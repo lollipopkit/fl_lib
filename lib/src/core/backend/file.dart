@@ -27,7 +27,7 @@ abstract final class FileApi {
   /// Returns the remote urls.
   static Future<List<String>> upload(List<String> paths, {String? dir}) async {
     final map = <String, dynamic>{
-      if (dir != null) 'dir': dir,
+      'dir': ?dir,
     };
     for (final path in paths) {
       final name = urlToName(path);

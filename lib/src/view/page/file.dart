@@ -108,7 +108,7 @@ final class _FileCardViewState extends State<FileCardView> with AutomaticKeepAli
             leading: const Icon(Icons.insert_drive_file),
             title: Text(widget.name ?? file.uri.pathSegments.last),
             subtitle:
-                Text([if (mime != null) mime, if (sizeStr.isNotEmpty) sizeStr, if (dateStr.isNotEmpty) dateStr].join(' · ')),
+                Text([?mime, if (sizeStr.isNotEmpty) sizeStr, if (dateStr.isNotEmpty) dateStr].join(' · ')),
             trailing: IconButton(
               icon: const Icon(Icons.open_in_new),
               onPressed: _onTapCard,
