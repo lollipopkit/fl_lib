@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -34,6 +32,8 @@ abstract final class LocalAuth {
           case AuthResult.notAvail:
             onUnavailable?.call();
             return;
+          case AuthResult.lockedOut:
+            return;
           case AuthResult.fail:
           case AuthResult.cancel:
             retries++;
@@ -65,10 +65,12 @@ abstract final class LocalAuth {
           return AuthResult.notAvail;
         case LocalAuthExceptionCode.temporaryLockout:
         case LocalAuthExceptionCode.biometricLockout:
-          exit(0);
+          return AuthResult.lockedOut;
         default:
           return AuthResult.cancel;
       }
+    } on PlatformException {
+      return AuthResult.cancel;
     }
   }
 }
@@ -78,4 +80,5 @@ enum AuthResult {
   fail,
   cancel,
   notAvail,
+  lockedOut,
 }
