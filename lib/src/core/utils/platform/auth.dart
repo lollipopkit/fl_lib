@@ -24,28 +24,26 @@ abstract final class LocalAuth {
     if (_isAuthing) return;
     _isAuthing = true;
 
-    var retries = 0;
-    while (retries < maxRetries) {
-      final val = await goWithResult();
-      switch (val) {
-        case AuthResult.success:
-          _isAuthing = false;
-          return;
-        case AuthResult.notAvail:
-          _isAuthing = false;
-          onUnavailable?.call();
-          return;
-        case AuthResult.fail:
-        case AuthResult.cancel:
-          retries++;
-          if (retries >= maxRetries) {
-            _isAuthing = false;
+    try {
+      var retries = 0;
+      while (retries < maxRetries) {
+        final val = await goWithResult();
+        switch (val) {
+          case AuthResult.success:
             return;
-          }
-          break;
+          case AuthResult.notAvail:
+            onUnavailable?.call();
+            return;
+          case AuthResult.fail:
+          case AuthResult.cancel:
+            retries++;
+            if (retries >= maxRetries) return;
+            break;
+        }
       }
+    } finally {
+      _isAuthing = false;
     }
-    _isAuthing = false;
   }
 
   static Future<AuthResult> goWithResult({bool onlyBio = false}) async {
