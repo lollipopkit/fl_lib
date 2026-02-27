@@ -472,4 +472,188 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get view => 'Перегляд';
+
+  @override
+  String get askAiModel => 'Модель';
+
+  @override
+  String get battery => 'Акумулятор';
+
+  @override
+  String get cmd => 'Команда';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => 'З\'єднання';
+
+  @override
+  String get container => 'Контейнер';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
+
+  @override
+  String get decode => 'Декодувати';
+
+  @override
+  String get decompress => 'Розпакувати';
+
+  @override
+  String get disconnected => 'Відключено';
+
+  @override
+  String get disk => 'Диск';
+
+  @override
+  String get emulator => 'Емулятор';
+
+  @override
+  String get encode => 'Кодувати';
+
+  @override
+  String get force => 'Примусово';
+
+  @override
+  String get host => 'Хост';
+
+  @override
+  String get inner => 'Внутрішній';
+
+  @override
+  String get install => 'Встановити';
+
+  @override
+  String get location => 'Місцезнаходження';
+
+  @override
+  String get logs => 'Журнали';
+
+  @override
+  String get loss => 'втрата пакетів';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => 'Місія';
+
+  @override
+  String get ms => 'мс.';
+
+  @override
+  String get net => 'Мережа';
+
+  @override
+  String get node => 'Вузол';
+
+  @override
+  String get notAvailable => 'Недоступний';
+
+  @override
+  String get pingAvg => 'Середнє:';
+
+  @override
+  String get pkg => 'Пакет';
+
+  @override
+  String get port => 'Порт';
+
+  @override
+  String get process => 'Процес';
+
+  @override
+  String get prune => 'Обрізати';
+
+  @override
+  String get reboot => 'Перезавантажити';
+
+  @override
+  String get restart => 'Перезапустити';
+
+  @override
+  String get route => 'Маршрут';
+
+  @override
+  String get run => 'Запустити';
+
+  @override
+  String get running => 'Виконання';
+
+  @override
+  String get saved => 'Збережено';
+
+  @override
+  String get sensors => 'Датчики';
+
+  @override
+  String get sequence => 'Послідовність';
+
+  @override
+  String get server => 'Сервер';
+
+  @override
+  String get servers => 'серверів';
+
+  @override
+  String get shutdown => 'Вимкнення';
+
+  @override
+  String get snippet => 'Фрагмент';
+
+  @override
+  String get stats => 'Статистики';
+
+  @override
+  String get stopped => 'Зупинено';
+
+  @override
+  String get storage => 'Сховище';
+
+  @override
+  String get suspend => 'Призупинити';
+
+  @override
+  String get temperature => 'Температура';
+
+  @override
+  String get terminal => 'Термінал';
+
+  @override
+  String get test => 'Тест';
+
+  @override
+  String get theme => 'Тема';
+
+  @override
+  String get total => 'Всього';
+
+  @override
+  String get totalAttempts => 'Загальна кількість';
+
+  @override
+  String get traffic => 'Трафік';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => 'Час роботи';
 }

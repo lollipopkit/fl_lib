@@ -470,6 +470,190 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get view => '查看';
+
+  @override
+  String get askAiModel => '模型';
+
+  @override
+  String get battery => '电池';
+
+  @override
+  String get cmd => '命令';
+
+  @override
+  String get confirm => '确认';
+
+  @override
+  String get conn => '连接';
+
+  @override
+  String get container => '容器';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki/主页#自定义命令';
+
+  @override
+  String get decode => '解码';
+
+  @override
+  String get decompress => '解压缩';
+
+  @override
+  String get disconnected => '已断开连接';
+
+  @override
+  String get disk => '磁盘';
+
+  @override
+  String get emulator => '模拟器';
+
+  @override
+  String get encode => '编码';
+
+  @override
+  String get force => '强制';
+
+  @override
+  String get host => '主机';
+
+  @override
+  String get inner => '内置';
+
+  @override
+  String get install => '安装';
+
+  @override
+  String get location => '位置';
+
+  @override
+  String get logs => '日志';
+
+  @override
+  String get loss => '丢包率';
+
+  @override
+  String get menuHelp => '帮助';
+
+  @override
+  String get menuInfo => '信息';
+
+  @override
+  String get menuNavigate => '导航';
+
+  @override
+  String get menuQuit => '退出';
+
+  @override
+  String get menuSettings => '设置';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => '任务';
+
+  @override
+  String get ms => '毫秒';
+
+  @override
+  String get net => '网络';
+
+  @override
+  String get node => '节点';
+
+  @override
+  String get notAvailable => '不可用';
+
+  @override
+  String get pingAvg => '平均:';
+
+  @override
+  String get pkg => '包管理';
+
+  @override
+  String get port => '端口';
+
+  @override
+  String get process => '进程';
+
+  @override
+  String get prune => '修剪';
+
+  @override
+  String get reboot => '重启';
+
+  @override
+  String get restart => '重启';
+
+  @override
+  String get route => '路由';
+
+  @override
+  String get run => '运行';
+
+  @override
+  String get running => '运行中';
+
+  @override
+  String get saved => '已保存';
+
+  @override
+  String get sensors => '传感器';
+
+  @override
+  String get sequence => '顺序';
+
+  @override
+  String get server => '服务器';
+
+  @override
+  String get servers => '服务器';
+
+  @override
+  String get shutdown => '关机';
+
+  @override
+  String get snippet => '代码片段';
+
+  @override
+  String get stats => '统计';
+
+  @override
+  String get stopped => '已停止';
+
+  @override
+  String get storage => '存储';
+
+  @override
+  String get suspend => '挂起';
+
+  @override
+  String get temperature => '温度';
+
+  @override
+  String get terminal => '终端';
+
+  @override
+  String get test => '测试';
+
+  @override
+  String get theme => '主题';
+
+  @override
+  String get total => '总共';
+
+  @override
+  String get totalAttempts => '总次数';
+
+  @override
+  String get traffic => '流量';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => '启动时长';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -938,4 +1122,188 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get view => '檢視';
+
+  @override
+  String get askAiModel => '模型';
+
+  @override
+  String get battery => '電池';
+
+  @override
+  String get cmd => '指令';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => '連線';
+
+  @override
+  String get container => '容器';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki/主页#自定义指令';
+
+  @override
+  String get decode => '解碼';
+
+  @override
+  String get decompress => '解壓縮';
+
+  @override
+  String get disconnected => '已中斷連線';
+
+  @override
+  String get disk => '磁碟';
+
+  @override
+  String get emulator => '模擬器';
+
+  @override
+  String get encode => '編碼';
+
+  @override
+  String get force => '強制';
+
+  @override
+  String get host => '主機';
+
+  @override
+  String get inner => '內建';
+
+  @override
+  String get install => '安裝';
+
+  @override
+  String get location => '位置';
+
+  @override
+  String get logs => '日誌';
+
+  @override
+  String get loss => '逾時';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => '任務';
+
+  @override
+  String get ms => '毫秒';
+
+  @override
+  String get net => '網路';
+
+  @override
+  String get node => '節點';
+
+  @override
+  String get notAvailable => '不可用';
+
+  @override
+  String get pingAvg => '平均:';
+
+  @override
+  String get pkg => '套件管理';
+
+  @override
+  String get port => '埠';
+
+  @override
+  String get process => '處理程序';
+
+  @override
+  String get prune => '修剪';
+
+  @override
+  String get reboot => '重開';
+
+  @override
+  String get restart => '重開';
+
+  @override
+  String get route => '路由';
+
+  @override
+  String get run => '執行';
+
+  @override
+  String get running => '運作中';
+
+  @override
+  String get saved => '已儲存';
+
+  @override
+  String get sensors => '感應器';
+
+  @override
+  String get sequence => '順序';
+
+  @override
+  String get server => '伺服器';
+
+  @override
+  String get servers => '服務器';
+
+  @override
+  String get shutdown => '關機';
+
+  @override
+  String get snippet => '程式片段';
+
+  @override
+  String get stats => '統計';
+
+  @override
+  String get stopped => '已停止';
+
+  @override
+  String get storage => '存儲';
+
+  @override
+  String get suspend => '當機';
+
+  @override
+  String get temperature => '溫度';
+
+  @override
+  String get terminal => '终端機';
+
+  @override
+  String get test => '測試';
+
+  @override
+  String get theme => '主題';
+
+  @override
+  String get total => '總共';
+
+  @override
+  String get totalAttempts => '總次數';
+
+  @override
+  String get traffic => '流量';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => '運作時間';
 }

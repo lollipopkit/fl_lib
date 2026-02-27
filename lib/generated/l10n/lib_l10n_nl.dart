@@ -473,4 +473,188 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get view => 'Bekijken';
+
+  @override
+  String get askAiModel => 'Model';
+
+  @override
+  String get battery => 'Batterij';
+
+  @override
+  String get cmd => 'Opdracht';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => 'Verbinding';
+
+  @override
+  String get container => 'Container';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
+
+  @override
+  String get decode => 'Decoderen';
+
+  @override
+  String get decompress => 'Decomprimeren';
+
+  @override
+  String get disconnected => 'Verbroken';
+
+  @override
+  String get disk => 'Schijf';
+
+  @override
+  String get emulator => 'Emulator';
+
+  @override
+  String get encode => 'Coderen';
+
+  @override
+  String get force => 'Forceer';
+
+  @override
+  String get host => 'Host';
+
+  @override
+  String get inner => 'Intern';
+
+  @override
+  String get install => 'Installeren';
+
+  @override
+  String get location => 'Locatie';
+
+  @override
+  String get logs => 'Logboeken';
+
+  @override
+  String get loss => 'verlies';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => 'Missie';
+
+  @override
+  String get ms => 'ms';
+
+  @override
+  String get net => 'Netwerk';
+
+  @override
+  String get node => 'Node';
+
+  @override
+  String get notAvailable => 'Niet beschikbaar';
+
+  @override
+  String get pingAvg => 'Gem:';
+
+  @override
+  String get pkg => 'Pkg';
+
+  @override
+  String get port => 'Poort';
+
+  @override
+  String get process => 'Proces';
+
+  @override
+  String get prune => 'Snoeien';
+
+  @override
+  String get reboot => 'Herstart';
+
+  @override
+  String get restart => 'Herstarten';
+
+  @override
+  String get route => 'Route';
+
+  @override
+  String get run => 'Uitvoeren';
+
+  @override
+  String get running => 'Uitgevoerd';
+
+  @override
+  String get saved => 'Opgeslagen';
+
+  @override
+  String get sensors => 'Sensor';
+
+  @override
+  String get sequence => 'Volgorde';
+
+  @override
+  String get server => 'Server';
+
+  @override
+  String get servers => 'servers';
+
+  @override
+  String get shutdown => 'Afsluiten';
+
+  @override
+  String get snippet => 'Fragment';
+
+  @override
+  String get stats => 'Statistieken';
+
+  @override
+  String get stopped => 'Gestopt';
+
+  @override
+  String get storage => 'Opslag';
+
+  @override
+  String get suspend => 'Ophangen';
+
+  @override
+  String get temperature => 'Temperatuur';
+
+  @override
+  String get terminal => 'Terminal';
+
+  @override
+  String get test => 'Testen';
+
+  @override
+  String get theme => 'Thema';
+
+  @override
+  String get total => 'Totaal';
+
+  @override
+  String get totalAttempts => 'Totaal';
+
+  @override
+  String get traffic => 'Verkeer';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => 'Uptime';
 }

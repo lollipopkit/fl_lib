@@ -472,4 +472,188 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get view => 'Görüntüle';
+
+  @override
+  String get askAiModel => 'Model';
+
+  @override
+  String get battery => 'Pil';
+
+  @override
+  String get cmd => 'Komut';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => 'Bağlantı';
+
+  @override
+  String get container => 'Konteyner';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#özel-komutlar';
+
+  @override
+  String get decode => 'Çöz';
+
+  @override
+  String get decompress => 'Sıkıştırmayı aç';
+
+  @override
+  String get disconnected => 'Bağlantı kesildi';
+
+  @override
+  String get disk => 'Disk';
+
+  @override
+  String get emulator => 'Emülatör';
+
+  @override
+  String get encode => 'Kodla';
+
+  @override
+  String get force => 'Zorla';
+
+  @override
+  String get host => 'Ana bilgisayar';
+
+  @override
+  String get inner => 'İç';
+
+  @override
+  String get install => 'Kur';
+
+  @override
+  String get location => 'Konum';
+
+  @override
+  String get logs => 'Günlükler';
+
+  @override
+  String get loss => 'Kayıp';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => 'Görev';
+
+  @override
+  String get ms => 'ms';
+
+  @override
+  String get net => 'Ağ';
+
+  @override
+  String get node => 'Düğüm';
+
+  @override
+  String get notAvailable => 'Kullanılamaz';
+
+  @override
+  String get pingAvg => 'Ort:';
+
+  @override
+  String get pkg => 'Paket';
+
+  @override
+  String get port => 'Port';
+
+  @override
+  String get process => 'İşlem';
+
+  @override
+  String get prune => 'Budamak';
+
+  @override
+  String get reboot => 'Yeniden başlat';
+
+  @override
+  String get restart => 'Yeniden başlat';
+
+  @override
+  String get route => 'Yönlendirme';
+
+  @override
+  String get run => 'Çalıştır';
+
+  @override
+  String get running => 'Çalışıyor';
+
+  @override
+  String get saved => 'Kaydedildi';
+
+  @override
+  String get sensors => 'Sensör';
+
+  @override
+  String get sequence => 'Sıra';
+
+  @override
+  String get server => 'Sunucu';
+
+  @override
+  String get servers => 'sunucu';
+
+  @override
+  String get shutdown => 'Kapat';
+
+  @override
+  String get snippet => 'Kod parçacığı';
+
+  @override
+  String get stats => 'İstatistikler';
+
+  @override
+  String get stopped => 'Durduruldu';
+
+  @override
+  String get storage => 'Depolama';
+
+  @override
+  String get suspend => 'Askıya al';
+
+  @override
+  String get temperature => 'Sıcaklık';
+
+  @override
+  String get terminal => 'Terminal';
+
+  @override
+  String get test => 'Test';
+
+  @override
+  String get theme => 'Tema';
+
+  @override
+  String get total => 'Toplam';
+
+  @override
+  String get totalAttempts => 'Toplam';
+
+  @override
+  String get traffic => 'Trafik';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => 'Çalışma süresi';
 }

@@ -470,4 +470,188 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get view => '表示';
+
+  @override
+  String get askAiModel => 'モデル';
+
+  @override
+  String get battery => 'バッテリー';
+
+  @override
+  String get cmd => 'コマンド';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => '接続';
+
+  @override
+  String get container => 'コンテナ';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
+
+  @override
+  String get decode => 'デコード';
+
+  @override
+  String get decompress => '解凍';
+
+  @override
+  String get disconnected => '接続が切断されました';
+
+  @override
+  String get disk => 'ディスク';
+
+  @override
+  String get emulator => 'エミュレーター';
+
+  @override
+  String get encode => 'エンコード';
+
+  @override
+  String get force => '強制';
+
+  @override
+  String get host => 'ホスト';
+
+  @override
+  String get inner => '内蔵';
+
+  @override
+  String get install => 'インストール';
+
+  @override
+  String get location => '場所';
+
+  @override
+  String get logs => 'ログ';
+
+  @override
+  String get loss => 'パケットロス';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => 'ミッション';
+
+  @override
+  String get ms => 'ミリ秒';
+
+  @override
+  String get net => 'ネットワーク';
+
+  @override
+  String get node => 'ノード';
+
+  @override
+  String get notAvailable => '利用不可';
+
+  @override
+  String get pingAvg => '平均:';
+
+  @override
+  String get pkg => 'パッケージ管理';
+
+  @override
+  String get port => 'ポート';
+
+  @override
+  String get process => 'プロセス';
+
+  @override
+  String get prune => '剪定する';
+
+  @override
+  String get reboot => '再起動';
+
+  @override
+  String get restart => '再開';
+
+  @override
+  String get route => 'ルーティング';
+
+  @override
+  String get run => '実行';
+
+  @override
+  String get running => '実行中';
+
+  @override
+  String get saved => '保存されました';
+
+  @override
+  String get sensors => 'センサー';
+
+  @override
+  String get sequence => '順序';
+
+  @override
+  String get server => 'サーバー';
+
+  @override
+  String get servers => 'サーバー';
+
+  @override
+  String get shutdown => 'シャットダウン';
+
+  @override
+  String get snippet => 'スニペット';
+
+  @override
+  String get stats => '統計';
+
+  @override
+  String get stopped => '停止しました';
+
+  @override
+  String get storage => 'ストレージ';
+
+  @override
+  String get suspend => '中断';
+
+  @override
+  String get temperature => '温度';
+
+  @override
+  String get terminal => 'ターミナル';
+
+  @override
+  String get test => 'テスト';
+
+  @override
+  String get theme => 'テーマ';
+
+  @override
+  String get total => '合計';
+
+  @override
+  String get totalAttempts => '総計';
+
+  @override
+  String get traffic => 'トラフィック';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => '稼働時間';
 }

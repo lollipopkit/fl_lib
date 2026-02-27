@@ -472,4 +472,188 @@ class LibLocalizationsEn extends LibLocalizations {
 
   @override
   String get view => 'View';
+
+  @override
+  String get askAiModel => 'Model';
+
+  @override
+  String get battery => 'Battery';
+
+  @override
+  String get cmd => 'Command';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => 'Connection';
+
+  @override
+  String get container => 'Container';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
+
+  @override
+  String get decode => 'Decode';
+
+  @override
+  String get decompress => 'Decompress';
+
+  @override
+  String get disconnected => 'Disconnected';
+
+  @override
+  String get disk => 'Disk';
+
+  @override
+  String get emulator => 'Emulator';
+
+  @override
+  String get encode => 'Encode';
+
+  @override
+  String get force => 'Force';
+
+  @override
+  String get host => 'Host';
+
+  @override
+  String get inner => 'Inner';
+
+  @override
+  String get install => 'install';
+
+  @override
+  String get location => 'Location';
+
+  @override
+  String get logs => 'Logs';
+
+  @override
+  String get loss => 'loss';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => 'Mission';
+
+  @override
+  String get ms => 'ms';
+
+  @override
+  String get net => 'Network';
+
+  @override
+  String get node => 'Node';
+
+  @override
+  String get notAvailable => 'Unavailable';
+
+  @override
+  String get pingAvg => 'Avg:';
+
+  @override
+  String get pkg => 'Pkg';
+
+  @override
+  String get port => 'Port';
+
+  @override
+  String get process => 'Process';
+
+  @override
+  String get prune => 'Prune';
+
+  @override
+  String get reboot => 'Reboot';
+
+  @override
+  String get restart => 'Restart';
+
+  @override
+  String get route => 'Routing';
+
+  @override
+  String get run => 'Run';
+
+  @override
+  String get running => 'Running';
+
+  @override
+  String get saved => 'Saved';
+
+  @override
+  String get sensors => 'Sensor';
+
+  @override
+  String get sequence => 'Sequence';
+
+  @override
+  String get server => 'Server';
+
+  @override
+  String get servers => 'servers';
+
+  @override
+  String get shutdown => 'Shutdown';
+
+  @override
+  String get snippet => 'Snippet';
+
+  @override
+  String get stats => 'Statistics';
+
+  @override
+  String get stopped => 'Stopped';
+
+  @override
+  String get storage => 'Storage';
+
+  @override
+  String get suspend => 'Suspend';
+
+  @override
+  String get temperature => 'Temperature';
+
+  @override
+  String get terminal => 'Terminal';
+
+  @override
+  String get test => 'Test';
+
+  @override
+  String get theme => 'Theme';
+
+  @override
+  String get total => 'Total';
+
+  @override
+  String get totalAttempts => 'Total';
+
+  @override
+  String get traffic => 'Traffic';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => 'Uptime';
 }

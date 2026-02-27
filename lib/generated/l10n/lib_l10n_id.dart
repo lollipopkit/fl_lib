@@ -473,4 +473,188 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get view => 'Lihat';
+
+  @override
+  String get askAiModel => 'Model';
+
+  @override
+  String get battery => 'Baterai';
+
+  @override
+  String get cmd => 'Memerintah';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => 'Koneksi';
+
+  @override
+  String get container => 'Wadah';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
+
+  @override
+  String get decode => 'Membaca sandi';
+
+  @override
+  String get decompress => 'Dekompresi';
+
+  @override
+  String get disconnected => 'Terputus';
+
+  @override
+  String get disk => 'Disk';
+
+  @override
+  String get emulator => 'Emulator';
+
+  @override
+  String get encode => 'Menyandi';
+
+  @override
+  String get force => 'sukarela';
+
+  @override
+  String get host => 'Host';
+
+  @override
+  String get inner => 'Batin';
+
+  @override
+  String get install => 'Install';
+
+  @override
+  String get location => 'Lokasi';
+
+  @override
+  String get logs => 'Log';
+
+  @override
+  String get loss => 'kehilangan';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
+
+  @override
+  String get mission => 'Misi';
+
+  @override
+  String get ms => 'MS';
+
+  @override
+  String get net => 'Jaringan';
+
+  @override
+  String get node => 'Node';
+
+  @override
+  String get notAvailable => 'Tidak tersedia';
+
+  @override
+  String get pingAvg => 'Rata -rata:';
+
+  @override
+  String get pkg => 'Pkg';
+
+  @override
+  String get port => 'Port';
+
+  @override
+  String get process => 'Proses';
+
+  @override
+  String get prune => 'Pangkas';
+
+  @override
+  String get reboot => 'Reboot';
+
+  @override
+  String get restart => 'Mengulang kembali';
+
+  @override
+  String get route => 'Routing';
+
+  @override
+  String get run => 'Berlari';
+
+  @override
+  String get running => 'berlari';
+
+  @override
+  String get saved => 'Diselamatkan';
+
+  @override
+  String get sensors => 'Sensor';
+
+  @override
+  String get sequence => 'Urutan';
+
+  @override
+  String get server => 'Server';
+
+  @override
+  String get servers => 'server';
+
+  @override
+  String get shutdown => 'Matikan';
+
+  @override
+  String get snippet => 'Snippet';
+
+  @override
+  String get stats => 'Statistik';
+
+  @override
+  String get stopped => 'dihentikan';
+
+  @override
+  String get storage => 'Penyimpanan';
+
+  @override
+  String get suspend => 'Suspend';
+
+  @override
+  String get temperature => 'Suhu';
+
+  @override
+  String get terminal => 'Terminal';
+
+  @override
+  String get test => 'pengujian';
+
+  @override
+  String get theme => ' Tema';
+
+  @override
+  String get total => 'Total';
+
+  @override
+  String get totalAttempts => 'Total';
+
+  @override
+  String get traffic => 'Lalu lintas';
+
+  @override
+  String get ttl => 'TTL';
+
+  @override
+  String get uptime => 'Uptime';
 }
