@@ -38,14 +38,7 @@ abstract final class Inits {
     await Paths.init(appName, bakName: bakName); // Keep this first.
     await PrefStore.shared.init();
 
-    // You can view [Future.wait]'s implementation to understand why it's used here
-    // and why put the [Paths.init] out of this.
-    //
-    // ps: [Future.wait] is a function to run multiple futures in parallel. It's a
-    // non-order function.
-    final futures = <Future<dynamic>>[];
-    futures.add(Computer.shared.turnOn(workersCount: computerCounts));
-    await Future.wait(futures);
+    await Computer.shared.turnOn(workersCount: computerCounts);
   }
 
   /// Wrap the [body] in a zone to catch all errors.

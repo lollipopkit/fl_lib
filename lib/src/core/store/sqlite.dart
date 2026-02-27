@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS kv_entries (
 )
 ''';
 
+  void _ensureInited() {
+    if (_inited) return;
+    throw StateError('SqliteStore.init() must be called before use.');
+  }
+
   Future<void> init() async {
     if (_inited) return;
     await _SqlCipherBootstrap.ensureConfigured();
@@ -58,6 +63,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
 
   @override
   T? get<T extends Object>(String key, {StoreFromObj<T>? fromObj}) {
+    _ensureInited();
     final val = _cache[key];
     if (val == null) return null;
     if (val is T) return val;
@@ -75,6 +81,13 @@ CREATE TABLE IF NOT EXISTS kv_entries (
     return null;
   }
 
+  /// Queues a write with optimistic cache update.
+  ///
+  /// Returning `true` means the write is queued, not that DB persistence has
+  /// completed. If persistence confirmation is required, await [flush].
+  ///
+  /// On DB failure, `_enqueueWrite(onError: ...)` rolls back cache changes and
+  /// notifies listeners.
   @override
   bool set<T extends Object>(
     String key,
@@ -82,6 +95,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
   }) {
+    _ensureInited();
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     try {
       final raw = toObj != null ? toObj(val) : val;
@@ -142,6 +156,7 @@ ON CONFLICT(key) DO UPDATE SET
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
   }) {
+    _ensureInited();
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     final prepared = <(String, Object, String, int)>[];
     for (final entry in map.entries) {
@@ -241,57 +256,88 @@ ON CONFLICT(key) DO UPDATE SET
   Set<String> keys({
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
+    _ensureInited();
     if (includeInternalKeys) return _cache.keys.toSet();
     return _cache.keys.where((key) => !isInternalKey(key)).toSet();
   }
 
   @override
   bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
+    _ensureInited();
+    final hadKey = _cache.containsKey(key);
+    final previousValue = _cache[key];
     _cache.remove(key);
-    _enqueueWrite(() async {
-      await _db.customStatement('DELETE FROM $_tableName WHERE key = ?', [key]);
-    });
-
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    if (updateLastUpdateTsOnRemove) {
-      updateLastUpdateTs(key: key);
-    }
-    _listeners.notify(key);
+    _enqueueWrite(
+      () async {
+        await _db.customStatement('DELETE FROM $_tableName WHERE key = ?', [
+          key,
+        ]);
+      },
+      onSuccess: () {
+        if (updateLastUpdateTsOnRemove == true) {
+          updateLastUpdateTs(key: key);
+        }
+        _listeners.notify(key);
+      },
+      onError: (e, _) {
+        if (hadKey) {
+          _cache[key] = previousValue;
+        }
+        dprintWarn('remove("$key")', 'db delete failed, rolled back cache: $e');
+        _listeners.notify(key);
+      },
+    );
     return true;
   }
 
   @override
   bool clear({bool? updateLastUpdateTsOnClear}) {
-    final lastUpdateTsMap = lastUpdateTs;
-    final changed = _cache.keys.toList(growable: false);
+    _ensureInited();
+    final oldCache = Map<String, Object?>.from(_cache);
+    final lastUpdateTsMap = oldCache[lastUpdateTsKey];
+    final changed = oldCache.keys.toList(growable: false);
 
     _cache.clear();
     if (lastUpdateTsMap != null) {
       _cache[lastUpdateTsKey] = lastUpdateTsMap;
     }
 
-    _enqueueWrite(() async {
-      await _db.customStatement('DELETE FROM $_tableName');
-      if (lastUpdateTsMap != null) {
-        await _db.customStatement(
-          '''
+    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
+    _enqueueWrite(
+      () async {
+        await _db.customStatement('DELETE FROM $_tableName');
+        if (lastUpdateTsMap != null) {
+          await _db.customStatement(
+            '''
 INSERT INTO $_tableName(key, value_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET
   value_json = excluded.value_json,
   updated_at = excluded.updated_at
 ''',
-          [lastUpdateTsKey, _encodeValue(lastUpdateTsMap), DateTimeX.timestamp],
-        );
-      }
-    });
-
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) {
-      updateLastUpdateTs(key: null);
-    }
-
-    _listeners.notifyMany(changed);
+            [
+              lastUpdateTsKey,
+              _encodeValue(lastUpdateTsMap),
+              DateTimeX.timestamp,
+            ],
+          );
+        }
+      },
+      onSuccess: () {
+        if (updateLastUpdateTsOnClear == true) {
+          updateLastUpdateTs(key: null);
+        }
+        _listeners.notifyMany(changed);
+      },
+      onError: (e, _) {
+        _cache
+          ..clear()
+          ..addAll(oldCache);
+        dprintWarn('clear()', 'db clear failed, rolled back cache: $e');
+        _listeners.notifyMany(changed);
+      },
+    );
     return true;
   }
 
@@ -299,6 +345,7 @@ ON CONFLICT(key) DO UPDATE SET
   Map<String, Object?> getAllMap({
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
+    _ensureInited();
     final keys = this.keys(includeInternalKeys: includeInternalKeys);
     return Map<String, Object?>.fromEntries(
       keys.map((key) => MapEntry(key, _cache[key])),
@@ -310,6 +357,7 @@ ON CONFLICT(key) DO UPDATE SET
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
     StoreFromObj<T>? fromStr,
   }) {
+    _ensureInited();
     final keys = this.keys(includeInternalKeys: includeInternalKeys);
     final map = <String, T>{};
     for (final key in keys) {
@@ -333,10 +381,12 @@ ON CONFLICT(key) DO UPDATE SET
   }
 
   Future<void> flush() async {
+    _ensureInited();
     await _pendingWrites;
   }
 
   Future<void> vacuum() async {
+    _ensureInited();
     await flush();
     await _db.customStatement('VACUUM');
   }
