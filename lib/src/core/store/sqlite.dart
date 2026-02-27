@@ -12,6 +12,7 @@ class SqliteStore extends Store {
   final String dbName;
   late final _RawSqliteDatabase _db;
   final Map<String, Object?> _cache = <String, Object?>{};
+  final Map<String, int> _removeOps = <String, int>{};
   final _SqliteListenerManager _listeners = _SqliteListenerManager();
   Future<void> _pendingWrites = Future<void>.value();
   Future<void>? _initFuture;
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
       final hadPrevious = _cache.containsKey(key);
       final previous = _cache[key];
       _cache[key] = normalized;
+      _listeners.notify(key);
       _enqueueWrite(
         () async {
           await _db.customStatement(
@@ -142,7 +144,6 @@ ON CONFLICT(key) DO UPDATE SET
           if (updateLastUpdateTsOnSet == true) {
             updateLastUpdateTs(key: key);
           }
-          _listeners.notify(key);
         },
         onError: (e, _) {
           if (_cache[key] == normalized) {
@@ -207,6 +208,7 @@ ON CONFLICT(key) DO UPDATE SET
       previousValues[key] = _cache[key];
       _cache[key] = item.$2;
     }
+    _listeners.notifyMany(changed);
 
     _enqueueWrite(
       () async {
@@ -231,7 +233,6 @@ ON CONFLICT(key) DO UPDATE SET
             updateLastUpdateTs(key: key);
           }
         }
-        _listeners.notifyMany(changed);
       },
       onError: (e, _) {
         for (final item in prepared) {
@@ -280,9 +281,12 @@ ON CONFLICT(key) DO UPDATE SET
   @override
   bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
     _ensureInited();
+    final opId = (_removeOps[key] ?? 0) + 1;
+    _removeOps[key] = opId;
     final hadKey = _cache.containsKey(key);
     final previousValue = _cache[key];
     _cache.remove(key);
+    _listeners.notify(key);
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     _enqueueWrite(
       () async {
@@ -291,17 +295,33 @@ ON CONFLICT(key) DO UPDATE SET
         ]);
       },
       onSuccess: () {
-        if (updateLastUpdateTsOnRemove == true) {
-          updateLastUpdateTs(key: key);
+        final currentOpId = _removeOps[key];
+        if (currentOpId != null && currentOpId != opId) return;
+        try {
+          if (updateLastUpdateTsOnRemove == true) {
+            updateLastUpdateTs(key: key);
+          }
+        } finally {
+          if (_removeOps[key] == opId) {
+            _removeOps.remove(key);
+          }
         }
-        _listeners.notify(key);
       },
       onError: (e, _) {
-        if (!_cache.containsKey(key) && hadKey) {
+        final currentOpId = _removeOps[key];
+        final isCurrent = currentOpId == null || currentOpId == opId;
+        if (isCurrent && !_cache.containsKey(key) && hadKey) {
           _cache[key] = previousValue;
         }
         dprintWarn('remove("$key")', 'db delete failed, rolled back cache: $e');
-        _listeners.notify(key);
+        if (!isCurrent) return;
+        try {
+          _listeners.notify(key);
+        } finally {
+          if (_removeOps[key] == opId) {
+            _removeOps.remove(key);
+          }
+        }
       },
     );
     return true;
@@ -319,6 +339,7 @@ ON CONFLICT(key) DO UPDATE SET
       _cache[lastUpdateTsKey] = lastUpdateTsMap;
     }
     final optimisticCache = Map<String, Object?>.from(_cache);
+    _listeners.notifyMany(changed);
 
     updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
     _enqueueWrite(
@@ -346,7 +367,6 @@ ON CONFLICT(key) DO UPDATE SET
         if (updateLastUpdateTsOnClear == true) {
           updateLastUpdateTs(key: null);
         }
-        _listeners.notifyMany(changed);
       },
       onError: (e, _) {
         final stillOptimistic =
