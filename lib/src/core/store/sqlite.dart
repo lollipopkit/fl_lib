@@ -69,7 +69,11 @@ CREATE TABLE IF NOT EXISTS kv_entries (
       final rawVal = row.data['value_json'];
       if (rawKey is! String || rawVal is! String) continue;
       final parsed = _decodeValue(rawVal);
-      _cache[rawKey] = parsed;
+      try {
+        _cache[rawKey] = _normalizeValue(parsed, path: rawKey);
+      } catch (e) {
+        dprintWarn('_reloadCache()', 'skip key "$rawKey": $e');
+      }
     }
   }
 
@@ -116,9 +120,9 @@ CREATE TABLE IF NOT EXISTS kv_entries (
         return false;
       }
 
-      final normalized = _normalizeValue(raw);
+      final normalized = _normalizeValue(raw, path: key);
       if (normalized == null) {
-        dprintWarn('set("$key")', 'unsupported type: ${raw.runtimeType}');
+        dprintWarn('set("$key")', 'normalized value is null');
         return false;
       }
 
@@ -181,12 +185,18 @@ ON CONFLICT(key) DO UPDATE SET
         dprintWarn('setAll()', 'toObj returned null for key `$key`');
         return false;
       }
-      final normalized = _normalizeValue(raw);
-      if (normalized == null) {
+      Object? normalized;
+      try {
+        normalized = _normalizeValue(raw, path: key);
+      } catch (e) {
         dprintWarn(
           'setAll()',
-          'unsupported type on `$key`: ${raw.runtimeType}',
+          'failed to normalize key `$key`: $e',
         );
+        return false;
+      }
+      if (normalized == null) {
+        dprintWarn('setAll()', 'normalized value is null on `$key`');
         return false;
       }
       prepared.add((
@@ -524,28 +534,43 @@ ON CONFLICT(key) DO UPDATE SET
     }
   }
 
-  Object? _normalizeValue(Object? value) {
+  Object? _normalizeValue(Object? value, {String path = r'$'}) {
     if (value == null) return null;
     if (value is bool || value is int || value is double || value is String) {
       return value;
     }
     if (value is Enum) return value.name;
     if (value is List) {
-      return value.map(_normalizeValue).toList(growable: false);
+      return List<Object?>.unmodifiable(
+        List<Object?>.generate(
+          value.length,
+          (index) => _normalizeValue(value[index], path: '$path[$index]'),
+        ),
+      );
     }
     if (value is Map) {
-      final map = <String, Object?>{};
+      final normalizedMap = <String, Object?>{};
       for (final entry in value.entries) {
-        map[entry.key.toString()] = _normalizeValue(entry.value);
+        final mapKey = entry.key.toString();
+        normalizedMap[mapKey] = _normalizeValue(
+          entry.value,
+          path: '$path.$mapKey',
+        );
       }
-      return map;
+      return Map<String, Object?>.unmodifiable(normalizedMap);
     }
     try {
       final dynamic obj = value;
       final jsonObj = obj.toJson();
-      return _normalizeValue(jsonObj);
+      return _normalizeValue(jsonObj, path: '$path.toJson()');
+    } on UnsupportedError {
+      rethrow;
+    } on ArgumentError {
+      rethrow;
     } catch (_) {
-      return null;
+      throw UnsupportedError(
+        'Unsupported value type at `$path`: ${value.runtimeType}',
+      );
     }
   }
 }
