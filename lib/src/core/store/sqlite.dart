@@ -13,6 +13,7 @@ class SqliteStore extends Store {
   late final _RawSqliteDatabase _db;
   final Map<String, Object?> _cache = <String, Object?>{};
   final Map<String, int> _removeOps = <String, int>{};
+  final Map<String, int> _writeVersionByKey = <String, int>{};
   final _SqliteListenerManager _listeners = _SqliteListenerManager();
   Future<void> _pendingWrites = Future<void>.value();
   Future<void>? _initFuture;
@@ -144,6 +145,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
       final encoded = _encodeValue(normalized);
       final hadPrevious = _cache.containsKey(key);
       final previous = _cache[key];
+      final capturedVersion = _nextWriteVersion(key);
       _cache[key] = normalized;
       _listeners.notify(key);
       _enqueueWrite(
@@ -160,17 +162,17 @@ ON CONFLICT(key) DO UPDATE SET
           );
         },
         onSuccess: () {
+          if (_writeVersionByKey[key] != capturedVersion) return;
           if (updateLastUpdateTsOnSet == true) {
             updateLastUpdateTs(key: key);
           }
         },
         onError: (e, _) {
-          if (_cache[key] == normalized) {
-            if (hadPrevious) {
-              _cache[key] = previous;
-            } else {
-              _cache.remove(key);
-            }
+          if (_writeVersionByKey[key] != capturedVersion) return;
+          if (hadPrevious) {
+            _cache[key] = previous;
+          } else {
+            _cache.remove(key);
           }
           dprintWarn('set("$key")', 'db write failed, rolled back cache: $e');
           _listeners.notify(key);
@@ -227,10 +229,12 @@ ON CONFLICT(key) DO UPDATE SET
     final changed = prepared.map((item) => item.$1).toList(growable: false);
     final hadPrevious = <String, bool>{};
     final previousValues = <String, Object?>{};
+    final capturedVersions = <String, int>{};
     for (final item in prepared) {
       final key = item.$1;
       hadPrevious[key] = _cache.containsKey(key);
       previousValues[key] = _cache[key];
+      capturedVersions[key] = _nextWriteVersion(key);
       _cache[key] = item.$2;
     }
     _listeners.notifyMany(changed);
@@ -255,23 +259,26 @@ ON CONFLICT(key) DO UPDATE SET
       onSuccess: () {
         if (updateLastUpdateTsOnSet == true) {
           for (final key in changed) {
+            if (_writeVersionByKey[key] != capturedVersions[key]) continue;
             updateLastUpdateTs(key: key);
           }
         }
       },
       onError: (e, _) {
+        final rolledBackKeys = <String>[];
         for (final item in prepared) {
           final key = item.$1;
-          final optimisticValue = item.$2;
-          if (_cache[key] != optimisticValue) continue;
+          if (_writeVersionByKey[key] != capturedVersions[key]) continue;
           if (hadPrevious[key] == true) {
             _cache[key] = previousValues[key];
           } else {
             _cache.remove(key);
           }
+          rolledBackKeys.add(key);
         }
+        if (rolledBackKeys.isEmpty) return;
         dprintWarn('setAll()', 'db write failed, rolled back cache: $e');
-        _listeners.notifyMany(changed);
+        _listeners.notifyMany(rolledBackKeys);
       },
     );
 
@@ -308,6 +315,7 @@ ON CONFLICT(key) DO UPDATE SET
     _ensureInited();
     final opId = (_removeOps[key] ?? 0) + 1;
     _removeOps[key] = opId;
+    _nextWriteVersion(key);
     final hadKey = _cache.containsKey(key);
     final previousValue = _cache[key];
     _cache.remove(key);
@@ -321,7 +329,7 @@ ON CONFLICT(key) DO UPDATE SET
       },
       onSuccess: () {
         final currentOpId = _removeOps[key];
-        if (currentOpId != null && currentOpId != opId) return;
+        if (currentOpId != opId) return;
         try {
           if (updateLastUpdateTsOnRemove == true) {
             updateLastUpdateTs(key: key);
@@ -334,12 +342,12 @@ ON CONFLICT(key) DO UPDATE SET
       },
       onError: (e, _) {
         final currentOpId = _removeOps[key];
-        final isCurrent = currentOpId == null || currentOpId == opId;
+        final isCurrent = currentOpId == opId;
+        if (!isCurrent) return;
         if (isCurrent && !_cache.containsKey(key) && hadKey) {
           _cache[key] = previousValue;
         }
         dprintWarn('remove("$key")', 'db delete failed, rolled back cache: $e');
-        if (!isCurrent) return;
         try {
           _listeners.notify(key);
         } finally {
@@ -358,6 +366,10 @@ ON CONFLICT(key) DO UPDATE SET
     final oldCache = Map<String, Object?>.from(_cache);
     final lastUpdateTsMap = oldCache[lastUpdateTsKey];
     final changed = oldCache.keys.toList(growable: false);
+    final clearCapturedVersions = <String, int>{};
+    for (final key in changed) {
+      clearCapturedVersions[key] = _nextWriteVersion(key);
+    }
 
     _cache.clear();
     if (lastUpdateTsMap != null) {
@@ -393,14 +405,26 @@ ON CONFLICT(key) DO UPDATE SET
         }
       },
       onError: (e, _) {
-        _cache
-          ..clear()
-          ..addAll(oldCache);
+        final restoredKeys = <String>[];
+        for (final entry in oldCache.entries) {
+          final key = entry.key;
+          if (_writeVersionByKey[key] != clearCapturedVersions[key]) continue;
+          _cache[key] = entry.value;
+          restoredKeys.add(key);
+        }
         dprintWarn('clear()', 'db clear failed, rolled back cache: $e');
-        _listeners.notifyMany(changed);
+        if (restoredKeys.isNotEmpty) {
+          _listeners.notifyMany(restoredKeys);
+        }
       },
     );
     return true;
+  }
+
+  int _nextWriteVersion(String key) {
+    final next = (_writeVersionByKey[key] ?? 0) + 1;
+    _writeVersionByKey[key] = next;
+    return next;
   }
 
   @override
