@@ -28,6 +28,12 @@ abstract final class Inits {
       if (record.error != null) dprint(record.error);
       if (record.stackTrace != null) dprint(record.stackTrace);
     });
+    if (hiveAdapters.isNotEmpty) {
+      dprint(
+        '[Inits.initFlLibMain] `hiveAdapters` is deprecated and ignored. '
+        'Received ${hiveAdapters.length} adapters.',
+      );
+    }
 
     await Paths.init(appName, bakName: bakName); // Keep this first.
     await PrefStore.shared.init();

@@ -164,28 +164,39 @@ sealed class Store {
   ///
   /// {@macro store_last_update_ts}
   Map<String, int>? get lastUpdateTs {
+    int? parseIntValue(Object? value) {
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value);
+      if (value is num) {
+        final intVal = value.toInt();
+        return intVal.toDouble() == value.toDouble() ? intVal : null;
+      }
+      return null;
+    }
+
+    Map<String, int> parseMap(Map<dynamic, dynamic> map) {
+      final parsed = <String, int>{};
+      for (final entry in map.entries) {
+        final intVal = parseIntValue(entry.value);
+        if (intVal == null) continue;
+        parsed[entry.key.toString()] = intVal;
+      }
+      return parsed;
+    }
+
     final ts = get<Map<String, int>>(
       lastUpdateTsKey,
       fromObj: (raw) {
         if (raw is String) {
-          return json.decode(raw).cast<String, int>();
-        } else if (raw is Map) {
-          final map = <String, int>{};
-          for (final entry in raw.entries) {
-            final key = entry.key.toString();
-            final val = entry.value;
-            final intVal = switch (val) {
-              final int i => i,
-              final String s => int.tryParse(s),
-              final num n => n.toInt(),
-              _ => null,
-            };
-            if (intVal == null) continue;
-            map[key] = intVal;
+          try {
+            final decoded = json.decode(raw);
+            if (decoded is Map) return parseMap(decoded);
+            return <String, int>{};
+          } catch (_) {
+            return <String, int>{};
           }
-          return map;
-        } else if (raw is Map<String, int>) {
-          return raw;
+        } else if (raw is Map) {
+          return parseMap(raw);
         }
         return null;
       },

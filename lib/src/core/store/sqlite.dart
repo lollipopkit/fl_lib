@@ -96,25 +96,39 @@ CREATE TABLE IF NOT EXISTS kv_entries (
         return false;
       }
 
-      _cache[key] = normalized;
       final encoded = _encodeValue(normalized);
-      _enqueueWrite(() async {
-        await _db.customStatement(
-          '''
+      final hadPrevious = _cache.containsKey(key);
+      final previous = _cache[key];
+      _cache[key] = normalized;
+      _enqueueWrite(
+        () async {
+          await _db.customStatement(
+            '''
 INSERT INTO $_tableName(key, value_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET
   value_json = excluded.value_json,
   updated_at = excluded.updated_at
 ''',
-          [key, encoded, DateTimeX.timestamp],
-        );
-      });
-
-      if (updateLastUpdateTsOnSet) {
-        updateLastUpdateTs(key: key);
-      }
-      _listeners.notify(key);
+            [key, encoded, DateTimeX.timestamp],
+          );
+        },
+        onSuccess: () {
+          if (updateLastUpdateTsOnSet == true) {
+            updateLastUpdateTs(key: key);
+          }
+          _listeners.notify(key);
+        },
+        onError: (e, _) {
+          if (hadPrevious) {
+            _cache[key] = previous;
+          } else {
+            _cache.remove(key);
+          }
+          dprintWarn('set("$key")', 'db write failed, rolled back cache: $e');
+          _listeners.notify(key);
+        },
+      );
       return true;
     } catch (e) {
       dprintWarn('set("$key")', 'write failed: $e');
@@ -129,8 +143,7 @@ ON CONFLICT(key) DO UPDATE SET
     bool? updateLastUpdateTsOnSet,
   }) {
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
-    final changed = <String>[];
-    final upserts = <(String, String, int)>[];
+    final prepared = <(String, Object, String, int)>[];
     for (final entry in map.entries) {
       final key = entry.key;
       final val = entry.value;
@@ -147,33 +160,81 @@ ON CONFLICT(key) DO UPDATE SET
         );
         return false;
       }
-      _cache[key] = normalized;
-      upserts.add((key, _encodeValue(normalized), DateTimeX.timestamp));
-      changed.add(key);
+      prepared.add((
+        key,
+        normalized,
+        _encodeValue(normalized),
+        DateTimeX.timestamp,
+      ));
     }
 
-    _enqueueWrite(() async {
-      for (final row in upserts) {
-        await _db.customStatement(
-          '''
+    if (prepared.isEmpty) return true;
+
+    final changed = prepared.map((item) => item.$1).toList(growable: false);
+    final hadPrevious = <String, bool>{};
+    final previousValues = <String, Object?>{};
+    for (final item in prepared) {
+      final key = item.$1;
+      hadPrevious[key] = _cache.containsKey(key);
+      previousValues[key] = _cache[key];
+      _cache[key] = item.$2;
+    }
+
+    _enqueueWrite(
+      () async {
+        await _runInTransaction(() async {
+          for (final item in prepared) {
+            await _db.customStatement(
+              '''
 INSERT INTO $_tableName(key, value_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET
   value_json = excluded.value_json,
   updated_at = excluded.updated_at
 ''',
-          [row.$1, row.$2, row.$3],
-        );
-      }
-    });
+              [item.$1, item.$3, item.$4],
+            );
+          }
+        });
+      },
+      onSuccess: () {
+        if (updateLastUpdateTsOnSet == true) {
+          for (final key in changed) {
+            updateLastUpdateTs(key: key);
+          }
+        }
+        _listeners.notifyMany(changed);
+      },
+      onError: (e, _) {
+        for (final key in changed) {
+          if (hadPrevious[key] == true) {
+            _cache[key] = previousValues[key];
+          } else {
+            _cache.remove(key);
+          }
+        }
+        dprintWarn('setAll()', 'db write failed, rolled back cache: $e');
+        _listeners.notifyMany(changed);
+      },
+    );
 
-    if (updateLastUpdateTsOnSet) {
-      for (final key in changed) {
-        updateLastUpdateTs(key: key);
+    return true;
+  }
+
+  Future<void> _runInTransaction(Future<void> Function() runner) async {
+    await _db.customStatement('BEGIN IMMEDIATE');
+    var committed = false;
+    try {
+      await runner();
+      await _db.customStatement('COMMIT');
+      committed = true;
+    } finally {
+      if (!committed) {
+        try {
+          await _db.customStatement('ROLLBACK');
+        } catch (_) {}
       }
     }
-    _listeners.notifyMany(changed);
-    return true;
   }
 
   @override
@@ -282,7 +343,6 @@ ON CONFLICT(key) DO UPDATE SET
 
   SqliteProp<T> property<T extends Object>(
     String key, {
-    T? defaultValue,
     bool updateLastModified = true,
     StoreFromObj<T>? fromObj,
     StoreToObj<T>? toObj,
@@ -330,9 +390,25 @@ ON CONFLICT(key) DO UPDATE SET
     );
   }
 
-  void _enqueueWrite(Future<void> Function() writer) {
-    _pendingWrites = _pendingWrites.then((_) => writer()).catchError((e, s) {
-      dprintWarn('writeQueue', '$e\n$s');
+  void _enqueueWrite(
+    Future<void> Function() writer, {
+    void Function()? onSuccess,
+    void Function(Object error, StackTrace stackTrace)? onError,
+  }) {
+    _pendingWrites = _pendingWrites.then((_) async {
+      try {
+        await writer();
+      } catch (e, s) {
+        onError?.call(e, s);
+        dprintWarn('writeQueue', '$e\n$s');
+        return;
+      }
+
+      try {
+        onSuccess?.call();
+      } catch (e, s) {
+        dprintWarn('writeQueue.onSuccess', '$e\n$s');
+      }
     });
   }
 
