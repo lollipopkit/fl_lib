@@ -641,7 +641,7 @@ class LibLocalizationsId extends LibLocalizations {
   String get test => 'pengujian';
 
   @override
-  String get theme => ' Tema';
+  String get theme => 'Tema';
 
   @override
   String get total => 'Total';

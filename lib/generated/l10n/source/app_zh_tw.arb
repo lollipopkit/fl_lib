@@ -152,7 +152,7 @@
   "askAiModel": "模型",
   "battery": "電池",
   "cmd": "指令",
-  "confirm": "Confirm",
+  "confirm": "確認",
   "conn": "連線",
   "container": "容器",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki/主页#自定义指令",

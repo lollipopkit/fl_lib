@@ -1133,7 +1133,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get cmd => '指令';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => '確認';
 
   @override
   String get conn => '連線';
