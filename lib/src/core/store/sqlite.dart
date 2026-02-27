@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
 
   Future<void> _initInternal() async {
     if (_inited) return;
+    _RawSqliteDatabase? localDb;
     try {
       await _SqlCipherBootstrap.ensureConfigured();
       final cipherKey = await _SqlCipherBootstrap.loadOrCreateKey();
@@ -48,19 +49,25 @@ CREATE TABLE IF NOT EXISTS kv_entries (
         _ => (await getApplicationDocumentsDirectory()).path,
       };
       final file = File(path.joinPath('$dbName.db'));
-      _db = _RawSqliteDatabase(file: file, cipherKey: cipherKey);
+      localDb = _RawSqliteDatabase(file: file, cipherKey: cipherKey);
 
-      await _db.customStatement(_createTable);
-      await _reloadCache();
+      await localDb.customStatement(_createTable);
+      await _reloadCache(localDb);
+      _db = localDb;
       _inited = true;
     } catch (_) {
+      if (localDb != null) {
+        try {
+          await localDb.close();
+        } catch (_) {}
+      }
       _initFuture = null;
       rethrow;
     }
   }
 
-  Future<void> _reloadCache() async {
-    final rows = await _db
+  Future<void> _reloadCache(_RawSqliteDatabase db) async {
+    final rows = await db
         .customSelect('SELECT key, value_json FROM $_tableName')
         .get();
     _cache.clear();
@@ -356,7 +363,6 @@ ON CONFLICT(key) DO UPDATE SET
     if (lastUpdateTsMap != null) {
       _cache[lastUpdateTsKey] = lastUpdateTsMap;
     }
-    final optimisticCache = Map<String, Object?>.from(_cache);
     _listeners.notifyMany(changed);
 
     updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
@@ -387,16 +393,9 @@ ON CONFLICT(key) DO UPDATE SET
         }
       },
       onError: (e, _) {
-        final stillOptimistic =
-            _cache.length == optimisticCache.length &&
-            optimisticCache.entries.every(
-              (entry) => _cache[entry.key] == entry.value,
-            );
-        if (stillOptimistic) {
-          _cache
-            ..clear()
-            ..addAll(oldCache);
-        }
+        _cache
+          ..clear()
+          ..addAll(oldCache);
         dprintWarn('clear()', 'db clear failed, rolled back cache: $e');
         _listeners.notifyMany(changed);
       },
@@ -698,13 +697,21 @@ class _SqliteListenerManager {
     if (listeners == null || listeners.isEmpty) return;
     final snapshot = List<VoidCallback>.of(listeners);
     for (final listener in snapshot) {
-      listener();
+      try {
+        listener();
+      } catch (e, s) {
+        debugPrint('notify("$key") listener error: $e\n$s');
+      }
     }
   }
 
   void notifyMany(Iterable<String> keys) {
     for (final key in keys.toSet()) {
-      notify(key);
+      try {
+        notify(key);
+      } catch (e, s) {
+        debugPrint('notifyMany("$key") error: $e\n$s');
+      }
     }
   }
 }
