@@ -14,6 +14,7 @@ class SqliteStore extends Store {
   final Map<String, Object?> _cache = <String, Object?>{};
   final _SqliteListenerManager _listeners = _SqliteListenerManager();
   Future<void> _pendingWrites = Future<void>.value();
+  Future<void>? _initFuture;
   bool _inited = false;
 
   static const _tableName = 'kv_entries';
@@ -30,21 +31,31 @@ CREATE TABLE IF NOT EXISTS kv_entries (
     throw StateError('SqliteStore.init() must be called before use.');
   }
 
-  Future<void> init() async {
+  Future<void> init() {
+    if (_inited) return Future<void>.value();
+    return _initFuture ??= _initInternal();
+  }
+
+  Future<void> _initInternal() async {
     if (_inited) return;
-    await _SqlCipherBootstrap.ensureConfigured();
-    final cipherKey = await _SqlCipherBootstrap.loadOrCreateKey();
+    try {
+      await _SqlCipherBootstrap.ensureConfigured();
+      final cipherKey = await _SqlCipherBootstrap.loadOrCreateKey();
 
-    final path = switch (Pfs.type) {
-      Pfs.linux || Pfs.windows => Paths.doc,
-      _ => (await getApplicationDocumentsDirectory()).path,
-    };
-    final file = File(path.joinPath('$dbName.db'));
-    _db = _RawSqliteDatabase(file: file, cipherKey: cipherKey);
+      final path = switch (Pfs.type) {
+        Pfs.linux || Pfs.windows => Paths.doc,
+        _ => (await getApplicationDocumentsDirectory()).path,
+      };
+      final file = File(path.joinPath('$dbName.db'));
+      _db = _RawSqliteDatabase(file: file, cipherKey: cipherKey);
 
-    await _db.customStatement(_createTable);
-    await _reloadCache();
-    _inited = true;
+      await _db.customStatement(_createTable);
+      await _reloadCache();
+      _inited = true;
+    } catch (_) {
+      _initFuture = null;
+      rethrow;
+    }
   }
 
   Future<void> _reloadCache() async {
@@ -134,10 +145,12 @@ ON CONFLICT(key) DO UPDATE SET
           _listeners.notify(key);
         },
         onError: (e, _) {
-          if (hadPrevious) {
-            _cache[key] = previous;
-          } else {
-            _cache.remove(key);
+          if (_cache[key] == normalized) {
+            if (hadPrevious) {
+              _cache[key] = previous;
+            } else {
+              _cache.remove(key);
+            }
           }
           dprintWarn('set("$key")', 'db write failed, rolled back cache: $e');
           _listeners.notify(key);
@@ -221,7 +234,10 @@ ON CONFLICT(key) DO UPDATE SET
         _listeners.notifyMany(changed);
       },
       onError: (e, _) {
-        for (final key in changed) {
+        for (final item in prepared) {
+          final key = item.$1;
+          final optimisticValue = item.$2;
+          if (_cache[key] != optimisticValue) continue;
           if (hadPrevious[key] == true) {
             _cache[key] = previousValues[key];
           } else {
@@ -281,7 +297,7 @@ ON CONFLICT(key) DO UPDATE SET
         _listeners.notify(key);
       },
       onError: (e, _) {
-        if (hadKey) {
+        if (!_cache.containsKey(key) && hadKey) {
           _cache[key] = previousValue;
         }
         dprintWarn('remove("$key")', 'db delete failed, rolled back cache: $e');
@@ -302,12 +318,14 @@ ON CONFLICT(key) DO UPDATE SET
     if (lastUpdateTsMap != null) {
       _cache[lastUpdateTsKey] = lastUpdateTsMap;
     }
+    final optimisticCache = Map<String, Object?>.from(_cache);
 
     updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
     _enqueueWrite(
       () async {
-        await _db.customStatement('DELETE FROM $_tableName');
-        if (lastUpdateTsMap != null) {
+        await _runInTransaction(() async {
+          await _db.customStatement('DELETE FROM $_tableName');
+          if (lastUpdateTsMap == null) return;
           await _db.customStatement(
             '''
 INSERT INTO $_tableName(key, value_json, updated_at)
@@ -322,7 +340,7 @@ ON CONFLICT(key) DO UPDATE SET
               DateTimeX.timestamp,
             ],
           );
-        }
+        });
       },
       onSuccess: () {
         if (updateLastUpdateTsOnClear == true) {
@@ -331,9 +349,16 @@ ON CONFLICT(key) DO UPDATE SET
         _listeners.notifyMany(changed);
       },
       onError: (e, _) {
-        _cache
-          ..clear()
-          ..addAll(oldCache);
+        final stillOptimistic =
+            _cache.length == optimisticCache.length &&
+            optimisticCache.entries.every(
+              (entry) => _cache[entry.key] == entry.value,
+            );
+        if (stillOptimistic) {
+          _cache
+            ..clear()
+            ..addAll(oldCache);
+        }
         dprintWarn('clear()', 'db clear failed, rolled back cache: $e');
         _listeners.notifyMany(changed);
       },
@@ -449,7 +474,11 @@ ON CONFLICT(key) DO UPDATE SET
       try {
         await writer();
       } catch (e, s) {
-        onError?.call(e, s);
+        try {
+          onError?.call(e, s);
+        } catch (errorInCallback, callbackStack) {
+          dprintWarn('writeQueue.onError', '$errorInCallback\n$callbackStack');
+        }
         dprintWarn('writeQueue', '$e\n$s');
         return;
       }
