@@ -739,6 +739,7 @@ void _setupCipherDatabase(sqlite3.Database database, String cipherKey) {
 abstract final class _SqlCipherBootstrap {
   static bool _configured = false;
   static String? _cipherKey;
+  static Completer<String>? _pendingLoad;
 
   static Future<void> ensureConfigured() async {
     if (_configured) return;
@@ -754,19 +755,35 @@ abstract final class _SqlCipherBootstrap {
     final cached = _cipherKey;
     if (cached != null) return cached;
 
-    final existing = await SecureStoreProps.sqlitePwd.read();
-    if (existing != null && existing.isNotEmpty) {
-      _cipherKey = existing;
-      return existing;
-    }
+    final pending = _pendingLoad;
+    if (pending != null) return pending.future;
 
-    final oldHiveKey = await SecureStoreProps.hivePwd.read();
-    final generated = oldHiveKey?.isNotEmpty == true
-        ? oldHiveKey!
-        : _generateKey();
-    await SecureStoreProps.sqlitePwd.write(generated);
-    _cipherKey = generated;
-    return generated;
+    final completer = Completer<String>();
+    _pendingLoad = completer;
+    try {
+      final existing = await SecureStoreProps.sqlitePwd.read();
+      if (existing != null && existing.isNotEmpty) {
+        _cipherKey = existing;
+        completer.complete(existing);
+        return existing;
+      }
+
+      final oldHiveKey = await SecureStoreProps.hivePwd.read();
+      final generated = oldHiveKey?.isNotEmpty == true
+          ? oldHiveKey!
+          : _generateKey();
+      await SecureStoreProps.sqlitePwd.write(generated);
+      _cipherKey = generated;
+      completer.complete(generated);
+      return generated;
+    } catch (e, s) {
+      completer.completeError(e, s);
+      rethrow;
+    } finally {
+      if (identical(_pendingLoad, completer)) {
+        _pendingLoad = null;
+      }
+    }
   }
 
   static String _generateKey() {
