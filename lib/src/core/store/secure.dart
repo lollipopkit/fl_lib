@@ -19,7 +19,10 @@ class _SlidingWindowRateLimiter {
   final Duration windowSize;
   final List<int> _timestamps = [];
 
-  _SlidingWindowRateLimiter({required this.maxRequests, required this.windowSize});
+  _SlidingWindowRateLimiter({
+    required this.maxRequests,
+    required this.windowSize,
+  });
 
   bool allowRequest() {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -61,7 +64,10 @@ abstract final class SecureStoreProps {
   static const bakPwd = SecureProp('bakPwd');
 
   /// Password of [HiveStore].
-  static const hivePwd = SecureProp('hivePwd'); 
+  static const hivePwd = SecureProp('hivePwd');
+
+  /// Password of [SqliteStore].
+  static const sqlitePwd = SecureProp('sqlitePwd');
 }
 
 /// The secure store.

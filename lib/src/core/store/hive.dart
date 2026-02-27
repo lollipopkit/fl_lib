@@ -3,6 +3,7 @@ part of 'iface.dart';
 /// The store of Hive.
 ///
 /// It implements [Store].
+@Deprecated('HiveStore is deprecated, use SqliteStore instead.')
 class HiveStore extends Store {
   /// The internal hive box for this [Store].
   late final Box<dynamic> box;
@@ -114,7 +115,12 @@ class HiveStore extends Store {
   }) {
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     for (final entry in map.entries) {
-      final res = set(entry.key, entry.value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+      final res = set(
+        entry.key,
+        entry.value,
+        toObj: toObj,
+        updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+      );
       if (!res) {
         dprintWarn('setAll()', 'failed to set ${entry.key}');
         return false;
@@ -124,7 +130,9 @@ class HiveStore extends Store {
   }
 
   @override
-  Set<String> keys({bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys}) {
+  Set<String> keys({
+    bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
+  }) {
     final set_ = <String>{};
     for (final key in box.keys) {
       if (key is String) {
@@ -273,7 +281,8 @@ class HiveProp<T extends Object> extends StoreProp<T> {
   }
 }
 
-final class HivePropDefault<T extends Object> extends StorePropDefault<T> implements HiveProp<T> {
+final class HivePropDefault<T extends Object> extends StorePropDefault<T>
+    implements HiveProp<T> {
   @override
   final HiveStore store;
 
@@ -405,7 +414,9 @@ extension _HiveEnc on HiveStore {
   static Future<String?> get _encryptionKey async {
     final secureStoreHiveKey = await SecureStoreProps.hivePwd.read();
     if (secureStoreHiveKey != null) return secureStoreHiveKey;
-    final hiveKey = PrefStore.shared.get<String>(_hiveEncKey) ?? PrefStore.shared.get<String>('flutter.$_hiveEncKey');
+    final hiveKey =
+        PrefStore.shared.get<String>(_hiveEncKey) ??
+        PrefStore.shared.get<String>('flutter.$_hiveEncKey');
     if (hiveKey != null) {
       SecureStoreProps.hivePwd.write(hiveKey);
     }

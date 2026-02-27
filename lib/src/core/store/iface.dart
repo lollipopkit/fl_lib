@@ -1,16 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
+import 'package:sqlite3/open.dart' as sqlite_open;
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 part 'hive.dart';
 part 'pref.dart';
 part 'mock.dart';
+part 'sqlite.dart';
 
 /// {@template store_from_to}
 /// If there is a type which is not supported by the store, the store will call
@@ -88,7 +95,12 @@ sealed class Store {
     bool? updateLastUpdateTsOnSet,
   }) async {
     for (final entry in map.entries) {
-      final res = await set(entry.key, entry.value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+      final res = await set(
+        entry.key,
+        entry.value,
+        toObj: toObj,
+        updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+      );
       if (!res) {
         dprintWarn('setAll()', 'failed to set ${entry.key}');
         return false;
@@ -102,7 +114,9 @@ sealed class Store {
   /// {@template store_include_internal_keys}
   /// - [includeInternalKeys] is whether to include the internal keys.
   /// {@endtemplate}
-  FutureOr<Set<String>> keys({bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys});
+  FutureOr<Set<String>> keys({
+    bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
+  });
 
   /// Remove the key.
   FutureOr<bool> remove(String key, {bool? updateLastUpdateTsOnRemove});
@@ -139,27 +153,50 @@ sealed class Store {
         map[k] = ts;
       }
     }
-    return set(lastUpdateTsKey, json.encode(map), updateLastUpdateTsOnSet: false);
+    return set(
+      lastUpdateTsKey,
+      json.encode(map),
+      updateLastUpdateTsOnSet: false,
+    );
   }
 
   /// Get the last update timestamp.
   ///
   /// {@macro store_last_update_ts}
   Map<String, int>? get lastUpdateTs {
-    final ts = get<Map<String, int>>(lastUpdateTsKey, fromObj: (raw) {
-      if (raw is String) {
-        return json.decode(raw).cast<String, int>();
-      } else if (raw is Map<String, int>) {
-        return raw;
-      }
-      return null;
-    });
+    final ts = get<Map<String, int>>(
+      lastUpdateTsKey,
+      fromObj: (raw) {
+        if (raw is String) {
+          return json.decode(raw).cast<String, int>();
+        } else if (raw is Map) {
+          final map = <String, int>{};
+          for (final entry in raw.entries) {
+            final key = entry.key.toString();
+            final val = entry.value;
+            final intVal = switch (val) {
+              final int i => i,
+              final String s => int.tryParse(s),
+              final num n => n.toInt(),
+              _ => null,
+            };
+            if (intVal == null) continue;
+            map[key] = intVal;
+          }
+          return map;
+        } else if (raw is Map<String, int>) {
+          return raw;
+        }
+        return null;
+      },
+    );
     return ts;
   }
 
   /// Whether the key is an internal key.
   bool isInternalKey(String key) {
-    return key.startsWith(StoreDefaults.prefixKey) || key.startsWith(StoreDefaults.prefixKeyOld);
+    return key.startsWith(StoreDefaults.prefixKey) ||
+        key.startsWith(StoreDefaults.prefixKeyOld);
   }
 
   /// Get all the key-value pairs.
@@ -269,7 +306,12 @@ abstract class StoreProp<T extends Object> {
   /// Set the value of the key.
   ///
   /// If you want to set `null`, use `remove()` instead.
-  FutureOr<void> set(T value) => store.set(key, value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+  FutureOr<void> set(T value) => store.set(
+    key,
+    value,
+    toObj: toObj,
+    updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+  );
 
   /// Remove the key.
   FutureOr<void> remove() => store.remove(key);
@@ -285,7 +327,8 @@ abstract class StoreProp<T extends Object> {
   /// both [updateLastUpdateTsOnSetProp] && [updateLastUpdateTsOnSet].
   ///
   /// {@macro store_last_update_ts}
-  bool get updateLastUpdateTsOnSet => store.updateLastUpdateTsOnSet && updateLastUpdateTsOnSetProp;
+  bool get updateLastUpdateTsOnSet =>
+      store.updateLastUpdateTsOnSet && updateLastUpdateTsOnSetProp;
 }
 
 /// The interface of a single Property in any [Store] which has a default value.
@@ -314,7 +357,12 @@ abstract class StorePropDefault<T extends Object> extends StoreProp<T> {
 
   /// Set the value of the key.
   @override
-  FutureOr<void> set(T value) => store.set(key, value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+  FutureOr<void> set(T value) => store.set(
+    key,
+    value,
+    toObj: toObj,
+    updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+  );
 
   /// {@macro store_prop_listenable}
   @override
