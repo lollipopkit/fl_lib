@@ -70,7 +70,15 @@ CREATE TABLE IF NOT EXISTS kv_entries (
       if (rawKey is! String || rawVal is! String) continue;
       final parsed = _decodeValue(rawVal);
       try {
-        _cache[rawKey] = _normalizeValue(parsed, path: rawKey);
+        final normalized = _normalizeValue(parsed, path: rawKey);
+        if (normalized == null) {
+          dprintWarn(
+            '_reloadCache()',
+            'skip key "$rawKey": normalized value is null',
+          );
+          continue;
+        }
+        _cache[rawKey] = normalized;
       } catch (e) {
         dprintWarn('_reloadCache()', 'skip key "$rawKey": $e');
       }
