@@ -10,12 +10,8 @@ class SqliteStore extends Store {
   }) : super(name: dbName);
 
   final String dbName;
-  late final _RawSqliteDatabase _db;
-  final Map<String, Object?> _cache = <String, Object?>{};
-  final Map<String, int> _removeOps = <String, int>{};
-  final Map<String, int> _writeVersionByKey = <String, int>{};
+  late final sqlite3.Database _db;
   final _SqliteListenerManager _listeners = _SqliteListenerManager();
-  Future<void> _pendingWrites = Future<void>.value();
   Future<void>? _initFuture;
   bool _inited = false;
 
@@ -40,7 +36,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
 
   Future<void> _initInternal() async {
     if (_inited) return;
-    _RawSqliteDatabase? localDb;
+    sqlite3.Database? localDb;
     try {
       await _SqlCipherBootstrap.ensureConfigured();
       final cipherKey = await _SqlCipherBootstrap.loadOrCreateKey();
@@ -50,16 +46,16 @@ CREATE TABLE IF NOT EXISTS kv_entries (
         _ => (await getApplicationDocumentsDirectory()).path,
       };
       final file = File(path.joinPath('$dbName.db'));
-      localDb = _RawSqliteDatabase(file: file, cipherKey: cipherKey);
+      localDb = sqlite3.sqlite3.open(file.path);
+      _setupCipherDatabase(localDb, cipherKey);
 
-      await localDb.customStatement(_createTable);
-      await _reloadCache(localDb);
+      localDb.execute(_createTable);
       _db = localDb;
       _inited = true;
     } catch (_) {
       if (localDb != null) {
         try {
-          await localDb.close();
+          localDb.dispose();
         } catch (_) {}
       }
       _initFuture = null;
@@ -67,36 +63,28 @@ CREATE TABLE IF NOT EXISTS kv_entries (
     }
   }
 
-  Future<void> _reloadCache(_RawSqliteDatabase db) async {
-    final rows = await db
-        .customSelect('SELECT key, value_json FROM $_tableName')
-        .get();
-    _cache.clear();
-    for (final row in rows) {
-      final rawKey = row.data['key'];
-      final rawVal = row.data['value_json'];
-      if (rawKey is! String || rawVal is! String) continue;
-      final parsed = _decodeValue(rawVal);
-      try {
-        final normalized = _normalizeValue(parsed, path: rawKey);
-        if (normalized == null) {
-          dprintWarn(
-            '_reloadCache()',
-            'skip key "$rawKey": normalized value is null',
-          );
-          continue;
-        }
-        _cache[rawKey] = normalized;
-      } catch (e) {
-        dprintWarn('_reloadCache()', 'skip key "$rawKey": $e');
-      }
+  Object? _readNormalizedValue(String key) {
+    final rows = _db.select(
+      'SELECT value_json FROM $_tableName WHERE key = ? LIMIT 1',
+      [key],
+    );
+    if (rows.isEmpty) return null;
+    final rawVal = rows.first['value_json'];
+    if (rawVal is! String) return null;
+    final parsed = _decodeValue(rawVal);
+    if (parsed == null) return null;
+    try {
+      return _normalizeValue(parsed, path: key);
+    } catch (e) {
+      dprintWarn('get("$key")', 'normalize failed: $e');
+      return null;
     }
   }
 
   @override
   T? get<T extends Object>(String key, {StoreFromObj<T>? fromObj}) {
     _ensureInited();
-    final val = _cache[key];
+    final val = _readNormalizedValue(key);
     if (val == null) return null;
     if (val is T) return val;
 
@@ -113,13 +101,6 @@ CREATE TABLE IF NOT EXISTS kv_entries (
     return null;
   }
 
-  /// Queues a write with optimistic cache update.
-  ///
-  /// Returning `true` means the write is queued, not that DB persistence has
-  /// completed. If persistence confirmation is required, await [flush].
-  ///
-  /// On DB failure, `_enqueueWrite(onError: ...)` rolls back cache changes and
-  /// notifies listeners.
   @override
   bool set<T extends Object>(
     String key,
@@ -143,41 +124,20 @@ CREATE TABLE IF NOT EXISTS kv_entries (
       }
 
       final encoded = _encodeValue(normalized);
-      final hadPrevious = _cache.containsKey(key);
-      final previous = _cache[key];
-      final capturedVersion = _nextWriteVersion(key);
-      _cache[key] = normalized;
-      _listeners.notify(key);
-      _enqueueWrite(
-        () async {
-          await _db.customStatement(
-            '''
+      _db.execute(
+        '''
 INSERT INTO $_tableName(key, value_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET
   value_json = excluded.value_json,
   updated_at = excluded.updated_at
 ''',
-            [key, encoded, DateTimeX.timestamp],
-          );
-        },
-        onSuccess: () {
-          if (_writeVersionByKey[key] != capturedVersion) return;
-          if (updateLastUpdateTsOnSet == true) {
-            updateLastUpdateTs(key: key);
-          }
-        },
-        onError: (e, _) {
-          if (_writeVersionByKey[key] != capturedVersion) return;
-          if (hadPrevious) {
-            _cache[key] = previous;
-          } else {
-            _cache.remove(key);
-          }
-          dprintWarn('set("$key")', 'db write failed, rolled back cache: $e');
-          _listeners.notify(key);
-        },
+        [key, encoded, DateTimeX.timestamp],
       );
+      _listeners.notify(key);
+      if (updateLastUpdateTsOnSet == true) {
+        updateLastUpdateTs(key: key);
+      }
       return true;
     } catch (e) {
       dprintWarn('set("$key")', 'write failed: $e');
@@ -206,10 +166,7 @@ ON CONFLICT(key) DO UPDATE SET
       try {
         normalized = _normalizeValue(raw, path: key);
       } catch (e) {
-        dprintWarn(
-          'setAll()',
-          'failed to normalize key `$key`: $e',
-        );
+        dprintWarn('setAll()', 'failed to normalize key `$key`: $e');
         return false;
       }
       if (normalized == null) {
@@ -227,75 +184,47 @@ ON CONFLICT(key) DO UPDATE SET
     if (prepared.isEmpty) return true;
 
     final changed = prepared.map((item) => item.$1).toList(growable: false);
-    final hadPrevious = <String, bool>{};
-    final previousValues = <String, Object?>{};
-    final capturedVersions = <String, int>{};
-    for (final item in prepared) {
-      final key = item.$1;
-      hadPrevious[key] = _cache.containsKey(key);
-      previousValues[key] = _cache[key];
-      capturedVersions[key] = _nextWriteVersion(key);
-      _cache[key] = item.$2;
-    }
-    _listeners.notifyMany(changed);
-
-    _enqueueWrite(
-      () async {
-        await _runInTransaction(() async {
-          for (final item in prepared) {
-            await _db.customStatement(
-              '''
+    try {
+      _runInTransaction(() {
+        for (final item in prepared) {
+          _db.execute(
+            '''
 INSERT INTO $_tableName(key, value_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET
   value_json = excluded.value_json,
   updated_at = excluded.updated_at
 ''',
-              [item.$1, item.$3, item.$4],
-            );
-          }
-        });
-      },
-      onSuccess: () {
-        if (updateLastUpdateTsOnSet == true) {
-          for (final key in changed) {
-            if (_writeVersionByKey[key] != capturedVersions[key]) continue;
-            updateLastUpdateTs(key: key);
-          }
+            [item.$1, item.$3, item.$4],
+          );
         }
-      },
-      onError: (e, _) {
-        final rolledBackKeys = <String>[];
-        for (final item in prepared) {
-          final key = item.$1;
-          if (_writeVersionByKey[key] != capturedVersions[key]) continue;
-          if (hadPrevious[key] == true) {
-            _cache[key] = previousValues[key];
-          } else {
-            _cache.remove(key);
-          }
-          rolledBackKeys.add(key);
-        }
-        if (rolledBackKeys.isEmpty) return;
-        dprintWarn('setAll()', 'db write failed, rolled back cache: $e');
-        _listeners.notifyMany(rolledBackKeys);
-      },
-    );
+      });
+    } catch (e) {
+      dprintWarn('setAll()', 'write failed: $e');
+      return false;
+    }
+
+    _listeners.notifyMany(changed);
+    if (updateLastUpdateTsOnSet == true) {
+      for (final key in changed) {
+        updateLastUpdateTs(key: key);
+      }
+    }
 
     return true;
   }
 
-  Future<void> _runInTransaction(Future<void> Function() runner) async {
-    await _db.customStatement('BEGIN IMMEDIATE');
+  void _runInTransaction(void Function() runner) {
+    _db.execute('BEGIN IMMEDIATE');
     var committed = false;
     try {
-      await runner();
-      await _db.customStatement('COMMIT');
+      runner();
+      _db.execute('COMMIT');
       committed = true;
     } finally {
       if (!committed) {
         try {
-          await _db.customStatement('ROLLBACK');
+          _db.execute('ROLLBACK');
         } catch (_) {}
       }
     }
@@ -306,125 +235,64 @@ ON CONFLICT(key) DO UPDATE SET
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
     _ensureInited();
-    if (includeInternalKeys) return _cache.keys.toSet();
-    return _cache.keys.where((key) => !isInternalKey(key)).toSet();
+    final rows = _db.select('SELECT key FROM $_tableName');
+    final result = <String>{};
+    for (final row in rows) {
+      final key = row['key'];
+      if (key is! String) continue;
+      if (!includeInternalKeys && isInternalKey(key)) continue;
+      result.add(key);
+    }
+    return result;
   }
 
   @override
   bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
     _ensureInited();
-    final opId = (_removeOps[key] ?? 0) + 1;
-    _removeOps[key] = opId;
-    _nextWriteVersion(key);
-    final hadKey = _cache.containsKey(key);
-    final previousValue = _cache[key];
-    _cache.remove(key);
-    _listeners.notify(key);
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    _enqueueWrite(
-      () async {
-        await _db.customStatement('DELETE FROM $_tableName WHERE key = ?', [
-          key,
-        ]);
-      },
-      onSuccess: () {
-        final currentOpId = _removeOps[key];
-        if (currentOpId != opId) return;
-        try {
-          if (updateLastUpdateTsOnRemove == true) {
-            updateLastUpdateTs(key: key);
-          }
-        } finally {
-          if (_removeOps[key] == opId) {
-            _removeOps.remove(key);
-          }
-        }
-      },
-      onError: (e, _) {
-        final currentOpId = _removeOps[key];
-        final isCurrent = currentOpId == opId;
-        if (!isCurrent) return;
-        if (isCurrent && !_cache.containsKey(key) && hadKey) {
-          _cache[key] = previousValue;
-        }
-        dprintWarn('remove("$key")', 'db delete failed, rolled back cache: $e');
-        try {
-          _listeners.notify(key);
-        } finally {
-          if (_removeOps[key] == opId) {
-            _removeOps.remove(key);
-          }
-        }
-      },
-    );
-    return true;
+    try {
+      _db.execute('DELETE FROM $_tableName WHERE key = ?', [key]);
+      _listeners.notify(key);
+      if (updateLastUpdateTsOnRemove == true) {
+        updateLastUpdateTs(key: key);
+      }
+      return true;
+    } catch (e) {
+      dprintWarn('remove("$key")', 'delete failed: $e');
+      return false;
+    }
   }
 
   @override
   bool clear({bool? updateLastUpdateTsOnClear}) {
     _ensureInited();
-    final oldCache = Map<String, Object?>.from(_cache);
-    final lastUpdateTsMap = oldCache[lastUpdateTsKey];
-    final changed = oldCache.keys.toList(growable: false);
-    final clearCapturedVersions = <String, int>{};
-    for (final key in changed) {
-      clearCapturedVersions[key] = _nextWriteVersion(key);
-    }
-
-    _cache.clear();
-    if (lastUpdateTsMap != null) {
-      _cache[lastUpdateTsKey] = lastUpdateTsMap;
-    }
-    _listeners.notifyMany(changed);
-
+    final changed = keys(includeInternalKeys: true).toList(growable: false);
+    final lastUpdateTsMap = lastUpdateTs;
     updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    _enqueueWrite(
-      () async {
-        await _runInTransaction(() async {
-          await _db.customStatement('DELETE FROM $_tableName');
-          if (lastUpdateTsMap == null) return;
-          await _db.customStatement(
-            '''
+    try {
+      _runInTransaction(() {
+        _db.execute('DELETE FROM $_tableName');
+        if (lastUpdateTsMap == null) return;
+        _db.execute(
+          '''
 INSERT INTO $_tableName(key, value_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET
   value_json = excluded.value_json,
   updated_at = excluded.updated_at
 ''',
-            [
-              lastUpdateTsKey,
-              _encodeValue(lastUpdateTsMap),
-              DateTimeX.timestamp,
-            ],
-          );
-        });
-      },
-      onSuccess: () {
-        if (updateLastUpdateTsOnClear == true) {
-          updateLastUpdateTs(key: null);
-        }
-      },
-      onError: (e, _) {
-        final restoredKeys = <String>[];
-        for (final entry in oldCache.entries) {
-          final key = entry.key;
-          if (_writeVersionByKey[key] != clearCapturedVersions[key]) continue;
-          _cache[key] = entry.value;
-          restoredKeys.add(key);
-        }
-        dprintWarn('clear()', 'db clear failed, rolled back cache: $e');
-        if (restoredKeys.isNotEmpty) {
-          _listeners.notifyMany(restoredKeys);
-        }
-      },
-    );
-    return true;
-  }
-
-  int _nextWriteVersion(String key) {
-    final next = (_writeVersionByKey[key] ?? 0) + 1;
-    _writeVersionByKey[key] = next;
-    return next;
+          [lastUpdateTsKey, _encodeValue(lastUpdateTsMap), DateTimeX.timestamp],
+        );
+      });
+      _listeners.notifyMany(changed);
+      if (updateLastUpdateTsOnClear == true) {
+        updateLastUpdateTs(key: null);
+      }
+      return true;
+    } catch (e) {
+      dprintWarn('clear()', 'clear failed: $e');
+      return false;
+    }
   }
 
   @override
@@ -432,10 +300,25 @@ ON CONFLICT(key) DO UPDATE SET
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
     _ensureInited();
-    final keys = this.keys(includeInternalKeys: includeInternalKeys);
-    return Map<String, Object?>.fromEntries(
-      keys.map((key) => MapEntry(key, _cache[key])),
-    );
+    final rows = _db.select('SELECT key, value_json FROM $_tableName');
+    final map = <String, Object?>{};
+    for (final row in rows) {
+      final key = row['key'];
+      final rawVal = row['value_json'];
+      if (key is! String || rawVal is! String) continue;
+      if (!includeInternalKeys && isInternalKey(key)) continue;
+
+      final parsed = _decodeValue(rawVal);
+      if (parsed == null) continue;
+      try {
+        final normalized = _normalizeValue(parsed, path: key);
+        if (normalized == null) continue;
+        map[key] = normalized;
+      } catch (e) {
+        dprintWarn('getAllMap()', 'skip key `$key`: $e');
+      }
+    }
+    return map;
   }
 
   @override
@@ -444,10 +327,11 @@ ON CONFLICT(key) DO UPDATE SET
     StoreFromObj<T>? fromStr,
   }) {
     _ensureInited();
-    final keys = this.keys(includeInternalKeys: includeInternalKeys);
     final map = <String, T>{};
-    for (final key in keys) {
-      final val = _cache[key];
+    final all = getAllMap(includeInternalKeys: includeInternalKeys);
+    for (final entry in all.entries) {
+      final key = entry.key;
+      final val = entry.value;
       if (val is T) {
         map[key] = val;
         continue;
@@ -468,13 +352,11 @@ ON CONFLICT(key) DO UPDATE SET
 
   Future<void> flush() async {
     _ensureInited();
-    await _pendingWrites;
   }
 
   Future<void> vacuum() async {
     _ensureInited();
-    await flush();
-    await _db.customStatement('VACUUM');
+    _db.execute('VACUUM');
   }
 
   SqliteProp<T> property<T extends Object>(
@@ -524,32 +406,6 @@ ON CONFLICT(key) DO UPDATE SET
       fromObj: fromObj ?? (obj) => List<T>.from(obj as Iterable),
       toObj: toObj,
     );
-  }
-
-  void _enqueueWrite(
-    Future<void> Function() writer, {
-    void Function()? onSuccess,
-    void Function(Object error, StackTrace stackTrace)? onError,
-  }) {
-    _pendingWrites = _pendingWrites.then((_) async {
-      try {
-        await writer();
-      } catch (e, s) {
-        try {
-          onError?.call(e, s);
-        } catch (errorInCallback, callbackStack) {
-          dprintWarn('writeQueue.onError', '$errorInCallback\n$callbackStack');
-        }
-        dprintWarn('writeQueue', '$e\n$s');
-        return;
-      }
-
-      try {
-        onSuccess?.call();
-      } catch (e, s) {
-        dprintWarn('writeQueue.onSuccess', '$e\n$s');
-      }
-    });
   }
 
   String _encodeValue(Object value) {
@@ -738,22 +594,6 @@ class _SqliteListenerManager {
       }
     }
   }
-}
-
-class _RawSqliteDatabase extends GeneratedDatabase {
-  _RawSqliteDatabase({required File file, required String cipherKey})
-    : super(
-        NativeDatabase(
-          file,
-          setup: (database) => _setupCipherDatabase(database, cipherKey),
-        ),
-      );
-
-  @override
-  int get schemaVersion => 1;
-
-  @override
-  Iterable<TableInfo<Table, Object?>> get allTables => const [];
 }
 
 void _setupCipherDatabase(sqlite3.Database database, String cipherKey) {

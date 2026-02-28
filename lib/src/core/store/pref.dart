@@ -3,7 +3,11 @@ part of 'iface.dart';
 /// Properties saved in SharedPreferences.
 abstract final class PrefProps {
   /// Used for migration
-  static const lastVer = PrefPropDefault('last_ver', 0, updateLastUpdateTsOnSetProp: false);
+  static const lastVer = PrefPropDefault(
+    'last_ver',
+    0,
+    updateLastUpdateTsOnSetProp: false,
+  );
 
   /// `null` means not set, `''` means empty password
   static const bakPwd = PrefProp<String>('bak_pwd');
@@ -23,10 +27,18 @@ abstract final class PrefProps {
   static const webdavPwd = PrefProp<String>('webdav_pwd');
 
   /// {@macro webdav_settings}
-  static const webdavSync = PrefPropDefault('webdav_sync', false, updateLastUpdateTsOnSetProp: false);
+  static const webdavSync = PrefPropDefault(
+    'webdav_sync',
+    false,
+    updateLastUpdateTsOnSetProp: false,
+  );
 
   /// iCloud sync
-  static const icloudSync = PrefPropDefault('icloud_sync', false, updateLastUpdateTsOnSetProp: false);
+  static const icloudSync = PrefPropDefault(
+    'icloud_sync',
+    false,
+    updateLastUpdateTsOnSetProp: false,
+  );
 
   /// GitHub token used for Gist access
   static const githubToken = PrefProp<String>('github_token');
@@ -35,7 +47,11 @@ abstract final class PrefProps {
   static const gistId = PrefProp<String>('gist_id');
 
   /// Enable GitHub Gist sync
-  static const gistSync = PrefPropDefault('gist_sync', false, updateLastUpdateTsOnSetProp: false);
+  static const gistSync = PrefPropDefault(
+    'gist_sync',
+    false,
+    updateLastUpdateTsOnSetProp: false,
+  );
 }
 
 /// The listener of the SharedPreferences.
@@ -77,13 +93,32 @@ final class PrefStore extends Store {
 
   SharedPreferences? _instance;
 
+  String _realKey(String key) {
+    final p = prefix;
+    if (p == null || p.isEmpty) return key;
+    return '$p.$key';
+  }
+
+  String? _logicalKey(String realKey) {
+    final p = prefix;
+    if (p == null || p.isEmpty) return realKey;
+    final prefixWithDot = '$p.';
+    if (!realKey.startsWith(prefixWithDot)) return null;
+    return realKey.substring(prefixWithDot.length);
+  }
+
   /// Initialize the store.
   ///
   /// `MUST` call this before using any pref stores.
   Future<void> init({String prefix = ''}) async {
     if (_instance != null) return;
-    SharedPreferences.setPrefix(prefix);
-    _instance = await SharedPreferences.getInstance();
+    if (identical(this, PrefStore.shared)) {
+      SharedPreferences.setPrefix(prefix);
+      _instance = await SharedPreferences.getInstance();
+      return;
+    }
+    await PrefStore.shared.init(prefix: prefix);
+    _instance = PrefStore.shared._instance;
   }
 
   /// Get the value of the key.
@@ -101,23 +136,28 @@ final class PrefStore extends Store {
       return null;
     }
 
+    final realKey = _realKey(key);
     try {
+      if (T == Object) {
+        return instance.get(realKey) as T?;
+      }
+
       final res = switch (T) {
-        const (bool) => instance.getBool(key),
-        const (double) => instance.getDouble(key),
-        const (int) => instance.getInt(key),
-        const (String) => instance.getString(key),
-        const (List<String>) => instance.getStringList(key),
+        const (bool) => instance.getBool(realKey),
+        const (double) => instance.getDouble(realKey),
+        const (int) => instance.getInt(realKey),
+        const (String) => instance.getString(realKey),
+        const (List<String>) => instance.getStringList(realKey),
         const (Map<String, dynamic>) => () {
-            final str = instance.getString(key);
-            if (str == null) return null;
-            return json.decode(str) as Map<String, dynamic>;
-          }(),
+          final str = instance.getString(realKey);
+          if (str == null) return null;
+          return json.decode(str) as Map<String, dynamic>;
+        }(),
         _ => () {
-            final str = instance.getString(key);
-            if (str == null) return null;
-            return fromObj?.call(str);
-          }(),
+          final str = instance.getString(realKey);
+          if (str == null) return null;
+          return fromObj?.call(str);
+        }(),
       };
       if (res is! T?) {
         dprintWarn('get("$key")', 'is: ${res.runtimeType}, expected: $T');
@@ -147,21 +187,32 @@ final class PrefStore extends Store {
       return Future.value(false);
     }
 
-    final res = _set(key, val, ifNotSupported: () async {
-      if (toObj == null) {
-        dprintWarn('set("$key")', 'invalid type: ${val.runtimeType}');
-        return false;
-      }
-      final obj = toObj(val);
-      if (obj != null) {
-        return _set(key, obj, ifNotSupported: () {
-          dprintWarn('set("$key")', 'unsupported type: ${obj.runtimeType}');
-          return Future.value(false);
-        });
-      }
-      return instance.remove(key);
-    });
-    if (updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
+    final realKey = _realKey(key);
+    final res = _set(
+      realKey,
+      val,
+      ifNotSupported: () async {
+        if (toObj == null) {
+          dprintWarn('set("$key")', 'invalid type: ${val.runtimeType}');
+          return false;
+        }
+        final obj = toObj(val);
+        if (obj != null) {
+          return _set(
+            realKey,
+            obj,
+            ifNotSupported: () {
+              dprintWarn('set("$key")', 'unsupported type: ${obj.runtimeType}');
+              return Future.value(false);
+            },
+          );
+        }
+        return instance.remove(realKey);
+      },
+    );
+    if (updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) {
+      updateLastUpdateTs(key: key);
+    }
     return res;
   }
 
@@ -178,7 +229,9 @@ final class PrefStore extends Store {
 
     final set_ = <String>{};
     try {
-      for (final key in instance.getKeys()) {
+      for (final realKey in instance.getKeys()) {
+        final key = _logicalKey(realKey);
+        if (key == null) continue;
         if (!includeInternalKeys && isInternalKey(key)) continue;
         set_.add(key);
       }
@@ -197,7 +250,7 @@ final class PrefStore extends Store {
       return Future.value(false);
     }
 
-    final ret = instance.remove(key);
+    final ret = instance.remove(_realKey(key));
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
     return ret;
@@ -212,37 +265,112 @@ final class PrefStore extends Store {
       return Future.value(false);
     }
 
-    final lastUpTsMap = lastUpdateTs;
-    final ret = instance.clear();
-    if (lastUpTsMap != null) {
-      set(lastUpdateTsKey, lastUpTsMap, updateLastUpdateTsOnSet: false);
-    }
+    final existingKeys = keys(includeInternalKeys: true);
+    final ret = Future.wait(
+      existingKeys.map((key) => instance.remove(_realKey(key))),
+    ).then((results) => results.every((ok) => ok));
 
     updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) updateLastUpdateTs(key: null);
+    if (updateLastUpdateTsOnClear) {
+      updateLastUpdateTs(key: null);
+    }
     return ret;
   }
 
   Future<bool> _set<T extends Object>(
-    String key,
+    String realKey,
     T val, {
     required Future<bool> Function() ifNotSupported,
   }) {
     final instance = _instance;
     if (instance == null) {
-      dprintWarn('set("$key")', 'instance not initialized');
+      dprintWarn('set("$realKey")', 'instance not initialized');
       return Future.value(false);
     }
 
     return switch (val) {
-      final bool obj => instance.setBool(key, obj),
-      final double obj => instance.setDouble(key, obj),
-      final int obj => instance.setInt(key, obj),
-      final String obj => instance.setString(key, obj),
-      final List<String> obj => instance.setStringList(key, obj),
-      final Map<String, dynamic> obj => instance.setString(key, json.encode(obj)),
+      final bool obj => instance.setBool(realKey, obj),
+      final double obj => instance.setDouble(realKey, obj),
+      final int obj => instance.setInt(realKey, obj),
+      final String obj => instance.setString(realKey, obj),
+      final List<String> obj => instance.setStringList(realKey, obj),
+      final Map<String, dynamic> obj => instance.setString(
+        realKey,
+        json.encode(obj),
+      ),
+      final List<Object?> obj => instance.setString(realKey, json.encode(obj)),
+      final Map<Object?, Object?> obj => instance.setString(
+        realKey,
+        json.encode({
+          for (final entry in obj.entries) entry.key.toString(): entry.value,
+        }),
+      ),
       _ => ifNotSupported(),
     };
+  }
+
+  PrefProp<T> property<T extends Object>(
+    String key, {
+    bool updateLastModified = true,
+    StoreFromObj<T>? fromObj,
+    StoreToObj<T>? toObj,
+  }) {
+    return PrefProp<T>(
+      key,
+      store: this,
+      updateLastUpdateTsOnSetProp: updateLastModified,
+      fromObj: fromObj,
+      toObj: toObj,
+    );
+  }
+
+  PrefPropDefault<T> propertyDefault<T extends Object>(
+    String key,
+    T defaultValue, {
+    bool updateLastModified = StoreDefaults.defaultUpdateLastUpdateTs,
+    StoreFromObj<T>? fromObj,
+    StoreToObj<T>? toObj,
+  }) {
+    return PrefPropDefault<T>(
+      key,
+      defaultValue,
+      store: this,
+      updateLastUpdateTsOnSetProp: updateLastModified,
+      fromObj: fromObj,
+      toObj: toObj,
+    );
+  }
+
+  PrefPropDefault<List<T>> listProperty<T extends Object>(
+    String key, {
+    List<T> defaultValue = const [],
+    bool updateLastModified = StoreDefaults.defaultUpdateLastUpdateTs,
+    StoreFromObj<List<T>>? fromObj,
+    StoreToObj<List<T>>? toObj,
+  }) {
+    return PrefPropDefault<List<T>>(
+      key,
+      defaultValue,
+      store: this,
+      updateLastUpdateTsOnSetProp: updateLastModified,
+      fromObj:
+          fromObj ??
+          (obj) {
+            final raw = switch (obj) {
+              final String s => json.decode(s),
+              _ => obj,
+            };
+            return List<T>.from(raw as Iterable);
+          },
+      toObj:
+          toObj ??
+          (value) {
+            if (value == null) return null;
+            final list = List<Object?>.from(value);
+            final allString = list.every((e) => e is String);
+            return allString ? list.cast<String>() : list;
+          },
+    );
   }
 }
 
@@ -274,6 +402,12 @@ final class PrefProp<T extends Object> extends StoreProp<T> {
   /// Override it, so the return type is `T?` instead of `FutureOr<T?>`.
   @override
   T? get() => store.get<T>(key);
+
+  T? fetch() => get();
+
+  FutureOr<void> put(T value) => set(value);
+
+  FutureOr<void> delete() => remove();
 }
 
 /// A single Property in SharedPreferences with default value.
@@ -300,7 +434,14 @@ final class PrefPropDefault<T extends Object> extends StorePropDefault<T> {
   PrefStore get store => _store ?? PrefStore.shared;
 
   @override
-  ValueListenable<T> listenable() => PrefPropDefaultListenable<T>(store, key, defaultValue);
+  ValueListenable<T> listenable() =>
+      PrefPropDefaultListenable<T>(store, key, defaultValue);
+
+  T fetch() => get();
+
+  FutureOr<void> put(T value) => set(value);
+
+  FutureOr<void> delete() => remove();
 }
 
 /// Base class for PrefProp listenables to avoid code duplication
@@ -334,7 +475,8 @@ abstract class _BasePrefPropListenable {
 }
 
 /// The [ValueListenable] of the key.
-final class PrefPropListenable<T extends Object> extends _BasePrefPropListenable implements ValueListenable<T?> {
+final class PrefPropListenable<T extends Object> extends _BasePrefPropListenable
+    implements ValueListenable<T?> {
   const PrefPropListenable(super.store, super.key);
 
   @override
@@ -342,13 +484,14 @@ final class PrefPropListenable<T extends Object> extends _BasePrefPropListenable
 }
 
 /// The [ValueListenable] of the key with default value.
-final class PrefPropDefaultListenable<T extends Object> extends _BasePrefPropListenable implements ValueListenable<T> {
+final class PrefPropDefaultListenable<T extends Object>
+    extends _BasePrefPropListenable
+    implements ValueListenable<T> {
   final T defaultValue;
 
   PrefPropDefaultListenable(super.store, super.key, this.defaultValue);
 
   @override
-
   /// Since the value is retrieved from the store, so the value is not guaranteed
   /// to be the same as expected(the actual modified value).
   T get value => store.get<T>(key) ?? defaultValue;
