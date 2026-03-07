@@ -77,6 +77,9 @@ final class PrefStore extends Store {
 
   SharedPreferences? _instance;
 
+  /// Whether the underlying SharedPreferences instance is ready.
+  bool get isInitialized => _instance != null;
+
   /// Initialize the store.
   ///
   /// `MUST` call this before using any pref stores.

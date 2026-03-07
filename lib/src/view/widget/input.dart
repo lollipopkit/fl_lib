@@ -91,6 +91,13 @@ class Input extends StatefulWidget {
 class _InputState extends State<Input> {
   late final _obscureText = widget.obscureText.vn;
 
+  bool get _enableSuggestions {
+    final suggestion = widget.suggestion;
+    if (suggestion != null) return suggestion;
+    if (!PrefStore.shared.isInitialized) return true;
+    return PrefProps.imeSuggestions.get() ?? true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final icon = widget.icon.nullOr((i) => Icon(i).paddingOnly(left: 5));
@@ -125,8 +132,7 @@ class _InputState extends State<Input> {
         textInputAction: widget.action,
         focusNode: widget.node,
         autocorrect: widget.autoCorrect,
-        enableSuggestions:
-            widget.suggestion ?? PrefProps.imeSuggestions.get() ?? true,
+        enableSuggestions: _enableSuggestions,
         autofocus: widget.autoFocus,
         onSubmitted: widget.onSubmitted,
         onChanged: widget.onChanged,
