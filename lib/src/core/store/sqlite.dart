@@ -42,8 +42,7 @@ CREATE TABLE IF NOT EXISTS kv_entries (
     if (_inited) return;
     _RawSqliteDatabase? localDb;
     try {
-      await _SqlCipherBootstrap.ensureConfigured();
-      final cipherKey = await _SqlCipherBootstrap.loadOrCreateKey();
+      final cipherKey = await _EncryptedSqliteBootstrap.loadOrCreateKey();
 
       final path = switch (Pfs.type) {
         Pfs.linux || Pfs.windows => Paths.doc,
@@ -206,10 +205,7 @@ ON CONFLICT(key) DO UPDATE SET
       try {
         normalized = _normalizeValue(raw, path: key);
       } catch (e) {
-        dprintWarn(
-          'setAll()',
-          'failed to normalize key `$key`: $e',
-        );
+        dprintWarn('setAll()', 'failed to normalize key `$key`: $e');
         return false;
       }
       if (normalized == null) {
@@ -745,7 +741,7 @@ class _RawSqliteDatabase extends GeneratedDatabase {
     : super(
         NativeDatabase(
           file,
-          setup: (database) => _setupCipherDatabase(database, cipherKey),
+          setup: (database) => _setupEncryptedDatabase(database, cipherKey),
         ),
       );
 
@@ -756,7 +752,10 @@ class _RawSqliteDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
 }
 
-void _setupCipherDatabase(sqlite3.Database database, String cipherKey) {
+void _setupEncryptedDatabase(sqlite3.Database database, String cipherKey) {
+  database.execute("PRAGMA cipher = 'sqlcipher';");
+  database.execute('PRAGMA legacy = 4;');
+
   final escapedKey = cipherKey.replaceAll("'", "''");
   database.execute("PRAGMA key = '$escapedKey';");
 
@@ -767,7 +766,7 @@ void _setupCipherDatabase(sqlite3.Database database, String cipherKey) {
       : cipherVersionRows.first.values.first?.toString();
   if (cipherVersion == null || cipherVersion.isEmpty) {
     throw StateError(
-      'SQLCipher is not available. Please ensure sqlcipher_flutter_libs is linked correctly.',
+      'Encrypted sqlite support is not available. Configure sqlite3 hooks with source=sqlite3mc before opening this database.',
     );
   }
 
@@ -775,20 +774,9 @@ void _setupCipherDatabase(sqlite3.Database database, String cipherKey) {
   database.execute('PRAGMA journal_mode = WAL;');
 }
 
-abstract final class _SqlCipherBootstrap {
-  static bool _configured = false;
+abstract final class _EncryptedSqliteBootstrap {
   static String? _cipherKey;
   static Completer<String>? _pendingLoad;
-
-  static Future<void> ensureConfigured() async {
-    if (_configured) return;
-    await applyWorkaroundToOpenSqlCipherOnOldAndroidVersions();
-    sqlite_open.open.overrideFor(
-      sqlite_open.OperatingSystem.android,
-      openCipherOnAndroid,
-    );
-    _configured = true;
-  }
 
   static Future<String> loadOrCreateKey() async {
     final cached = _cipherKey;
