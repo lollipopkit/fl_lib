@@ -40,3 +40,6 @@ Common library for the my Flutter projects.
 
 ### Attention
 Remember to run `./export_all.dart` after changing any file in this library.
+
+### Platform setup
+- `flutter_secure_storage` v10 requires consuming Android apps to set `minSdk` or `minSdkVersion` to `23` or higher.

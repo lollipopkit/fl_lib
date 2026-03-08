@@ -15,7 +15,9 @@ final class TagTile extends StatelessWidget {
       return ListTile(
         leading: const Icon(MingCute.hashtag_line),
         title: Text(l10n.tag),
-        subtitle: vals.isEmpty ? null : Text(vals.join(', '), style: UIs.textGrey),
+        subtitle: vals.isEmpty
+            ? null
+            : Text(vals.join(', '), style: UIs.textGrey),
         trailing: const Icon(Icons.keyboard_arrow_right),
         onTap: () async {
           final allTags_ = {...allTags, ...vals}.toList();
@@ -34,28 +36,17 @@ final class TagTile extends StatelessWidget {
               TextButton(
                 onPressed: () async {
                   context.pop();
-                  final ctrl = TextEditingController();
-                  void onSave() {
-                    final s = ctrl.text.trim();
-                    if (s.isEmpty) return;
-                    tags.value = {...tags.value, s};
-                    context.pop();
-                  }
+                  final dialogKey = GlobalKey<_AddTagDialogState>();
 
-                  context.showRoundDialog(
+                  await context.showRoundDialog(
                     title: l10n.add,
-                    child: Input(
-                      controller: ctrl,
-                      type: TextInputType.text,
-                      label: l10n.tag,
-                      icon: MingCute.hashtag_line,
-                      hint: l10n.name,
-                      suggestion: true,
-                      autoCorrect: true,
-                      autoFocus: true,
-                      onSubmitted: (_) => onSave(),
+                    child: _AddTagDialog(
+                      key: dialogKey,
+                      onSaved: (value) => tags.value = {...tags.value, value},
                     ),
-                    actions: [Btn.ok(onTap: onSave)],
+                    actions: [
+                      Btn.ok(onTap: () => dialogKey.currentState?.save()),
+                    ],
                   );
                 },
                 child: Text(l10n.add),
@@ -68,5 +59,46 @@ final class TagTile extends StatelessWidget {
         },
       );
     });
+  }
+}
+
+final class _AddTagDialog extends StatefulWidget {
+  final ValueChanged<String> onSaved;
+
+  const _AddTagDialog({super.key, required this.onSaved});
+
+  @override
+  State<_AddTagDialog> createState() => _AddTagDialogState();
+}
+
+final class _AddTagDialogState extends State<_AddTagDialog> {
+  final _ctrl = TextEditingController();
+
+  void save() {
+    final value = _ctrl.text.trim();
+    if (value.isEmpty) return;
+    widget.onSaved(value);
+    context.pop();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Input(
+      controller: _ctrl,
+      type: TextInputType.text,
+      label: l10n.tag,
+      icon: MingCute.hashtag_line,
+      hint: l10n.name,
+      suggestion: true,
+      autoCorrect: true,
+      autoFocus: true,
+      onSubmitted: (_) => save(),
+    );
   }
 }

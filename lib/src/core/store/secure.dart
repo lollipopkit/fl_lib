@@ -87,8 +87,11 @@ abstract final class SecureStore {
 
   /// The secure storage instance.
   ///
-  /// Uses Android 10.x default ciphers plus
-  /// [KeychainAccessibility.first_unlock_this_device] on Apple platforms.
+  /// On Android, this relies on `flutter_secure_storage` v10.0.0 defaults:
+  /// RSA-OAEP for key wrapping and AES-GCM for content encryption.
+  ///
+  /// On iOS and macOS, it uses
+  /// [KeychainAccessibility.first_unlock_this_device].
   static const storage = FlutterSecureStorage(
     aOptions: AndroidOptions(),
     iOptions: IOSOptions(
