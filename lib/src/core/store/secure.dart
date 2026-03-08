@@ -87,12 +87,10 @@ abstract final class SecureStore {
 
   /// The secure storage instance.
   ///
-  /// With [defaultAccountName], [KeychainAccessibility.first_unlock_this_device],
+  /// Uses Android 10.x default ciphers plus
+  /// [KeychainAccessibility.first_unlock_this_device] on Apple platforms.
   static const storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-      resetOnError: true,
-    ),
+    aOptions: AndroidOptions(),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,
       accountName: defaultAccountName,

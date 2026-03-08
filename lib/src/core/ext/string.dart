@@ -7,8 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-import '../utils/platform/image.dart';
-
 extension StringX on String {
   /// [isEmpty] => [null]
   /// [isNotEmpty] => [this]
@@ -74,12 +72,12 @@ extension StringColorX on String? {
     if (value == null) return null;
     return switch (hexLen) {
       3 => () {
-          final r = (value & 0xF00) >> 8;
-          final g = (value & 0x0F0) >> 4;
-          final b = value & 0x00F;
-          final rgb = r << 20 | r << 16 | g << 12 | g << 8 | b << 4 | b;
-          return Color(rgb | 0xFF000000);
-        }(),
+        final r = (value & 0xF00) >> 8;
+        final g = (value & 0x0F0) >> 4;
+        final b = value & 0x00F;
+        final rgb = r << 20 | r << 16 | g << 12 | g << 8 | b << 4 | b;
+        return Color(rgb | 0xFF000000);
+      }(),
       6 => Color(value | 0xFF000000),
       _ => null,
     };
@@ -97,13 +95,13 @@ extension StringColorX on String? {
     if (value == null) return null;
     return switch (hexLen) {
       4 => () {
-          final a = (value & 0xF000) >> 12;
-          final r = (value & 0x0F00) >> 8;
-          final g = (value & 0x00F0) >> 4;
-          final b = value & 0x000F;
-          final argb = a << 28 | a << 24 | r << 20 | r << 16 | g << 12 | g << 8 | b << 4 | b;
-          return Color(argb);
-        }(),
+        final a = (value & 0xF000) >> 12;
+        final r = (value & 0x0F00) >> 8;
+        final g = (value & 0x00F0) >> 4;
+        final b = value & 0x000F;
+        final argb = a << 28 | a << 24 | r << 20 | r << 16 | g << 12 | g << 8 | b << 4 | b;
+        return Color(argb);
+      }(),
       8 => Color(value),
       _ => null,
     };
@@ -224,16 +222,12 @@ abstract final class RandomStr {
   ///
   /// - [length] is the length of the string.
   /// - [secure] is whether to use a secure random number generator.
-  /// - [lowerCase] is whether to use lowercase characters.
-  /// - [charsSet] is the character set.
-  static String generate(
-    int length, {
-    bool secure = false,
-    bool lowerCase = true,
-    String charsSet = chars,
-  }) {
+  /// - [lowerCase] controls whether alphabetic characters are lowercase or uppercase.
+  /// - [charsSet] is the character set used to generate the result.
+  static String generate(int length, {bool secure = false, bool lowerCase = true, String charsSet = chars}) {
     final random = secure ? Random.secure() : Random();
-    return List.generate(length, (_) => chars[random.nextInt(chars.length)]).join();
+    final effectiveCharsSet = lowerCase ? charsSet.toLowerCase() : charsSet.toUpperCase();
+    return List.generate(length, (_) => effectiveCharsSet[random.nextInt(effectiveCharsSet.length)]).join();
   }
 }
 
