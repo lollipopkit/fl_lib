@@ -60,6 +60,9 @@ final class EditorPageArgs {
   /// eg.: [CodeContextMenuController]
   final SelectionToolbarController? toolbarController;
 
+  /// The font family to use in the editor
+  final String? fontFamily;
+
   const EditorPageArgs({
     this.path,
     this.text,
@@ -72,6 +75,7 @@ final class EditorPageArgs {
     this.enableHighlight = _kEnableHighlight,
     this.closeAfterSave = _kCloseAfterSave,
     this.toolbarController,
+    this.fontFamily,
   });
 }
 
@@ -181,6 +185,7 @@ class _EditorPageState extends State<EditorPage> {
   Widget _buildBody() {
     return CodeEditor(
       style: CodeEditorStyle(
+        fontFamily: widget.args?.fontFamily,
         codeTheme: CodeHighlightTheme(
           languages: _modesMap,
           theme: _codeTheme,
