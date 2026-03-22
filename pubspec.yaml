@@ -10,7 +10,6 @@ environment:
 
 dependencies:
   animations: ^2.0.11
-  app_links: ^6.1.1
   choice: ^2.3.2
   crypto: ^3.0.3
   dio: ^5.4.2+1
@@ -65,10 +64,6 @@ dependency_overrides:
 # flutter_markdown_latex:
 #   path: ../flutter_markdown_latex
   flutter_math_fork: ^0.7.4
-  gtk: # TODO: remove it after fixed in upstream
-    git:
-      url: https://github.com/lollipopkit/gtk.dart
-      ref: v0.0.36
 
 dev_dependencies:
   build_runner: ^2.4.13
