@@ -575,6 +575,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get port => '포트';
 
   @override
+  String get portForward => 'Port Forward';
+
+  @override
   String get process => '프로세스';
 
   @override

@@ -578,6 +578,9 @@ class LibLocalizationsEs extends LibLocalizations {
   String get port => 'Puerto';
 
   @override
+  String get portForward => 'Port Forward';
+
+  @override
   String get process => 'Proceso';
 
   @override

@@ -1221,6 +1221,12 @@ abstract class LibLocalizations {
   /// **'Port'**
   String get port;
 
+  /// No description provided for @portForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Port Forward'**
+  String get portForward;
+
   /// No description provided for @process.
   ///
   /// In en, this message translates to:
