@@ -577,6 +577,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get port => 'Порт';
 
   @override
+  String get portForward => 'Port Forward';
+
+  @override
   String get process => 'Процесс';
 
   @override
