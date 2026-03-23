@@ -183,6 +183,7 @@
   "pingAvg": "Avg:",
   "pkg": "Pkg",
   "port": "Port",
+  "portForward": "Port Forward",
   "process": "Process",
   "prune": "Prune",
   "reboot": "Reboot",

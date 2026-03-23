@@ -575,6 +575,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get port => '端口';
 
   @override
+  String get portForward => '端口映射';
+
+  @override
   String get process => '进程';
 
   @override

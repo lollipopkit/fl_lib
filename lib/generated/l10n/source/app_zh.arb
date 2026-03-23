@@ -183,6 +183,7 @@
   "pingAvg": "平均:",
   "pkg": "包管理",
   "port": "端口",
+  "portForward": "端口映射",
   "process": "进程",
   "prune": "修剪",
   "reboot": "重启",
