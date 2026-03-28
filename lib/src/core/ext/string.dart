@@ -140,11 +140,8 @@ extension StringPathX on String {
 
   /// Get the file name from the path.
   ///
-  /// - [separator] is the separator of the path.
   /// - [withoutExtension] is whether to remove the extension
-  ///
-  /// {@macro string_path_separator}
-  String? getFileName({String? separator, bool withoutExtension = false}) {
+  String? getFileName({bool withoutExtension = false}) {
     final index = lastIndexOf(Pfs.seperator);
     if (index == -1) return null;
     final wholeName = substring(index + 1);
