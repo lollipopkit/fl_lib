@@ -25,7 +25,7 @@ abstract final class Paths {
     video = await _initDir('video');
     img = await _initDir('img');
     cache = await _initDir('cache');
-    font = doc.joinPath('font.ttf');
+    font = await _initDir('font');
     final bakName_ = bakName ?? '${appName}_bak.json';
     Paths.bakName = bakName_;
     bak = doc.joinPath(bakName_);
