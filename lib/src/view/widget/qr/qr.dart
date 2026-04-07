@@ -25,6 +25,7 @@ final class QrView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final qrImg = QrImage(QrCode.fromData(
       data: data,
       errorCorrectLevel: QrErrorCorrectLevel.M,
@@ -33,7 +34,7 @@ final class QrView extends StatelessWidget {
       background: Colors.white,
       shape: PrettyQrSmoothSymbol(
         roundFactor: 1,
-        color: UIs.primaryColor,
+        color: primaryColor,
       ),
       image:
           centerImg != null ? PrettyQrDecorationImage(image: centerImg!) : null,
@@ -48,7 +49,7 @@ final class QrView extends StatelessWidget {
           Text(
             tip!,
             style: TextStyle(
-              color: UIs.primaryColor,
+              color: primaryColor,
               fontSize: 17,
               fontWeight: FontWeight.w500,
             ),

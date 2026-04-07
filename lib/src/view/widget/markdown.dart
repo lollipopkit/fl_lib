@@ -18,6 +18,7 @@ final class SimpleMarkdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     return MarkdownBody(
       data: data,
       onTapLink: (text, href, title) async {
@@ -29,8 +30,8 @@ final class SimpleMarkdown extends StatelessWidget {
       },
       selectable: selectable,
       extensionSet: MarkdownUtils.extensionSet,
-      styleSheet: styleSheet?.copyWith(a: TextStyle(color: UIs.colorSeed)) ??
-          MarkdownStyleSheet(a: TextStyle(color: UIs.colorSeed)),
+      styleSheet:
+          styleSheet?.copyWith(a: TextStyle(color: primaryColor)) ?? MarkdownStyleSheet(a: TextStyle(color: primaryColor)),
     );
   }
 }
