@@ -386,7 +386,7 @@ class _SplitViewState extends State<SplitView> with SingleTickerProviderStateMix
       data: MultiSplitViewThemeData(
         dividerPainter: DividerPainters.grooved1(
           color: UIs.bgColor.resolve(context),
-          highlightedColor: UIs.primaryColor,
+          highlightedColor: Theme.of(context).colorScheme.primary,
         ),
       ),
       child: multiSplitView,

@@ -73,7 +73,7 @@ class _SwitchState extends State<SwitchIndicator> with TickerProviderStateMixin 
               child ?? UIs.placeholder,
               ScaleTransition(
                 scale: _showIndicatorAnim,
-                child: _buildIndicator(),
+                child: _buildIndicator(context),
               ),
             ],
           );
@@ -82,7 +82,7 @@ class _SwitchState extends State<SwitchIndicator> with TickerProviderStateMixin 
     );
   }
 
-  Widget _buildIndicator() {
+  Widget _buildIndicator(BuildContext context) {
     final icon = _scrollDirection == null
         ? null
         : Icon(
@@ -94,7 +94,7 @@ class _SwitchState extends State<SwitchIndicator> with TickerProviderStateMixin 
 
     return ClipOval(
       child: ColoredBox(
-        color: UIs.colorSeed,
+        color: Theme.of(context).colorScheme.primary,
         child: Padding(padding: const EdgeInsets.all(_kPadding), child: icon),
       ),
     );

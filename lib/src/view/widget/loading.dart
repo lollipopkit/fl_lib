@@ -27,11 +27,15 @@ final class SizedLoading extends StatelessWidget {
   const SizedLoading(this.size, {this.padding = 7, this.valueColor, this.builder = linearBuilder, super.key});
 
   static Widget linearBuilder(BuildContext context, Animation<Color>? valueColor) {
-    return LinearProgressIndicator(valueColor: valueColor ?? AlwaysStoppedAnimation(UIs.primaryColor));
+    return LinearProgressIndicator(
+      valueColor: valueColor ?? AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+    );
   }
 
   static Widget circularBuilder(BuildContext context, Animation<Color>? valueColor) {
-    return CircularProgressIndicator(valueColor: valueColor ?? AlwaysStoppedAnimation(UIs.primaryColor));
+    return CircularProgressIndicator(
+      valueColor: valueColor ?? AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+    );
   }
 
   @override
