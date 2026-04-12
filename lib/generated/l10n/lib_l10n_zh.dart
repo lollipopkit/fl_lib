@@ -308,6 +308,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get save => '保存';
 
   @override
+  String get saveFailed => '保存失败';
+
+  @override
   String get search => '搜索';
 
   @override
@@ -527,6 +530,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get location => '位置';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => '日志';
 
   @override
@@ -630,6 +636,14 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get suspend => '挂起';
+
+  @override
+  String get sudoPassword => 'sudo 密码';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => '温度';
@@ -963,6 +977,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get save => '儲存';
 
   @override
+  String get saveFailed => '儲存失敗';
+
+  @override
   String get search => '搜尋';
 
   @override
@@ -1182,6 +1199,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get location => '位置';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => '日誌';
 
   @override
@@ -1282,6 +1302,14 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get suspend => '當機';
+
+  @override
+  String get sudoPassword => 'sudo 密碼';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => '溫度';

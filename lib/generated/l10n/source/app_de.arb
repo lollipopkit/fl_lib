@@ -209,5 +209,9 @@
   "totalAttempts": "Gesamt",
   "traffic": "Durchflussmenge",
   "ttl": "TTL",
-  "uptime": "Betriebszeit"
+  "uptime": "Betriebszeit",
+  "saveFailed": "Speichern fehlgeschlagen",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo-Passwort",
+  "sudoPwdTitle": "sudo {pwd}"
 }

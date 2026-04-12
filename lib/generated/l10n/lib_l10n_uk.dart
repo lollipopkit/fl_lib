@@ -310,6 +310,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get save => 'Зберегти';
 
   @override
+  String get saveFailed => 'Не вдалося зберегти';
+
+  @override
   String get search => 'Пошук';
 
   @override
@@ -529,6 +532,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get location => 'Місцезнаходження';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => 'Журнали';
 
   @override
@@ -632,6 +638,14 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get suspend => 'Призупинити';
+
+  @override
+  String get sudoPassword => 'пароль sudo';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => 'Температура';

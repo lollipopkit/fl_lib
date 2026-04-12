@@ -311,6 +311,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get save => 'Opslaan';
 
   @override
+  String get saveFailed => 'Opslaan mislukt';
+
+  @override
   String get search => 'Zoeken';
 
   @override
@@ -530,6 +533,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get location => 'Locatie';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => 'Logboeken';
 
   @override
@@ -633,6 +639,14 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get suspend => 'Ophangen';
+
+  @override
+  String get sudoPassword => 'sudo-wachtwoord';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => 'Temperatuur';

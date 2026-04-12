@@ -311,6 +311,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get save => 'Simpan';
 
   @override
+  String get saveFailed => 'Gagal menyimpan';
+
+  @override
   String get search => 'Cari';
 
   @override
@@ -530,6 +533,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get location => 'Lokasi';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => 'Log';
 
   @override
@@ -633,6 +639,14 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get suspend => 'Suspend';
+
+  @override
+  String get sudoPassword => 'kata sandi sudo';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => 'Suhu';

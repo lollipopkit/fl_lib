@@ -209,5 +209,9 @@
   "totalAttempts": "Общее",
   "traffic": "Трафик",
   "ttl": "TTL",
-  "uptime": "Время работы"
+  "uptime": "Время работы",
+  "saveFailed": "Не удалось сохранить",
+  "loadingEllipsis": "...",
+  "sudoPassword": "пароль sudo",
+  "sudoPwdTitle": "sudo {pwd}"
 }

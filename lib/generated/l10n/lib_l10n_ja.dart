@@ -308,6 +308,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get save => '保存';
 
   @override
+  String get saveFailed => '保存に失敗しました';
+
+  @override
   String get search => '検索';
 
   @override
@@ -527,6 +530,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get location => '場所';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => 'ログ';
 
   @override
@@ -630,6 +636,14 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get suspend => '中断';
+
+  @override
+  String get sudoPassword => 'sudo パスワード';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => '温度';

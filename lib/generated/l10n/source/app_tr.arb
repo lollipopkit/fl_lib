@@ -209,5 +209,9 @@
   "totalAttempts": "Toplam",
   "traffic": "Trafik",
   "ttl": "TTL",
-  "uptime": "Çalışma süresi"
+  "uptime": "Çalışma süresi",
+  "saveFailed": "Kaydetme başarısız",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo parolası",
+  "sudoPwdTitle": "sudo {pwd}"
 }

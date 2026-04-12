@@ -705,6 +705,12 @@ abstract class LibLocalizations {
   /// **'Save'**
   String get save;
 
+  /// No description provided for @saveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed'**
+  String get saveFailed;
+
   /// No description provided for @search.
   ///
   /// In en, this message translates to:
@@ -1125,6 +1131,12 @@ abstract class LibLocalizations {
   /// **'Location'**
   String get location;
 
+  /// No description provided for @loadingEllipsis.
+  ///
+  /// In en, this message translates to:
+  /// **'...'**
+  String get loadingEllipsis;
+
   /// No description provided for @logs.
   ///
   /// In en, this message translates to:
@@ -1334,6 +1346,18 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Suspend'**
   String get suspend;
+
+  /// No description provided for @sudoPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'sudo password'**
+  String get sudoPassword;
+
+  /// No description provided for @sudoPwdTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'sudo {pwd}'**
+  String sudoPwdTitle(Object pwd);
 
   /// No description provided for @temperature.
   ///
