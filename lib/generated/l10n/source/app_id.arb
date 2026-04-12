@@ -209,5 +209,9 @@
   "totalAttempts": "Total",
   "traffic": "Lalu lintas",
   "ttl": "TTL",
-  "uptime": "Uptime"
+  "uptime": "Uptime",
+  "saveFailed": "Gagal menyimpan",
+  "loadingEllipsis": "...",
+  "sudoPassword": "kata sandi sudo",
+  "sudoPwdTitle": "sudo {pwd}"
 }

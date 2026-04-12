@@ -209,5 +209,9 @@
   "totalAttempts": "Загальна кількість",
   "traffic": "Трафік",
   "ttl": "TTL",
-  "uptime": "Час роботи"
+  "uptime": "Час роботи",
+  "saveFailed": "Не вдалося зберегти",
+  "loadingEllipsis": "...",
+  "sudoPassword": "пароль sudo",
+  "sudoPwdTitle": "sudo {pwd}"
 }

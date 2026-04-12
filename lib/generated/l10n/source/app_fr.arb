@@ -209,5 +209,9 @@
   "totalAttempts": "Total",
   "traffic": "Trafic",
   "ttl": "TTL",
-  "uptime": "Temps d'activité"
+  "uptime": "Temps d'activité",
+  "saveFailed": "Échec de l'enregistrement",
+  "loadingEllipsis": "...",
+  "sudoPassword": "mot de passe sudo",
+  "sudoPwdTitle": "sudo {pwd}"
 }

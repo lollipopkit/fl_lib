@@ -210,5 +210,9 @@
   "totalAttempts": "总次数",
   "traffic": "流量",
   "ttl": "TTL",
-  "uptime": "启动时长"
+  "uptime": "启动时长",
+  "saveFailed": "保存失败",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo 密码",
+  "sudoPwdTitle": "sudo {pwd}"
 }

@@ -311,6 +311,9 @@ class LibLocalizationsFr extends LibLocalizations {
   String get save => 'Enregistrer';
 
   @override
+  String get saveFailed => 'Échec de l\'enregistrement';
+
+  @override
   String get search => 'Rechercher';
 
   @override
@@ -530,6 +533,9 @@ class LibLocalizationsFr extends LibLocalizations {
   String get location => 'Emplacement';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => 'Journaux';
 
   @override
@@ -633,6 +639,14 @@ class LibLocalizationsFr extends LibLocalizations {
 
   @override
   String get suspend => 'Suspendre';
+
+  @override
+  String get sudoPassword => 'mot de passe sudo';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => 'Température';

@@ -209,5 +209,9 @@
   "totalAttempts": "総計",
   "traffic": "トラフィック",
   "ttl": "TTL",
-  "uptime": "稼働時間"
+  "uptime": "稼働時間",
+  "saveFailed": "保存に失敗しました",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo パスワード",
+  "sudoPwdTitle": "sudo {pwd}"
 }

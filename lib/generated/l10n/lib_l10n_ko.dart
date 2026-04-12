@@ -308,6 +308,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get save => '저장';
 
   @override
+  String get saveFailed => '저장 실패';
+
+  @override
   String get search => '검색';
 
   @override
@@ -527,6 +530,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get location => '위치';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => '로그';
 
   @override
@@ -630,6 +636,14 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get suspend => '일시 중지';
+
+  @override
+  String get sudoPassword => 'sudo 비밀번호';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => '온도';

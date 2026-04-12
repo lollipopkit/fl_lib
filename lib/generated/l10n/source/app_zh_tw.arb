@@ -209,5 +209,9 @@
   "totalAttempts": "總次數",
   "traffic": "流量",
   "ttl": "TTL",
-  "uptime": "運作時間"
+  "uptime": "運作時間",
+  "saveFailed": "儲存失敗",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo 密碼",
+  "sudoPwdTitle": "sudo {pwd}"
 }

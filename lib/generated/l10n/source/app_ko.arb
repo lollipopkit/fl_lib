@@ -209,5 +209,9 @@
   "totalAttempts": "총계",
   "traffic": "트래픽",
   "ttl": "TTL",
-  "uptime": "가동 시간"
+  "uptime": "가동 시간",
+  "saveFailed": "저장 실패",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo 비밀번호",
+  "sudoPwdTitle": "sudo {pwd}"
 }

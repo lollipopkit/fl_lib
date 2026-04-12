@@ -209,5 +209,9 @@
   "totalAttempts": "Totaal",
   "traffic": "Verkeer",
   "ttl": "TTL",
-  "uptime": "Uptime"
+  "uptime": "Uptime",
+  "saveFailed": "Opslaan mislukt",
+  "loadingEllipsis": "...",
+  "sudoPassword": "sudo-wachtwoord",
+  "sudoPwdTitle": "sudo {pwd}"
 }

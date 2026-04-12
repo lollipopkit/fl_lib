@@ -310,6 +310,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get save => 'Kaydet';
 
   @override
+  String get saveFailed => 'Kaydetme başarısız';
+
+  @override
   String get search => 'Ara';
 
   @override
@@ -529,6 +532,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get location => 'Konum';
 
   @override
+  String get loadingEllipsis => '...';
+
+  @override
   String get logs => 'Günlükler';
 
   @override
@@ -632,6 +638,14 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get suspend => 'Askıya al';
+
+  @override
+  String get sudoPassword => 'sudo parolası';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
 
   @override
   String get temperature => 'Sıcaklık';
