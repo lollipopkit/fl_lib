@@ -14,6 +14,7 @@ final class MultiList extends StatefulWidget {
 
   /// Number used to divide available width for column sizing.
   final double widthDivider;
+  final double scrollbarGutter;
 
   const MultiList({
     super.key,
@@ -21,7 +22,8 @@ final class MultiList extends StatefulWidget {
     this.outerPadding = kOuterPadding,
     this.widthDivider = 2.2,
     this.betweenPadding = 10,
-  });
+    this.scrollbarGutter = 12,
+  }) : assert(scrollbarGutter >= 0);
 
   /// Default outer padding.
   static const kOuterPadding = EdgeInsets.symmetric(horizontal: 17, vertical: 13);
@@ -81,6 +83,7 @@ final class _MultiListState extends State<MultiList> {
             return SizedBox(
               width: columnWidth,
               child: ListView.builder(
+                padding: EdgeInsetsDirectional.only(end: widget.scrollbarGutter),
                 itemCount: col.length,
                 itemBuilder: (_, index) => col[index],
               ),
