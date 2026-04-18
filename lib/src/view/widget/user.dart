@@ -28,6 +28,7 @@ final class _UserCardState extends State<UserCard> {
         return FadeTransition(opacity: animation, child: child);
       },
       child: InkWell(
+        key: ValueKey(user == null ? 'user-card-login' : 'user-card-profile'),
         onTap: () {
           if (user != null) {
             UserPage.route.go(context);

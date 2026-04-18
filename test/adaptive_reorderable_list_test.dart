@@ -121,4 +121,80 @@ void main() {
     expect(recordedOrders, isNotEmpty);
     expect(recordedOrders.last, equals(<int>[2, 3, 1]));
   });
+
+  testWidgets('animates inserted and removed items to their final visible state', (
+    tester,
+  ) async {
+    final items = <int>[1, 2];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            return Material(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            items.add(3);
+                          });
+                        },
+                        child: const Text('add'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            items.remove(1);
+                          });
+                        },
+                        child: const Text('remove'),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: SizedBox(
+                      width: 280,
+                      child: AdaptiveReorderableList.builder(
+                        items: List<int>.from(items),
+                        itemKey: (item) => item,
+                        columnWidth: 320,
+                        onReorder: (oldIndex, newIndex) {},
+                        itemBuilder: (context, item, index, animation) =>
+                            ListTile(
+                              key: ValueKey('anim-tile-$item'),
+                              title: FadeTransition(
+                                opacity: animation,
+                                child: Text('Animated Item $item'),
+                              ),
+                            ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    expect(find.text('Animated Item 3'), findsNothing);
+
+    await tester.tap(find.text('add'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Animated Item 3'), findsOneWidget);
+
+    await tester.tap(find.text('remove'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Animated Item 1'), findsNothing);
+    expect(find.text('Animated Item 2'), findsOneWidget);
+    expect(find.text('Animated Item 3'), findsOneWidget);
+  });
 }

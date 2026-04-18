@@ -26,61 +26,65 @@ class OverlayWidget extends StatefulWidget {
 
 class _OverlayWidgetState extends State<OverlayWidget> with SingleTickerProviderStateMixin {
   OverlayEntry? _overlayEntry;
-
-  /// Can't use `late` because it's not initialized in [dispose]
-  ///
-  /// The animation controller is created when the overlay is shown.
-  AnimationController? _animeCtrl;
-  Animation<double>? _blurAnime;
-  Animation<double>? _fadeAnime;
+  bool _isRemovingOverlay = false;
+  late final AnimationController _animeCtrl;
+  late final CurvedAnimation _overlayCurve;
+  late final Animation<double> _blurAnime;
+  late final Animation<double> _fadeAnime;
 
   final _isShowingOverlay = false.vn;
 
   @override
+  void initState() {
+    super.initState();
+    _animeCtrl = AnimationController(
+      vsync: this,
+      duration: Durations.medium1,
+    );
+    _overlayCurve = CurvedAnimation(
+      parent: _animeCtrl,
+      curve: Curves.easeInOutCubic,
+    );
+    _blurAnime = Tween<double>(begin: 0, end: 5).animate(_overlayCurve);
+    _fadeAnime = Tween<double>(begin: 0, end: 1).animate(_overlayCurve);
+  }
+
+  @override
   void dispose() {
-    _removeOverlaySafe();
-    _animeCtrl?.dispose();
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    _isShowingOverlay.value = false;
+    _animeCtrl.dispose();
     super.dispose();
   }
 
   void _showOverlay(BuildContext context) async {
+    if (_overlayEntry != null) {
+      return;
+    }
     final overlayState = Overlay.of(context);
-
-    /// Only create once (`??=`)
-    _animeCtrl ??= AnimationController(
-      vsync: this,
-      duration: Durations.medium1,
-    );
-    _blurAnime = Tween(begin: 0.0, end: 5.0).animate(
-      CurvedAnimation(parent: _animeCtrl!, curve: Curves.easeInOutCubic),
-    );
-
-    _fadeAnime = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animeCtrl!, curve: Curves.easeInOutCubic),
-    );
 
     _overlayEntry = _createOverlayEntry(context);
     overlayState.insert(_overlayEntry!);
-
-    await _animeCtrl?.forward();
     _isShowingOverlay.value = true;
+
+    await _animeCtrl.forward(from: 0);
   }
 
   void _removeOverlaySafe() async {
-    // No overlay or controller created yet
-    if (_overlayEntry == null || _animeCtrl == null) {
-      _overlayEntry = null;
-      _isShowingOverlay.value = false;
+    if (_overlayEntry == null || _isRemovingOverlay) {
       return;
     }
+    _isRemovingOverlay = true;
     try {
       if (mounted) {
-        await _animeCtrl!.reverse();
+        await _animeCtrl.reverse();
       }
       _overlayEntry?.remove();
     } finally {
       _overlayEntry = null;
       _isShowingOverlay.value = false;
+      _isRemovingOverlay = false;
     }
   }
 
@@ -89,30 +93,33 @@ class _OverlayWidgetState extends State<OverlayWidget> with SingleTickerProvider
       builder: (context) => GestureDetector(
         onTap: _removeOverlaySafe,
         behavior: HitTestBehavior.opaque,
-        child: _buildOverlayWidget(),
+        child: SizedBox.expand(child: _buildOverlayWidget()),
       ),
     );
   }
 
   Widget _buildOverlayWidget() {
+    final popup = Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      child: FadeTransition(
+        opacity: _fadeAnime,
+        child: Center(child: RepaintBoundary(child: widget.popup)),
+      ),
+    );
+    if (!widget.blurBg) {
+      return popup;
+    }
     return AnimatedBuilder(
-      animation: _animeCtrl!,
-      builder: (_, _) {
-        final fadeTransition = Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 11),
-          child: FadeTransition(
-            opacity: _fadeAnime!,
-            child: Center(child: widget.popup),
-          ),
-        );
-        if (!widget.blurBg) return fadeTransition;
+      animation: _blurAnime,
+      child: popup,
+      builder: (_, child) {
         return BackdropFilter(
           filter: ImageFilter.blur(
-            sigmaX: _blurAnime!.value,
-            sigmaY: _blurAnime!.value,
+            sigmaX: _blurAnime.value,
+            sigmaY: _blurAnime.value,
           ),
-          child: fadeTransition,
+          child: child,
         );
       },
     );

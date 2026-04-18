@@ -15,23 +15,21 @@ class FadeIn extends StatefulWidget {
 }
 
 class _MyFadeInState extends State<FadeIn> with SingleTickerProviderStateMixin {
+  static final Animatable<double> _opacityTween = Tween<double>(
+    begin: 0,
+    end: 1,
+  );
+
   late final _controller = AnimationController(
     vsync: this,
     duration: widget.duration,
   );
-  late final _animation = Tween(
-    begin: 0.0,
-    end: 1.0,
-  ).animate(_controller);
+  late final _animation = _controller.drive(_opacityTween);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _controller.status == AnimationStatus.dismissed) {
-        _controller.forward();
-      }
-    });
+    _controller.forward();
   }
 
   @override

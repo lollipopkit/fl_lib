@@ -92,28 +92,31 @@ class _AnimatedCodeLineSelectionToolbar extends StatefulWidget {
 }
 
 class _AnimatedCodeLineSelectionToolbarState extends State<_AnimatedCodeLineSelectionToolbar> with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+  static final Animatable<double> _fadeTween = Tween<double>(begin: 0, end: 1);
+  late final AnimationController _animationController;
+  late final CurvedAnimation _curvedAnimation;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
 
     _animationController = AnimationController(duration: widget.animationConfig.duration, vsync: this);
+    _curvedAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: widget.animationConfig.curve,
+    );
 
     _fadeAnimation = widget.animationConfig.enableFade
-        ? Tween<double>(
-            begin: 0.0,
-            end: 1.0,
-          ).animate(CurvedAnimation(parent: _animationController, curve: widget.animationConfig.curve))
+        ? _fadeTween.animate(_curvedAnimation)
         : const AlwaysStoppedAnimation(1.0);
 
     _scaleAnimation = widget.animationConfig.enableScale
         ? Tween<double>(
             begin: widget.animationConfig.scaleBegin,
-            end: 1.0,
-          ).animate(CurvedAnimation(parent: _animationController, curve: widget.animationConfig.curve))
+            end: 1,
+          ).animate(_curvedAnimation)
         : const AlwaysStoppedAnimation(1.0);
 
     _animationController.forward();
@@ -134,33 +137,26 @@ class _AnimatedCodeLineSelectionToolbarState extends State<_AnimatedCodeLineSele
   @override
   Widget build(BuildContext context) {
     final textDirection = Directionality.of(context);
+    Widget toolbarWidget = _CodeLineSelectionToolbar(
+      controller: widget.controller,
+      anchors: widget.anchors,
+      renderRect: widget.renderRect,
+      layerLink: widget.layerLink,
+      onHide: _hideWithAnimation,
+    );
+
+    if (widget.animationConfig.enableScale) {
+      toolbarWidget = ScaleTransition(scale: _scaleAnimation, child: toolbarWidget);
+    }
+
+    if (widget.animationConfig.enableFade) {
+      toolbarWidget = FadeTransition(opacity: _fadeAnimation, child: toolbarWidget);
+    }
 
     return CodeEditorTapRegion(
       child: Directionality(
         textDirection: textDirection,
-        child: AnimatedBuilder(
-          animation: _animationController,
-          child: _CodeLineSelectionToolbar(
-            controller: widget.controller,
-            anchors: widget.anchors,
-            renderRect: widget.renderRect,
-            layerLink: widget.layerLink,
-            onHide: _hideWithAnimation,
-          ),
-          builder: (context, child) {
-            Widget toolbarWidget = child!;
-
-            if (widget.animationConfig.enableScale) {
-              toolbarWidget = ScaleTransition(scale: _scaleAnimation, child: toolbarWidget);
-            }
-
-            if (widget.animationConfig.enableFade) {
-              toolbarWidget = FadeTransition(opacity: _fadeAnimation, child: toolbarWidget);
-            }
-
-            return toolbarWidget;
-          },
-        ),
+        child: RepaintBoundary(child: toolbarWidget),
       ),
     );
   }
