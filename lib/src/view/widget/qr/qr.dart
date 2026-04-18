@@ -32,7 +32,7 @@ final class QrView extends StatelessWidget {
     ));
     final qrDecoration = PrettyQrDecoration(
       background: Colors.white,
-      shape: PrettyQrSmoothSymbol(
+      shape: const PrettyQrSmoothSymbol(
         roundFactor: 1,
         color: qrForegroundColor,
       ),
@@ -48,7 +48,7 @@ final class QrView extends StatelessWidget {
         if (tip != null)
           Text(
             tip!,
-            style: TextStyle(
+            style: const TextStyle(
               color: qrForegroundColor,
               fontSize: 17,
               fontWeight: FontWeight.w500,

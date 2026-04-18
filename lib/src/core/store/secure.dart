@@ -79,7 +79,6 @@ abstract final class SecureStore {
   /// With [defaultAccountName], [KeychainAccessibility.first_unlock_this_device],
   static const storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
       resetOnError: true,
     ),
     iOptions: IOSOptions(
