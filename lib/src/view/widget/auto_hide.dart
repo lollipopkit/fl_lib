@@ -90,39 +90,36 @@ final class AutoHideState extends State<AutoHide> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final hiddenOffset = _getHiddenOffset(constraints);
-        return AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            return AnimatedSlide(
-              offset: _controller.visible ? Offset.zero : hiddenOffset,
-              duration: Durations.medium1,
-              curve: Curves.easeInOutCubic,
-              child: child,
+    final hiddenOffset = _getHiddenOffset();
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return TweenAnimationBuilder<Offset>(
+          tween: Tween<Offset>(
+            end: _controller.visible ? Offset.zero : hiddenOffset,
+          ),
+          duration: Durations.medium1,
+          curve: Curves.easeInOutCubic,
+          builder: (context, offset, animatedChild) {
+            return Transform.translate(
+              offset: offset,
+              child: animatedChild,
             );
           },
-          child: widget.child,
+          child: child,
         );
       },
+      child: widget.child,
     );
   }
 
-  Offset _getHiddenOffset(BoxConstraints constraints) {
+  Offset _getHiddenOffset() {
     final offsetPx = widget.offset;
-    final denom = switch (widget.direction) {
-      AxisDirection.down || AxisDirection.up =>
-        constraints.maxHeight.isFinite && constraints.maxHeight > 0 ? constraints.maxHeight : widget.offset,
-      AxisDirection.left || AxisDirection.right =>
-        constraints.maxWidth.isFinite && constraints.maxWidth > 0 ? constraints.maxWidth : widget.offset,
-    };
-    final fraction = offsetPx / (denom == 0 ? 1 : denom);
     return switch (widget.direction) {
-      AxisDirection.down => Offset(0, fraction),
-      AxisDirection.up => Offset(0, -fraction),
-      AxisDirection.left => Offset(-fraction, 0),
-      AxisDirection.right => Offset(fraction, 0),
+      AxisDirection.down => Offset(0, offsetPx),
+      AxisDirection.up => Offset(0, -offsetPx),
+      AxisDirection.left => Offset(-offsetPx, 0),
+      AxisDirection.right => Offset(offsetPx, 0),
     };
   }
 }

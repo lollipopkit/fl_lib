@@ -66,15 +66,13 @@ class _OverlayWidgetState extends State<OverlayWidget> with SingleTickerProvider
 
     _overlayEntry = _createOverlayEntry(context);
     overlayState.insert(_overlayEntry!);
+    _isShowingOverlay.value = true;
 
     await _animeCtrl.forward(from: 0);
-    _isShowingOverlay.value = true;
   }
 
   void _removeOverlaySafe() async {
     if (_overlayEntry == null || _isRemovingOverlay) {
-      _overlayEntry = null;
-      _isShowingOverlay.value = false;
       return;
     }
     _isRemovingOverlay = true;

@@ -388,8 +388,7 @@ class _SplitViewState extends State<SplitView> with SingleTickerProviderStateMix
     if (!mounted) {
       return;
     }
-    if (status == AnimationStatus.completed ||
-        status == AnimationStatus.dismissed) {
+    if (status == AnimationStatus.completed) {
       setState(() {
         _previousWidget = null;
       });
