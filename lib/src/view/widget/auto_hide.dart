@@ -90,28 +90,26 @@ final class AutoHideState extends State<AutoHide> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final visible = _controller.visible;
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final offset = _getOffset(visible, constraints);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hiddenOffset = _getHiddenOffset(constraints);
+        return AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
             return AnimatedSlide(
-              offset: offset,
+              offset: _controller.visible ? Offset.zero : hiddenOffset,
               duration: Durations.medium1,
               curve: Curves.easeInOutCubic,
               child: child,
             );
           },
+          child: widget.child,
         );
       },
-      child: widget.child,
     );
   }
 
-  Offset _getOffset(bool visible, BoxConstraints constraints) {
-    if (visible) return Offset.zero;
+  Offset _getHiddenOffset(BoxConstraints constraints) {
     final offsetPx = widget.offset;
     final denom = switch (widget.direction) {
       AxisDirection.down || AxisDirection.up =>

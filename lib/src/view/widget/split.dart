@@ -326,6 +326,27 @@ class SplitView extends StatefulWidget {
 }
 
 class _SplitViewState extends State<SplitView> with SingleTickerProviderStateMixin {
+  static final Animatable<Offset> _pushInTween = Tween<Offset>(
+    begin: const Offset(1, 0),
+    end: Offset.zero,
+  );
+  static final Animatable<Offset> _popInTween = Tween<Offset>(
+    begin: const Offset(-1, 0),
+    end: Offset.zero,
+  );
+  static final Animatable<Offset> _popOutTween = Tween<Offset>(
+    begin: Offset.zero,
+    end: const Offset(1, 0),
+  );
+  static final Animatable<double> _fadeInTween = Tween<double>(
+    begin: 0,
+    end: 1,
+  );
+  static final Animatable<double> _fadeOutTween = Tween<double>(
+    begin: 1,
+    end: 0,
+  );
+
   late final controller = widget.controller ?? SplitViewController(initialRight: widget.initialRight);
   late final AnimationController _animationController;
   late final Animation<double> _animation;
@@ -347,6 +368,7 @@ class _SplitViewState extends State<SplitView> with SingleTickerProviderStateMix
       parent: _animationController,
       curve: widget.curve,
     );
+    _animationController.addStatusListener(_handleAnimationStatusChanged);
 
     // Initialize with initial right widget
     _currentWidget = controller.routes.value.lastOrNull?.widget ?? widget.initialRight;
@@ -362,9 +384,22 @@ class _SplitViewState extends State<SplitView> with SingleTickerProviderStateMix
     });
   }
 
+  void _handleAnimationStatusChanged(AnimationStatus status) {
+    if (!mounted) {
+      return;
+    }
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      setState(() {
+        _previousWidget = null;
+      });
+    }
+  }
+
   @override
   void dispose() {
     controller.routes.removeListener(_handleRouteChange);
+    _animationController.removeStatusListener(_handleAnimationStatusChanged);
     if (widget.controller == null) {
       controller.dispose();
     }
@@ -408,48 +443,63 @@ class _SplitViewState extends State<SplitView> with SingleTickerProviderStateMix
   Area get _rightArea {
     return Area(
       flex: widget.rightWeight,
-      builder: (context, area) => AnimatedBuilder(
-        animation: _animation,
-        builder: (context, _) {
-          final currentDisplayWidget = _currentWidget ?? widget.initialRight;
-          final previousDisplayWidget = _previousWidget;
+      builder: (context, area) {
+        final currentDisplayWidget = _currentWidget ?? widget.initialRight;
+        final previousDisplayWidget = _previousWidget;
+        final isAnimating = _animationController.isAnimating;
 
-          return Stack(
-            children: [
-              if (previousDisplayWidget != null && controller._isPushing == false && _animationController.isAnimating)
-                SlideTransition(
-                  position: Tween<Offset>(
-                    begin: Offset.zero,
-                    end: const Offset(1.0, 0.0),
-                  ).animate(_animation),
-                  child: FadeTransition(
-                    opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_animation),
-                    child: KeyedSubtree(
-                      key: ValueKey(previousDisplayWidget),
-                      child: previousDisplayWidget,
-                    ),
-                  ),
-                ),
-              SlideTransition(
-                position: Tween<Offset>(
-                  begin: _animationController.isAnimating && controller._isPushing
-                      ? const Offset(1.0, 0.0)
-                      : _animationController.isAnimating && !controller._isPushing
-                          ? const Offset(-1.0, 0.0)
-                          : Offset.zero,
-                  end: Offset.zero,
-                ).animate(_animation),
-                child: FadeTransition(
-                  opacity: Tween<double>(begin: _animationController.isAnimating ? 0.0 : 1.0, end: 1.0).animate(_animation),
-                  child: KeyedSubtree(
-                    key: ValueKey(currentDisplayWidget),
-                    child: currentDisplayWidget,
-                  ),
+        return Stack(
+          children: [
+            if (previousDisplayWidget != null &&
+                !controller._isPushing &&
+                isAnimating)
+              _SplitTransitionPane(
+                slideAnimation: _animation.drive(_popOutTween),
+                fadeAnimation: _animation.drive(_fadeOutTween),
+                child: KeyedSubtree(
+                  key: ValueKey(previousDisplayWidget),
+                  child: previousDisplayWidget,
                 ),
               ),
-            ],
-          );
-        },
+            _SplitTransitionPane(
+              slideAnimation: isAnimating
+                  ? _animation.drive(
+                      controller._isPushing ? _pushInTween : _popInTween,
+                    )
+                  : const AlwaysStoppedAnimation<Offset>(Offset.zero),
+              fadeAnimation: isAnimating
+                  ? _animation.drive(_fadeInTween)
+                  : const AlwaysStoppedAnimation<double>(1),
+              child: KeyedSubtree(
+                key: ValueKey(currentDisplayWidget),
+                child: currentDisplayWidget,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SplitTransitionPane extends StatelessWidget {
+  const _SplitTransitionPane({
+    required this.slideAnimation,
+    required this.fadeAnimation,
+    required this.child,
+  });
+
+  final Animation<Offset> slideAnimation;
+  final Animation<double> fadeAnimation;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: slideAnimation,
+      child: FadeTransition(
+        opacity: fadeAnimation,
+        child: RepaintBoundary(child: child),
       ),
     );
   }

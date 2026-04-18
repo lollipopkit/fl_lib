@@ -230,7 +230,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
   final List<_AdaptiveEntry<T>> _entries = [];
   final Map<Object, _AdaptiveEntry<T>> _entryByKey = {};
   final Map<Object, _ShiftAnimation> _shiftAnimations = {};
-  Object? _hoveringKey;
+  final ValueNotifier<Object?> _hoveringKey = ValueNotifier<Object?>(null);
   _ActiveDrag? _activeDrag;
 
   static final Object _trailingDropMarker = Object();
@@ -341,7 +341,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
           _entries.remove(entry);
           _entryByKey.remove(entry.key);
         });
-        controller.dispose();
+        entry.dispose();
       },
     );
 
@@ -357,12 +357,13 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
   @override
   void dispose() {
     for (final entry in _entries) {
-      entry.controller.dispose();
+      entry.dispose();
     }
     for (final shift in _shiftAnimations.values) {
       shift.dispose();
     }
     _shiftAnimations.clear();
+    _hoveringKey.dispose();
     super.dispose();
   }
 
@@ -438,13 +439,9 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
     required int visibleIndex,
     required int visibleCount,
   }) {
-    final child = _buildAnimatedChild(entry, visibleIndex, visibleCount);
-    final draggingPlaceholder = widget.draggingChildOpacity < 1
-        ? Opacity(opacity: widget.draggingChildOpacity, child: child)
-        : child;
-    final visibleChild = entry.dropAnimating
-        ? IgnorePointer(child: Opacity(opacity: 0, child: child))
-        : child;
+    final child = RepaintBoundary(
+      child: _buildAnimatedChild(entry, visibleIndex, visibleCount),
+    );
 
     return KeyedSubtree(
       key: entry.tileKey,
@@ -463,44 +460,58 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
           _handleDrop(details.data, entry.key);
         },
         builder: (context, candidateData, rejectedData) {
-          final isHovering =
-              candidateData.isNotEmpty || _hoveringKey == entry.key;
-          final scale = isHovering ? 1.02 : 1.0;
+          return ListenableBuilder(
+            listenable: Listenable.merge([_hoveringKey, entry.dropAnimating]),
+            child: child,
+            builder: (context, stableChild) {
+              final stable = stableChild;
+              final isHovering =
+                  candidateData.isNotEmpty || _hoveringKey.value == entry.key;
+              final scale = isHovering ? 1.02 : 1.0;
+              final draggingPlaceholder = widget.draggingChildOpacity < 1
+                  ? Opacity(
+                      opacity: widget.draggingChildOpacity,
+                      child: stable,
+                    )
+                  : stable;
+              final visibleChild = entry.dropAnimating.value
+                  ? IgnorePointer(
+                      child: Opacity(opacity: 0, child: stable),
+                    )
+                  : stable;
 
-          final displayChild = IgnorePointer(
-            ignoring: entry.removed,
-            child: visibleChild,
-          );
+              final displayChild = IgnorePointer(
+                ignoring: entry.removed,
+                child: visibleChild,
+              );
 
-          return AnimatedScale(
-            duration: const Duration(milliseconds: 120),
-            scale: scale,
-            child: SizedBox(
-              width: width,
-              child: LongPressDraggable<Object>(
-                data: entry.key,
-                dragAnchorStrategy: childDragAnchorStrategy,
-                feedback: _buildDragFeedback(
-                  entry,
-                  width,
-                  visibleIndex,
-                  visibleCount,
+              return AnimatedScale(
+                duration: const Duration(milliseconds: 120),
+                scale: scale,
+                child: SizedBox(
+                  width: width,
+                  child: LongPressDraggable<Object>(
+                    data: entry.key,
+                    dragAnchorStrategy: childDragAnchorStrategy,
+                    feedback: _buildDragFeedback(
+                      entry,
+                      width,
+                      visibleIndex,
+                      visibleCount,
+                    ),
+                    childWhenDragging: draggingPlaceholder,
+                    onDragStarted: () => _onDragStarted(entry),
+                    onDragEnd: (details) {
+                      if (!details.wasAccepted) {
+                        _cancelActiveDrag();
+                        entry.dropAnimating.value = false;
+                      }
+                    },
+                    child: displayChild,
+                  ),
                 ),
-                childWhenDragging: draggingPlaceholder,
-                onDragStarted: () => _onDragStarted(entry),
-                onDragEnd: (details) {
-                  if (!details.wasAccepted) {
-                    _cancelActiveDrag();
-                    if (mounted) {
-                      setState(() {
-                        entry.dropAnimating = false;
-                      });
-                    }
-                  }
-                },
-                child: displayChild,
-              ),
-            ),
+              );
+            },
           );
         },
       ),
@@ -519,35 +530,42 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
         _handleDrop(details.data, null);
       },
       builder: (context, candidateData, rejectedData) {
-        final isHovering =
-            candidateData.isNotEmpty || _hoveringKey == _trailingDropMarker;
-        final colorScheme = Theme.of(context).colorScheme;
-        final baseOnSurface = colorScheme.onSurface;
-        final targetAlpha = ((baseOnSurface.a * 255.0) * 0.3)
-            .round()
-            .clamp(0, 255)
-            .toInt();
-        final fadedOnSurface = baseOnSurface.withAlpha(targetAlpha);
+        return ValueListenableBuilder<Object?>(
+          valueListenable: _hoveringKey,
+          builder: (context, hoveringKey, _) {
+            final isHovering =
+                candidateData.isNotEmpty || hoveringKey == _trailingDropMarker;
+            final colorScheme = Theme.of(context).colorScheme;
+            final baseOnSurface = colorScheme.onSurface;
+            final targetAlpha = ((baseOnSurface.a * 255.0) * 0.3)
+                .round()
+                .clamp(0, 255)
+                .toInt();
+            final fadedOnSurface = baseOnSurface.withAlpha(targetAlpha);
 
-        return SizedBox(
-          width: width,
-          height: math.max(24, widget.mainAxisSpacing * 1.2),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isHovering ? colorScheme.primary : Colors.transparent,
-                width: 1.5,
+            return SizedBox(
+              width: width,
+              height: math.max(24, widget.mainAxisSpacing * 1.2),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isHovering
+                        ? colorScheme.primary
+                        : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.add,
+                    size: 16,
+                    color: isHovering ? colorScheme.primary : fadedOnSurface,
+                  ),
+                ),
               ),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.add,
-                size: 16,
-                color: isHovering ? colorScheme.primary : fadedOnSurface,
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -664,7 +682,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
       elevation: 6,
       child: ConstrainedBox(
         constraints: BoxConstraints.tightFor(width: width),
-        child: feedback,
+        child: RepaintBoundary(child: feedback),
       ),
     );
   }
@@ -694,7 +712,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
         : null;
 
     setState(() {
-      _hoveringKey = null;
+      _hoveringKey.value = null;
 
       final entry = _entries.removeAt(oldIndex);
 
@@ -716,7 +734,8 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
       }
 
       final clampedIndex = insertIndex.clamp(0, _entries.length).toInt();
-      entry.dropAnimating = matchingDrag != null && clampedIndex != oldIndex;
+      entry.dropAnimating.value =
+          matchingDrag != null && clampedIndex != oldIndex;
       _entries.insert(clampedIndex, entry);
     });
 
@@ -731,7 +750,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
     widget.onReorderComplete?.call(filtered);
 
     if (matchingDrag == null || oldVisibleIndex == newVisibleIndex) {
-      if (dragged.dropAnimating) {
+      if (dragged.dropAnimating.value) {
         _completeDropWithoutOverlay(dragged);
       }
       return;
@@ -839,7 +858,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
   void _startDropAnimation(_AdaptiveEntry<T> entry, _ActiveDrag dragInfo) {
     final Rect? startRect = dragInfo.startRect ?? _rectForEntry(entry);
     if (startRect == null) {
-      if (entry.dropAnimating && mounted) {
+      if (entry.dropAnimating.value && mounted) {
         _completeDropWithoutOverlay(entry);
       }
       return;
@@ -851,7 +870,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
       }
       final Rect? endRect = _rectForEntry(entry);
       if (endRect == null) {
-        if (entry.dropAnimating) {
+        if (entry.dropAnimating.value) {
           _completeDropWithoutOverlay(entry);
         }
         return;
@@ -859,7 +878,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
 
       final overlayState = Overlay.maybeOf(context);
       if (overlayState == null) {
-        if (entry.dropAnimating) {
+        if (entry.dropAnimating.value) {
           _completeDropWithoutOverlay(entry);
         }
         return;
@@ -872,11 +891,13 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
           child: SizedBox(
             width: endRect.width,
             height: endRect.height,
-            child: _buildChildContent(
-              entry,
-              _visibleIndexFor(entry),
-              _visibleItemCount,
-              animation: const AlwaysStoppedAnimation<double>(1),
+            child: RepaintBoundary(
+              child: _buildChildContent(
+                entry,
+                _visibleIndexFor(entry),
+                _visibleItemCount,
+                animation: const AlwaysStoppedAnimation<double>(1),
+              ),
             ),
           ),
         ),
@@ -930,33 +951,24 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
   }
 
   void _completeDropWithoutOverlay(_AdaptiveEntry<T> entry) {
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      entry.dropAnimating = false;
-    });
+    entry.dropAnimating.value = false;
     entry.controller
       ..stop()
       ..forward(from: 0);
   }
 
   void _setHovering(Object key) {
-    if (_hoveringKey == key) {
+    if (_hoveringKey.value == key) {
       return;
     }
-    setState(() {
-      _hoveringKey = key;
-    });
+    _hoveringKey.value = key;
   }
 
   void _clearHovering(Object key) {
-    if (_hoveringKey != key) {
+    if (_hoveringKey.value != key) {
       return;
     }
-    setState(() {
-      _hoveringKey = null;
-    });
+    _hoveringKey.value = null;
   }
 
   int get _visibleItemCount => _entries.where((e) => !e.removed).length;
@@ -1008,11 +1020,16 @@ class _AdaptiveEntry<T> {
   final AnimationController controller;
   final Animation<double> animation;
   final VoidCallback onRemoveCompleted;
+  final ValueNotifier<bool> dropAnimating = ValueNotifier(false);
 
   bool removed = false;
   bool markedForRemoval = false;
   final GlobalKey tileKey = GlobalKey(debugLabel: 'adaptive_reorderable_tile');
-  bool dropAnimating = false;
+
+  void dispose() {
+    controller.dispose();
+    dropAnimating.dispose();
+  }
 }
 
 class _ShiftAnimation {
@@ -1027,6 +1044,11 @@ class _ShiftAnimation {
 }
 
 class _AnimatedEntry extends StatelessWidget {
+  static final Animatable<double> _scaleTween = Tween<double>(
+    begin: 0.92,
+    end: 1,
+  );
+
   const _AnimatedEntry({
     super.key,
     required this.animation,
@@ -1038,10 +1060,9 @@ class _AnimatedEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scaleTween = Tween<double>(begin: 0.92, end: 1.0);
     return FadeTransition(
       opacity: animation,
-      child: ScaleTransition(scale: animation.drive(scaleTween), child: child),
+      child: ScaleTransition(scale: animation.drive(_scaleTween), child: child),
     );
   }
 }
