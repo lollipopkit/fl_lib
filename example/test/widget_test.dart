@@ -15,9 +15,12 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const MyApp());
 
+    final introPageTile = find.widgetWithText(ListTile, 'Intro Page');
+
     expect(find.text('fl_lib demo'), findsOneWidget);
     expect(find.byType(ListTile), findsWidgets);
-    expect(find.text('Intro Page'), findsOneWidget);
+    await tester.scrollUntilVisible(introPageTile, 20);
+    expect(introPageTile, findsOneWidget);
     expect(find.byIcon(Icons.chevron_right), findsWidgets);
   });
 }
