@@ -56,6 +56,7 @@ extension WidgetX on Widget {
     if (!clip) return child;
 
     return ClipRRect(
+      clipBehavior: Clip.hardEdge,
       borderRadius: BorderRadius.circular(17),
       child: Material(
         color: Colors.transparent,
