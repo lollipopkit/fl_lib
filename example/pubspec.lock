@@ -518,11 +518,11 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
-  icloud_storage:
+  icloud_storage_plus:
     dependency: transitive
     description:
-      name: icloud_storage
-      sha256: fa91d9c3b4264651f01a4f5b99cffa354ffe455623b13ecf92be86d88b1e26ea
+      name: icloud_storage_plus
+      sha256: "309660223892e6aa61eb458487692e854d9294cffff9afa79f4af3c35328eab2"
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"

@@ -11,10 +11,10 @@ final class ICloud implements RemoteStorage<ICloudFile> {
     String? localPath,
   }) async {
     final completer = Completer<void>();
-    await ICloudStorage.upload(
+    await ICloudStorage.uploadFile(
       containerId: containerId,
-      filePath: localPath ?? Paths.doc.joinPath(relativePath),
-      destinationRelativePath: relativePath,
+      localPath: localPath ?? Paths.doc.joinPath(relativePath),
+      cloudRelativePath: relativePath,
       onProgress: (stream) {
         stream.listen(
           null,
@@ -27,8 +27,9 @@ final class ICloud implements RemoteStorage<ICloudFile> {
   }
 
   @override
-  Future<List<ICloudFile>> list() {
-    return ICloudStorage.gather(containerId: containerId);
+  Future<List<ICloudFile>> list() async {
+    final result = await ICloudStorage.gather(containerId: containerId);
+    return result.files;
   }
 
   @override
@@ -45,10 +46,10 @@ final class ICloud implements RemoteStorage<ICloudFile> {
     String? localPath,
   }) async {
     final completer = Completer<void>();
-    await ICloudStorage.download(
+    await ICloudStorage.downloadFile(
       containerId: containerId,
-      relativePath: relativePath,
-      destinationFilePath: localPath ?? Paths.doc.joinPath(relativePath),
+      cloudRelativePath: relativePath,
+      localPath: localPath ?? Paths.doc.joinPath(relativePath),
       onProgress: (stream) {
         stream.listen(
           null,
