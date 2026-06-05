@@ -24,7 +24,7 @@ extension ContextX on BuildContext {
   ThemeData get theme => Theme.of(this);
 
   /// Whether the current theme brightness is dark
-  bool get isDark => MediaQuery.platformBrightnessOf(this) == Brightness.dark;
+  bool get isDark => theme.brightness == Brightness.dark;
 
   /// Current route settings from the closest ModalRoute ancestor
   RouteSettings? get route => ModalRoute.settingsOf(this);

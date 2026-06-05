@@ -173,7 +173,27 @@ enum HighlightTheme {
 
   /// Returns the corresponding theme colors map.
   Map<String, TextStyle>? get theme {
-    return themeMap[name];
+    return themeMap[themeMapKey];
+  }
+
+  /// Returns the corresponding key in flutter_highlight's theme map.
+  String get themeMapKey {
+    return switch (this) {
+      HighlightTheme.defaultTheme => 'default',
+      HighlightTheme.kimbie_dark => 'kimbie.dark',
+      HighlightTheme.kimbie_light => 'kimbie.light',
+      HighlightTheme.qtcreator_dark => 'qtcreator_dark',
+      HighlightTheme.qtcreator_light => 'qtcreator_light',
+      _ => name.replaceAll('_', '-'),
+    };
+  }
+
+  static HighlightTheme? fromThemeMapKey(String? key) {
+    if (key == null) return null;
+    for (final theme in values) {
+      if (theme.themeMapKey == key) return theme;
+    }
+    return null;
   }
 }
 
