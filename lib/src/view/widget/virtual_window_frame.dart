@@ -21,13 +21,7 @@ class VirtualWindowFrame extends StatefulWidget {
   /// Title of the window.
   final String? title;
 
-  /// Whether to show the virtual window caption.
-  ///
-  /// Only affects desktop platforms. When set to false, the virtual caption will be hidden,
-  /// which is useful when the native title bar is shown.
-  final bool showCaption;
-
-  const VirtualWindowFrame({super.key, required this.child, this.title, this.showCaption = true});
+  const VirtualWindowFrame({super.key, required this.child, this.title});
 
   @override
   State<VirtualWindowFrame> createState() => _VirtualWindowFrameState();
@@ -54,7 +48,7 @@ class _VirtualWindowFrameState extends State<VirtualWindowFrame> {
   Widget build(BuildContext context) {
     final content = switch (CustomAppBar.sysStatusBarHeight) {
       0.0 => widget.child,
-      _ when widget.showCaption && WindowFrameConfig.showCaption => Column(
+      _ when WindowFrameConfig.showCaption => Column(
           children: [
             _WindowCaption(title: widget.title),
             Expanded(child: widget.child),

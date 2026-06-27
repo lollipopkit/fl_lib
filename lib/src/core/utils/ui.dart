@@ -101,10 +101,10 @@ abstract final class SystemUIs {
   /// Only works on desktop platforms.
   static Future<void> updateTitleBarStyle({required bool hideTitleBar}) async {
     if (!isDesktop) return;
-    WindowFrameConfig.setShowCaption(hideTitleBar);
     await windowManager.setTitleBarStyle(
       hideTitleBar ? TitleBarStyle.hidden : TitleBarStyle.normal,
     );
+    WindowFrameConfig.setShowCaption(hideTitleBar);
   }
 }
 
