@@ -1,25 +1,28 @@
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart' as wm;
 
 abstract final class WindowFrameConfig {
-  static bool _showCaption = true;
+  static final _showCaption = ValueNotifier(true);
 
-  static bool get showCaption => _showCaption && isDesktop;
+  static bool get showCaption => _showCaption.value && isDesktop;
+
+  static ValueListenable<bool> get listenable => _showCaption;
 
   static void setShowCaption(bool value) {
-    _showCaption = value;
+    _showCaption.value = value;
   }
 }
 
-class VirtualWindowFrame extends StatelessWidget {
+class VirtualWindowFrame extends StatefulWidget {
   final Widget child;
 
   /// Title of the window.
   final String? title;
 
   /// Whether to show the virtual window caption.
-  /// 
+  ///
   /// Only affects desktop platforms. When set to false, the virtual caption will be hidden,
   /// which is useful when the native title bar is shown.
   final bool showCaption;
@@ -27,16 +30,37 @@ class VirtualWindowFrame extends StatelessWidget {
   const VirtualWindowFrame({super.key, required this.child, this.title, this.showCaption = true});
 
   @override
+  State<VirtualWindowFrame> createState() => _VirtualWindowFrameState();
+}
+
+class _VirtualWindowFrameState extends State<VirtualWindowFrame> {
+  @override
+  void initState() {
+    super.initState();
+    WindowFrameConfig.listenable.addListener(_onCaptionChanged);
+  }
+
+  @override
+  void dispose() {
+    WindowFrameConfig.listenable.removeListener(_onCaptionChanged);
+    super.dispose();
+  }
+
+  void _onCaptionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     final content = switch (CustomAppBar.sysStatusBarHeight) {
-      0.0 => child,
-      _ when showCaption && WindowFrameConfig.showCaption => Column(
+      0.0 => widget.child,
+      _ when widget.showCaption && WindowFrameConfig.showCaption => Column(
           children: [
-            _WindowCaption(title: title),
-            Expanded(child: child),
+            _WindowCaption(title: widget.title),
+            Expanded(child: widget.child),
           ],
         ),
-      _ => child,
+      _ => widget.child,
     };
     return wm.VirtualWindowFrame(child: content);
   }

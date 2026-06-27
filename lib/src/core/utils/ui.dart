@@ -95,6 +95,17 @@ abstract final class SystemUIs {
       }
     });
   }
+
+  /// Updates the title bar style at runtime without restarting the app.
+  ///
+  /// Only works on desktop platforms.
+  static Future<void> updateTitleBarStyle({required bool hideTitleBar}) async {
+    if (!isDesktop) return;
+    WindowFrameConfig.setShowCaption(hideTitleBar);
+    await windowManager.setTitleBarStyle(
+      hideTitleBar ? TitleBarStyle.hidden : TitleBarStyle.normal,
+    );
+  }
 }
 
 void withTextFieldController(Future<void> Function(TextEditingController) callback) async {
