@@ -42,6 +42,22 @@ abstract final class AppUpdate {
   static Pfs? _githubPlatform;
   static CpuArch? _githubArch;
 
+  /// Reset mutable state between tests.
+  static void resetForTest() {
+    _chan = AppUpdateChan.stable;
+    _build = 0;
+    _data = <String, dynamic>{};
+    _locale = '';
+    _source = _AppUpdateSource.manifest;
+    _githubReleases = <Map<String, dynamic>>[];
+    _githubStoreUrl = null;
+    _githubPlatform = null;
+    _githubArch = null;
+    _changelog = null;
+    _url = null;
+    _version = null;
+  }
+
   static String _rmComment(String raw) {
     return (raw.split('\n')..removeWhere((e) => e.trimLeft().startsWith('//')))
         .join('\n');
@@ -137,9 +153,11 @@ abstract final class AppUpdate {
     if (release == null) return;
     final newest = _parseGitHubBuild(release);
     if (newest == null) return;
+    final url = _getGitHubUrl(release);
+    if (url == null) return;
+    _url = url;
     _version = AppUpdateVer(latest: newest).parse(_build);
     _changelog = release.body;
-    _url = _getGitHubUrl(release);
   }
 
   static String? _changelog;
@@ -335,10 +353,9 @@ abstract final class AppUpdate {
               asset.hasArch(arch),
         )?.url;
       case Pfs.macos:
-        return _findGitHubAsset(
-              assets,
-              (asset) => asset.name.endsWith('.dmg'),
-            )?.url ??
+        final dmgs = assets.where((asset) => asset.name.endsWith('.dmg'));
+        return _findGitHubAsset(dmgs, (asset) => asset.hasArch(arch))?.url ??
+            _findGitHubAsset(dmgs, (asset) => !asset.hasAnyArch)?.url ??
             _githubStoreUrl;
       case Pfs.ios:
         return _githubStoreUrl;
@@ -457,6 +474,8 @@ final class _GitHubAsset {
           lower.contains('-arm_'),
     };
   }
+
+  bool get hasAnyArch => CpuArch.values.any(hasArch);
 }
 
 /// Update channels supported by the app.

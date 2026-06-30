@@ -7,7 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   setUp(() {
-    AppUpdate.chan = AppUpdateChan.stable;
+    AppUpdate.resetForTest();
+  });
+
+  tearDown(() {
+    AppUpdate.resetForTest();
   });
 
   test('github stable release uses release body and platform asset', () {
@@ -172,6 +176,27 @@ void main() {
     expect(AppUpdate.url, 'https://apps.apple.com/app/id1586449703');
   });
 
+  test('github macos prefers current architecture dmg over generic dmg', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.3',
+          assets: [
+            _asset('App-1.0.3-x86_64.dmg'),
+            _asset('App-1.0.3.dmg'),
+            _asset('App-1.0.3-arm64.dmg'),
+          ],
+        ),
+      ]),
+      build: 1,
+      storeUrl: 'https://apps.apple.com/app/id1586449703',
+      platform: Pfs.macos,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.url, 'https://download/App-1.0.3-arm64.dmg');
+  });
+
   test('github ios always uses store url', () {
     final raw = _githubRaw([
       _release(
@@ -203,7 +228,7 @@ void main() {
     expect(AppUpdate.url, isNull);
   });
 
-  test('github missing platform asset keeps version but has no update url', () {
+  test('github missing platform asset exposes no update', () {
     AppUpdate.fromGitHubReleasesStr(
       raw: _githubRaw([
         _release(tag: 'v1.0.3', assets: [_asset('ServerBox.zip')]),
@@ -212,7 +237,7 @@ void main() {
       platform: Pfs.windows,
       arch: CpuArch.amd64,
     );
-    expect(AppUpdate.version, (3, AppUpdateLevel.normal));
+    expect(AppUpdate.version, isNull);
     expect(AppUpdate.url, isNull);
   });
 }
