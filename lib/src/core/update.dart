@@ -7,14 +7,24 @@ abstract final class AppUpdateIface {
 
   static Future<void> doUpdate({
     required BuildContext context,
-    required String url,
+    required String githubReleasesUrl,
     required int build,
+    String? storeUrl,
     bool force = false,
     bool beta = false,
   }) async {
     if (isWeb) return;
 
-    await AppUpdate.fromUrl(url: url, locale: l10n.localeName, build: build);
+    try {
+      await AppUpdate.fromGitHubReleasesUrl(
+        url: githubReleasesUrl,
+        build: build,
+        storeUrl: storeUrl,
+      );
+    } catch (e, s) {
+      Loggers.app.warning('Check update failed', e, s);
+      return;
+    }
 
     final result = AppUpdate.version;
     if (result == null) {

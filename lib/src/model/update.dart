@@ -1,37 +1,46 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:fl_lib/fl_lib.dart';
+import 'package:fl_lib/src/core/dio.dart';
+import 'package:fl_lib/src/core/utils/platform/arch.dart';
+import 'package:fl_lib/src/core/utils/platform/base.dart';
+import 'package:logging/logging.dart';
 
 /// Parse and provide app update metadata from a JSON manifest.
 ///
 /// The manifest supports per-channel (stable/beta), per-OS, and per-arch
 /// overrides for build numbers, changelog, and download URLs.
 abstract final class AppUpdate {
-  static final _arch = CpuArch.current.name;
-  static final _os = Pfs.type.name;
-  static final _osArch = '$_os-$_arch';
-  static var _resKey = '${chan.name}-$_osArch';
-  static var _chanOs = '${chan.name}-$_os';
+  static final _logger = Logger('AppUpdate');
+
+  static String get _arch => CpuArch.current.name;
+  static String get _os => Pfs.type.name;
+  static String get _osArch => '$_os-$_arch';
+  static String get _resKey => '${chan.name}-$_osArch';
+  static String get _chanOs => '${chan.name}-$_os';
 
   static var _chan = AppUpdateChan.stable;
   /// Current update channel.
   static AppUpdateChan get chan => _chan;
   static set chan(AppUpdateChan value) {
-    _updateChanRelated(value);
+    if (value == _chan) return;
+    _chan = value;
     _getAll();
   }
 
   static void _updateChanRelated(AppUpdateChan value) {
     if (value == _chan) return;
     _chan = value;
-    _resKey = '${_chan.name}-$_osArch';
-    _chanOs = '${_chan.name}-$_os';
   }
 
   static var _build = 0;
   static var _data = <String, dynamic>{};
   static var _locale = '';
+  static var _source = _AppUpdateSource.manifest;
+  static var _githubReleases = <Map<String, dynamic>>[];
+  static String? _githubStoreUrl;
+  static Pfs? _githubPlatform;
+  static CpuArch? _githubArch;
 
   static String _rmComment(String raw) {
     return (raw.split('\n')..removeWhere((e) => e.trimLeft().startsWith('//')))
@@ -51,6 +60,7 @@ abstract final class AppUpdate {
     _data = data;
     _locale = locale;
     _build = build;
+    _source = _AppUpdateSource.manifest;
     _getAll();
   }
 
@@ -65,15 +75,71 @@ abstract final class AppUpdate {
     _data = data;
     _locale = locale;
     _build = build;
+    _source = _AppUpdateSource.manifest;
+    _getAll();
+  }
+
+  /// Load and parse releases from the GitHub Releases API.
+  static Future<void> fromGitHubReleasesUrl({
+    required String url,
+    required int build,
+    String? storeUrl,
+  }) async {
+    final resp = await myDio.get(
+      url,
+      options: Options(responseType: ResponseType.plain),
+    );
+    fromGitHubReleasesStr(
+      raw: resp.data.toString(),
+      build: build,
+      storeUrl: storeUrl,
+    );
+  }
+
+  /// Load and parse a raw GitHub Releases API response.
+  static void fromGitHubReleasesStr({
+    required String raw,
+    required int build,
+    String? storeUrl,
+    Pfs? platform,
+    CpuArch? arch,
+  }) {
+    final decoded = json.decode(raw);
+    if (decoded is! List) {
+      throw FormatException('Expected GitHub releases list, got $decoded');
+    }
+    _githubReleases = decoded
+        .whereType<Map<String, dynamic>>()
+        .map(Map<String, dynamic>.from)
+        .toList();
+    _build = build;
+    _source = _AppUpdateSource.github;
+    _githubStoreUrl = storeUrl;
+    _githubPlatform = platform;
+    _githubArch = arch;
     _getAll();
   }
 
   static void _getAll() {
     _changelog = _url = _version = null;
+    if (_source == _AppUpdateSource.github) {
+      _getGitHubAll();
+      return;
+    }
     // Keep this order
     _getChangelog();
     _getVersion();
     _getUrl();
+  }
+
+  static void _getGitHubAll() {
+    final release = _getGitHubRelease();
+    if (release == null) return;
+    final newest = _parseGitHubBuild(release);
+    if (newest == null) return;
+    _version = AppUpdateVer(latest: newest).parse(_build);
+    _changelog = release.body;
+    _url = _getGitHubUrl(release);
   }
 
   static String? _changelog;
@@ -158,7 +224,7 @@ abstract final class AppUpdate {
       try {
         return AppUpdateVer.fromJson(map).parse(_build);
       } catch (e) {
-        Loggers.app.warning('AppUpdateVer.fromJson failed', e);
+        _logger.warning('AppUpdateVer.fromJson failed', e);
       }
       return null;
     }
@@ -213,6 +279,93 @@ abstract final class AppUpdate {
         .replaceAll('{CHAN}', chan.name);
   }
 
+  static _GitHubRelease? _getGitHubRelease() {
+    final stable = _latestGitHubRelease(prerelease: false);
+    if (chan == AppUpdateChan.stable) return stable;
+
+    final beta = _latestGitHubRelease(prerelease: true);
+    if (beta == null) {
+      _updateChanRelated(AppUpdateChan.stable);
+      return stable;
+    }
+    if (stable == null) return beta;
+    if (beta.build >= stable.build) return beta;
+    _updateChanRelated(AppUpdateChan.stable);
+    return stable;
+  }
+
+  static _GitHubRelease? _latestGitHubRelease({required bool prerelease}) {
+    _GitHubRelease? latest;
+    for (final release in _githubReleases) {
+      if (release['draft'] == true) continue;
+      if (release['prerelease'] != prerelease) continue;
+      final parsed = _GitHubRelease.fromJson(release);
+      if (parsed == null) continue;
+      if (latest == null || parsed.build > latest.build) {
+        latest = parsed;
+      }
+    }
+    return latest;
+  }
+
+  static int? _parseGitHubBuild(_GitHubRelease release) => release.build;
+
+  static String? _getGitHubUrl(_GitHubRelease release) {
+    final platform = _githubPlatform ?? Pfs.type;
+    final arch = _githubArch ?? CpuArch.current;
+    final assets = release.assets;
+
+    switch (platform) {
+      case Pfs.android:
+        return _findGitHubAsset(
+          assets,
+          (asset) => asset.name.endsWith('.apk') && asset.hasArch(arch),
+        )?.url;
+      case Pfs.linux:
+        final appImages = assets.where(
+          (asset) => asset.name.endsWith('.AppImage') && asset.hasArch(arch),
+        );
+        return _preferNonLegacy(appImages)?.url;
+      case Pfs.windows:
+        return _findGitHubAsset(
+          assets,
+          (asset) =>
+              asset.name.endsWith('.zip') &&
+              asset.name.contains('windows') &&
+              asset.hasArch(arch),
+        )?.url;
+      case Pfs.macos:
+        return _findGitHubAsset(
+              assets,
+              (asset) => asset.name.endsWith('.dmg'),
+            )?.url ??
+            _githubStoreUrl;
+      case Pfs.ios:
+        return _githubStoreUrl;
+      case Pfs.web || Pfs.fuchsia || Pfs.unknown:
+        return null;
+    }
+  }
+
+  static _GitHubAsset? _findGitHubAsset(
+    Iterable<_GitHubAsset> assets,
+    bool Function(_GitHubAsset asset) test,
+  ) {
+    for (final asset in assets) {
+      if (test(asset)) return asset;
+    }
+    return null;
+  }
+
+  static _GitHubAsset? _preferNonLegacy(Iterable<_GitHubAsset> assets) {
+    _GitHubAsset? legacy;
+    for (final asset in assets) {
+      if (!asset.name.contains('legacy')) return asset;
+      legacy ??= asset;
+    }
+    return legacy;
+  }
+
   // static Map<String, String> _asStrMap(Map<String, dynamic> data) {
   //   final ret = <String, String>{};
   //   for (final key in data.keys) {
@@ -223,6 +376,87 @@ abstract final class AppUpdate {
   //   }
   //   return ret;
   // }
+}
+
+enum _AppUpdateSource {
+  manifest,
+  github,
+}
+
+final class _GitHubRelease {
+  final int build;
+  final String? body;
+  final List<_GitHubAsset> assets;
+
+  const _GitHubRelease({
+    required this.build,
+    required this.body,
+    required this.assets,
+  });
+
+  factory _GitHubRelease._fromJson(Map<String, dynamic> data) {
+    final build = _parseBuild(data['tag_name']) ?? _parseBuild(data['name']);
+    if (build == null) {
+      throw FormatException('GitHub release build not found: $data');
+    }
+
+    final assets = (data['assets'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map((asset) => _GitHubAsset.fromJson(Map<String, dynamic>.from(asset)))
+        .nonNulls
+        .toList();
+
+    return _GitHubRelease(
+      build: build,
+      body: data['body'] as String?,
+      assets: assets,
+    );
+  }
+
+  static _GitHubRelease? fromJson(Map<String, dynamic> data) {
+    try {
+      return _GitHubRelease._fromJson(data);
+    } catch (e) {
+      AppUpdate._logger.warning('GitHub release parse failed', e);
+      return null;
+    }
+  }
+
+  static int? _parseBuild(Object? raw) {
+    if (raw == null) return null;
+    final matches = RegExp(r'\d+').allMatches(raw.toString()).toList();
+    if (matches.isEmpty) return null;
+    return int.tryParse(matches.last.group(0)!);
+  }
+}
+
+final class _GitHubAsset {
+  final String name;
+  final String url;
+
+  const _GitHubAsset({
+    required this.name,
+    required this.url,
+  });
+
+  static _GitHubAsset? fromJson(Map<String, dynamic> data) {
+    final name = data['name'];
+    final url = data['browser_download_url'];
+    if (name is! String || url is! String) return null;
+    return _GitHubAsset(name: name, url: url);
+  }
+
+  bool hasArch(CpuArch arch) {
+    final lower = name.toLowerCase();
+    return switch (arch) {
+      CpuArch.amd64 => lower.contains('amd64') || lower.contains('x86_64'),
+      CpuArch.arm64 => lower.contains('arm64') || lower.contains('aarch64'),
+      CpuArch.arm => lower.contains('_arm.') ||
+          lower.contains('_arm_') ||
+          lower.contains('-arm.') ||
+          lower.contains('-arm_'),
+    };
+  }
 }
 
 /// Update channels supported by the app.
