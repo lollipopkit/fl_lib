@@ -1,11 +1,16 @@
 const sizeSuffix = ['B', 'KB', 'MB', 'GB', 'TB'];
 
 extension NumX on num {
+  /// Human-readable byte count, e.g. `1.9 MB`.
+  ///
+  /// Steps while the quotient is `>= 1`, not `> 1`: an exact power of 1024
+  /// divides to exactly 1, and the strict comparison stopped one unit short —
+  /// 1048576 rendered as `1024 KB`, and 1024 as `1024 B`.
   String get bytes2Str {
     double value = toDouble();
     int squareTimes = 0;
     for (;
-        value / 1024 > 1 && squareTimes < sizeSuffix.length - 1;
+        value / 1024 >= 1 && squareTimes < sizeSuffix.length - 1;
         squareTimes++) {
       value /= 1024;
     }
@@ -20,11 +25,12 @@ extension NumX on num {
 }
 
 extension BigIntX on BigInt {
+  /// See [NumX.bytes2Str].
   String get bytes2Str {
     double value = toDouble();
     int squareTimes = 0;
     for (;
-        value / 1024 > 1 && squareTimes < sizeSuffix.length - 1;
+        value / 1024 >= 1 && squareTimes < sizeSuffix.length - 1;
         squareTimes++) {
       value /= 1024;
     }
