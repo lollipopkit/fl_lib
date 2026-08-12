@@ -122,7 +122,7 @@ class _JsonListEditorState extends State<JsonListEditor> {
     void onSave() {
       final jsonStr = ctrl.text;
       if (jsonStr.isEmpty) {
-        context.pop();
+        context.popDialog();
         context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
 
         return;
@@ -131,9 +131,9 @@ class _JsonListEditorState extends State<JsonListEditor> {
       try {
         final parsed = Fns.parseWithPriority(jsonStr);
         _list[idx] = parsed;
-        contextSafe?.pop(true);
+        contextSafe?.popDialog(true);
       } catch (e) {
-        contextSafe?.pop();
+        contextSafe?.popDialog();
         contextSafe?.showRoundDialog(title: l10n.fail, child: Text('Invalid input: $e'));
       }
     }
@@ -162,7 +162,7 @@ class _JsonListEditorState extends State<JsonListEditor> {
     void onSave() {
       final jsonStr = ctrl.text;
       if (jsonStr.isEmpty) {
-        context.pop();
+        context.popDialog();
         context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
 
         return;
@@ -171,9 +171,9 @@ class _JsonListEditorState extends State<JsonListEditor> {
       try {
         final parsed = Fns.parseWithPriority(jsonStr);
         _list.add(parsed);
-        contextSafe?.pop(true);
+        contextSafe?.popDialog(true);
       } catch (e) {
-        context.pop();
+        context.popDialog();
         context.showRoundDialog(title: l10n.fail, child: Text('Invalid input: $e'));
       }
     }

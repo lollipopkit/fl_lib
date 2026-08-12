@@ -1,5 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 /// A widget that displays multiple lists in columns, adapting layout for mobile and desktop.
 final class MultiList extends StatefulWidget {
@@ -95,122 +96,86 @@ final class _MultiListState extends State<MultiList> {
   }
 }
 
-//// Based on [MultiList], but automatically calculates the number of columns based on the available width.
-final class AutoMultiList extends StatefulWidget {
-  /// List of widgets to distribute.
-  final List<Widget> children;
-
-  /// Desired width for each column.
-  final double columnWidth;
-
-  /// Padding around the entire list.
-  final EdgeInsetsGeometry outerPadding;
-
-  /// Padding between columns.
-  final double betweenPadding;
-
-  const AutoMultiList({
+/// Cards flowing down as many columns as the width allows, each landing in
+/// whichever column is currently shortest.
+///
+/// Replaces a round-robin split into one [ListView] per column. That put every
+/// other card in the next column regardless of how tall any of them were, so
+/// one long card left its neighbour half empty; worse, each column scrolled on
+/// its own, and a page of cards had no single position to be at.
+///
+/// Use [MultiList] instead where the grouping means something — a settings
+/// page whose columns are sections. Here the columns are only how many fit.
+final class MasonryList extends StatelessWidget {
+  MasonryList({
     super.key,
-    required this.children,
-    this.outerPadding = MultiList.kOuterPadding,
+    required List<Widget> children,
     this.columnWidth = UIs.columnWidth,
-    this.betweenPadding = 10,
+    this.maxColumns = 10,
+    this.padding = kPadding,
+    this.spacing = 8,
+    this.controller,
+  }) : itemCount = children.length,
+       itemBuilder = ((_, i) => children[i]);
+
+  /// The lazy form, for a list long enough that building the ones off screen
+  /// costs something — a card per server, each watching its own state.
+  const MasonryList.builder({
+    super.key,
+    required this.itemCount,
+    required this.itemBuilder,
+    this.columnWidth = UIs.columnWidth,
+    this.maxColumns = 10,
+    this.padding = kPadding,
+    this.spacing = 8,
+    this.controller,
   });
 
-  @override
-  State<AutoMultiList> createState() => _AutoMultiListState();
-}
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
 
-/// State for AutoMultiList, handles dynamic column calculation and distribution.
-class _AutoMultiListState extends State<AutoMultiList> {
-  /// The distributed children into columns.
-  List<List<Widget>> _distributedChildren = [];
+  /// How wide a column wants to be. The real width is whatever is left after
+  /// dividing the space between however many of these fit.
+  final double columnWidth;
 
-  /// Actual number of columns calculated.
-  int _actualColumnCount = 0;
+  /// A ceiling on the columns, for content that stops being readable when it
+  /// is spread across a whole desktop window.
+  final int maxColumns;
 
-  /// Current total width available.
-  double _totalWidth = 0.0;
+  final EdgeInsets padding;
 
-  /// Last total width used for distribution.
-  double _lastTotalWidth = 1.0;
+  /// Between columns and between cards, the same on both axes: the grid should
+  /// read as one field of cards rather than as rows or as columns.
+  final double spacing;
 
-  /// Hash code of the last children list to detect changes
-  int _lastChildrenHashCode = 0;
+  final ScrollController? controller;
 
-  @override
-  void didUpdateWidget(covariant AutoMultiList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final needsUpdate = oldWidget.children.length != widget.children.length ||
-        oldWidget.columnWidth != widget.columnWidth ||
-        oldWidget.outerPadding != widget.outerPadding;
-    if (needsUpdate) {
-      _updateDistribution(forceUpdate: true);
-    }
-  }
+  /// Enough to keep cards off the window edge and each other, and no more.
+  static const kPadding = EdgeInsets.symmetric(horizontal: 8, vertical: 8);
 
-  void _updateDistribution({bool forceUpdate = false}) {
-    final currentWidth = _totalWidth;
-    final availableWidth = currentWidth - widget.outerPadding.horizontal;
-    final newColumnCount = availableWidth / widget.columnWidth;
-    final clampedColumnCount = newColumnCount.floor().clamp(1, 10);
-
-    final currentChildrenHashCode = _computeChildrenHashCode(widget.children);
-    final widthChanged = (_lastTotalWidth - currentWidth).abs() > 1.0;
-    final needsUpdate = forceUpdate ||
-        widthChanged ||
-        _lastChildrenHashCode != currentChildrenHashCode ||
-        _actualColumnCount != clampedColumnCount;
-
-    if (!needsUpdate) {
-      return;
-    }
-
-    _actualColumnCount = clampedColumnCount;
-    _distributedChildren = _distributeChildrenToColumns(widget.children, _actualColumnCount);
-    _lastTotalWidth = currentWidth;
-    _lastChildrenHashCode = currentChildrenHashCode;
-  }
-
-  int _computeChildrenHashCode(List<Widget> children) {
-    return Object.hashAll(children);
+  /// How many columns [width] holds. Public so a caller that has to size
+  /// itself around the same answer gets the same one.
+  int columnsFor(double width) {
+    final available = width - padding.horizontal;
+    if (available <= 0) return 1;
+    return ((available + spacing) / (columnWidth + spacing)).floor().clamp(
+      1,
+      maxColumns,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (_, cons) {
-      _totalWidth = cons.maxWidth;
-      _updateDistribution();
-
-      return MultiList(
-        betweenPadding: widget.betweenPadding,
-        outerPadding: widget.outerPadding,
-        widthDivider: _actualColumnCount.toDouble(),
-        children: _distributedChildren,
-      );
-    });
-  }
-}
-
-extension on _AutoMultiListState {
-  List<List<Widget>> _distributeChildrenToColumns(List<Widget> children, int columnCount) {
-    if (children.isEmpty || columnCount <= 1) {
-      return [List<Widget>.from(children)];
-    }
-
-    final columns = List.generate(columnCount, (_) => <Widget>[]);
-    final itemCount = children.length;
-    final baseItemsPerColumn = itemCount ~/ columnCount;
-    final extraItems = itemCount % columnCount;
-    int currentIndex = 0;
-    for (int col = 0; col < columnCount; col++) {
-      final itemsInThisColumn = baseItemsPerColumn + (col < extraItems ? 1 : 0);
-      for (int i = 0; i < itemsInThisColumn; i++) {
-        if (currentIndex < itemCount) {
-          columns[col].add(children[currentIndex++]);
-        }
-      }
-    }
-    return columns;
+    return LayoutBuilder(
+      builder: (_, cons) => MasonryGridView.count(
+        controller: controller,
+        padding: padding,
+        crossAxisCount: columnsFor(cons.maxWidth),
+        mainAxisSpacing: spacing,
+        crossAxisSpacing: spacing,
+        itemCount: itemCount,
+        itemBuilder: itemBuilder,
+      ),
+    );
   }
 }

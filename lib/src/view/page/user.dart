@@ -114,7 +114,7 @@ final class _UserPageState extends State<UserPage> {
   void _onRename() async {
     final ctrl = TextEditingController(text: UserApi.user.value?.name);
     void onOk() async {
-      context.pop();
+      context.popDialog();
       final name = ctrl.text;
       if (name.isEmpty) return;
       await context.showLoadingDialog(fn: () => UserApi.edit(name: name));
@@ -138,7 +138,7 @@ final class _UserPageState extends State<UserPage> {
       child: Text(l10n.delFmt(l10n.user, UserApi.user.value?.name ?? '???')),
       actions: [
         CountDownBtn(
-          onTap: () => context.pop(true),
+          onTap: () => context.popDialog(true),
           text: l10n.ok,
           afterColor: Colors.red,
         ),

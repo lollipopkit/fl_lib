@@ -6,6 +6,19 @@ import 'package:responsive_framework/responsive_framework.dart';
 extension ContextX on BuildContext {
   /// Pops the current route off the navigator if possible.
   /// Returns without action if [canPop] is false.
+  /// Closes a dialog raised by [DialogX.showRoundDialog].
+  ///
+  /// Those are pinned to the root navigator, so [pop] from a page's context
+  /// closes the *page* instead once that page lives in a nested navigator — a
+  /// pane, or a tab that keeps its own stack. The dialog then stays up with
+  /// nothing behind it.
+  ///
+  /// Actions built with `actionsBuilder` get the dialog's own context and can
+  /// use [pop] directly; this is for the ones that only have the page's.
+  void popDialog<T extends Object?>([T? result]) {
+    Navigator.of(this, rootNavigator: true).pop<T>(result);
+  }
+
   void pop<T extends Object?>([T? result]) {
     // final splitCtx = SplitViewNavigator.of(this);
     // final canPopSplitView = splitCtx?.canPop ?? false;

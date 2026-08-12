@@ -66,7 +66,7 @@ abstract final class AppUpdateIface {
         actions: [
           TextButton(
             onPressed: () {
-              if (!force) context.pop();
+              if (!force) context.popDialog();
               _doUpdate(context, fileUrl);
             },
             child: Text(l10n.update),

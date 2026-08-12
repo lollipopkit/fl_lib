@@ -113,8 +113,7 @@ final class Btn extends StatelessWidget {
   ///
   /// By default:
   /// - [Btn.ok] pops `true`
-  /// - [Btn.cancel] pops `false`
-  /// - Others pops `null`
+  /// - Everything else, [Btn.cancel] included, pops `null`
   final Object? popVal;
 
   /// TextButton
@@ -232,7 +231,13 @@ final class Btn extends StatelessWidget {
         textStyle = red ? UIs.textRed : null;
 
   /// {@template btn_cancel_pop}
-  /// It will pop `false` if [onTap] is null.
+  /// It pops nothing — a null result — if [onTap] is null.
+  ///
+  /// Not `false`, which it used to pop: a `showRoundDialog<T>` is a
+  /// `Route<T>`, and popping a bool through one typed for anything else threw
+  /// on the way out, leaving the dialog on screen with a cancel button that
+  /// did nothing. Null is the one result every `T` accepts, and a caller
+  /// asking whether something was confirmed reads `== true` either way.
   /// {@endtemplate}
   Btn.cancel({
     super.key,
@@ -246,7 +251,7 @@ final class Btn extends StatelessWidget {
         mainAxisAlignment = null,
         mainAxisSize = null,
         borderRadius = null,
-        popVal = false,
+        popVal = null,
         textStyle = null;
 
   @override

@@ -29,12 +29,21 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    // At the root of a detail pane there is nothing on the stack to pop, so
+    // `AppBar` draws no back button — yet there is still somewhere to go back
+    // to: closing the pane hands the width back to the list. Resolved here so
+    // that a page never has to know which of the two it is being shown in.
+    final closeDetail = leading == null
+        ? PaneScope.closeDetailOf(context)
+        : null;
     final bar = AppBar(
       key: key,
       title: title,
       actions: actions,
       centerTitle: centerTitle,
-      leading: leading,
+      leading: closeDetail == null
+          ? leading
+          : BackButton(onPressed: closeDetail),
       backgroundColor: backgroundColor,
       toolbarHeight: appBarHeight,
       bottom: bottom,

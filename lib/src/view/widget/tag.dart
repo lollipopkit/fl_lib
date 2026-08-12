@@ -125,20 +125,20 @@ final class TagTile extends StatelessWidget {
               actions: [
                 TextButton(
                   onPressed: () {
-                    context.pop();
+                    context.popDialog();
                     tags.value = {};
                   },
                   child: Text(l10n.clear),
                 ),
                 TextButton(
                   onPressed: () async {
-                    context.pop();
+                    context.popDialog();
                     final ctrl = TextEditingController();
                     void onSave() {
                       final s = ctrl.text.trim();
                       if (s.isEmpty) return;
                       tags.value = tags.value..add(s);
-                      context.pop();
+                      context.popDialog();
                     }
 
                     context.showRoundDialog(

@@ -114,12 +114,12 @@ class _KvEditorState extends State<KvEditor> {
       final newK = ctrlK.text;
       final newV = ctrlV.text;
       if (newK.isEmpty || newV.isEmpty) {
-        context.pop();
+        context.popDialog();
         await context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
       }
       _map.remove(k);
       _map[newK] = newV;
-      contextSafe?.pop(true);
+      contextSafe?.popDialog(true);
     }
 
     final result = await context.showRoundDialog<bool>(
@@ -153,12 +153,12 @@ class _KvEditorState extends State<KvEditor> {
       final k = ctrlK.text;
       final v = ctrlV.text;
       if (k.isEmpty || v.isEmpty) {
-        context.pop();
+        context.popDialog();
         context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
         return;
       }
       _map[k] = v;
-      context.pop(true);
+      context.popDialog(true);
     }
 
     final result = await context.showRoundDialog(

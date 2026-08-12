@@ -25,7 +25,7 @@ class DebugPage extends StatelessWidget {
     return Scaffold(
       appBar: CustomAppBar(
         leading: IconButton(
-          onPressed: () => context.pop(),
+          onPressed: () => context.popDialog(),
           icon: const Icon(Icons.arrow_back),
         ),
         title: Text(args?.title ?? l10n.log, style: const TextStyle(fontSize: 17)),
@@ -41,7 +41,7 @@ class DebugPage extends StatelessWidget {
                 actions: Btn.ok(
                   onTap: () {
                     DebugProvider.clear();
-                    context.pop();
+                    context.popDialog();
                   },
                 ).toList,
               );

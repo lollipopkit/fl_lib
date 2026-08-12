@@ -42,6 +42,11 @@ extension DialogX on BuildContext {
     return await showDialog<T>(
       context: this,
       barrierDismissible: barrierDismiss,
+      // Stated rather than inherited. The default is being deprecated, and it
+      // stops being a formality once there is more than one navigator: a
+      // dialog on the nearest one is clipped to whatever pane raised it, so a
+      // confirmation for a destructive action would appear inside a column.
+      useRootNavigator: true,
       builder: (ctx) {
         final title_ = switch (titleBuilder) {
           null => title != null ? Text(title, maxLines: titleMaxLines) : null,
@@ -81,11 +86,11 @@ extension DialogX on BuildContext {
           null => await fn(),
           _ => await fn().timeout(timeout),
         };
-        pop();
+        popDialog();
         return ret;
       },
       onErr: (e, s) {
-        pop();
+        popDialog();
         showErrDialog(e, s);
         onErr?.call(e, s);
       },
@@ -108,7 +113,7 @@ extension DialogX on BuildContext {
         type: TextInputType.visiblePassword,
         obscureText: true,
         onSubmitted: (val) {
-          pop(val);
+          popDialog(val);
           if (remember && id != null) {
             _recoredPwd[id] = val;
           }
@@ -145,7 +150,7 @@ extension DialogX on BuildContext {
     var vals = initial ?? <T>[];
     final btns = actions ?? <Widget>[];
     if (multi && addOkBtn) {
-      btns.add(TextButton(onPressed: () => pop(true), child: Text(l10n.ok)));
+      btns.add(TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)));
     }
 
     final itemsList = items.toList();
@@ -156,7 +161,7 @@ extension DialogX on BuildContext {
       return ChoiceWidget<T>(
         onChanged: (value) {
           vals = value;
-          if (!multi) pop(true);
+          if (!multi) popDialog(true);
         },
         multi: multi,
         clearable: clearable,
@@ -310,7 +315,7 @@ extension DialogX on BuildContext {
       ),
       actions: [
         if (actions != null) ...actions,
-        TextButton(onPressed: () => pop(true), child: Text(l10n.ok)),
+        TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)),
       ],
     );
     if (sure == true && vals.isNotEmpty) {
@@ -345,9 +350,9 @@ extension DialogX on BuildContext {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Btn.tile(onTap: () => pop(_ImportFrom.file), text: l10n.file, icon: const Icon(MingCute.file_line)),
-          Btn.tile(onTap: () => pop(_ImportFrom.network), text: l10n.network, icon: const Icon(ZondIcons.network)),
-          Btn.tile(onTap: () => pop(_ImportFrom.clipboard), text: l10n.clipboard, icon: const Icon(MingCute.clipboard_line)),
+          Btn.tile(onTap: () => popDialog(_ImportFrom.file), text: l10n.file, icon: const Icon(MingCute.file_line)),
+          Btn.tile(onTap: () => popDialog(_ImportFrom.network), text: l10n.network, icon: const Icon(ZondIcons.network)),
+          Btn.tile(onTap: () => popDialog(_ImportFrom.clipboard), text: l10n.clipboard, icon: const Icon(MingCute.clipboard_line)),
           if (modelDef != null)
             Btn.tile(
               text: l10n.example,
@@ -396,7 +401,7 @@ $content
                   controller: urlCtrl,
                   maxLines: 3,
                   minLines: 1,
-                  onSubmitted: (p0) => pop(),
+                  onSubmitted: (p0) => popDialog(),
                 ),
                 UIs.height7,
                 Input(
@@ -406,7 +411,7 @@ $content
                   controller: headersCtrl,
                   maxLines: 5,
                   minLines: 2,
-                  onSubmitted: (p0) => pop(),
+                  onSubmitted: (p0) => popDialog(),
                 ),
               ],
             ),

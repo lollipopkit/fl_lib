@@ -196,11 +196,11 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
           action: TextInputAction.done,
           autoFocus: true,
           noWrap: true,
-          onSubmitted: (text) => context.pop(text),
+          onSubmitted: (text) => context.popDialog(text),
         ),
         actions: [
           TextButton(onPressed: context.pop, child: Text(libL10n.cancel)),
-          TextButton(onPressed: () => context.pop(ctrl.text), child: Text(libL10n.ok)),
+          TextButton(onPressed: () => context.popDialog(ctrl.text), child: Text(libL10n.ok)),
         ],
       );
     } finally {
