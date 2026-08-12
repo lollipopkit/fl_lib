@@ -67,6 +67,20 @@ class _AdaptiveSideListState extends State<AdaptiveSideList> {
   late double _width = widget.sideWidth;
 
   @override
+  void didUpdateWidget(AdaptiveSideList old) {
+    super.didUpdateWidget(old);
+    // Where several of these share one stored width, the page that is on
+    // screen is not the only one holding a state: the others are kept alive
+    // behind it, built once with the width of the day and never told it
+    // changed. One setting then behaves as one per page, and whichever was
+    // dragged last silently overwrites what the rest had persisted.
+    //
+    // Only when the caller's value actually changes, so a drag in progress is
+    // not undone by the next rebuild carrying the old stored number.
+    if (old.sideWidth != widget.sideWidth) _width = widget.sideWidth;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {

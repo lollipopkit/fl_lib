@@ -169,6 +169,35 @@ void main() {
     expect(tester.getSize(find.byKey(_sideKey)).width, 450);
   });
 
+  testWidgets('a width given later replaces the one it opened with', (
+    tester,
+  ) async {
+    await pumpAt(tester, width: 1000, sideWidth: 300);
+    expect(tester.getSize(find.byKey(_sideKey)).width, 300);
+
+    // What several of these sharing one stored width look like: the page on
+    // screen writes it, and this one — kept alive behind it — is rebuilt with
+    // the new number. Ignoring it made one setting behave as one per page.
+    await pumpAt(tester, width: 1000, sideWidth: 420);
+
+    expect(tester.getSize(find.byKey(_sideKey)).width, 420);
+  });
+
+  testWidgets('a drag survives a rebuild carrying the same given width', (
+    tester,
+  ) async {
+    await pumpAt(tester, width: 1000, sideWidth: 300);
+    await tester.drag(_divider, const Offset(60, 0));
+    await tester.pump();
+    expect(tester.getSize(find.byKey(_sideKey)).width, closeTo(360, 0.01));
+
+    // The caller re-reads the store and passes what it had before the drag
+    // ended. Copying it back unconditionally would snap the list to 300.
+    await pumpAt(tester, width: 1000, sideWidth: 300);
+
+    expect(tester.getSize(find.byKey(_sideKey)).width, closeTo(360, 0.01));
+  });
+
   testWidgets('a wider start than the range allows is clamped down', (
     tester,
   ) async {
