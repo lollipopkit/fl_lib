@@ -1,3 +1,4 @@
+import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/material.dart';
 
 /// A list in its own column beside what it opens, when there is room, and
@@ -100,7 +101,7 @@ class _AdaptiveSideListState extends State<AdaptiveSideList> {
                 width: _width.clamp(widget.minSideWidth, maxWidth),
                 child: Builder(builder: widget.sideBuilder),
               ),
-              _SideDivider(
+              PaneDivider(
                 onDrag: (dx) => setState(() {
                   _width = (_width + dx).clamp(widget.minSideWidth, maxWidth);
                 }),
@@ -122,50 +123,3 @@ class _AdaptiveSideListState extends State<AdaptiveSideList> {
     );
   }
 }
-
-/// The seam between the two columns, and the handle for moving it.
-class _SideDivider extends StatefulWidget {
-  const _SideDivider({required this.onDrag, required this.onDragEnd});
-
-  final ValueChanged<double> onDrag;
-  final VoidCallback onDragEnd;
-
-  @override
-  State<_SideDivider> createState() => _SideDividerState();
-}
-
-class _SideDividerState extends State<_SideDivider> {
-  bool _active = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
-      onEnter: (_) => setState(() => _active = true),
-      onExit: (_) => setState(() => _active = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (details) => widget.onDrag(details.delta.dx),
-        onHorizontalDragEnd: (_) => widget.onDragEnd(),
-        child: SizedBox(
-          // The line stays a hairline; the grab area does not, because a 1px
-          // target is not something a pointer can find.
-          width: _kDividerHitWidth,
-          child: Center(
-            child: Container(
-              width: 1,
-              color: _active
-                  ? theme.colorScheme.primary
-                  // Translucent: the seam separates two halves of one surface,
-                  // and at full strength it reads as a border around each.
-                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-const _kDividerHitWidth = 13.0;

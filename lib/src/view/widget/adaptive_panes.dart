@@ -145,23 +145,16 @@ class _AdaptivePanesState extends State<AdaptivePanes> {
           closeDetail: widget.onCloseDetail,
           child: showDetail
               ? MultiSplitViewTheme(
-                  // A hairline in the surface's own outline colour. The
-                  // default divider is drawn for a light background and reads
-                  // as a bright seam on a dark one.
+                  // The app's one seam, handed to this package's painter — see
+                  // [Hairline] and [PaneDivider], which is the same line drawn
+                  // by hand where there is no split view to ask.
                   data: MultiSplitViewThemeData(
-                    dividerThickness: 1,
-                    // The line stays thin; the grab area does not, because a
-                    // 1px target is not something a pointer can find.
-                    dividerHandleBuffer: 6,
+                    dividerThickness: Hairline.thickness,
+                    dividerHandleBuffer:
+                        (PaneDivider.hitWidth - Hairline.thickness) / 2,
                     dividerPainter: DividerPainters.background(
-                      // Translucent: the seam separates two halves of one
-                      // surface, and at full strength it reads as a border
-                      // around each of them. The highlight stays solid, so
-                      // that grabbing it is unmistakable.
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outlineVariant.withValues(alpha: 0.35),
-                      highlightedColor: Theme.of(context).colorScheme.primary,
+                      color: Hairline.color(context),
+                      highlightedColor: Hairline.activeColor(context),
                     ),
                   ),
                   child: MultiSplitView(

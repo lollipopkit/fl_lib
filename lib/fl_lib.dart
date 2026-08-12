@@ -159,6 +159,7 @@ export 'src/view/widget/loading.dart';
 export 'src/view/widget/markdown.dart';
 export 'src/view/widget/adaptive_panes.dart';
 export 'src/view/widget/adaptive_side_list.dart';
+export 'src/view/widget/hairline.dart';
 export 'src/view/widget/pane.dart';
 export 'src/view/widget/nested_navigator.dart';
 export 'src/view/widget/overlay.dart';
