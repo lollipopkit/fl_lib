@@ -150,8 +150,7 @@ class _AdaptivePanesState extends State<AdaptivePanes> {
                   // by hand where there is no split view to ask.
                   data: MultiSplitViewThemeData(
                     dividerThickness: Hairline.thickness,
-                    dividerHandleBuffer:
-                        (PaneDivider.hitWidth - Hairline.thickness) / 2,
+                    dividerHandleBuffer: PaneDivider.handleBuffer,
                     dividerPainter: DividerPainters.background(
                       color: Hairline.color(context),
                       highlightedColor: Hairline.activeColor(context),

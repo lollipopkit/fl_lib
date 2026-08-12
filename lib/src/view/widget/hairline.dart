@@ -8,8 +8,6 @@ import 'package:flutter/material.dart';
 /// difference between two lines that touch reads as one of the two halves being
 /// a window of its own.
 abstract final class Hairline {
-  const Hairline._();
-
   /// Material's default divider is drawn for a light background and reads as a
   /// bright seam on a dark one, so it is not used.
   static const thickness = 1.0;
@@ -33,6 +31,11 @@ class PaneDivider extends StatefulWidget {
 
   /// The line stays a hairline; the grab area does not, because a 1px target is
   /// not something a pointer can find.
+  /// What `multi_split_view` wants either side of its own line to add up to
+  /// [hitWidth]: it takes `thickness + 2 * buffer`. Stated once, here, rather
+  /// than as arithmetic at a call site that cannot explain it.
+  static const handleBuffer = (hitWidth - Hairline.thickness) / 2;
+
   static const hitWidth = 13.0;
 
   /// Pointer movement since the last call, in logical pixels.
