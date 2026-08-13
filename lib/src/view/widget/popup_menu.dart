@@ -10,6 +10,12 @@ class PopupMenu<T> extends StatelessWidget {
   final String? tooltip;
   final BorderRadius? borderRadius;
 
+  /// Off refuses the tap and greys the child, the way every other disabled
+  /// control does. `PopupMenuButton` has always had this; not carrying it
+  /// through meant a caller with a reason to refuse had to reach past this
+  /// widget for the one underneath.
+  final bool enabled;
+
   const PopupMenu({
     super.key,
     required this.items,
@@ -19,6 +25,7 @@ class PopupMenu<T> extends StatelessWidget {
     this.initialValue,
     this.tooltip,
     this.borderRadius,
+    this.enabled = true,
   });
 
   @override
@@ -31,6 +38,7 @@ class PopupMenu<T> extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       tooltip: tooltip,
       borderRadius: borderRadius,
+      enabled: enabled,
       child: child,
     );
   }
