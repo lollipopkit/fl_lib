@@ -117,6 +117,20 @@ class _AdaptivePanesState extends State<AdaptivePanes> {
   );
 
   @override
+  void didUpdateWidget(AdaptivePanes old) {
+    super.didUpdateWidget(old);
+    // The controller is built once, so the width it opened with is the width it
+    // keeps. Where several of these share one stored number — the app has a
+    // list column on four pages — every page but the one being dragged is kept
+    // alive behind it and would never hear that the number moved.
+    //
+    // Only when the caller's value actually changes, so a drag in progress is
+    // not undone by the next rebuild carrying the old stored one.
+    if (old.primaryWidth == widget.primaryWidth) return;
+    _splitCtrl.areas.firstOrNull?.size = widget.primaryWidth;
+  }
+
+  @override
   void dispose() {
     _splitCtrl.dispose();
     super.dispose();

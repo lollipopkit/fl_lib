@@ -49,6 +49,37 @@ void main() {
     );
   }
 
+  testWidgets('a primary width given later replaces the one it opened with', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Widget at(double width) => MaterialApp(
+      home: Scaffold(
+        body: AdaptivePanes(
+          primaryWidth: width,
+          detailId: 'a',
+          primaryBuilder: (_, _) =>
+              const ColoredBox(key: ValueKey('primary'), color: Colors.grey),
+          detailBuilder: (_) => const Scaffold(body: Text('detail')),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(at(300));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(const ValueKey('primary'))).width, 300);
+
+    // What several of these sharing one stored width look like: another page
+    // wrote it, and this one — kept alive behind it — is rebuilt with the new
+    // number. Ignoring it made one setting behave as one per page.
+    await tester.pumpWidget(at(420));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.byKey(const ValueKey('primary'))).width, 420);
+  });
+
   testWidgets('a narrow window shows the list alone', (tester) async {
     await tester.pumpWidget(harness(width: 700, selected: 'a'));
     await tester.pumpAndSettle();

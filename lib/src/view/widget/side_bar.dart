@@ -114,9 +114,9 @@ final class SideBarSection extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Divider(
-              height: 1,
-              thickness: 1,
-              color: scheme.outlineVariant.withValues(alpha: 0.4),
+              height: Hairline.thickness,
+              thickness: Hairline.thickness,
+              color: Hairline.color(context),
             ),
           ),
         ],
