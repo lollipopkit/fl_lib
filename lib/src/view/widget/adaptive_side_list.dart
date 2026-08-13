@@ -37,11 +37,10 @@ class AdaptiveSideList extends StatefulWidget {
   /// find somewhere else for the list when it is not.
   final Widget Function(BuildContext context, bool split) builder;
 
-  /// Off keeps the single-column layout at any width, for the setting that
-  /// lets someone say they simply do not want this.
+  /// Off keeps the single-column layout at any width.
   ///
-  /// Also where "there is nothing open yet" belongs: a column reserved beside
-  /// an empty surface is width spent on nothing.
+  /// Where "there is nothing open yet" belongs: a column reserved beside an
+  /// empty surface is width spent on nothing.
   final bool enabled;
 
   /// Below this the list cannot earn a column of its own. Set for the

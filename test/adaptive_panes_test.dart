@@ -10,7 +10,6 @@ void main() {
   Widget harness({
     required double width,
     String? selected,
-    bool enabled = true,
     double minWidthForDetail = 800,
     VoidCallback? onClose,
   }) {
@@ -21,7 +20,6 @@ void main() {
             width: width,
             height: 600,
             child: AdaptivePanes(
-              enabled: enabled,
               minWidthForDetail: minWidthForDetail,
               detailId: selected,
               onCloseDetail: onClose,
@@ -112,19 +110,6 @@ void main() {
       findsNothing,
       reason: 'an empty column is worse than no column',
     );
-  });
-
-  testWidgets('disabling forces one pane however wide the window', (
-    tester,
-  ) async {
-    // The setting for people who simply do not want this
-    await tester.pumpWidget(
-      harness(width: 1400, selected: 'a', enabled: false),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('list'), findsOneWidget);
-    expect(find.text('detail a'), findsNothing);
   });
 
   testWidgets('selecting another item replaces the detail', (tester) async {

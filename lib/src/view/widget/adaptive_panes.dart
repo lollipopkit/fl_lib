@@ -20,7 +20,6 @@ class AdaptivePanes extends StatefulWidget {
     required this.detailBuilder,
     this.detailId,
     this.onCloseDetail,
-    this.enabled = true,
     this.minWidthForDetail = 800,
     this.primaryWidth = 320,
     this.minPrimaryWidth = 220,
@@ -52,10 +51,6 @@ class AdaptivePanes extends StatefulWidget {
   /// pane, via [PaneScope.closeDetailOf]. Leave null and no way out is
   /// offered — appropriate where something must always be open.
   final VoidCallback? onCloseDetail;
-
-  /// Off forces the single-pane layout at any width, for the setting that
-  /// lets someone say they simply do not want this.
-  final bool enabled;
 
   /// Below this the detail cannot earn a column. Set for the narrowest device
   /// that should still get two: an 11" iPad in portrait is 834pt.
@@ -147,7 +142,6 @@ class _AdaptivePanesState extends State<AdaptivePanes> {
         // second as the first means a list that only selects once a pane is on
         // screen can never put anything on it.
         final canSplit =
-            widget.enabled &&
             constraints.maxWidth >= widget.minWidthForDetail;
         final showDetail = canSplit && detail != null;
 
