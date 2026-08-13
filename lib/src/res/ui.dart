@@ -53,7 +53,7 @@ abstract final class UIs {
   /// Misc
 
   static const popMenuChild = Padding(
-    padding: EdgeInsets.only(left: 7),
+    padding: EdgeInsets.symmetric(horizontal: 5, vertical: 3),
     child: Icon(
       Icons.more_vert,
       size: 21,

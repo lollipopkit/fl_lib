@@ -27,4 +27,25 @@ abstract class Err<T extends Enum> {
   String toString() {
     return '$runtimeType<${type.name.capitalize}>: $message';
   }
+
+  /// Two errors describing the same thing are the same error.
+  ///
+  /// Without this, an operation that retries and fails the same way produces a
+  /// new instance every time, and anything holding one in state — a Riverpod
+  /// state class, a `ValueNotifier` — reports a change on every attempt. A page
+  /// showing the error then rebuilds on a timer and visibly flickers, for a
+  /// failure that never changed.
+  ///
+  /// [runtimeType] is part of it so two error families with the same enum
+  /// index do not collide.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Err<T> &&
+          other.runtimeType == runtimeType &&
+          other.type == type &&
+          other.message == message;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, type, message);
 }
