@@ -47,6 +47,18 @@ enum Pfs {
 
   static final String seperator = isWindows ? '\\' : '/';
 
+  /// Whether macOS is confining this process to a container.
+  ///
+  /// The container id is in the environment of a sandboxed app and absent
+  /// otherwise, which is the cheapest reliable answer — verified both ways.
+  /// Asked of the running process rather than baked in at build time, so one
+  /// binary is honest in either build.
+  ///
+  /// False everywhere else: no other platform this ships on has two builds of
+  /// itself that differ in what the process may do.
+  static final bool isMacSandboxed =
+      isMacOS && Platform.environment.containsKey('APP_SANDBOX_CONTAINER_ID');
+
   /// Available only on desktop,
   /// return null on mobile
   static final String? homeDir = () {

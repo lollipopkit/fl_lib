@@ -60,7 +60,25 @@ abstract final class Paths {
       return p;
     }
 
-    // macOS / iOS
+    // macOS without the sandbox: the documents directory is the user's own
+    // `~/Documents`, which is no place for a database, seven working
+    // directories and a downloads folder — and which macOS gates behind a
+    // permission prompt this app would have no way to explain.
+    //
+    // The sandboxed build keeps the documents directory, because there it
+    // *is* the container: `~/Library/Containers/<id>/Data/Documents`, private
+    // to the app and where every install to date has its data.
+    if (isMacOS && !Pfs.isMacSandboxed) {
+      final home = Pfs.homeDir;
+      if (home != null) {
+        final dir = Directory(
+          home.joinPath('Library').joinPath('Application Support').joinPath(appName),
+        );
+        return (await dir.create(recursive: true)).path;
+      }
+    }
+
+    // macOS (sandboxed) / iOS
     final dir = await getApplicationDocumentsDirectory();
     return dir.path;
   }

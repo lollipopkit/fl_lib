@@ -5,7 +5,11 @@ part of 'iface.dart';
 /// It implements [Store].
 class HiveStore extends Store {
   /// The internal hive box for this [Store].
-  late final Box<dynamic> box;
+  ///
+  /// Not `final`: [init] may run a second time on the same instance after
+  /// `Hive.close()`, which is how an app recovers from box files it turned out
+  /// not to be able to open.
+  late Box<dynamic> box;
 
   /// The name of the box. Used for the hive box.
   final String boxName;
@@ -26,6 +30,11 @@ class HiveStore extends Store {
     final path = switch (Pfs.type) {
       /// The default path of Hive is the HOME dir
       Pfs.linux || Pfs.windows => Paths.doc,
+
+      /// The unsandboxed macOS build's documents directory is the user's own
+      /// `~/Documents`. Boxes follow [Paths.doc] there, or they would be the
+      /// one part of the app still writing into it.
+      Pfs.macos when !Pfs.isMacSandboxed => Paths.doc,
       _ => (await getApplicationDocumentsDirectory()).path,
     };
 

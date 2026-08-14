@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 abstract final class AppUpdateIface {
   static final newestBuild = ValueNotifier<int?>(null);
 
+  /// - [noticeBuilder] is shown above the release notes, for whatever this
+  ///   particular app has to say alongside an update — which build the user is
+  ///   running, where else it can be had. Returning null shows nothing.
   static Future<void> doUpdate({
     required BuildContext context,
     required String githubReleasesUrl,
@@ -12,6 +15,7 @@ abstract final class AppUpdateIface {
     String? storeUrl,
     bool force = false,
     bool beta = false,
+    Widget? Function(BuildContext ctx)? noticeBuilder,
   }) async {
     if (isWeb) return;
 
@@ -58,12 +62,22 @@ abstract final class AppUpdateIface {
     void showUpdateDialog([bool force = false]) {
       context.showRoundDialog(
         title: title,
-        childBuilder: (ctx) => SizedBox(
-          width: size.width * 0.8,
-          child: SingleChildScrollView(
-            child: _changelogView(ctx, changelog, notes),
-          ),
-        ),
+        childBuilder: (ctx) {
+          final notice = noticeBuilder?.call(ctx);
+          return SizedBox(
+            width: size.width * 0.8,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (notice != null) ...[notice, const SizedBox(height: 13)],
+                  _changelogView(ctx, changelog, notes),
+                ],
+              ),
+            ),
+          );
+        },
         barrierDismiss: !force,
         actions: [
           TextButton(
