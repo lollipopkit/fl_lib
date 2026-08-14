@@ -178,6 +178,7 @@ export 'src/view/widget/store/store_switch.dart';
 export 'src/view/widget/switch_indicator.dart';
 export 'src/view/widget/tag.dart';
 export 'src/view/widget/text.dart';
+export 'src/view/widget/tile/card_tile.dart';
 export 'src/view/widget/tile/expand_tile.dart';
 export 'src/view/widget/tile/tiles.dart';
 export 'src/view/widget/turnstile.dart';
