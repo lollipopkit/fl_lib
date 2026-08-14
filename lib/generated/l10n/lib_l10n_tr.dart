@@ -28,6 +28,9 @@ class LibLocalizationsTr extends LibLocalizations {
   }
 
   @override
+  String get ai => 'Yapay zekâ';
+
+  @override
   String get all => 'Tümü';
 
   @override
@@ -35,7 +38,19 @@ class LibLocalizationsTr extends LibLocalizations {
       'Şu anda anonim olarak giriş yapılmış, işlemlere devam edilmesi veri kaybına neden olacaktır.';
 
   @override
+  String get apiEndpoint => 'Temel URL';
+
+  @override
+  String get apiKey => 'API anahtarı';
+
+  @override
+  String get apiProtocol => 'API protokolü';
+
+  @override
   String get app => 'Uygulama';
+
+  @override
+  String get ascending => 'Artan';
 
   @override
   String get askAiModel => 'Model';
@@ -76,13 +91,22 @@ class LibLocalizationsTr extends LibLocalizations {
   String get bright => 'Açık';
 
   @override
+  String get browsing => 'Göz atılıyor';
+
+  @override
   String get cancel => 'İptal';
+
+  @override
+  String get cancelled => 'İptal edildi';
 
   @override
   String get checkUpdate => 'Güncellemeleri kontrol et';
 
   @override
   String get clear => 'Temizle';
+
+  @override
+  String get clearHistory => 'Geçmişi temizle';
 
   @override
   String get click => 'Tıkla';
@@ -95,6 +119,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get cmd => 'Komut';
+
+  @override
+  String get configured => 'Yapılandırıldı';
 
   @override
   String get confirm => 'Onayla';
@@ -146,6 +173,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get delete => 'Sil';
+
+  @override
+  String get descending => 'Azalan';
 
   @override
   String get device => 'Cihaz';
@@ -229,7 +259,13 @@ class LibLocalizationsTr extends LibLocalizations {
   String get folder => 'Klasör';
 
   @override
+  String get followSystem => 'Sistemi takip et';
+
+  @override
   String get font => 'Yazı Tipi';
+
+  @override
+  String get fontSize => 'Yazı tipi boyutu';
 
   @override
   String get force => 'Zorla';
@@ -241,10 +277,16 @@ class LibLocalizationsTr extends LibLocalizations {
   String get found => 'Bulundu';
 
   @override
+  String get goBackQ => 'Geri dön?';
+
+  @override
   String get goto => 'Git';
 
   @override
   String get hideTitleBar => 'Başlık çubuğunu gizle';
+
+  @override
+  String get highlight => 'Kod vurgulama';
 
   @override
   String get host => 'Ana bilgisayar';
@@ -271,6 +313,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get invalid => 'Geçersiz';
 
   @override
+  String get invalidUrl => 'Geçersiz URL';
+
+  @override
   String get justNow => 'Az önce';
 
   @override
@@ -284,6 +329,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => 'Yerel';
 
   @override
   String get location => 'Konum';
@@ -311,6 +359,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get max => 'Maksimum';
+
+  @override
+  String get memory => 'Bellek';
 
   @override
   String get menuHelp => 'Yardım';
@@ -405,6 +456,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get permission => 'İzin';
 
   @override
+  String get permissionDenied => 'İzin reddedildi.';
+
+  @override
   String get pingAvg => 'Ort:';
 
   @override
@@ -442,7 +496,13 @@ class LibLocalizationsTr extends LibLocalizations {
   String get read => 'Oku';
 
   @override
+  String get ready => 'Hazır';
+
+  @override
   String get reboot => 'Yeniden başlat';
+
+  @override
+  String get reconnecting => 'Yeniden bağlanılıyor...';
 
   @override
   String get redo => 'Yeniden Yap';
@@ -452,6 +512,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get register => 'Kaydol';
+
+  @override
+  String get remote => 'Uzak';
 
   @override
   String get rename => 'Yeniden adlandır';
@@ -537,6 +600,15 @@ class LibLocalizationsTr extends LibLocalizations {
   String get snippet => 'Kod parçacığı';
 
   @override
+  String get softWrap => 'Yumuşak kaydırma';
+
+  @override
+  String get sort => 'Sırala';
+
+  @override
+  String get sortByName => 'Ada göre';
+
+  @override
   String get speed => 'Hız';
 
   @override
@@ -599,6 +671,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get test => 'Test';
 
   @override
+  String get textScaler => 'Metin ölçekleyici';
+
+  @override
   String get theme => 'Tema';
 
   @override
@@ -609,6 +684,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get time => 'Zaman';
+
+  @override
+  String get timedOut => 'Zaman aşımı';
 
   @override
   String get timeout => 'Zaman Aşımı';
@@ -675,6 +753,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get view => 'Görüntüle';
+
+  @override
+  String get viewErr => 'Hatayı gör';
 
   @override
   String get write => 'Yaz';

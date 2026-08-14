@@ -28,13 +28,28 @@ class LibLocalizationsKo extends LibLocalizations {
   }
 
   @override
+  String get ai => 'AI';
+
+  @override
   String get all => '모두';
 
   @override
   String get anonLoseDataTip => '현재 익명으로 로그인되어 있습니다. 계속 작업하면 데이터가 손실됩니다.';
 
   @override
+  String get apiEndpoint => '기본 URL';
+
+  @override
+  String get apiKey => 'API 키';
+
+  @override
+  String get apiProtocol => 'API 프로토콜';
+
+  @override
   String get app => '애플리케이션';
+
+  @override
+  String get ascending => '오름차순';
 
   @override
   String get askAiModel => '모델';
@@ -75,13 +90,22 @@ class LibLocalizationsKo extends LibLocalizations {
   String get bright => '밝게';
 
   @override
+  String get browsing => '탐색 중';
+
+  @override
   String get cancel => '취소';
+
+  @override
+  String get cancelled => '취소됨';
 
   @override
   String get checkUpdate => '업데이트 확인';
 
   @override
   String get clear => '지우기';
+
+  @override
+  String get clearHistory => '기록 지우기';
 
   @override
   String get click => '클릭';
@@ -94,6 +118,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get cmd => '명령어';
+
+  @override
+  String get configured => '설정됨';
 
   @override
   String get confirm => '확인';
@@ -145,6 +172,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get delete => '삭제';
+
+  @override
+  String get descending => '내림차순';
 
   @override
   String get device => '장치';
@@ -228,7 +258,13 @@ class LibLocalizationsKo extends LibLocalizations {
   String get folder => '폴더';
 
   @override
+  String get followSystem => '시스템 설정 따르기';
+
+  @override
   String get font => '글꼴';
+
+  @override
+  String get fontSize => '글꼴 크기';
 
   @override
   String get force => '강제';
@@ -240,10 +276,16 @@ class LibLocalizationsKo extends LibLocalizations {
   String get found => '찾음';
 
   @override
+  String get goBackQ => '돌아가시겠습니까?';
+
+  @override
   String get goto => '이동';
 
   @override
   String get hideTitleBar => '제목 표시줄 숨기기';
+
+  @override
+  String get highlight => '코드 하이라이팅';
 
   @override
   String get host => '호스트';
@@ -270,6 +312,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get invalid => '잘못됨';
 
   @override
+  String get invalidUrl => '잘못된 URL입니다';
+
+  @override
   String get justNow => '방금';
 
   @override
@@ -283,6 +328,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => '로컬';
 
   @override
   String get location => '위치';
@@ -310,6 +358,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get max => '최대';
+
+  @override
+  String get memory => '메모리';
 
   @override
   String get menuHelp => '도움말';
@@ -404,6 +455,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get permission => '권한';
 
   @override
+  String get permissionDenied => '권한이 없습니다.';
+
+  @override
   String get pingAvg => '평균:';
 
   @override
@@ -440,7 +494,13 @@ class LibLocalizationsKo extends LibLocalizations {
   String get read => '읽기';
 
   @override
+  String get ready => '준비됨';
+
+  @override
   String get reboot => '재부팅';
+
+  @override
+  String get reconnecting => '재연결 중...';
 
   @override
   String get redo => '다시 실행';
@@ -450,6 +510,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get register => '가입';
+
+  @override
+  String get remote => '원격';
 
   @override
   String get rename => '이름 변경';
@@ -535,6 +598,15 @@ class LibLocalizationsKo extends LibLocalizations {
   String get snippet => '스니펫';
 
   @override
+  String get softWrap => '자동 줄바꿈';
+
+  @override
+  String get sort => '정렬';
+
+  @override
+  String get sortByName => '이름순';
+
+  @override
   String get speed => '속도';
 
   @override
@@ -597,6 +669,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get test => '테스트';
 
   @override
+  String get textScaler => '텍스트 배율';
+
+  @override
   String get theme => '테마';
 
   @override
@@ -607,6 +682,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get time => '시간';
+
+  @override
+  String get timedOut => '시간 초과';
 
   @override
   String get timeout => '시간 초과';
@@ -673,6 +751,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get view => '보기';
+
+  @override
+  String get viewErr => '오류 보기';
 
   @override
   String get write => '쓰기';

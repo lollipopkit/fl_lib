@@ -28,6 +28,9 @@ class LibLocalizationsRu extends LibLocalizations {
   }
 
   @override
+  String get ai => 'ИИ';
+
+  @override
   String get all => 'Все';
 
   @override
@@ -35,7 +38,19 @@ class LibLocalizationsRu extends LibLocalizations {
       'В настоящее время выполнен анонимный вход, продолжение операций приведет к потере данных.';
 
   @override
+  String get apiEndpoint => 'Базовый URL';
+
+  @override
+  String get apiKey => 'Ключ API';
+
+  @override
+  String get apiProtocol => 'Протокол API';
+
+  @override
   String get app => 'Приложение';
+
+  @override
+  String get ascending => 'По возрастанию';
 
   @override
   String get askAiModel => 'Модель';
@@ -76,13 +91,22 @@ class LibLocalizationsRu extends LibLocalizations {
   String get bright => 'Светлый';
 
   @override
+  String get browsing => 'Просмотр';
+
+  @override
   String get cancel => 'Отмена';
+
+  @override
+  String get cancelled => 'Отменено';
 
   @override
   String get checkUpdate => 'Проверить обновления';
 
   @override
   String get clear => 'Очистить';
+
+  @override
+  String get clearHistory => 'Очистить историю';
 
   @override
   String get click => 'Нажать';
@@ -95,6 +119,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get cmd => 'Команда';
+
+  @override
+  String get configured => 'Настроено';
 
   @override
   String get confirm => 'Подтвердить';
@@ -146,6 +173,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get delete => 'Удалить';
+
+  @override
+  String get descending => 'По убыванию';
 
   @override
   String get device => 'Устройство';
@@ -229,7 +259,13 @@ class LibLocalizationsRu extends LibLocalizations {
   String get folder => 'Папка';
 
   @override
+  String get followSystem => 'Следовать за системой';
+
+  @override
   String get font => 'Шрифт';
+
+  @override
+  String get fontSize => 'Размер шрифта';
 
   @override
   String get force => 'Принудительно';
@@ -241,10 +277,16 @@ class LibLocalizationsRu extends LibLocalizations {
   String get found => 'Найдено';
 
   @override
+  String get goBackQ => 'Вернуться?';
+
+  @override
   String get goto => 'Перейти к';
 
   @override
   String get hideTitleBar => 'Скрыть строку заголовка';
+
+  @override
+  String get highlight => 'Подсветка кода';
 
   @override
   String get host => 'Хост';
@@ -271,6 +313,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get invalid => 'Недействительно';
 
   @override
+  String get invalidUrl => 'Некорректный URL';
+
+  @override
   String get justNow => 'Только что';
 
   @override
@@ -284,6 +329,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => 'Локальный';
 
   @override
   String get location => 'Местоположение';
@@ -311,6 +359,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get max => 'Максимум';
+
+  @override
+  String get memory => 'Память';
 
   @override
   String get menuHelp => 'Справка';
@@ -405,6 +456,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get permission => 'Разрешение';
 
   @override
+  String get permissionDenied => 'Доступ запрещён.';
+
+  @override
   String get pingAvg => 'В среднем:';
 
   @override
@@ -442,7 +496,13 @@ class LibLocalizationsRu extends LibLocalizations {
   String get read => 'Читать';
 
   @override
+  String get ready => 'Готов';
+
+  @override
   String get reboot => 'Перезагрузка';
+
+  @override
+  String get reconnecting => 'Переподключение...';
 
   @override
   String get redo => 'Повторить';
@@ -452,6 +512,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get register => 'Зарегистрироваться';
+
+  @override
+  String get remote => 'Удалённый';
 
   @override
   String get rename => 'Переименовать';
@@ -537,6 +600,15 @@ class LibLocalizationsRu extends LibLocalizations {
   String get snippet => 'Фрагмент';
 
   @override
+  String get softWrap => 'Мягкий перенос';
+
+  @override
+  String get sort => 'Сортировка';
+
+  @override
+  String get sortByName => 'По имени';
+
+  @override
   String get speed => 'Скорость';
 
   @override
@@ -599,6 +671,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get test => 'Тест';
 
   @override
+  String get textScaler => 'Масштабирование текста';
+
+  @override
   String get theme => 'Тема';
 
   @override
@@ -609,6 +684,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get time => 'Время';
+
+  @override
+  String get timedOut => 'Время истекло';
 
   @override
   String get timeout => 'Тайм-аут';
@@ -675,6 +753,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get view => 'Просмотр';
+
+  @override
+  String get viewErr => 'Просмотр ошибок';
 
   @override
   String get write => 'Записывать';

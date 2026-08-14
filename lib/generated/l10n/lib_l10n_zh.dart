@@ -28,13 +28,28 @@ class LibLocalizationsZh extends LibLocalizations {
   }
 
   @override
+  String get ai => 'AI';
+
+  @override
   String get all => '所有';
 
   @override
   String get anonLoseDataTip => '当前以匿名登录，继续操作会导致数据丢失';
 
   @override
+  String get apiEndpoint => 'API 接口地址';
+
+  @override
+  String get apiKey => 'API 密钥';
+
+  @override
+  String get apiProtocol => 'API 协议';
+
+  @override
   String get app => '应用';
+
+  @override
+  String get ascending => '升序';
 
   @override
   String get askAiModel => '模型';
@@ -75,13 +90,22 @@ class LibLocalizationsZh extends LibLocalizations {
   String get bright => '亮';
 
   @override
+  String get browsing => '浏览中';
+
+  @override
   String get cancel => '取消';
+
+  @override
+  String get cancelled => '已取消';
 
   @override
   String get checkUpdate => '检查更新';
 
   @override
   String get clear => '清除';
+
+  @override
+  String get clearHistory => '清空历史';
 
   @override
   String get click => '点击';
@@ -94,6 +118,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get cmd => '命令';
+
+  @override
+  String get configured => '已配置';
 
   @override
   String get confirm => '确认';
@@ -145,6 +172,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get delete => '删除';
+
+  @override
+  String get descending => '降序';
 
   @override
   String get device => '设备';
@@ -228,7 +258,13 @@ class LibLocalizationsZh extends LibLocalizations {
   String get folder => '文件夹';
 
   @override
+  String get followSystem => '跟随系统';
+
+  @override
   String get font => '字体';
+
+  @override
+  String get fontSize => '字体大小';
 
   @override
   String get force => '强制';
@@ -240,10 +276,16 @@ class LibLocalizationsZh extends LibLocalizations {
   String get found => '已找到';
 
   @override
+  String get goBackQ => '返回？';
+
+  @override
   String get goto => '转到';
 
   @override
   String get hideTitleBar => '隐藏标题栏';
+
+  @override
+  String get highlight => '代码高亮';
 
   @override
   String get host => '主机';
@@ -270,6 +312,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get invalid => '无效';
 
   @override
+  String get invalidUrl => '无效的 URL';
+
+  @override
   String get justNow => '刚刚';
 
   @override
@@ -283,6 +328,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => '本地';
 
   @override
   String get location => '位置';
@@ -310,6 +358,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get max => '最大';
+
+  @override
+  String get memory => '内存';
 
   @override
   String get menuHelp => '帮助';
@@ -404,6 +455,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get permission => '权限';
 
   @override
+  String get permissionDenied => '权限不足。';
+
+  @override
   String get pingAvg => '平均:';
 
   @override
@@ -440,7 +494,13 @@ class LibLocalizationsZh extends LibLocalizations {
   String get read => '读取';
 
   @override
+  String get ready => '就绪';
+
+  @override
   String get reboot => '重启';
+
+  @override
+  String get reconnecting => '重连中...';
 
   @override
   String get redo => '重做';
@@ -450,6 +510,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get register => '注册';
+
+  @override
+  String get remote => '远程';
 
   @override
   String get rename => '重命名';
@@ -535,6 +598,15 @@ class LibLocalizationsZh extends LibLocalizations {
   String get snippet => '代码片段';
 
   @override
+  String get softWrap => '自动换行';
+
+  @override
+  String get sort => '排序';
+
+  @override
+  String get sortByName => '按名称';
+
+  @override
   String get speed => '速度';
 
   @override
@@ -597,6 +669,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get test => '测试';
 
   @override
+  String get textScaler => '字体缩放';
+
+  @override
   String get theme => '主题';
 
   @override
@@ -607,6 +682,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get time => '时间';
+
+  @override
+  String get timedOut => '执行超时';
 
   @override
   String get timeout => '超时';
@@ -675,6 +753,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get view => '查看';
 
   @override
+  String get viewErr => '查看错误';
+
+  @override
   String get write => '写入';
 
   @override
@@ -697,12 +778,15 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get add => '添加';
 
   @override
-  String get addr => '地址';
+  String get addr => '位址';
 
   @override
   String agoFmt(String time) {
     return '$time前';
   }
+
+  @override
+  String get ai => 'AI';
 
   @override
   String get all => '所有';
@@ -711,7 +795,19 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get anonLoseDataTip => '目前為匿名登入，繼續操作可能會導致資料遺失。';
 
   @override
+  String get apiEndpoint => 'API 介面位址';
+
+  @override
+  String get apiKey => 'API 金鑰';
+
+  @override
+  String get apiProtocol => 'API 協議';
+
+  @override
   String get app => '應用';
+
+  @override
+  String get ascending => '遞增';
 
   @override
   String get askAiModel => '模型';
@@ -752,13 +848,22 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get bright => '亮';
 
   @override
+  String get browsing => '瀏覽中';
+
+  @override
   String get cancel => '取消';
+
+  @override
+  String get cancelled => '已取消';
 
   @override
   String get checkUpdate => '檢查更新';
 
   @override
   String get clear => '清除';
+
+  @override
+  String get clearHistory => '清除紀錄';
 
   @override
   String get click => '點擊';
@@ -771,6 +876,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get cmd => '指令';
+
+  @override
+  String get configured => '已設定';
 
   @override
   String get confirm => '確認';
@@ -822,6 +930,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get delete => '刪除';
+
+  @override
+  String get descending => '遞減';
 
   @override
   String get device => '裝置';
@@ -905,7 +1016,13 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get folder => '資料夾';
 
   @override
+  String get followSystem => '跟隨系統';
+
+  @override
   String get font => '字體';
+
+  @override
+  String get fontSize => '字型大小';
 
   @override
   String get force => '強制';
@@ -917,10 +1034,16 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get found => '找到';
 
   @override
+  String get goBackQ => '返回？';
+
+  @override
   String get goto => '前往';
 
   @override
   String get hideTitleBar => '隱藏標題欄';
+
+  @override
+  String get highlight => '程式碼標記';
 
   @override
   String get host => '主機';
@@ -947,6 +1070,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get invalid => '無效';
 
   @override
+  String get invalidUrl => '無效的網址';
+
+  @override
   String get justNow => '剛剛';
 
   @override
@@ -960,6 +1086,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => '本機';
 
   @override
   String get location => '位置';
@@ -987,6 +1116,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get max => '最大';
+
+  @override
+  String get memory => '記憶體';
 
   @override
   String get menuHelp => '說明';
@@ -1081,6 +1213,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get permission => '權限';
 
   @override
+  String get permissionDenied => '權限不足。';
+
+  @override
   String get pingAvg => '平均:';
 
   @override
@@ -1117,7 +1252,13 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get read => '讀取';
 
   @override
+  String get ready => '就緒';
+
+  @override
   String get reboot => '重新開機';
+
+  @override
+  String get reconnecting => '重連中...';
 
   @override
   String get redo => '重做';
@@ -1127,6 +1268,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get register => '註冊';
+
+  @override
+  String get remote => '遠端';
 
   @override
   String get rename => '重命名';
@@ -1212,6 +1356,15 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get snippet => '程式片段';
 
   @override
+  String get softWrap => '軟換行';
+
+  @override
+  String get sort => '排序';
+
+  @override
+  String get sortByName => '依名稱';
+
+  @override
   String get speed => '速度';
 
   @override
@@ -1274,6 +1427,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get test => '測試';
 
   @override
+  String get textScaler => '字型縮放';
+
+  @override
   String get theme => '主題';
 
   @override
@@ -1284,6 +1440,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get time => '時間';
+
+  @override
+  String get timedOut => '執行逾時';
 
   @override
   String get timeout => '超時';
@@ -1350,6 +1509,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get view => '檢視';
+
+  @override
+  String get viewErr => '查看錯誤';
 
   @override
   String get write => '寫入';

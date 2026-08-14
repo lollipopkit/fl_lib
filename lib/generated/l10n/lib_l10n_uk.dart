@@ -28,6 +28,9 @@ class LibLocalizationsUk extends LibLocalizations {
   }
 
   @override
+  String get ai => 'ШІ';
+
+  @override
   String get all => 'Все';
 
   @override
@@ -35,7 +38,19 @@ class LibLocalizationsUk extends LibLocalizations {
       'Наразі ви увійшли в систему анонімно, продовження роботи призведе до втрати даних.';
 
   @override
+  String get apiEndpoint => 'Базова URL';
+
+  @override
+  String get apiKey => 'Ключ API';
+
+  @override
+  String get apiProtocol => 'Протокол API';
+
+  @override
   String get app => 'Застосунок';
+
+  @override
+  String get ascending => 'За зростанням';
 
   @override
   String get askAiModel => 'Модель';
@@ -76,13 +91,22 @@ class LibLocalizationsUk extends LibLocalizations {
   String get bright => 'Світлий';
 
   @override
+  String get browsing => 'Перегляд';
+
+  @override
   String get cancel => 'Скасувати';
+
+  @override
+  String get cancelled => 'Скасовано';
 
   @override
   String get checkUpdate => 'Перевірити оновлення';
 
   @override
   String get clear => 'Очистити';
+
+  @override
+  String get clearHistory => 'Очистити історію';
 
   @override
   String get click => 'Натиснути';
@@ -95,6 +119,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get cmd => 'Команда';
+
+  @override
+  String get configured => 'Налаштовано';
 
   @override
   String get confirm => 'Підтвердити';
@@ -146,6 +173,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get delete => 'Видалити';
+
+  @override
+  String get descending => 'За спаданням';
 
   @override
   String get device => 'Пристрій';
@@ -229,7 +259,13 @@ class LibLocalizationsUk extends LibLocalizations {
   String get folder => 'Директорія';
 
   @override
+  String get followSystem => 'Слідувати системі';
+
+  @override
   String get font => 'Шрифт';
+
+  @override
+  String get fontSize => 'Розмір шрифту';
 
   @override
   String get force => 'Примусово';
@@ -241,10 +277,16 @@ class LibLocalizationsUk extends LibLocalizations {
   String get found => 'Знайдено';
 
   @override
+  String get goBackQ => 'Повернутися назад?';
+
+  @override
   String get goto => 'Перейти до';
 
   @override
   String get hideTitleBar => 'Приховати рядок заголовка';
+
+  @override
+  String get highlight => 'Підсвітка коду';
 
   @override
   String get host => 'Хост';
@@ -271,6 +313,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get invalid => 'Недійсно';
 
   @override
+  String get invalidUrl => 'Некоректна URL-адреса';
+
+  @override
   String get justNow => 'Щойно';
 
   @override
@@ -284,6 +329,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => 'Локальний';
 
   @override
   String get location => 'Місцезнаходження';
@@ -311,6 +359,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get max => 'Максимум';
+
+  @override
+  String get memory => 'Пам\'ять';
 
   @override
   String get menuHelp => 'Довідка';
@@ -405,6 +456,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get permission => 'Дозвіл';
 
   @override
+  String get permissionDenied => 'Доступ заборонено.';
+
+  @override
   String get pingAvg => 'Середнє:';
 
   @override
@@ -442,7 +496,13 @@ class LibLocalizationsUk extends LibLocalizations {
   String get read => 'Читати';
 
   @override
+  String get ready => 'Готово';
+
+  @override
   String get reboot => 'Перезавантажити';
+
+  @override
+  String get reconnecting => 'Перепідключення...';
 
   @override
   String get redo => 'Повторити';
@@ -452,6 +512,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get register => 'Зареєструватися';
+
+  @override
+  String get remote => 'Віддалений';
 
   @override
   String get rename => 'Перейменувати';
@@ -537,6 +600,15 @@ class LibLocalizationsUk extends LibLocalizations {
   String get snippet => 'Фрагмент';
 
   @override
+  String get softWrap => 'М\'ягкий перенос';
+
+  @override
+  String get sort => 'Сортування';
+
+  @override
+  String get sortByName => 'За назвою';
+
+  @override
   String get speed => 'Швидкість';
 
   @override
@@ -599,6 +671,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get test => 'Тест';
 
   @override
+  String get textScaler => 'Масштабування тексту';
+
+  @override
   String get theme => 'Тема';
 
   @override
@@ -609,6 +684,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get time => 'Час';
+
+  @override
+  String get timedOut => 'Час вичерпано';
 
   @override
   String get timeout => 'Тайм-аут';
@@ -675,6 +753,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get view => 'Перегляд';
+
+  @override
+  String get viewErr => 'Переглянути помилку';
 
   @override
   String get write => 'Записувати';

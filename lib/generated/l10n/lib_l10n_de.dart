@@ -28,6 +28,9 @@ class LibLocalizationsDe extends LibLocalizations {
   }
 
   @override
+  String get ai => 'KI';
+
+  @override
   String get all => 'Alle';
 
   @override
@@ -35,7 +38,19 @@ class LibLocalizationsDe extends LibLocalizations {
       'Sie sind derzeit anonym angemeldet. Bei Fortsetzung der Aktion gehen Daten verloren.';
 
   @override
+  String get apiEndpoint => 'Basis-URL';
+
+  @override
+  String get apiKey => 'API-Schlüssel';
+
+  @override
+  String get apiProtocol => 'API-Protokoll';
+
+  @override
   String get app => 'Anwendung';
+
+  @override
+  String get ascending => 'Aufsteigend';
 
   @override
   String get askAiModel => 'Modell';
@@ -76,13 +91,22 @@ class LibLocalizationsDe extends LibLocalizations {
   String get bright => 'Hell';
 
   @override
+  String get browsing => 'Wird durchsucht';
+
+  @override
   String get cancel => 'Abbrechen';
+
+  @override
+  String get cancelled => 'Abgebrochen';
 
   @override
   String get checkUpdate => 'Nach Updates suchen';
 
   @override
   String get clear => 'Löschen';
+
+  @override
+  String get clearHistory => 'Verlauf löschen';
 
   @override
   String get click => 'Klicken';
@@ -95,6 +119,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get cmd => 'Befehl';
+
+  @override
+  String get configured => 'Konfiguriert';
 
   @override
   String get confirm => 'Bestätigen';
@@ -146,6 +173,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get delete => 'Löschen';
+
+  @override
+  String get descending => 'Absteigend';
 
   @override
   String get device => 'Gerät';
@@ -229,7 +259,13 @@ class LibLocalizationsDe extends LibLocalizations {
   String get folder => 'Ordner';
 
   @override
+  String get followSystem => 'System verfolgen';
+
+  @override
   String get font => 'Schriftart';
+
+  @override
+  String get fontSize => 'Schriftgröße';
 
   @override
   String get force => 'freiwillig';
@@ -241,10 +277,16 @@ class LibLocalizationsDe extends LibLocalizations {
   String get found => 'Gefunden';
 
   @override
+  String get goBackQ => 'Zurückkommen?';
+
+  @override
   String get goto => 'Gehe zu';
 
   @override
   String get hideTitleBar => 'Titelleiste ausblenden';
+
+  @override
+  String get highlight => 'Code highlight';
 
   @override
   String get host => 'Host';
@@ -271,6 +313,9 @@ class LibLocalizationsDe extends LibLocalizations {
   String get invalid => 'Ungültig';
 
   @override
+  String get invalidUrl => 'Ungültige URL';
+
+  @override
   String get justNow => 'Gerade eben';
 
   @override
@@ -284,6 +329,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => 'Lokal';
 
   @override
   String get location => 'Standort';
@@ -312,6 +360,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get max => 'Maximum';
+
+  @override
+  String get memory => 'Speicher';
 
   @override
   String get menuHelp => 'Hilfe';
@@ -407,6 +458,9 @@ class LibLocalizationsDe extends LibLocalizations {
   String get permission => 'Berechtigung';
 
   @override
+  String get permissionDenied => 'Zugriff verweigert.';
+
+  @override
   String get pingAvg => 'Durchschn.:';
 
   @override
@@ -444,7 +498,13 @@ class LibLocalizationsDe extends LibLocalizations {
   String get read => 'Lesen';
 
   @override
+  String get ready => 'Bereit';
+
+  @override
   String get reboot => 'Neustart';
+
+  @override
+  String get reconnecting => 'Erneut verbinden...';
 
   @override
   String get redo => 'Wiederholen';
@@ -454,6 +514,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get register => 'Registrieren';
+
+  @override
+  String get remote => 'Entfernt';
 
   @override
   String get rename => 'Umbenennen';
@@ -539,6 +602,15 @@ class LibLocalizationsDe extends LibLocalizations {
   String get snippet => 'Snippet';
 
   @override
+  String get softWrap => 'Weicher Umbruch';
+
+  @override
+  String get sort => 'Sortieren';
+
+  @override
+  String get sortByName => 'Nach Name';
+
+  @override
   String get speed => 'Geschwindigkeit';
 
   @override
@@ -601,6 +673,9 @@ class LibLocalizationsDe extends LibLocalizations {
   String get test => 'Prüfung';
 
   @override
+  String get textScaler => 'Skalierung der Schriftart';
+
+  @override
   String get theme => 'Themen';
 
   @override
@@ -611,6 +686,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get time => 'Zeit';
+
+  @override
+  String get timedOut => 'Zeitüberschreitung';
 
   @override
   String get timeout => 'Zeitüberschreitung';
@@ -677,6 +755,9 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get view => 'Anzeigen';
+
+  @override
+  String get viewErr => 'Fehler anzeigen';
 
   @override
   String get write => 'Schreiben';

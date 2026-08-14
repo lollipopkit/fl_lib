@@ -28,6 +28,9 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
+  String get ai => 'AI';
+
+  @override
   String get all => 'Semua';
 
   @override
@@ -35,7 +38,19 @@ class LibLocalizationsId extends LibLocalizations {
       'Saat ini masuk secara anonim, melanjutkan operasi akan mengakibatkan hilangnya data.';
 
   @override
+  String get apiEndpoint => 'URL dasar';
+
+  @override
+  String get apiKey => 'Kunci API';
+
+  @override
+  String get apiProtocol => 'Protokol API';
+
+  @override
   String get app => 'Aplikasi';
+
+  @override
+  String get ascending => 'Naik';
 
   @override
   String get askAiModel => 'Model';
@@ -76,13 +91,22 @@ class LibLocalizationsId extends LibLocalizations {
   String get bright => 'Terang';
 
   @override
+  String get browsing => 'Menjelajahi';
+
+  @override
   String get cancel => 'Batal';
+
+  @override
+  String get cancelled => 'Dibatalkan';
 
   @override
   String get checkUpdate => 'Periksa pembaruan';
 
   @override
   String get clear => 'Bersihkan';
+
+  @override
+  String get clearHistory => 'Hapus riwayat';
 
   @override
   String get click => 'Klik';
@@ -95,6 +119,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get cmd => 'Memerintah';
+
+  @override
+  String get configured => 'Sudah dikonfigurasi';
 
   @override
   String get confirm => 'Konfirmasi';
@@ -146,6 +173,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get delete => 'Hapus';
+
+  @override
+  String get descending => 'Turun';
 
   @override
   String get device => 'Perangkat';
@@ -229,7 +259,13 @@ class LibLocalizationsId extends LibLocalizations {
   String get folder => 'Map';
 
   @override
+  String get followSystem => 'Ikuti sistem';
+
+  @override
   String get font => 'Font';
+
+  @override
+  String get fontSize => 'Ukuran huruf';
 
   @override
   String get force => 'sukarela';
@@ -241,10 +277,16 @@ class LibLocalizationsId extends LibLocalizations {
   String get found => 'Ditemukan';
 
   @override
+  String get goBackQ => 'Datang kembali?';
+
+  @override
   String get goto => 'Pergi ke';
 
   @override
   String get hideTitleBar => 'Sembunyikan bilah judul';
+
+  @override
+  String get highlight => 'Sorotan kode';
 
   @override
   String get host => 'Host';
@@ -271,6 +313,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get invalid => 'Tidak valid';
 
   @override
+  String get invalidUrl => 'URL tidak valid';
+
+  @override
   String get justNow => 'Baru saja';
 
   @override
@@ -284,6 +329,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => 'Lokal';
 
   @override
   String get location => 'Lokasi';
@@ -311,6 +359,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get max => 'Maksimum';
+
+  @override
+  String get memory => 'Memori';
 
   @override
   String get menuHelp => 'Bantuan';
@@ -406,6 +457,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get permission => 'Izin';
 
   @override
+  String get permissionDenied => 'Izin ditolak.';
+
+  @override
   String get pingAvg => 'Rata -rata:';
 
   @override
@@ -443,7 +497,13 @@ class LibLocalizationsId extends LibLocalizations {
   String get read => 'Baca';
 
   @override
+  String get ready => 'Siap';
+
+  @override
   String get reboot => 'Mulai Ulang';
+
+  @override
+  String get reconnecting => 'Menghubungkan kembali...';
 
   @override
   String get redo => 'Ulangi';
@@ -453,6 +513,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get register => 'Daftar';
+
+  @override
+  String get remote => 'Jarak jauh';
 
   @override
   String get rename => 'Ubah nama';
@@ -538,6 +601,15 @@ class LibLocalizationsId extends LibLocalizations {
   String get snippet => 'Snippet';
 
   @override
+  String get softWrap => 'Pembungkus lembut';
+
+  @override
+  String get sort => 'Urutkan';
+
+  @override
+  String get sortByName => 'Menurut nama';
+
+  @override
   String get speed => 'Kecepatan';
 
   @override
@@ -600,6 +672,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get test => 'pengujian';
 
   @override
+  String get textScaler => 'Penskalaan font';
+
+  @override
   String get theme => 'Tema';
 
   @override
@@ -610,6 +685,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get time => 'Waktu';
+
+  @override
+  String get timedOut => 'Waktu habis';
 
   @override
   String get timeout => 'Waktu habis';
@@ -676,6 +754,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get view => 'Lihat';
+
+  @override
+  String get viewErr => 'Lihat kesalahan';
 
   @override
   String get write => 'Tulis';

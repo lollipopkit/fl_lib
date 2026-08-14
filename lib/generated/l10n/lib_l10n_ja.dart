@@ -28,13 +28,28 @@ class LibLocalizationsJa extends LibLocalizations {
   }
 
   @override
+  String get ai => 'AI';
+
+  @override
   String get all => '全て';
 
   @override
   String get anonLoseDataTip => '現在匿名でログイン中です。操作を続けるとデータが失われます。';
 
   @override
+  String get apiEndpoint => 'ベース URL';
+
+  @override
+  String get apiKey => 'API キー';
+
+  @override
+  String get apiProtocol => 'API プロトコル';
+
+  @override
   String get app => 'アプリケーション';
+
+  @override
+  String get ascending => '昇順';
 
   @override
   String get askAiModel => 'モデル';
@@ -75,13 +90,22 @@ class LibLocalizationsJa extends LibLocalizations {
   String get bright => '明るい';
 
   @override
+  String get browsing => '閲覧中';
+
+  @override
   String get cancel => 'キャンセル';
+
+  @override
+  String get cancelled => 'キャンセル済み';
 
   @override
   String get checkUpdate => 'アップデートを確認する';
 
   @override
   String get clear => 'クリア';
+
+  @override
+  String get clearHistory => '履歴を消去';
 
   @override
   String get click => 'クリック';
@@ -94,6 +118,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get cmd => 'コマンド';
+
+  @override
+  String get configured => '設定済み';
 
   @override
   String get confirm => '確認';
@@ -145,6 +172,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get delete => '削除';
+
+  @override
+  String get descending => '降順';
 
   @override
   String get device => 'デバイス';
@@ -228,7 +258,13 @@ class LibLocalizationsJa extends LibLocalizations {
   String get folder => 'フォルダ';
 
   @override
+  String get followSystem => 'システムに従う';
+
+  @override
   String get font => 'フォント';
+
+  @override
+  String get fontSize => 'フォントサイズ';
 
   @override
   String get force => '強制';
@@ -240,10 +276,16 @@ class LibLocalizationsJa extends LibLocalizations {
   String get found => '見つかりました';
 
   @override
+  String get goBackQ => '戻りますか？';
+
+  @override
   String get goto => '移動';
 
   @override
   String get hideTitleBar => 'タイトルバーを非表示にする';
+
+  @override
+  String get highlight => 'コードハイライト';
 
   @override
   String get host => 'ホスト';
@@ -270,6 +312,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get invalid => '無効';
 
   @override
+  String get invalidUrl => '無効な URL';
+
+  @override
   String get justNow => 'たった今';
 
   @override
@@ -283,6 +328,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get loadingEllipsis => '...';
+
+  @override
+  String get local => 'ローカル';
 
   @override
   String get location => '場所';
@@ -310,6 +358,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get max => '最大';
+
+  @override
+  String get memory => 'メモリ';
 
   @override
   String get menuHelp => 'ヘルプ';
@@ -404,6 +455,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get permission => '権限';
 
   @override
+  String get permissionDenied => '権限がありません。';
+
+  @override
   String get pingAvg => '平均:';
 
   @override
@@ -440,7 +494,13 @@ class LibLocalizationsJa extends LibLocalizations {
   String get read => '読み取り';
 
   @override
+  String get ready => '準備完了';
+
+  @override
   String get reboot => '再起動';
+
+  @override
+  String get reconnecting => '再接続中...';
 
   @override
   String get redo => 'やり直す';
@@ -450,6 +510,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get register => '登録';
+
+  @override
+  String get remote => 'リモート';
 
   @override
   String get rename => '名前変更';
@@ -535,6 +598,15 @@ class LibLocalizationsJa extends LibLocalizations {
   String get snippet => 'スニペット';
 
   @override
+  String get softWrap => 'ソフトラップ';
+
+  @override
+  String get sort => '並べ替え';
+
+  @override
+  String get sortByName => '名前順';
+
+  @override
   String get speed => '速度';
 
   @override
@@ -597,6 +669,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get test => 'テスト';
 
   @override
+  String get textScaler => 'テキストスケーラー';
+
+  @override
   String get theme => 'テーマ';
 
   @override
@@ -607,6 +682,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get time => '時間';
+
+  @override
+  String get timedOut => 'タイムアウト';
 
   @override
   String get timeout => 'タイムアウト';
@@ -673,6 +751,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get view => '表示';
+
+  @override
+  String get viewErr => 'エラーを表示';
 
   @override
   String get write => '書き込み';

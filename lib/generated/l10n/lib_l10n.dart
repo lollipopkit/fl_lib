@@ -153,6 +153,12 @@ abstract class LibLocalizations {
   /// **'{time} ago'**
   String agoFmt(String time);
 
+  /// No description provided for @ai.
+  ///
+  /// In en, this message translates to:
+  /// **'AI'**
+  String get ai;
+
   /// No description provided for @all.
   ///
   /// In en, this message translates to:
@@ -165,11 +171,35 @@ abstract class LibLocalizations {
   /// **'Currently logged in anonymously, continuing operations will result in data loss.'**
   String get anonLoseDataTip;
 
+  /// No description provided for @apiEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'API Endpoint'**
+  String get apiEndpoint;
+
+  /// No description provided for @apiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API Key'**
+  String get apiKey;
+
+  /// No description provided for @apiProtocol.
+  ///
+  /// In en, this message translates to:
+  /// **'API protocol'**
+  String get apiProtocol;
+
   /// No description provided for @app.
   ///
   /// In en, this message translates to:
   /// **'Application'**
   String get app;
+
+  /// No description provided for @ascending.
+  ///
+  /// In en, this message translates to:
+  /// **'Ascending'**
+  String get ascending;
 
   /// No description provided for @askAiModel.
   ///
@@ -243,11 +273,23 @@ abstract class LibLocalizations {
   /// **'Bright'**
   String get bright;
 
+  /// No description provided for @browsing.
+  ///
+  /// In en, this message translates to:
+  /// **'Browsing'**
+  String get browsing;
+
   /// No description provided for @cancel.
   ///
   /// In en, this message translates to:
   /// **'Cancel'**
   String get cancel;
+
+  /// No description provided for @cancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get cancelled;
 
   /// No description provided for @checkUpdate.
   ///
@@ -260,6 +302,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Clear'**
   String get clear;
+
+  /// No description provided for @clearHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear history'**
+  String get clearHistory;
 
   /// No description provided for @click.
   ///
@@ -284,6 +332,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Command'**
   String get cmd;
+
+  /// No description provided for @configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get configured;
 
   /// No description provided for @confirm.
   ///
@@ -380,6 +434,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Delete'**
   String get delete;
+
+  /// No description provided for @descending.
+  ///
+  /// In en, this message translates to:
+  /// **'Descending'**
+  String get descending;
 
   /// No description provided for @device.
   ///
@@ -543,11 +603,23 @@ abstract class LibLocalizations {
   /// **'Folder'**
   String get folder;
 
+  /// No description provided for @followSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get followSystem;
+
   /// No description provided for @font.
   ///
   /// In en, this message translates to:
   /// **'Font'**
   String get font;
+
+  /// No description provided for @fontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Font size'**
+  String get fontSize;
 
   /// No description provided for @force.
   ///
@@ -567,6 +639,12 @@ abstract class LibLocalizations {
   /// **'Found'**
   String get found;
 
+  /// No description provided for @goBackQ.
+  ///
+  /// In en, this message translates to:
+  /// **'Go back?'**
+  String get goBackQ;
+
   /// No description provided for @goto.
   ///
   /// In en, this message translates to:
@@ -578,6 +656,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Hide title bar'**
   String get hideTitleBar;
+
+  /// No description provided for @highlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Code highlighting'**
+  String get highlight;
 
   /// No description provided for @host.
   ///
@@ -627,6 +711,12 @@ abstract class LibLocalizations {
   /// **'Invalid'**
   String get invalid;
 
+  /// No description provided for @invalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid URL'**
+  String get invalidUrl;
+
   /// No description provided for @justNow.
   ///
   /// In en, this message translates to:
@@ -656,6 +746,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'...'**
   String get loadingEllipsis;
+
+  /// No description provided for @local.
+  ///
+  /// In en, this message translates to:
+  /// **'Local'**
+  String get local;
 
   /// No description provided for @location.
   ///
@@ -710,6 +806,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Maximum'**
   String get max;
+
+  /// No description provided for @memory.
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get memory;
 
   /// No description provided for @menuHelp.
   ///
@@ -891,6 +993,12 @@ abstract class LibLocalizations {
   /// **'Permission'**
   String get permission;
 
+  /// No description provided for @permissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission denied.'**
+  String get permissionDenied;
+
   /// No description provided for @pingAvg.
   ///
   /// In en, this message translates to:
@@ -963,11 +1071,23 @@ abstract class LibLocalizations {
   /// **'Read'**
   String get read;
 
+  /// No description provided for @ready.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get ready;
+
   /// No description provided for @reboot.
   ///
   /// In en, this message translates to:
   /// **'Reboot'**
   String get reboot;
+
+  /// No description provided for @reconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting...'**
+  String get reconnecting;
 
   /// No description provided for @redo.
   ///
@@ -986,6 +1106,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Sign up'**
   String get register;
+
+  /// No description provided for @remote.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote'**
+  String get remote;
 
   /// No description provided for @rename.
   ///
@@ -1149,6 +1275,24 @@ abstract class LibLocalizations {
   /// **'Snippet'**
   String get snippet;
 
+  /// No description provided for @softWrap.
+  ///
+  /// In en, this message translates to:
+  /// **'Soft wrap'**
+  String get softWrap;
+
+  /// No description provided for @sort.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get sort;
+
+  /// No description provided for @sortByName.
+  ///
+  /// In en, this message translates to:
+  /// **'By name'**
+  String get sortByName;
+
   /// No description provided for @speed.
   ///
   /// In en, this message translates to:
@@ -1269,6 +1413,12 @@ abstract class LibLocalizations {
   /// **'Test'**
   String get test;
 
+  /// No description provided for @textScaler.
+  ///
+  /// In en, this message translates to:
+  /// **'Text scaler'**
+  String get textScaler;
+
   /// No description provided for @theme.
   ///
   /// In en, this message translates to:
@@ -1292,6 +1442,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Time'**
   String get time;
+
+  /// No description provided for @timedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Timed out'**
+  String get timedOut;
 
   /// No description provided for @timeout.
   ///
@@ -1412,6 +1568,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'View'**
   String get view;
+
+  /// No description provided for @viewErr.
+  ///
+  /// In en, this message translates to:
+  /// **'See error'**
+  String get viewErr;
 
   /// No description provided for @write.
   ///
