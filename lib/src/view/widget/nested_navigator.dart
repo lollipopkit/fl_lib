@@ -49,6 +49,17 @@ class _NestedNavigatorState extends State<NestedNavigator> {
   late final _navigatorKey =
       widget.navigatorKey ?? GlobalKey<NavigatorState>();
 
+  /// Which root route [rootBuilder] currently describes.
+  ///
+  /// Rebuilding a `Navigator` rebuilds the page of *every* route in its stack:
+  /// the framework calls `changedExternalState` on all of them, which drops
+  /// each route's cached page. So the route on its way out ran [rootBuilder]
+  /// again and rendered whatever was selected *now* — putting the newly picked
+  /// page on screen twice, once immediately underneath and once more as the
+  /// incoming route animated in over it. Two of everything for the length of
+  /// the transition, and two of any work the page does when it is created.
+  Object? _current;
+
   @override
   void didUpdateWidget(NestedNavigator oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -69,9 +80,24 @@ class _NestedNavigatorState extends State<NestedNavigator> {
   /// implementation of something the framework already does, and the
   /// framework's is the one that has been through every case.
   Route<void> _rootRoute() {
+    // Identity of this route, held so the builder below can tell whether it is
+    // still the one the caller is describing. The id cannot answer that: the
+    // same one can be selected again after another, and both routes would then
+    // claim to be current.
+    final token = _current = Object();
+    Widget? shown;
     return MaterialPageRoute<void>(
       settings: RouteSettings(name: '${widget.rootId}'),
-      builder: (context) => widget.rootBuilder(context),
+      builder: (context) {
+        // Superseded, so this route is on its way out. It keeps what it last
+        // showed until it is removed — the same widget instance, which leaves
+        // the outgoing page's subtree untouched rather than rebuilding it into
+        // the incoming page's content.
+        if (!identical(_current, token)) {
+          return shown ?? const SizedBox.shrink();
+        }
+        return shown = widget.rootBuilder(context);
+      },
     );
   }
 

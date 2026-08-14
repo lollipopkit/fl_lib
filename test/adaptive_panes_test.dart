@@ -124,6 +124,32 @@ void main() {
     expect(find.text('detail a'), findsNothing);
   });
 
+  testWidgets('the page being replaced is not rebuilt into the new one', (
+    tester,
+  ) async {
+    // Rebuilding a navigator rebuilds every route's page, so the route on its
+    // way out ran the caller's builder again and rendered the item just
+    // picked. The new page was then on screen twice — once underneath at
+    // once, once more as the incoming route animated in over it — which read
+    // as the pane flashing twice for one tap.
+    await tester.pumpWidget(harness(width: 1000, selected: 'a'));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(harness(width: 1000, selected: 'b'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('detail b'), findsOneWidget);
+    expect(
+      find.text('detail a'),
+      findsOneWidget,
+      reason: 'the outgoing page shows what it always showed until it goes',
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('detail a'), findsNothing);
+  });
+
   testWidgets('switching items clears what was pushed on top', (tester) async {
     await tester.pumpWidget(harness(width: 1000, selected: 'a'));
     await tester.pumpAndSettle();
