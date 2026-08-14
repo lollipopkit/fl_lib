@@ -254,6 +254,9 @@ final class Btn extends StatelessWidget {
         popVal = null,
         textStyle = null;
 
+  /// Right-click reaches [onLongTap], for the same reason every other tile
+  /// does — see `WidgetSecondaryX`. Wrapped once here rather than in each of
+  /// the six shapes below, which all carry the same callback.
   @override
   Widget build(BuildContext context) => switch (type) {
         BtnType.text => _text(context),
@@ -261,7 +264,8 @@ final class Btn extends StatelessWidget {
         BtnType.column => _column(context),
         BtnType.row => _row(context),
         BtnType.elevated => _elevated(context),
-      };
+      }
+          .onSecondary(asSecondary(onLongTap));
 
   VoidCallback? _resolveOnTap(BuildContext c) {
     if (onTap == _defaultOnTap) {

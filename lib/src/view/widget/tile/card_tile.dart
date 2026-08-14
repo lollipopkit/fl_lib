@@ -1,3 +1,4 @@
+import 'package:fl_lib/src/core/ext/secondary_tap.dart';
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/widget/card.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ class CardTile extends StatelessWidget {
     this.trailing = const Icon(Icons.chevron_right),
     this.onTap,
     this.onLongPress,
+    this.onSecondaryTap,
   });
 
   final String title;
@@ -38,6 +40,10 @@ class CardTile extends StatelessWidget {
 
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
+  /// Right-click. Defaults to [onLongPress], which is the same request from a
+  /// pointer — see `WidgetSecondaryX`.
+  final void Function(Offset at)? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +67,7 @@ class CardTile extends StatelessWidget {
         trailing: trailing,
         onTap: onTap,
         onLongPress: onLongPress,
-      ),
+      ).onSecondary(onSecondaryTap ?? asSecondary(onLongPress)),
     );
   }
 }

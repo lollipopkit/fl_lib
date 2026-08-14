@@ -44,6 +44,7 @@ extension WidgetX on Widget {
     VoidCallback? onLongTap,
     VoidCallback? onDoubleTap,
     bool clip = true,
+    void Function(Offset at)? onSecondaryTap,
   }) {
     if (disable) return this;
 
@@ -52,7 +53,7 @@ extension WidgetX on Widget {
       onLongPress: onLongTap,
       onDoubleTap: onDoubleTap,
       child: this,
-    );
+    ).onSecondary(onSecondaryTap ?? asSecondary(onLongTap));
     if (!clip) return child;
 
     return ClipRRect(

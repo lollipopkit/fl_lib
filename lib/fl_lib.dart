@@ -43,6 +43,7 @@ export 'src/core/ext/order.dart';
 export 'src/core/ext/string.dart';
 export 'src/core/ext/theme_data.dart';
 export 'src/core/ext/uint8list.dart';
+export 'src/core/ext/secondary_tap.dart';
 export 'src/core/ext/widget.dart';
 
 // --- Mixins ---
@@ -135,6 +136,7 @@ export 'src/view/page/user.dart';
 // --- Widgets ---
 // Reusable UI components and specialized widgets
 export 'src/view/widget/adaptive_list.dart';
+export 'src/view/widget/context_menu.dart';
 export 'src/view/widget/appbar.dart';
 export 'src/view/widget/auto_hide.dart';
 export 'src/view/widget/avg.dart';

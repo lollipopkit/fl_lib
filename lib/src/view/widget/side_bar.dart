@@ -163,6 +163,8 @@ final class SideBarTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    // Right-click reaches whatever the long press does — see
+    // `WidgetSecondaryX`, which is where the reasoning lives.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       child: Material(
@@ -226,7 +228,7 @@ final class SideBarTile extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ).onSecondary(asSecondary(onLongPress));
   }
 }
 
