@@ -37,7 +37,7 @@ abstract final class AppUpdate {
   static var _data = <String, dynamic>{};
   static var _locale = '';
   static var _source = _AppUpdateSource.manifest;
-  static var _githubReleases = <Map<String, dynamic>>[];
+  static var _githubReleases = <_GitHubRelease>[];
   static String? _githubStoreUrl;
   static Pfs? _githubPlatform;
   static CpuArch? _githubArch;
@@ -49,11 +49,13 @@ abstract final class AppUpdate {
     _data = <String, dynamic>{};
     _locale = '';
     _source = _AppUpdateSource.manifest;
-    _githubReleases = <Map<String, dynamic>>[];
+    _githubReleases = <_GitHubRelease>[];
     _githubStoreUrl = null;
     _githubPlatform = null;
     _githubArch = null;
     _changelog = null;
+    _releaseNotes = const [];
+    _versionName = null;
     _url = null;
     _version = null;
   }
@@ -126,7 +128,11 @@ abstract final class AppUpdate {
     }
     _githubReleases = decoded
         .whereType<Map<String, dynamic>>()
-        .map(Map<String, dynamic>.from)
+        // Drafts are not published to anyone, so they are dropped before
+        // parsing: an unfinished tag must not log as a malformed release.
+        .where((release) => release['draft'] != true)
+        .map((release) => _GitHubRelease.fromJson(Map.from(release)))
+        .nonNulls
         .toList();
     _build = build;
     _source = _AppUpdateSource.github;
@@ -137,7 +143,8 @@ abstract final class AppUpdate {
   }
 
   static void _getAll() {
-    _changelog = _url = _version = null;
+    _changelog = _url = _version = _versionName = null;
+    _releaseNotes = const [];
     if (_source == _AppUpdateSource.github) {
       _getGitHubAll();
       return;
@@ -151,14 +158,55 @@ abstract final class AppUpdate {
   static void _getGitHubAll() {
     final release = _getGitHubRelease();
     if (release == null) return;
-    final newest = _parseGitHubBuild(release);
-    if (newest == null) return;
     final url = _getGitHubUrl(release);
     if (url == null) return;
     _url = url;
-    _version = AppUpdateVer(latest: newest).parse(_build);
-    _changelog = release.body;
+    _version = AppUpdateVer(latest: release.build).parse(_build);
+    _versionName = release.tag;
+    _releaseNotes = _getGitHubReleaseNotes(release.build);
+    _changelog = switch (_releaseNotes.length) {
+      0 => null,
+      1 => _releaseNotes.first.body,
+      _ => _releaseNotes.map((e) => '## ${e.title}\n\n${e.body}').join('\n\n'),
+    };
   }
+
+  /// The notes of every release between the installed build and [newest],
+  /// newest first.
+  ///
+  /// A user several versions behind gets every version's notes, not only the
+  /// one GitHub calls latest. Releases without a body are left out: they would
+  /// only add an entry with nothing under it.
+  static List<AppUpdateReleaseNote> _getGitHubReleaseNotes(int newest) {
+    final notes = <AppUpdateReleaseNote>[];
+    for (final release in _githubReleases) {
+      if (release.build <= _build || release.build > newest) continue;
+      // A beta user passes through the stable releases as well; a stable user
+      // never sees a prerelease.
+      if (chan == AppUpdateChan.stable && release.prerelease) continue;
+      final body = release.body?.trim();
+      if (body == null || body.isEmpty) continue;
+      notes.add(AppUpdateReleaseNote(
+        build: release.build,
+        title: release.tag,
+        date: release.publishedAt,
+        body: body,
+      ));
+    }
+    notes.sort((a, b) => b.build.compareTo(a.build));
+    return notes;
+  }
+
+  static String? _versionName;
+  /// What the source calls the newest version, e.g. the GitHub tag `v1.0.1024`.
+  ///
+  /// Null for the JSON manifest, which only carries build numbers.
+  static String? get versionName => _versionName;
+
+  static var _releaseNotes = const <AppUpdateReleaseNote>[];
+  /// Per-version release notes for every build newer than the installed one,
+  /// newest first. Empty for the JSON manifest, which has [changelog] instead.
+  static List<AppUpdateReleaseNote> get releaseNotes => _releaseNotes;
 
   static String? _changelog;
   /// Combined changelog lines for builds newer than [build] in the selected locale.
@@ -315,18 +363,13 @@ abstract final class AppUpdate {
   static _GitHubRelease? _latestGitHubRelease({required bool prerelease}) {
     _GitHubRelease? latest;
     for (final release in _githubReleases) {
-      if (release['draft'] == true) continue;
-      if (release['prerelease'] != prerelease) continue;
-      final parsed = _GitHubRelease.fromJson(release);
-      if (parsed == null) continue;
-      if (latest == null || parsed.build > latest.build) {
-        latest = parsed;
+      if (release.prerelease != prerelease) continue;
+      if (latest == null || release.build > latest.build) {
+        latest = release;
       }
     }
     return latest;
   }
-
-  static int? _parseGitHubBuild(_GitHubRelease release) => release.build;
 
   static String? _getGitHubUrl(_GitHubRelease release) {
     final platform = _githubPlatform ?? Pfs.type;
@@ -400,20 +443,57 @@ enum _AppUpdateSource {
   github,
 }
 
+/// One version's release notes.
+final class AppUpdateReleaseNote {
+  /// Build number these notes belong to.
+  final int build;
+
+  /// What the source calls this version, e.g. the GitHub tag `v1.0.1024`.
+  final String title;
+
+  /// Publish time, if the source states one.
+  final DateTime? date;
+
+  /// The notes themselves, in markdown.
+  final String body;
+
+  const AppUpdateReleaseNote({
+    required this.build,
+    required this.title,
+    required this.date,
+    required this.body,
+  });
+}
+
 final class _GitHubRelease {
   final int build;
+
+  /// The tag the build number was read from, e.g. `v1.0.1024`.
+  final String tag;
+  final bool prerelease;
+  final DateTime? publishedAt;
   final String? body;
   final List<_GitHubAsset> assets;
 
   const _GitHubRelease({
     required this.build,
+    required this.tag,
+    required this.prerelease,
+    required this.publishedAt,
     required this.body,
     required this.assets,
   });
 
   factory _GitHubRelease._fromJson(Map<String, dynamic> data) {
-    final build = _parseBuild(data['tag_name']) ?? _parseBuild(data['name']);
+    // The tag names the version everywhere the user sees it, so the build has
+    // to come from the same string that ends up on screen.
+    var tag = _nonEmptyStr(data['tag_name']);
+    var build = _parseBuild(tag);
     if (build == null) {
+      tag = _nonEmptyStr(data['name']);
+      build = _parseBuild(tag);
+    }
+    if (build == null || tag == null) {
       throw FormatException('GitHub release build not found: $data');
     }
 
@@ -425,9 +505,20 @@ final class _GitHubRelease {
 
     return _GitHubRelease(
       build: build,
+      tag: tag,
+      prerelease: data['prerelease'] == true,
+      publishedAt: DateTime.tryParse(
+        _nonEmptyStr(data['published_at']) ?? _nonEmptyStr(data['created_at']) ?? '',
+      ),
       body: data['body'] as String?,
       assets: assets,
     );
+  }
+
+  static String? _nonEmptyStr(Object? raw) {
+    if (raw is! String) return null;
+    final trimmed = raw.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   static _GitHubRelease? fromJson(Map<String, dynamic> data) {

@@ -35,6 +35,168 @@ void main() {
     expect(AppUpdate.url, 'https://download/ServerBox_v1.0.3_arm64.apk');
   });
 
+  test('github release notes cover every version newer than current', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          body: 'five',
+          publishedAt: '2026-08-14T10:00:00Z',
+          assets: [_asset('ServerBox_v1.0.5_arm64.apk')],
+        ),
+        _release(tag: 'v1.0.3', body: 'three'),
+        _release(tag: 'v1.0.4', body: 'four'),
+        // Already installed, and older than that: not news.
+        _release(tag: 'v1.0.2', body: 'two'),
+        _release(tag: 'v1.0.1', body: 'one'),
+      ]),
+      build: 2,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.versionName, 'v1.0.5');
+    expect(
+      AppUpdate.releaseNotes.map((e) => e.title).toList(),
+      ['v1.0.5', 'v1.0.4', 'v1.0.3'],
+    );
+    expect(AppUpdate.releaseNotes.map((e) => e.body).toList(),
+        ['five', 'four', 'three']);
+    expect(AppUpdate.releaseNotes.first.date, DateTime.utc(2026, 8, 14, 10));
+    expect(AppUpdate.releaseNotes.last.date, isNull);
+    expect(
+      AppUpdate.changelog,
+      '## v1.0.5\n\nfive\n\n## v1.0.4\n\nfour\n\n## v1.0.3\n\nthree',
+    );
+  });
+
+  test('github release notes skip drafts and empty bodies', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          body: 'five',
+          assets: [_asset('ServerBox_v1.0.5_arm64.apk')],
+        ),
+        _release(tag: 'v1.0.4', body: '  '),
+        _release(tag: 'v1.0.3'),
+        _release(tag: 'v1.0.6', body: 'six', draft: true),
+      ]),
+      build: 2,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.version, (5, AppUpdateLevel.normal));
+    expect(AppUpdate.releaseNotes.map((e) => e.title).toList(), ['v1.0.5']);
+    expect(AppUpdate.changelog, 'five');
+  });
+
+  test('github release notes exclude prereleases on stable channel', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          body: 'five',
+          assets: [_asset('ServerBox_v1.0.5_arm64.apk')],
+        ),
+        _release(tag: 'v1.0.4', body: 'four beta', prerelease: true),
+        _release(tag: 'v1.0.3', body: 'three'),
+      ]),
+      build: 2,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(
+      AppUpdate.releaseNotes.map((e) => e.title).toList(),
+      ['v1.0.5', 'v1.0.3'],
+    );
+  });
+
+  test('github beta channel keeps prereleases in release notes', () {
+    AppUpdate.chan = AppUpdateChan.beta;
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          body: 'five beta',
+          prerelease: true,
+          assets: [_asset('ServerBox_v1.0.5_arm64.apk')],
+        ),
+        _release(tag: 'v1.0.4', body: 'four'),
+        _release(tag: 'v1.0.3', body: 'three'),
+      ]),
+      build: 3,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(
+      AppUpdate.releaseNotes.map((e) => e.title).toList(),
+      ['v1.0.5', 'v1.0.4'],
+    );
+  });
+
+  test('github release notes stop at the release being offered', () {
+    // The newest stable is 4; a newer prerelease exists but this channel is
+    // not being offered it, so its notes have no place in the dialog.
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(tag: 'v1.0.5', body: 'five beta', prerelease: true),
+        _release(
+          tag: 'v1.0.4',
+          body: 'four',
+          assets: [_asset('ServerBox_v1.0.4_arm64.apk')],
+        ),
+      ]),
+      build: 3,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.version, (4, AppUpdateLevel.normal));
+    expect(AppUpdate.releaseNotes.map((e) => e.title).toList(), ['v1.0.4']);
+  });
+
+  test('github release notes are empty when up to date', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.3',
+          body: 'three',
+          assets: [_asset('ServerBox_v1.0.3_arm64.apk')],
+        ),
+      ]),
+      build: 3,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.version, (3, AppUpdateLevel.nil));
+    expect(AppUpdate.releaseNotes, isEmpty);
+    expect(AppUpdate.changelog, isNull);
+  });
+
+  test('github version name falls back to release name', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: '',
+          name: 'ServerBox 1.0.3',
+          body: 'three',
+          assets: [_asset('ServerBox_v1.0.3_arm64.apk')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.version, (3, AppUpdateLevel.normal));
+    expect(AppUpdate.versionName, 'ServerBox 1.0.3');
+  });
+
   test('github stable release ignores drafts and older releases', () {
     AppUpdate.fromGitHubReleasesStr(
       raw: _githubRaw([
@@ -246,17 +408,20 @@ String _githubRaw(List<Map<String, dynamic>> releases) => json.encode(releases);
 
 Map<String, dynamic> _release({
   required String tag,
+  String? name,
   bool prerelease = false,
   bool draft = false,
   String? body,
+  String? publishedAt,
   List<Map<String, dynamic>> assets = const [],
 }) {
   return {
     'tag_name': tag,
-    'name': tag,
+    'name': name ?? tag,
     'draft': draft,
     'prerelease': prerelease,
     'body': body,
+    'published_at': publishedAt,
     'assets': assets,
   };
 }

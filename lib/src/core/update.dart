@@ -49,17 +49,19 @@ abstract final class AppUpdateIface {
     }
 
     final changelog = AppUpdate.changelog ?? '~';
+    final notes = AppUpdate.releaseNotes;
+    final title = AppUpdate.versionName ?? 'v1.0.$newest';
 
     if (!context.mounted) return;
     final size = MediaQuery.sizeOf(context);
 
     void showUpdateDialog([bool force = false]) {
       context.showRoundDialog(
-        title: 'v1.0.$newest',
-        child: SizedBox(
+        title: title,
+        childBuilder: (ctx) => SizedBox(
           width: size.width * 0.8,
           child: SingleChildScrollView(
-            child: SimpleMarkdown(data: changelog),
+            child: _changelogView(ctx, changelog, notes),
           ),
         ),
         barrierDismiss: !force,
@@ -77,7 +79,7 @@ abstract final class AppUpdateIface {
 
     return switch (result.$2) {
       AppUpdateLevel.normal => context.showSnackBarWithAction(
-          content: 'v1.0.$newest',
+          content: title,
           action: l10n.update,
           onTap: showUpdateDialog,
         ),
@@ -85,6 +87,57 @@ abstract final class AppUpdateIface {
       AppUpdateLevel.forced => showUpdateDialog(true),
       AppUpdateLevel.nil => (),
     };
+  }
+
+  /// The notes of every version the user is about to skip over.
+  ///
+  /// Each version is one collapsed row, the way a finished tool call is one row
+  /// in the agent view: several release bodies at full length would push the
+  /// update button off the screen. Only the version being installed is open,
+  /// since that is the one the user came for.
+  static Widget _changelogView(
+    BuildContext context,
+    String changelog,
+    List<AppUpdateReleaseNote> notes,
+  ) {
+    // One version, or a source that has no per-version notes (the JSON
+    // manifest): the dialog title already names it, so an expander would only
+    // hide the text behind a tap.
+    if (notes.length <= 1) return SimpleMarkdown(data: changelog);
+
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (idx, note) in notes.indexed)
+          ExpandTile(
+            initiallyExpanded: idx == 0,
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 11),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    note.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                if (note.date != null)
+                  Text(
+                    note.date!.ymd(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+            children: [SimpleMarkdown(data: note.body)],
+          ),
+      ],
+    );
   }
 
   static Future<void> _doUpdate(BuildContext context, String url) async {
