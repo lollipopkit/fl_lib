@@ -52,7 +52,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get authRequired => 'Authentifizierung erforderlich';
 
   @override
-  String get auto => 'Auto';
+  String get auto => 'Automatisch';
 
   @override
   String get available => 'Verfügbar';
@@ -94,7 +94,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get close => 'Schließen';
 
   @override
-  String get cmd => 'Command';
+  String get cmd => 'Befehl';
 
   @override
   String get confirm => 'Bestätigen';
@@ -131,7 +131,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get day => 'Tage';
 
   @override
-  String get decode => 'Decode';
+  String get decode => 'Dekodieren';
 
   @override
   String get decompress => 'Dekomprimieren';
@@ -154,7 +154,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get disabled => 'Deaktiviert';
 
   @override
-  String get disconnected => 'Disconnected';
+  String get disconnected => 'Getrennt';
 
   @override
   String get disk => 'Festplatte';
@@ -187,7 +187,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get emulator => 'Emulator';
 
   @override
-  String get encode => 'Encode';
+  String get encode => 'Kodieren';
 
   @override
   String get error => 'Fehler';
@@ -265,7 +265,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get inner => 'Eingebaut';
 
   @override
-  String get install => 'install';
+  String get install => 'Installieren';
 
   @override
   String get invalid => 'Ungültig';
@@ -305,7 +305,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get logs => 'Protokolle';
 
   @override
-  String get loss => 'loss';
+  String get loss => 'Verlust';
 
   @override
   String get manual => 'Manuell';
@@ -314,19 +314,19 @@ class LibLocalizationsDe extends LibLocalizations {
   String get max => 'Maximum';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'Hilfe';
 
   @override
   String get menuInfo => 'Info';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Navigieren';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Beenden';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Einstellungen';
 
   @override
   String get menuWiki => 'Wiki';
@@ -348,7 +348,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get minute => 'Minuten';
 
   @override
-  String get mission => 'Mission';
+  String get mission => 'Aufgabe';
 
   @override
   String get more => 'Mehr';
@@ -407,7 +407,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get permission => 'Berechtigung';
 
   @override
-  String get pingAvg => 'Avg:';
+  String get pingAvg => 'Durchschn.:';
 
   @override
   String get pkg => 'Pkg';
@@ -507,7 +507,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get select => 'Auswählen';
 
   @override
-  String get sensors => 'Sensor';
+  String get sensors => 'Sensoren';
 
   @override
   String get sequence => 'Sequenz';
@@ -551,7 +551,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get stats => 'Statistik';
 
   @override
-  String get stop => 'Stop';
+  String get stop => 'Stopp';
 
   @override
   String get stopped => 'Ausgelaufen';
@@ -571,7 +571,7 @@ class LibLocalizationsDe extends LibLocalizations {
   }
 
   @override
-  String get suspend => 'Suspend';
+  String get suspend => 'Anhalten';
 
   @override
   String get switch_ => 'Schalter';
@@ -619,7 +619,7 @@ class LibLocalizationsDe extends LibLocalizations {
   String get times => 'Mal';
 
   @override
-  String get total => 'Total';
+  String get total => 'Gesamt';
 
   @override
   String get totalAttempts => 'Gesamt';

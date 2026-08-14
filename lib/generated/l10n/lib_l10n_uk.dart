@@ -97,7 +97,7 @@ class LibLocalizationsUk extends LibLocalizations {
   String get cmd => 'Команда';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => 'Підтвердити';
 
   @override
   String get conn => 'З\'єднання';
@@ -313,19 +313,19 @@ class LibLocalizationsUk extends LibLocalizations {
   String get max => 'Максимум';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'Довідка';
 
   @override
-  String get menuInfo => 'Info';
+  String get menuInfo => 'Інформація';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Навігація';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Вихід';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Налаштування';
 
   @override
   String get menuWiki => 'Wiki';

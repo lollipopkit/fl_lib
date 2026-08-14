@@ -795,7 +795,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get customCmdDocUrl =>
-      'https://github.com/lollipopkit/flutter_server_box/wiki/主页#自定义指令';
+      'https://github.com/lollipopkit/flutter_server_box/wiki/主页#自定义命令';
 
   @override
   String get cut => '剪下';
@@ -827,7 +827,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get device => '裝置';
 
   @override
-  String get disabled => '已禁用';
+  String get disabled => '已停用';
 
   @override
   String get disconnected => '已中斷連線';
@@ -836,7 +836,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get disk => '磁碟';
 
   @override
-  String get doc => '文檔';
+  String get doc => '說明文件';
 
   @override
   String get done => '完成';
@@ -896,7 +896,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get feedback => '反饋';
 
   @override
-  String get file => '文件';
+  String get file => '檔案';
 
   @override
   String get fold => '摺疊';
@@ -932,7 +932,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get image => '圖片';
 
   @override
-  String get import => '導入';
+  String get import => '匯入';
 
   @override
   String get init => '初始化';
@@ -980,28 +980,28 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get logs => '日誌';
 
   @override
-  String get loss => '逾時';
+  String get loss => '丟包率';
 
   @override
-  String get manual => '手冊';
+  String get manual => '手動';
 
   @override
   String get max => '最大';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => '說明';
 
   @override
-  String get menuInfo => 'Info';
+  String get menuInfo => '資訊';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => '導覽';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => '結束';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => '設定';
 
   @override
   String get menuWiki => 'Wiki';
@@ -1043,7 +1043,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get net => '網路';
 
   @override
-  String get network => '網絡';
+  String get network => '網路';
 
   @override
   String get next => '下一項';
@@ -1069,7 +1069,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get opacity => '透明度';
 
   @override
-  String get open => '打開';
+  String get open => '開啟';
 
   @override
   String get paste => '貼上';
@@ -1117,13 +1117,13 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get read => '讀取';
 
   @override
-  String get reboot => '重開';
+  String get reboot => '重新開機';
 
   @override
   String get redo => '重做';
 
   @override
-  String get refresh => '刷新';
+  String get refresh => '重新整理';
 
   @override
   String get register => '註冊';
@@ -1141,7 +1141,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get reset => '重設';
 
   @override
-  String get restart => '重開';
+  String get restart => '重新啟動';
 
   @override
   String get restore => '恢復';
@@ -1189,7 +1189,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get server => '伺服器';
 
   @override
-  String get servers => '服務器';
+  String get servers => '伺服器';
 
   @override
   String get setting => '設定';
@@ -1230,7 +1230,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get stopped => '已停止';
 
   @override
-  String get storage => '存儲';
+  String get storage => '儲存';
 
   @override
   String get success => '成功';
@@ -1244,7 +1244,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   }
 
   @override
-  String get suspend => '當機';
+  String get suspend => '暫停';
 
   @override
   String get switch_ => '切換';
@@ -1268,7 +1268,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get temperature => '溫度';
 
   @override
-  String get terminal => '终端機';
+  String get terminal => '終端機';
 
   @override
   String get test => '測試';
@@ -1277,7 +1277,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get theme => '主題';
 
   @override
-  String get themeMode => '主題風格';
+  String get themeMode => '主題模式';
 
   @override
   String get thinking => '思考中';

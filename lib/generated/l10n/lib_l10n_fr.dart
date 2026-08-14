@@ -52,7 +52,7 @@ class LibLocalizationsFr extends LibLocalizations {
   String get authRequired => 'Authentification requise';
 
   @override
-  String get auto => 'Auto';
+  String get auto => 'Automatique';
 
   @override
   String get available => 'Disponible';
@@ -97,7 +97,7 @@ class LibLocalizationsFr extends LibLocalizations {
   String get cmd => 'Commande';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => 'Confirmer';
 
   @override
   String get conn => 'Connexion';
@@ -313,19 +313,19 @@ class LibLocalizationsFr extends LibLocalizations {
   String get max => 'Maximum';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'Aide';
 
   @override
   String get menuInfo => 'Info';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Naviguer';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Quitter';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Paramètres';
 
   @override
   String get menuWiki => 'Wiki';

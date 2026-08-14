@@ -1110,7 +1110,7 @@ abstract class LibLocalizations {
   /// No description provided for @servers.
   ///
   /// In en, this message translates to:
-  /// **'servers'**
+  /// **'Servers'**
   String get servers;
 
   /// No description provided for @setting.

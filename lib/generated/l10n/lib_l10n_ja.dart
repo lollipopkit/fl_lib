@@ -96,7 +96,7 @@ class LibLocalizationsJa extends LibLocalizations {
   String get cmd => 'コマンド';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => '確認';
 
   @override
   String get conn => '接続';
@@ -312,19 +312,19 @@ class LibLocalizationsJa extends LibLocalizations {
   String get max => '最大';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'ヘルプ';
 
   @override
-  String get menuInfo => 'Info';
+  String get menuInfo => '情報';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'ナビゲート';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => '終了';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => '設定';
 
   @override
   String get menuWiki => 'Wiki';

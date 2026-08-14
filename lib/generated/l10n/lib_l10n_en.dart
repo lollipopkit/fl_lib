@@ -514,7 +514,7 @@ class LibLocalizationsEn extends LibLocalizations {
   String get server => 'Server';
 
   @override
-  String get servers => 'servers';
+  String get servers => 'Servers';
 
   @override
   String get setting => 'Settings';

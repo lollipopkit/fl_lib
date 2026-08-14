@@ -313,19 +313,19 @@ class LibLocalizationsRu extends LibLocalizations {
   String get max => 'Максимум';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'Справка';
 
   @override
-  String get menuInfo => 'Info';
+  String get menuInfo => 'Информация';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Навигация';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Выход';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Настройки';
 
   @override
   String get menuWiki => 'Wiki';

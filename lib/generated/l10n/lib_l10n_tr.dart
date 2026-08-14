@@ -97,7 +97,7 @@ class LibLocalizationsTr extends LibLocalizations {
   String get cmd => 'Komut';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => 'Onayla';
 
   @override
   String get conn => 'Bağlantı';
@@ -313,19 +313,19 @@ class LibLocalizationsTr extends LibLocalizations {
   String get max => 'Maksimum';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'Yardım';
 
   @override
-  String get menuInfo => 'Info';
+  String get menuInfo => 'Bilgi';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Gezin';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Çıkış';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Ayarlar';
 
   @override
   String get menuWiki => 'Wiki';

@@ -97,7 +97,7 @@ class LibLocalizationsId extends LibLocalizations {
   String get cmd => 'Memerintah';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => 'Konfirmasi';
 
   @override
   String get conn => 'Koneksi';
@@ -313,19 +313,19 @@ class LibLocalizationsId extends LibLocalizations {
   String get max => 'Maksimum';
 
   @override
-  String get menuHelp => 'Help';
+  String get menuHelp => 'Bantuan';
 
   @override
   String get menuInfo => 'Info';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Navigasi';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Keluar';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Pengaturan';
 
   @override
   String get menuWiki => 'Wiki';
@@ -443,7 +443,7 @@ class LibLocalizationsId extends LibLocalizations {
   String get read => 'Baca';
 
   @override
-  String get reboot => 'Reboot';
+  String get reboot => 'Mulai Ulang';
 
   @override
   String get redo => 'Ulangi';
@@ -570,7 +570,7 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
-  String get suspend => 'Suspend';
+  String get suspend => 'Tangguhkan';
 
   @override
   String get switch_ => 'Saklar';
@@ -645,7 +645,7 @@ class LibLocalizationsId extends LibLocalizations {
   String get upload => 'Unggah';
 
   @override
-  String get uptime => 'Uptime';
+  String get uptime => 'Waktu Aktif';
 
   @override
   String get used => 'Digunakan';

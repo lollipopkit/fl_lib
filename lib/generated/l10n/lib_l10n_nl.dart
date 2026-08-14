@@ -52,7 +52,7 @@ class LibLocalizationsNl extends LibLocalizations {
   String get authRequired => 'Authenticatie vereist';
 
   @override
-  String get auto => 'Auto';
+  String get auto => 'Automatisch';
 
   @override
   String get available => 'Beschikbaar';
@@ -97,7 +97,7 @@ class LibLocalizationsNl extends LibLocalizations {
   String get cmd => 'Opdracht';
 
   @override
-  String get confirm => 'Confirm';
+  String get confirm => 'Bevestigen';
 
   @override
   String get conn => 'Verbinding';
@@ -319,13 +319,13 @@ class LibLocalizationsNl extends LibLocalizations {
   String get menuInfo => 'Info';
 
   @override
-  String get menuNavigate => 'Navigate';
+  String get menuNavigate => 'Navigeren';
 
   @override
-  String get menuQuit => 'Quit';
+  String get menuQuit => 'Afsluiten';
 
   @override
-  String get menuSettings => 'Setting';
+  String get menuSettings => 'Instellingen';
 
   @override
   String get menuWiki => 'Wiki';
@@ -506,7 +506,7 @@ class LibLocalizationsNl extends LibLocalizations {
   String get select => 'Selecteren';
 
   @override
-  String get sensors => 'Sensor';
+  String get sensors => 'Sensoren';
 
   @override
   String get sequence => 'Volgorde';
