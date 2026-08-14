@@ -279,16 +279,25 @@ extension on _EditorPageState {
       return;
     }
 
+    // `popDialog`, not `pop`. `showRoundDialog` puts the dialog on the root
+    // navigator, while this context's nearest navigator is the one holding
+    // the *page* — a different one wherever the editor was pushed inside a
+    // pane or a tab. Popping that closed the editor and left the dialog on
+    // screen over whatever was behind it, with `shouldSave` never completing
+    // because the dialog route was still there.
+    //
+    // `Btn.ok` and friends get this right without being told: they resolve
+    // the navigator from the button's own context, which is inside the dialog.
     final shouldSave = await contextSafe?.showRoundDialog<bool>(
       title: libL10n.attention,
       child: Text(libL10n.actionAndAction(libL10n.save, libL10n.exit)),
       actions: [
         TextButton(
-          onPressed: () => contextSafe?.pop(false),
+          onPressed: () => contextSafe?.popDialog(false),
           child: Text(libL10n.exitDirectly),
         ),
         TextButton(
-          onPressed: () => contextSafe?.pop(true),
+          onPressed: () => contextSafe?.popDialog(true),
           child: Text(libL10n.ok),
         ),
       ],
