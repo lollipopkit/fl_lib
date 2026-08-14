@@ -20,6 +20,14 @@ class LibLocalizationsTr extends LibLocalizations {
   String get add => 'Ekle';
 
   @override
+  String get addr => 'Adres';
+
+  @override
+  String agoFmt(String time) {
+    return '$time önce';
+  }
+
+  @override
   String get all => 'Tümü';
 
   @override
@@ -28,6 +36,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get app => 'Uygulama';
+
+  @override
+  String get askAiModel => 'Model';
 
   @override
   String askContinue(Object msg) {
@@ -44,10 +55,16 @@ class LibLocalizationsTr extends LibLocalizations {
   String get auto => 'Otomatik';
 
   @override
+  String get available => 'Mevcut';
+
+  @override
   String get background => 'Arka Plan';
 
   @override
   String get backup => 'Yedekleme';
+
+  @override
+  String get battery => 'Pil';
 
   @override
   String get bioAuth => 'Biyometrik doğrulama';
@@ -77,13 +94,32 @@ class LibLocalizationsTr extends LibLocalizations {
   String get close => 'Kapat';
 
   @override
+  String get cmd => 'Komut';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => 'Bağlantı';
+
+  @override
+  String get container => 'Konteyner';
+
+  @override
   String get content => 'İçerik';
+
+  @override
+  String get convert => 'Dönüştür';
 
   @override
   String get copy => 'Kopyala';
 
   @override
   String get custom => 'Özel';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#özel-komutlar';
 
   @override
   String get cut => 'Kes';
@@ -93,6 +129,12 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get day => 'gün';
+
+  @override
+  String get decode => 'Çöz';
+
+  @override
+  String get decompress => 'Sıkıştırmayı aç';
 
   @override
   String delFmt(Object id, Object type) {
@@ -112,7 +154,16 @@ class LibLocalizationsTr extends LibLocalizations {
   String get disabled => 'Devre dışı';
 
   @override
+  String get disconnected => 'Bağlantı kesildi';
+
+  @override
+  String get disk => 'Disk';
+
+  @override
   String get doc => 'Dokümantasyon';
+
+  @override
+  String get done => 'Tamam';
 
   @override
   String get dontShowAgain => 'Bir daha gösterme';
@@ -133,6 +184,12 @@ class LibLocalizationsTr extends LibLocalizations {
   String get empty => 'Boş';
 
   @override
+  String get emulator => 'Emülatör';
+
+  @override
+  String get encode => 'Kodla';
+
+  @override
   String get error => 'Hata';
 
   @override
@@ -149,6 +206,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get exitDirectly => 'Doğrudan çık';
+
+  @override
+  String get experimentalFeature => 'Deneysel Özellik';
 
   @override
   String get export => 'Dışa aktar';
@@ -172,10 +232,22 @@ class LibLocalizationsTr extends LibLocalizations {
   String get font => 'Yazı Tipi';
 
   @override
+  String get force => 'Zorla';
+
+  @override
+  String get foregroundService => 'Önplan Hizmeti';
+
+  @override
   String get found => 'Bulundu';
 
   @override
+  String get goto => 'Git';
+
+  @override
   String get hideTitleBar => 'Başlık çubuğunu gizle';
+
+  @override
+  String get host => 'Ana bilgisayar';
 
   @override
   String get hour => 'saat';
@@ -190,6 +262,18 @@ class LibLocalizationsTr extends LibLocalizations {
   String get init => 'Başlat';
 
   @override
+  String get inner => 'İç';
+
+  @override
+  String get install => 'Kur';
+
+  @override
+  String get invalid => 'Geçersiz';
+
+  @override
+  String get justNow => 'Az önce';
+
+  @override
   String get key => 'Anahtar';
 
   @override
@@ -197,6 +281,12 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get license => 'Lisans';
+
+  @override
+  String get loadingEllipsis => '...';
+
+  @override
+  String get location => 'Konum';
 
   @override
   String get log => 'Kayıt';
@@ -211,7 +301,34 @@ class LibLocalizationsTr extends LibLocalizations {
   String get logout => 'Çıkış yap';
 
   @override
+  String get logs => 'Günlükler';
+
+  @override
+  String get loss => 'Kayıp';
+
+  @override
   String get manual => 'Kılavuz';
+
+  @override
+  String get max => 'Maksimum';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
 
   @override
   String get migrateCfg => 'Yapılandırma geçişi';
@@ -220,7 +337,19 @@ class LibLocalizationsTr extends LibLocalizations {
   String get migrateCfgTip => 'Gerekli yeni yapılandırmaya uyum sağlamak için';
 
   @override
+  String get milliseconds => 'Milisaniye';
+
+  @override
+  String get min => 'Minimum';
+
+  @override
   String get minute => 'dakika';
+
+  @override
+  String get mission => 'Görev';
+
+  @override
+  String get more => 'Daha fazla';
 
   @override
   String get moveDown => 'Aşağı Taşı';
@@ -229,13 +358,25 @@ class LibLocalizationsTr extends LibLocalizations {
   String get moveUp => 'Yukarı Taşı';
 
   @override
+  String get ms => 'ms';
+
+  @override
   String get name => 'Ad';
+
+  @override
+  String get net => 'Ağ';
 
   @override
   String get network => 'Ağ';
 
   @override
   String get next => 'Sonraki';
+
+  @override
+  String get node => 'Düğüm';
+
+  @override
+  String get notAvailable => 'Kullanılamaz';
 
   @override
   String notExistFmt(Object file) {
@@ -261,6 +402,21 @@ class LibLocalizationsTr extends LibLocalizations {
   String get path => 'Yol';
 
   @override
+  String get permission => 'İzin';
+
+  @override
+  String get pingAvg => 'Ort:';
+
+  @override
+  String get pkg => 'Paket';
+
+  @override
+  String get port => 'Port';
+
+  @override
+  String get portForward => 'Port Yönlendirme';
+
+  @override
   String get preview => 'Önizleme';
 
   @override
@@ -270,11 +426,23 @@ class LibLocalizationsTr extends LibLocalizations {
   String get primaryColorSeed => 'Ana renk';
 
   @override
+  String get process => 'İşlem';
+
+  @override
+  String get prune => 'Budamak';
+
+  @override
   String get pwd => 'Şifre';
 
   @override
   String get pwdTip =>
       'Uzunluk 6-32, İngilizce harfler, rakamlar ve noktalama işaretleri olabilir';
+
+  @override
+  String get read => 'Oku';
+
+  @override
+  String get reboot => 'Yeniden başlat';
 
   @override
   String get redo => 'Yeniden Yap';
@@ -298,6 +466,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get reset => 'Sıfırla';
 
   @override
+  String get restart => 'Yeniden başlat';
+
+  @override
   String get restore => 'Geri Yükleme';
 
   @override
@@ -307,10 +478,22 @@ class LibLocalizationsTr extends LibLocalizations {
   String get retry => 'Yeniden Dene';
 
   @override
+  String get route => 'Yönlendirme';
+
+  @override
+  String get run => 'Çalıştır';
+
+  @override
+  String get running => 'Çalışıyor';
+
+  @override
   String get save => 'Kaydet';
 
   @override
   String get saveFailed => 'Kaydetme başarısız';
+
+  @override
+  String get saved => 'Kaydedildi';
 
   @override
   String get search => 'Ara';
@@ -322,10 +505,25 @@ class LibLocalizationsTr extends LibLocalizations {
   String get select => 'Seç';
 
   @override
+  String get sensors => 'Sensör';
+
+  @override
+  String get sequence => 'Sıra';
+
+  @override
+  String get server => 'Sunucu';
+
+  @override
+  String get servers => 'sunucu';
+
+  @override
   String get setting => 'Ayarlar';
 
   @override
   String get share => 'Paylaş';
+
+  @override
+  String get shutdown => 'Kapat';
 
   @override
   String get size => 'Boyut';
@@ -336,13 +534,42 @@ class LibLocalizationsTr extends LibLocalizations {
   }
 
   @override
+  String get snippet => 'Kod parçacığı';
+
+  @override
+  String get speed => 'Hız';
+
+  @override
   String get start => 'Başlat';
+
+  @override
+  String get stat => 'İstatistik';
+
+  @override
+  String get stats => 'İstatistikler';
 
   @override
   String get stop => 'Durdur';
 
   @override
+  String get stopped => 'Durduruldu';
+
+  @override
+  String get storage => 'Depolama';
+
+  @override
   String get success => 'Başarılı';
+
+  @override
+  String get sudoPassword => 'sudo parolası';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
+
+  @override
+  String get suspend => 'Askıya al';
 
   @override
   String get switch_ => 'Geçiş';
@@ -363,13 +590,43 @@ class LibLocalizationsTr extends LibLocalizations {
   String get tapToAuth => 'Doğrulamak için dokunun';
 
   @override
+  String get temperature => 'Sıcaklık';
+
+  @override
+  String get terminal => 'Terminal';
+
+  @override
+  String get test => 'Test';
+
+  @override
+  String get theme => 'Tema';
+
+  @override
   String get themeMode => 'Tema modu';
 
   @override
   String get thinking => 'Düşünüyor';
 
   @override
+  String get time => 'Zaman';
+
+  @override
   String get timeout => 'Zaman Aşımı';
+
+  @override
+  String get times => 'Kez';
+
+  @override
+  String get total => 'Toplam';
+
+  @override
+  String get totalAttempts => 'Toplam';
+
+  @override
+  String get traffic => 'Trafik';
+
+  @override
+  String get ttl => 'TTL';
 
   @override
   String get undo => 'Geri Al';
@@ -387,7 +644,16 @@ class LibLocalizationsTr extends LibLocalizations {
   String get upload => 'Yükle';
 
   @override
+  String get uptime => 'Çalışma süresi';
+
+  @override
+  String get used => 'Kullanıldı';
+
+  @override
   String get user => 'Kullanıcı';
+
+  @override
+  String get valid => 'Geçerli';
 
   @override
   String get value => 'Değer';
@@ -408,269 +674,11 @@ class LibLocalizationsTr extends LibLocalizations {
   }
 
   @override
-  String get yesterday => 'Dün';
-
-  @override
-  String get addr => 'Adres';
-
-  @override
-  String get available => 'Mevcut';
-
-  @override
-  String get convert => 'Dönüştür';
-
-  @override
-  String get experimentalFeature => 'Deneysel Özellik';
-
-  @override
-  String get foregroundService => 'Önplan Hizmeti';
-
-  @override
-  String get goto => 'Git';
-
-  @override
-  String get invalid => 'Geçersiz';
-
-  @override
-  String get valid => 'Geçerli';
-
-  @override
-  String get max => 'Maksimum';
-
-  @override
-  String get min => 'Minimum';
-
-  @override
-  String get more => 'Daha fazla';
-
-  @override
-  String get milliseconds => 'Milisaniye';
-
-  @override
-  String get permission => 'İzin';
-
-  @override
-  String get read => 'Oku';
+  String get view => 'Görüntüle';
 
   @override
   String get write => 'Yaz';
 
   @override
-  String get done => 'Tamam';
-
-  @override
-  String get speed => 'Hız';
-
-  @override
-  String get stat => 'İstatistik';
-
-  @override
-  String get time => 'Zaman';
-
-  @override
-  String get times => 'Kez';
-
-  @override
-  String get used => 'Kullanıldı';
-
-  @override
-  String get view => 'Görüntüle';
-
-  @override
-  String get askAiModel => 'Model';
-
-  @override
-  String get battery => 'Pil';
-
-  @override
-  String get cmd => 'Komut';
-
-  @override
-  String get confirm => 'Confirm';
-
-  @override
-  String get conn => 'Bağlantı';
-
-  @override
-  String get container => 'Konteyner';
-
-  @override
-  String get customCmdDocUrl =>
-      'https://github.com/lollipopkit/flutter_server_box/wiki#özel-komutlar';
-
-  @override
-  String get decode => 'Çöz';
-
-  @override
-  String get decompress => 'Sıkıştırmayı aç';
-
-  @override
-  String get disconnected => 'Bağlantı kesildi';
-
-  @override
-  String get disk => 'Disk';
-
-  @override
-  String get emulator => 'Emülatör';
-
-  @override
-  String get encode => 'Kodla';
-
-  @override
-  String get force => 'Zorla';
-
-  @override
-  String get host => 'Ana bilgisayar';
-
-  @override
-  String get inner => 'İç';
-
-  @override
-  String get install => 'Kur';
-
-  @override
-  String get location => 'Konum';
-
-  @override
-  String get loadingEllipsis => '...';
-
-  @override
-  String get logs => 'Günlükler';
-
-  @override
-  String get loss => 'Kayıp';
-
-  @override
-  String get menuHelp => 'Help';
-
-  @override
-  String get menuInfo => 'Info';
-
-  @override
-  String get menuNavigate => 'Navigate';
-
-  @override
-  String get menuQuit => 'Quit';
-
-  @override
-  String get menuSettings => 'Setting';
-
-  @override
-  String get menuWiki => 'Wiki';
-
-  @override
-  String get mission => 'Görev';
-
-  @override
-  String get ms => 'ms';
-
-  @override
-  String get net => 'Ağ';
-
-  @override
-  String get node => 'Düğüm';
-
-  @override
-  String get notAvailable => 'Kullanılamaz';
-
-  @override
-  String get pingAvg => 'Ort:';
-
-  @override
-  String get pkg => 'Paket';
-
-  @override
-  String get port => 'Port';
-
-  @override
-  String get portForward => 'Port Forward';
-
-  @override
-  String get process => 'İşlem';
-
-  @override
-  String get prune => 'Budamak';
-
-  @override
-  String get reboot => 'Yeniden başlat';
-
-  @override
-  String get restart => 'Yeniden başlat';
-
-  @override
-  String get route => 'Yönlendirme';
-
-  @override
-  String get run => 'Çalıştır';
-
-  @override
-  String get running => 'Çalışıyor';
-
-  @override
-  String get saved => 'Kaydedildi';
-
-  @override
-  String get sensors => 'Sensör';
-
-  @override
-  String get sequence => 'Sıra';
-
-  @override
-  String get server => 'Sunucu';
-
-  @override
-  String get servers => 'sunucu';
-
-  @override
-  String get shutdown => 'Kapat';
-
-  @override
-  String get snippet => 'Kod parçacığı';
-
-  @override
-  String get stats => 'İstatistikler';
-
-  @override
-  String get stopped => 'Durduruldu';
-
-  @override
-  String get storage => 'Depolama';
-
-  @override
-  String get suspend => 'Askıya al';
-
-  @override
-  String get sudoPassword => 'sudo parolası';
-
-  @override
-  String sudoPwdTitle(Object pwd) {
-    return 'sudo $pwd';
-  }
-
-  @override
-  String get temperature => 'Sıcaklık';
-
-  @override
-  String get terminal => 'Terminal';
-
-  @override
-  String get test => 'Test';
-
-  @override
-  String get theme => 'Tema';
-
-  @override
-  String get total => 'Toplam';
-
-  @override
-  String get totalAttempts => 'Toplam';
-
-  @override
-  String get traffic => 'Trafik';
-
-  @override
-  String get ttl => 'TTL';
-
-  @override
-  String get uptime => 'Çalışma süresi';
+  String get yesterday => 'Dün';
 }

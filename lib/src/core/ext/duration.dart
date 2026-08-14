@@ -24,3 +24,22 @@ extension DurationX on Duration {
     return '$seconds ${l10n.second}';
   }
 }
+
+extension DateTimeAgoX on DateTime {
+  /// How long ago this was, in words: `Just now`, `5 minutes ago`.
+  ///
+  /// Anything inside [justNowBelow] reads as "just now" rather than a count of
+  /// seconds — a list of things touched moments apart should not look like a
+  /// stopwatch.
+  String toAgoStr({
+    DateTime? now,
+    Duration justNowBelow = const Duration(minutes: 1),
+  }) {
+    // `difference` on a timestamp from the future is negative, and
+    // [DurationX.toAgoStr] takes the absolute value; treating that as "just
+    // now" is the honest reading of a clock that moved.
+    final elapsed = (now ?? DateTime.now()).difference(this);
+    if (elapsed < justNowBelow) return l10n.justNow;
+    return l10n.agoFmt(elapsed.toAgoStr);
+  }
+}

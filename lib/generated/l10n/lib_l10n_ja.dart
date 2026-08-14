@@ -20,6 +20,14 @@ class LibLocalizationsJa extends LibLocalizations {
   String get add => '追加';
 
   @override
+  String get addr => 'アドレス';
+
+  @override
+  String agoFmt(String time) {
+    return '$time前';
+  }
+
+  @override
   String get all => '全て';
 
   @override
@@ -27,6 +35,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get app => 'アプリケーション';
+
+  @override
+  String get askAiModel => 'モデル';
 
   @override
   String askContinue(Object msg) {
@@ -43,10 +54,16 @@ class LibLocalizationsJa extends LibLocalizations {
   String get auto => '自動';
 
   @override
+  String get available => '利用可能';
+
+  @override
   String get background => '背景';
 
   @override
   String get backup => 'バックアップ';
+
+  @override
+  String get battery => 'バッテリー';
 
   @override
   String get bioAuth => '生体認証';
@@ -76,13 +93,32 @@ class LibLocalizationsJa extends LibLocalizations {
   String get close => '閉じる';
 
   @override
+  String get cmd => 'コマンド';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get conn => '接続';
+
+  @override
+  String get container => 'コンテナ';
+
+  @override
   String get content => 'コンテンツ';
+
+  @override
+  String get convert => '変換';
 
   @override
   String get copy => 'コピーする';
 
   @override
   String get custom => 'カスタム';
+
+  @override
+  String get customCmdDocUrl =>
+      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
 
   @override
   String get cut => '切り取り';
@@ -92,6 +128,12 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get day => '日';
+
+  @override
+  String get decode => 'デコード';
+
+  @override
+  String get decompress => '解凍';
 
   @override
   String delFmt(Object id, Object type) {
@@ -111,7 +153,16 @@ class LibLocalizationsJa extends LibLocalizations {
   String get disabled => '無効化';
 
   @override
+  String get disconnected => '接続が切断されました';
+
+  @override
+  String get disk => 'ディスク';
+
+  @override
   String get doc => 'ドキュメント';
+
+  @override
+  String get done => '完了';
 
   @override
   String get dontShowAgain => '再度表示しない';
@@ -132,6 +183,12 @@ class LibLocalizationsJa extends LibLocalizations {
   String get empty => '空';
 
   @override
+  String get emulator => 'エミュレーター';
+
+  @override
+  String get encode => 'エンコード';
+
+  @override
   String get error => 'エラー';
 
   @override
@@ -148,6 +205,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get exitDirectly => '直接終了する';
+
+  @override
+  String get experimentalFeature => '実験的機能';
 
   @override
   String get export => 'エクスポート';
@@ -171,10 +231,22 @@ class LibLocalizationsJa extends LibLocalizations {
   String get font => 'フォント';
 
   @override
+  String get force => '強制';
+
+  @override
+  String get foregroundService => 'フォアグラウンドサービス';
+
+  @override
   String get found => '見つかりました';
 
   @override
+  String get goto => '移動';
+
+  @override
   String get hideTitleBar => 'タイトルバーを非表示にする';
+
+  @override
+  String get host => 'ホスト';
 
   @override
   String get hour => '時間';
@@ -189,6 +261,18 @@ class LibLocalizationsJa extends LibLocalizations {
   String get init => '初期化';
 
   @override
+  String get inner => '内蔵';
+
+  @override
+  String get install => 'インストール';
+
+  @override
+  String get invalid => '無効';
+
+  @override
+  String get justNow => 'たった今';
+
+  @override
   String get key => 'キー';
 
   @override
@@ -196,6 +280,12 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get license => 'ライセンス';
+
+  @override
+  String get loadingEllipsis => '...';
+
+  @override
+  String get location => '場所';
 
   @override
   String get log => 'ログ';
@@ -210,7 +300,34 @@ class LibLocalizationsJa extends LibLocalizations {
   String get logout => 'ログアウト';
 
   @override
+  String get logs => 'ログ';
+
+  @override
+  String get loss => 'パケットロス';
+
+  @override
   String get manual => 'マニュアル';
+
+  @override
+  String get max => '最大';
+
+  @override
+  String get menuHelp => 'Help';
+
+  @override
+  String get menuInfo => 'Info';
+
+  @override
+  String get menuNavigate => 'Navigate';
+
+  @override
+  String get menuQuit => 'Quit';
+
+  @override
+  String get menuSettings => 'Setting';
+
+  @override
+  String get menuWiki => 'Wiki';
 
   @override
   String get migrateCfg => '設定の移行';
@@ -219,7 +336,19 @@ class LibLocalizationsJa extends LibLocalizations {
   String get migrateCfgTip => '必要な新しい設定に適応するため';
 
   @override
+  String get milliseconds => 'ミリ秒';
+
+  @override
+  String get min => '最小';
+
+  @override
   String get minute => '分';
+
+  @override
+  String get mission => 'ミッション';
+
+  @override
+  String get more => 'もっと';
 
   @override
   String get moveDown => '下へ移動';
@@ -228,13 +357,25 @@ class LibLocalizationsJa extends LibLocalizations {
   String get moveUp => '上へ移動';
 
   @override
+  String get ms => 'ミリ秒';
+
+  @override
   String get name => '名前';
+
+  @override
+  String get net => 'ネットワーク';
 
   @override
   String get network => 'ネットワーク';
 
   @override
   String get next => '次へ';
+
+  @override
+  String get node => 'ノード';
+
+  @override
+  String get notAvailable => '利用不可';
 
   @override
   String notExistFmt(Object file) {
@@ -260,6 +401,21 @@ class LibLocalizationsJa extends LibLocalizations {
   String get path => 'パス';
 
   @override
+  String get permission => '権限';
+
+  @override
+  String get pingAvg => '平均:';
+
+  @override
+  String get pkg => 'パッケージ管理';
+
+  @override
+  String get port => 'ポート';
+
+  @override
+  String get portForward => 'ポートフォワード';
+
+  @override
   String get preview => 'プレビュー';
 
   @override
@@ -269,10 +425,22 @@ class LibLocalizationsJa extends LibLocalizations {
   String get primaryColorSeed => '基本カラーの種';
 
   @override
+  String get process => 'プロセス';
+
+  @override
+  String get prune => '剪定する';
+
+  @override
   String get pwd => 'パスワード';
 
   @override
   String get pwdTip => '6〜32文字で、英字、数字、句読点を使用できます';
+
+  @override
+  String get read => '読み取り';
+
+  @override
+  String get reboot => '再起動';
 
   @override
   String get redo => 'やり直す';
@@ -296,6 +464,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get reset => 'リセット';
 
   @override
+  String get restart => '再開';
+
+  @override
   String get restore => 'リストア';
 
   @override
@@ -305,10 +476,22 @@ class LibLocalizationsJa extends LibLocalizations {
   String get retry => '再試行';
 
   @override
+  String get route => 'ルーティング';
+
+  @override
+  String get run => '実行';
+
+  @override
+  String get running => '実行中';
+
+  @override
   String get save => '保存';
 
   @override
   String get saveFailed => '保存に失敗しました';
+
+  @override
+  String get saved => '保存されました';
 
   @override
   String get search => '検索';
@@ -320,10 +503,25 @@ class LibLocalizationsJa extends LibLocalizations {
   String get select => '選択';
 
   @override
+  String get sensors => 'センサー';
+
+  @override
+  String get sequence => '順序';
+
+  @override
+  String get server => 'サーバー';
+
+  @override
+  String get servers => 'サーバー';
+
+  @override
   String get setting => '設定';
 
   @override
   String get share => '共有';
+
+  @override
+  String get shutdown => 'シャットダウン';
 
   @override
   String get size => 'サイズ';
@@ -334,13 +532,42 @@ class LibLocalizationsJa extends LibLocalizations {
   }
 
   @override
+  String get snippet => 'スニペット';
+
+  @override
+  String get speed => '速度';
+
+  @override
   String get start => '開始';
+
+  @override
+  String get stat => '統計';
+
+  @override
+  String get stats => '統計';
 
   @override
   String get stop => '停止';
 
   @override
+  String get stopped => '停止しました';
+
+  @override
+  String get storage => 'ストレージ';
+
+  @override
   String get success => '成功';
+
+  @override
+  String get sudoPassword => 'sudo パスワード';
+
+  @override
+  String sudoPwdTitle(Object pwd) {
+    return 'sudo $pwd';
+  }
+
+  @override
+  String get suspend => '中断';
 
   @override
   String get switch_ => 'スイッチ';
@@ -361,13 +588,43 @@ class LibLocalizationsJa extends LibLocalizations {
   String get tapToAuth => '認証するにはクリックしてください';
 
   @override
+  String get temperature => '温度';
+
+  @override
+  String get terminal => 'ターミナル';
+
+  @override
+  String get test => 'テスト';
+
+  @override
+  String get theme => 'テーマ';
+
+  @override
   String get themeMode => 'テーマモード';
 
   @override
   String get thinking => '考え中です';
 
   @override
+  String get time => '時間';
+
+  @override
   String get timeout => 'タイムアウト';
+
+  @override
+  String get times => '回';
+
+  @override
+  String get total => '合計';
+
+  @override
+  String get totalAttempts => '総計';
+
+  @override
+  String get traffic => 'トラフィック';
+
+  @override
+  String get ttl => 'TTL';
 
   @override
   String get undo => '元に戻す';
@@ -385,7 +642,16 @@ class LibLocalizationsJa extends LibLocalizations {
   String get upload => 'アップロード';
 
   @override
+  String get uptime => '稼働時間';
+
+  @override
+  String get used => '使用済み';
+
+  @override
   String get user => 'ユーザー';
+
+  @override
+  String get valid => '有効';
 
   @override
   String get value => '値';
@@ -406,269 +672,11 @@ class LibLocalizationsJa extends LibLocalizations {
   }
 
   @override
-  String get yesterday => '昨日';
-
-  @override
-  String get addr => 'アドレス';
-
-  @override
-  String get available => '利用可能';
-
-  @override
-  String get convert => '変換';
-
-  @override
-  String get experimentalFeature => '実験的機能';
-
-  @override
-  String get foregroundService => 'フォアグラウンドサービス';
-
-  @override
-  String get goto => '移動';
-
-  @override
-  String get invalid => '無効';
-
-  @override
-  String get valid => '有効';
-
-  @override
-  String get max => '最大';
-
-  @override
-  String get min => '最小';
-
-  @override
-  String get more => 'もっと';
-
-  @override
-  String get milliseconds => 'ミリ秒';
-
-  @override
-  String get permission => '権限';
-
-  @override
-  String get read => '読み取り';
+  String get view => '表示';
 
   @override
   String get write => '書き込み';
 
   @override
-  String get done => '完了';
-
-  @override
-  String get speed => '速度';
-
-  @override
-  String get stat => '統計';
-
-  @override
-  String get time => '時間';
-
-  @override
-  String get times => '回';
-
-  @override
-  String get used => '使用済み';
-
-  @override
-  String get view => '表示';
-
-  @override
-  String get askAiModel => 'モデル';
-
-  @override
-  String get battery => 'バッテリー';
-
-  @override
-  String get cmd => 'コマンド';
-
-  @override
-  String get confirm => 'Confirm';
-
-  @override
-  String get conn => '接続';
-
-  @override
-  String get container => 'コンテナ';
-
-  @override
-  String get customCmdDocUrl =>
-      'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
-
-  @override
-  String get decode => 'デコード';
-
-  @override
-  String get decompress => '解凍';
-
-  @override
-  String get disconnected => '接続が切断されました';
-
-  @override
-  String get disk => 'ディスク';
-
-  @override
-  String get emulator => 'エミュレーター';
-
-  @override
-  String get encode => 'エンコード';
-
-  @override
-  String get force => '強制';
-
-  @override
-  String get host => 'ホスト';
-
-  @override
-  String get inner => '内蔵';
-
-  @override
-  String get install => 'インストール';
-
-  @override
-  String get location => '場所';
-
-  @override
-  String get loadingEllipsis => '...';
-
-  @override
-  String get logs => 'ログ';
-
-  @override
-  String get loss => 'パケットロス';
-
-  @override
-  String get menuHelp => 'Help';
-
-  @override
-  String get menuInfo => 'Info';
-
-  @override
-  String get menuNavigate => 'Navigate';
-
-  @override
-  String get menuQuit => 'Quit';
-
-  @override
-  String get menuSettings => 'Setting';
-
-  @override
-  String get menuWiki => 'Wiki';
-
-  @override
-  String get mission => 'ミッション';
-
-  @override
-  String get ms => 'ミリ秒';
-
-  @override
-  String get net => 'ネットワーク';
-
-  @override
-  String get node => 'ノード';
-
-  @override
-  String get notAvailable => '利用不可';
-
-  @override
-  String get pingAvg => '平均:';
-
-  @override
-  String get pkg => 'パッケージ管理';
-
-  @override
-  String get port => 'ポート';
-
-  @override
-  String get portForward => 'Port Forward';
-
-  @override
-  String get process => 'プロセス';
-
-  @override
-  String get prune => '剪定する';
-
-  @override
-  String get reboot => '再起動';
-
-  @override
-  String get restart => '再開';
-
-  @override
-  String get route => 'ルーティング';
-
-  @override
-  String get run => '実行';
-
-  @override
-  String get running => '実行中';
-
-  @override
-  String get saved => '保存されました';
-
-  @override
-  String get sensors => 'センサー';
-
-  @override
-  String get sequence => '順序';
-
-  @override
-  String get server => 'サーバー';
-
-  @override
-  String get servers => 'サーバー';
-
-  @override
-  String get shutdown => 'シャットダウン';
-
-  @override
-  String get snippet => 'スニペット';
-
-  @override
-  String get stats => '統計';
-
-  @override
-  String get stopped => '停止しました';
-
-  @override
-  String get storage => 'ストレージ';
-
-  @override
-  String get suspend => '中断';
-
-  @override
-  String get sudoPassword => 'sudo パスワード';
-
-  @override
-  String sudoPwdTitle(Object pwd) {
-    return 'sudo $pwd';
-  }
-
-  @override
-  String get temperature => '温度';
-
-  @override
-  String get terminal => 'ターミナル';
-
-  @override
-  String get test => 'テスト';
-
-  @override
-  String get theme => 'テーマ';
-
-  @override
-  String get total => '合計';
-
-  @override
-  String get totalAttempts => '総計';
-
-  @override
-  String get traffic => 'トラフィック';
-
-  @override
-  String get ttl => 'TTL';
-
-  @override
-  String get uptime => '稼働時間';
+  String get yesterday => '昨日';
 }
