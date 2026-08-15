@@ -97,4 +97,10 @@ abstract final class UIs {
   /// Single column width.
   /// Used for desktop and tablet.
   static const columnWidth = 330.0;
+
+  /// Half again [columnWidth], for content that is read rather than scanned:
+  /// a form field with its description, a chart with its axis labels, a
+  /// settings row with its switch. A page laid out in [columnWidth] columns
+  /// makes the reader cross the screen to get through one of them.
+  static const pageColumnWidth = columnWidth * 1.5;
 }
