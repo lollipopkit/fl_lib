@@ -29,6 +29,8 @@ extension Uint8ListX on Uint8List {
   /// Returns the path of the file.
   Future<String> save({bool compress = true}) async {
     final fileName = await md5Sum;
+    // [Paths.file] is not created at startup on desktop — see [Paths.ensureFile].
+    await Paths.ensureFile();
     final path = '${Paths.file}/$fileName';
     final file = File(path);
     await file.writeAsBytes(this);
