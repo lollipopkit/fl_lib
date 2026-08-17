@@ -1,5 +1,23 @@
 part of 'toast.dart';
 
+/// Clips the top and the bottom, and lets the two sides through.
+///
+/// Growing into place is a vertical clip, so that half of it is the point. The
+/// sides are not: a toast slides in from one of them and casts a shadow on all
+/// four, and a rect that hugs its width cuts off both.
+class _SidesOpen extends CustomClipper<Rect> {
+  const _SidesOpen();
+
+  /// Wider than any window this could be asked to run in.
+  static const _slack = 4000.0;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(-_slack, 0, size.width + _slack, size.height);
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
 /// A single toast.
 class _ToastItem extends StatefulWidget {
   final _ToastEntry entry;
@@ -395,26 +413,33 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
       );
     }
 
-    // Outside the arrival animation, which clips: a toast pulled past its own
-    // bounds has to keep showing, and so does its shadow.
-    card = _buildDraggable(card);
-
     if (!_settled) {
-      card = SizeTransition(
-        sizeFactor: _curve,
-        // Grows from the edge the stack hangs from, so what is already there
-        // does not shift as this one arrives.
-        alignment: fromTop ? Alignment.topLeft : Alignment.bottomLeft,
-        child: FadeTransition(
-          opacity: _curve,
-          child: SlideTransition(
-            position: _slide,
-            textDirection: Directionality.of(context),
-            child: card,
+      final fade = FadeTransition(opacity: _curve, child: card);
+      card = SlideTransition(
+        position: _slide,
+        textDirection: Directionality.of(context),
+        // Grows out of the edge the stack hangs from, so what is already there
+        // does not shift as this one arrives. `SizeTransition` would do this,
+        // but it clips to a rect the width of the toast, which cuts off both the
+        // slide and the shadow — hence the clipper that leaves the sides open.
+        child: AnimatedBuilder(
+          animation: _curve,
+          child: fade,
+          builder: (_, child) => ClipRect(
+            clipper: const _SidesOpen(),
+            child: Align(
+              alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+              heightFactor: _curve.value.clamp(0.0, 1.0),
+              child: child,
+            ),
           ),
         ),
       );
     }
+
+    // Outermost, so that neither the arrival clip nor anything else cuts a toast
+    // that is being pulled past its own bounds.
+    card = _buildDraggable(card);
 
     // Under the front of a closed pile, where there is nothing to hit.
     if (widget.depth > 0 && widget.piled && !widget.bodyAllowed) {
