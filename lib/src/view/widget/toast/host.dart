@@ -58,7 +58,12 @@ class _ToastHostState extends State<ToastHost> {
       // The host only wraps the app; it must not change how the app is
       // measured, so the incoming constraints go through untouched.
       fit: StackFit.passthrough,
-      children: [widget.child, const _ToastLayer()],
+      children: [
+        // The pile changing size marks this stack for paint, and without a
+        // boundary here that walks the whole app looking for layers to reuse.
+        RepaintBoundary(child: widget.child),
+        const _ToastLayer(),
+      ],
     );
   }
 }
@@ -134,12 +139,12 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
     final top = align.isTop ? safe.top + caption + margin.top : null;
     final bottom = align.isTop ? null : safe.bottom + margin.bottom;
 
-    final pile = SizedBox(
-      width: width,
-      child: AnimatedBuilder(
-        animation: _openCurve,
-        builder: (_, _) => _buildPile(entries, width, align),
-      ),
+    // No `AnimatedBuilder` around the pile: opening it used to rebuild every
+    // toast's whole subtree on every frame of the 400ms. The animation is handed
+    // down instead, and the two places that read it — this layout, and the
+    // scale each toast is drawn at — listen to it on their own.
+    final pile = RepaintBoundary(
+      child: SizedBox(width: width, child: _buildPile(entries, width, align)),
     );
 
     // Pinned to neither side edge: stretched across instead, and centred
@@ -167,7 +172,6 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
 
   Widget _buildPile(List<_ToastEntry> entries, double width, ToastAlign align) {
     final piled = entries.length > 1;
-    final open = _openCurve.value;
 
     // Counted over the toasts still holding a place. One on its way out is
     // still in the list, and still on screen giving up its height, but the ones
@@ -175,7 +179,7 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
     var depth = 0;
 
     return _ToastPile(
-      open: open,
+      open: _openCurve,
       fromTop: align.isTop,
       children: [
         for (var i = 0; i < entries.length; i++)
@@ -184,7 +188,7 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
             entry: entries[i],
             width: width,
             depth: entries[i].dismissing.value ? depth : depth++,
-            open: open.clamp(0.0, 1.0),
+            open: _openCurve,
             piled: piled,
             // A body is reachable when there is nothing else the tap could
             // mean: one toast on screen, or a pile the user has already opened.
@@ -220,7 +224,10 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
 /// it — which nothing but the layout knows.
 class _ToastPile extends MultiChildRenderObjectWidget {
   /// 0 piled, 1 opened. Overshoots both while the spring settles.
-  final double open;
+  ///
+  /// The animation rather than its value: the render object subscribes and
+  /// relayouts itself, so a frame of the opening costs no widget rebuild.
+  final Animation<double> open;
 
   /// Whether the stack hangs from the top edge, in which case the front toast
   /// is the topmost one.
@@ -276,15 +283,29 @@ class _RenderToastPile extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _PileParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _PileParentData> {
-  _RenderToastPile({required double open, required bool fromTop})
+  _RenderToastPile({required Animation<double> open, required bool fromTop})
       : _open = open,
         _fromTop = fromTop;
 
-  double _open;
-  set open(double value) {
+  Animation<double> _open;
+  set open(Animation<double> value) {
     if (_open == value) return;
+    if (attached) _open.removeListener(markNeedsLayout);
     _open = value;
+    if (attached) _open.addListener(markNeedsLayout);
     markNeedsLayout();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _open.addListener(markNeedsLayout);
+  }
+
+  @override
+  void detach() {
+    _open.removeListener(markNeedsLayout);
+    super.detach();
   }
 
   bool _fromTop;
@@ -325,13 +346,14 @@ class _RenderToastPile extends RenderBox
     // Both read the depth rather than the index, so a toast on its way out
     // stops taking up a place before it stops taking up height — the heights it
     // contributes to the sum below is already shrinking towards nothing.
+    final open = _open.value;
     final offsets = <double>[];
     var height = 0.0;
     var stacked = 0.0;
     for (var i = 0; i < heights.length; i++) {
       final opened = stacked + depths[i] * _kPileGap;
       final piled = math.min(depths[i], _kMaxPeek) * _kPeek;
-      final offset = _lerp(piled, opened, _open);
+      final offset = _lerp(piled, opened, open);
       offsets.add(offset);
       stacked += heights[i];
       height = math.max(height, offset + heights[i]);

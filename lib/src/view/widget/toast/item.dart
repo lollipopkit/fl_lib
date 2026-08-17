@@ -12,7 +12,10 @@ class _ToastItem extends StatefulWidget {
   final int depth;
 
   /// 0 piled, 1 opened. Drives what the depth is drawn as.
-  final double open;
+  ///
+  /// The animation rather than its value, so that a frame of the pile opening
+  /// rebuilds one transform per toast and not a toast's whole subtree.
+  final Animation<double> open;
 
   /// Whether there is more than one toast, and so a pile at all.
   final bool piled;
@@ -159,6 +162,11 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     // them again — as does a body that is no longer reachable.
     if (widget.paused != oldWidget.paused || widget.bodyAllowed != oldWidget.bodyAllowed) {
       _restartTimer();
+    }
+    // Whether the title fits was measured against the old width. A resized
+    // window is not a dependency change, so nothing else would remeasure it.
+    if (widget.width != oldWidget.width) {
+      _expandable = _computeExpandable();
     }
   }
 
@@ -372,11 +380,20 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     final accent = _data.accentColor(context);
     final fromTop = ToastConfig.align.isTop;
 
-    Widget card = MouseRegion(
-      onEnter: (_) => _onHover(true),
-      onExit: (_) => _onHover(false),
-      child: _buildCard(theme, accent),
-    );
+    // Everything above this is a transform, a clip or a size factor — the
+    // content itself does not change while any of them play, so it is worth a
+    // layer of its own to move around rather than redrawing every frame.
+    Widget card = RepaintBoundary(child: _buildCard(theme, accent));
+
+    // Only where a pointer can hover. On a touch platform it is an annotation
+    // in every hit test for an event that cannot arrive.
+    if (isDesktop) {
+      card = MouseRegion(
+        onEnter: (_) => _onHover(true),
+        onExit: (_) => _onHover(false),
+        child: card,
+      );
+    }
 
     // Outside the arrival animation, which clips: a toast pulled past its own
     // bounds has to keep showing, and so does its shadow.
@@ -416,7 +433,11 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
         final at = math.max(0.0, depth);
         return _PileSlot(
           depth: at,
-          child: _buildDepth(at, fromTop, child!),
+          child: AnimatedBuilder(
+            animation: widget.open,
+            child: child,
+            builder: (_, child) => _buildDepth(at, fromTop, child!),
+          ),
         );
       },
     );
@@ -430,15 +451,17 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   Widget _buildDepth(double depth, bool fromTop, Widget child) {
     if (depth == 0) return child;
 
-    var built = child;
-    final opacity = (1 - (depth - _kMaxPeek)).clamp(0.0, 1.0);
-    if (opacity < 1) {
-      built = Opacity(opacity: math.max(opacity, widget.open), child: built);
-    }
+    final open = widget.open.value.clamp(0.0, 1.0);
+    final scale = _lerp(1 - depth * _kPileScaleStep, 1, open);
+    final opacity = math.max((1 - (depth - _kMaxPeek)).clamp(0.0, 1.0), open);
+    // Once open there is nothing to draw differently, and an identity transform
+    // still costs a layer push.
+    if (scale == 1 && opacity == 1) return child;
+
     return Transform.scale(
-      scale: _lerp(1 - depth * _kPileScaleStep, 1, widget.open),
+      scale: scale,
       alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
-      child: built,
+      child: opacity < 1 ? Opacity(opacity: opacity, child: child) : child,
     );
   }
 
@@ -498,17 +521,24 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   }
 
   /// How long is left, along the bottom edge.
+  ///
+  /// Behind a boundary of its own, and reusing the one box it colours: it ticks
+  /// every frame for the whole life of the toast, and without one that is the
+  /// card, its shadow and its text redrawn each of those frames.
   Widget _buildCountdown(Color accent) {
     if (_data.duration <= Duration.zero) return UIs.placeholder;
 
-    return SizedBox(
-      height: _barHeight,
-      child: ValBuilder(
-        listenable: _countdown,
-        builder: (value) => FractionallySizedBox(
-          alignment: AlignmentDirectional.centerStart,
-          widthFactor: 1 - value,
+    return RepaintBoundary(
+      child: SizedBox(
+        height: _barHeight,
+        child: ValBuilder.child(
+          listenable: _countdown,
           child: ColoredBox(color: accent),
+          builder: (value, child) => FractionallySizedBox(
+            alignment: AlignmentDirectional.centerStart,
+            widthFactor: 1 - value,
+            child: child,
+          ),
         ),
       ),
     );
