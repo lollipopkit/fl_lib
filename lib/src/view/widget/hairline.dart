@@ -50,26 +50,53 @@ class PaneDivider extends StatefulWidget {
 }
 
 class _PaneDividerState extends State<PaneDivider> {
-  bool _active = false;
+  bool _hovered = false;
+  bool _pressed = false;
+
+  /// Either way of having hold of the line. A pointer can be both at once —
+  /// a mouse drag is a press by something that is also hovering — and letting
+  /// go of one must not undo the other.
+  bool get _active => _hovered || _pressed;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) return;
+    setState(() => _hovered = value);
+  }
+
+  void _setPressed(bool value) {
+    if (_pressed == value) return;
+    setState(() => _pressed = value);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
-      onEnter: (_) => setState(() => _active = true),
-      onExit: (_) => setState(() => _active = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (details) => widget.onDrag(details.delta.dx),
-        onHorizontalDragEnd: (_) => widget.onDragEnd?.call(),
-        child: SizedBox(
-          width: PaneDivider.hitWidth,
-          child: Center(
-            child: Container(
-              width: Hairline.thickness,
-              color: _active
-                  ? Hairline.activeColor(context)
-                  : Hairline.color(context),
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      // Touched, rather than dragged. A touchscreen has no hover to have said
+      // anything beforehand, and a horizontal drag is not recognised until the
+      // finger has already moved — so waiting for the drag means the line only
+      // lights up after it has started moving, which is the moment the user no
+      // longer needs telling. `Listener` sees the pointer before the gesture
+      // arena resolves and keeps seeing it after the drag claims it.
+      child: Listener(
+        onPointerDown: (_) => _setPressed(true),
+        onPointerUp: (_) => _setPressed(false),
+        onPointerCancel: (_) => _setPressed(false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: (details) => widget.onDrag(details.delta.dx),
+          onHorizontalDragEnd: (_) => widget.onDragEnd?.call(),
+          child: SizedBox(
+            width: PaneDivider.hitWidth,
+            child: Center(
+              child: Container(
+                width: Hairline.thickness,
+                color: _active
+                    ? Hairline.activeColor(context)
+                    : Hairline.color(context),
+              ),
             ),
           ),
         ),
