@@ -145,12 +145,20 @@ final class SideBarTile extends StatelessWidget {
     required this.title,
     this.selected = false,
     this.live = false,
+    this.icon,
     this.trailing,
     this.onTap,
     this.onLongPress,
   });
 
   final String title;
+
+  /// Drawn before the title, at the size of the row's text.
+  ///
+  /// For a rail whose entries are kinds of thing rather than instances of one:
+  /// a list of servers reads faster without the same icon down the side of it,
+  /// while a list of subjects is quicker to find your place in with them.
+  final IconData? icon;
 
   /// Whether this is the entry being shown.
   final bool selected;
@@ -218,6 +226,14 @@ final class SideBarTile extends StatelessWidget {
                         )
                       : null,
                 ),
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: 17,
+                    color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 9),
+                ],
                 Expanded(
                   child: Text(
                     title,
