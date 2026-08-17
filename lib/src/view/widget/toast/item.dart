@@ -288,17 +288,18 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     _restartTimer();
   }
 
-  /// A tap on the card itself.
+  /// A tap on the card itself, which is the pile's and nothing else's.
   ///
-  /// Every gesture has one meaning at a time: a pile answers with the pile, and
-  /// only once it is open does a tap on one of its toasts mean that toast's
-  /// body. [ToastData.onTap] takes precedence over both, being explicit.
+  /// The body has the chevron, always and only. Otherwise a tap would mean the
+  /// pile with two toasts on screen and the body with one, and on the way to a
+  /// body it would stop a countdown or start it over — a single toast should sit
+  /// there and expire on time however much it is tapped.
+  ///
+  /// [ToastData.onTap] takes precedence, being explicit.
   void _onTap() {
     final onTap = _data.onTap;
     if (onTap != null) return onTap();
-    final togglePile = widget.onPileToggle;
-    if (togglePile != null) return togglePile();
-    _toggleExpand();
+    widget.onPileToggle?.call();
   }
 
   void _onLongPress() {
@@ -531,7 +532,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
       clipBehavior: Clip.antiAlias,
       shape: const RoundedRectangleBorder(borderRadius: _radius),
       child: InkWell(
-        onTap: _data.onTap != null || widget.onPileToggle != null || _canOpenBody ? _onTap : null,
+        onTap: _data.onTap != null || widget.onPileToggle != null ? _onTap : null,
         onLongPress: _onLongPress,
         child: Column(
           mainAxisSize: MainAxisSize.min,
