@@ -9,9 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// change.
 void main() {
   final route = AppRouteNoArg<void>(
-    page: ({Key? key}) => Scaffold(
-      appBar: CustomAppBar(title: const Text('pushed title')),
-      body: const Text('pushed'),
+    page: ({Key? key}) => const Scaffold(
+      appBar: CustomAppBar(title: Text('pushed title')),
+      body: Text('pushed'),
     ),
     path: '/pushed',
   );
@@ -43,7 +43,7 @@ void main() {
                     onGenerateRoute: (settings) => MaterialPageRoute<void>(
                       settings: settings,
                       builder: (paneCtx) => Scaffold(
-                        appBar: CustomAppBar(title: const Text('pane root')),
+                        appBar: const CustomAppBar(title: Text('pane root')),
                         body: TextButton(
                           onPressed: () => route.go(paneCtx),
                           child: const Text('inside'),

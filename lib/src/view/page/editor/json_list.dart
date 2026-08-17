@@ -87,7 +87,7 @@ class _JsonListEditorState extends State<JsonListEditor> {
 
     return SizeTransition(
       sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic),
-      axisAlignment: 0.0,
+      alignment: const AlignmentDirectional(0.0, 0.0),
       child: tile,
     );
   }
