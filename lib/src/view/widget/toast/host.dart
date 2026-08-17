@@ -169,6 +169,11 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
     final piled = entries.length > 1;
     final open = _openCurve.value;
 
+    // Counted over the toasts still holding a place. One on its way out is
+    // still in the list, and still on screen giving up its height, but the ones
+    // behind it are already moving up into where it was.
+    var depth = 0;
+
     return _ToastPile(
       open: open,
       fromTop: align.isTop,
@@ -178,7 +183,7 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
             key: ValueKey(entries[i].id),
             entry: entries[i],
             width: width,
-            depth: i,
+            depth: entries[i].dismissing.value ? depth : depth++,
             open: open.clamp(0.0, 1.0),
             piled: piled,
             // A body is reachable when there is nothing else the tap could
@@ -240,7 +245,32 @@ class _ToastPile extends MultiChildRenderObjectWidget {
   }
 }
 
-class _PileParentData extends ContainerBoxParentData<RenderBox> {}
+/// Tells the pile how deep a toast sits, as a continuous value.
+///
+/// Continuous because the depths change while the pile is on screen: a toast
+/// leaving stops holding its place at once, and the ones behind it have to move
+/// up to where it was rather than snapping a place forward. [_ToastItem]
+/// animates the integer the layer gives it and reports the value in between.
+class _PileSlot extends ParentDataWidget<_PileParentData> {
+  final double depth;
+
+  const _PileSlot({required this.depth, required super.child});
+
+  @override
+  void applyParentData(RenderObject renderObject) {
+    final parentData = renderObject.parentData! as _PileParentData;
+    if (parentData.depth == depth) return;
+    parentData.depth = depth;
+    renderObject.parent?.markNeedsLayout();
+  }
+
+  @override
+  Type get debugTypicalAncestorWidgetClass => _ToastPile;
+}
+
+class _PileParentData extends ContainerBoxParentData<RenderBox> {
+  double depth = 0;
+}
 
 class _RenderToastPile extends RenderBox
     with
@@ -279,36 +309,41 @@ class _RenderToastPile extends RenderBox
 
     final childConstraints = BoxConstraints.tightFor(width: width);
     final heights = <double>[];
+    final depths = <double>[];
     var child = firstChild;
     while (child != null) {
       child.layout(childConstraints, parentUsesSize: true);
       heights.add(child.size.height);
+      depths.add((child.parentData! as _PileParentData).depth);
       child = childAfter(child);
     }
 
-    // Opened: one after another. Piled: each behind the one in front of it,
-    // with only an edge showing, and everything past the peek limit hidden
-    // right behind the last visible edge.
-    final opened = <double>[];
-    var openedTotal = 0.0;
-    for (final height in heights) {
-      opened.add(openedTotal);
-      openedTotal += height + _kPileGap;
+    // Opened: after everything in front of it, one gap per toast still holding a
+    // place. Piled: behind the one in front, only an edge showing, and past the
+    // peek limit tucked right behind the last edge that does.
+    //
+    // Both read the depth rather than the index, so a toast on its way out
+    // stops taking up a place before it stops taking up height — the heights it
+    // contributes to the sum below is already shrinking towards nothing.
+    final offsets = <double>[];
+    var height = 0.0;
+    var stacked = 0.0;
+    for (var i = 0; i < heights.length; i++) {
+      final opened = stacked + depths[i] * _kPileGap;
+      final piled = math.min(depths[i], _kMaxPeek) * _kPeek;
+      final offset = _lerp(piled, opened, _open);
+      offsets.add(offset);
+      stacked += heights[i];
+      height = math.max(height, offset + heights[i]);
     }
-    openedTotal -= _kPileGap;
-    final piledTotal = heights.first + math.min(childCount - 1, _kMaxPeek) * _kPeek;
-
-    final height = _lerp(piledTotal, openedTotal, _open);
     size = Size(width, math.max(0, height));
 
     var i = 0;
     child = firstChild;
     while (child != null) {
       final parentData = child.parentData! as _PileParentData;
-      final piled = math.min(i, _kMaxPeek) * _kPeek;
-      final offset = _lerp(piled, opened[i], _open);
       // Measured from the edge the stack hangs from, whichever that is.
-      parentData.offset = Offset(0, _fromTop ? offset : height - offset - heights[i]);
+      parentData.offset = Offset(0, _fromTop ? offsets[i] : height - offsets[i] - heights[i]);
       i++;
       child = childAfter(child);
     }

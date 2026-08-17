@@ -426,6 +426,10 @@ abstract final class _ToastCtrl {
     if (entry.dismissing.value) return;
     if (entry.mounted) {
       entry.dismissing.value = true;
+      // Republished so that the stack recounts its depths: one on its way out
+      // stops holding a place, and everything behind it starts moving up while
+      // it is still there giving up its height.
+      entries.value = [...entries.value];
       return;
     }
     remove(entry);

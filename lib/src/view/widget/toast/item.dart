@@ -246,7 +246,10 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     _settleFrom = _drag.value;
     _settleTo = thrown ? extent + _rubberLimit : 0;
     _settle.forward(from: 0).whenCompleteOrCancel(() {
-      if (_throwingOut) _ToastCtrl.remove(widget.entry);
+      // Gone from the screen but not yet from the pile: it still has to give up
+      // the height it holds, which is what moves the rest of the pile up. The
+      // same path an expiring toast takes, so both look the same.
+      if (_throwingOut) _ToastCtrl.dismiss(widget.entry);
     });
 
     // Whatever happens next, the toast is no longer under a finger.
@@ -368,7 +371,6 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final accent = _data.accentColor(context);
     final fromTop = ToastConfig.align.isTop;
-    final depth = widget.depth;
 
     Widget card = MouseRegion(
       onEnter: (_) => _onHover(true),
@@ -397,23 +399,47 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
       );
     }
 
-    // Behind the front of the pile: drawn a little smaller, and past the peek
-    // limit not drawn at all. Both settle to normal as the pile opens. Neither
-    // is a layout change, so the pile still measures the full height it will
-    // need once open.
-    if (depth > 0) {
-      final opacity = depth <= _kMaxPeek ? 1.0 : widget.open;
-      if (opacity < 1) card = Opacity(opacity: opacity, child: card);
-      card = Transform.scale(
-        scale: _lerp(1 - depth * _kPileScaleStep, 1, widget.open),
-        alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
-        child: card,
-      );
-      // Under the front of a closed pile, where there is nothing to hit.
-      if (widget.piled && !widget.bodyAllowed) card = IgnorePointer(child: card);
+    // Under the front of a closed pile, where there is nothing to hit.
+    if (widget.depth > 0 && widget.piled && !widget.bodyAllowed) {
+      card = IgnorePointer(child: card);
     }
 
-    return card;
+    // The depth is animated rather than taken as given: the toasts behind one
+    // that leaves are handed a new integer at once, and have to travel to it.
+    // The pile is told the value in between, so its layout travels too.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: widget.depth.toDouble()),
+      duration: Durations.medium2,
+      curve: _kSpring,
+      child: card,
+      builder: (_, depth, child) {
+        final at = math.max(0.0, depth);
+        return _PileSlot(
+          depth: at,
+          child: _buildDepth(at, fromTop, child!),
+        );
+      },
+    );
+  }
+
+  /// Behind the front of the pile a toast is drawn a little smaller, and past
+  /// the peek limit not drawn at all. Both settle to normal as the pile opens.
+  ///
+  /// Neither is a layout change, so the pile still measures the full height each
+  /// toast will need once it is open.
+  Widget _buildDepth(double depth, bool fromTop, Widget child) {
+    if (depth == 0) return child;
+
+    var built = child;
+    final opacity = (1 - (depth - _kMaxPeek)).clamp(0.0, 1.0);
+    if (opacity < 1) {
+      built = Opacity(opacity: math.max(opacity, widget.open), child: built);
+    }
+    return Transform.scale(
+      scale: _lerp(1 - depth * _kPileScaleStep, 1, widget.open),
+      alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+      child: built,
+    );
   }
 
   Widget _buildDraggable(Widget child) {
