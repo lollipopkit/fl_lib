@@ -121,8 +121,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
   /// Whether the arrival animation has finished.
   ///
-  /// [SizeTransition] clips, which while it plays is the point and afterwards is
-  /// not: it would cut off the shadow, and anything dragged past its bounds.
+  /// It clips while it plays, which is the point of it; afterwards there is
+  /// nothing to clip and a clip would cut the shadow and any drag past the
+  /// toast's own bounds, so the whole thing comes out of the tree.
   var _settled = false;
 
   ToastData get _data => widget.entry.data;
@@ -164,7 +165,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     _anime
       ..addStatusListener(_onAnimeStatus)
       ..forward();
-    _restartTimer();
+    _syncTimer();
   }
 
   @override
@@ -176,11 +177,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(_ToastItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Opening the pile holds every countdown in it, and closing it releases
-    // them again — as does a body that is no longer reachable.
-    if (widget.paused != oldWidget.paused || widget.bodyAllowed != oldWidget.bodyAllowed) {
-      _restartTimer();
-    }
+    // Unconditional: opening the pile holds every countdown in it and closing it
+    // releases them, and everything else that reaches here leaves them alone.
+    _syncTimer();
     // Whether the title fits was measured against the old width. A resized
     // window is not a dependency change, so nothing else would remeasure it.
     if (widget.width != oldWidget.width) {
@@ -207,21 +206,39 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
   // -- Actions --
 
-  /// The countdown restarts rather than resumes once the toast is released.
-  /// Pausing it means the user is reading; a message that vanishes half a
-  /// second after the pointer leaves has not been read. The bar going back to
-  /// full is what says so.
-  void _restartTimer() {
-    _timer?.cancel();
-    _timer = null;
-    final duration = _data.duration;
-    if (duration <= Duration.zero) return;
-    if (_isExpanded || _hovering || widget.paused || _dragging) {
+  /// Whether the countdown should be holding right now.
+  bool get _held =>
+      _isExpanded ||
+      _hovering ||
+      _dragging ||
+      _throwingOut ||
+      widget.paused ||
+      widget.entry.dismissing.value;
+
+  /// Brings the countdown in line with [_held].
+  ///
+  /// Idempotent, and that is the point: it runs from every rebuild, and a
+  /// rebuild is not news. A toast next to this one leaving is a rebuild — it
+  /// changes `piled`, and with it `bodyAllowed` — and used to put this toast's
+  /// countdown back to full for it.
+  ///
+  /// What does restart it is being released, having been held: reading it is
+  /// what holding means, and a message that vanishes half a second after the
+  /// pointer leaves has not been read. The bar going back to full while held is
+  /// what says so.
+  void _syncTimer() {
+    if (_data.duration <= Duration.zero) return;
+
+    if (_held) {
+      _timer?.cancel();
+      _timer = null;
       _countdown.stop();
       _countdown.value = 0;
       return;
     }
-    _timer = Timer(duration, () => _ToastCtrl.dismiss(widget.entry));
+
+    if (_timer != null) return;
+    _timer = Timer(_data.duration, () => _ToastCtrl.dismiss(widget.entry));
     _countdown.forward(from: 0);
   }
 
@@ -236,7 +253,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
   void _onHover(bool hovering) {
     _hovering = hovering;
-    _restartTimer();
+    _syncTimer();
   }
 
   void _onAnimeStatus(AnimationStatus status) {
@@ -253,7 +270,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   void _onDragStart() {
     _settle.stop();
     _dragging = true;
-    _restartTimer();
+    _syncTimer();
   }
 
   /// [delta] is in screen pixels along the axis; the sign is normalised so that
@@ -278,14 +295,15 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
       if (_throwingOut) _ToastCtrl.dismiss(widget.entry);
     });
 
-    // Whatever happens next, the toast is no longer under a finger.
-    if (!thrown) _restartTimer();
+    // No longer under a finger. Still held if it is on its way out, which
+    // [_held] knows, so this needs no condition of its own.
+    _syncTimer();
   }
 
   void _toggleExpand() {
     if (!_canOpenBody) return;
     setState(() => _expanded = !_expanded);
-    _restartTimer();
+    _syncTimer();
   }
 
   /// A tap on the card itself, which is the pile's and nothing else's.
