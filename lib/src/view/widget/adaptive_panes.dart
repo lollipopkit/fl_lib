@@ -21,8 +21,8 @@ class AdaptivePanes extends StatefulWidget {
     this.detailId,
     this.onCloseDetail,
     this.minWidthForDetail = 800,
-    this.primaryWidth = 320,
-    this.minPrimaryWidth = 220,
+    this.primaryWidth = 220,
+    this.minPrimaryWidth = 160,
     this.maxPrimaryWidth = 520,
     this.onPrimaryWidthChanged,
   });
@@ -57,9 +57,17 @@ class AdaptivePanes extends StatefulWidget {
   final double minWidthForDetail;
 
   /// Starting width of the list. The user can drag from there.
+  ///
+  /// As narrow as dragging used to allow. The list is an index — what is being
+  /// read is in the other column — and the width it opened with was taken from
+  /// what the detail beside it then had to make do with.
   final double primaryWidth;
 
   /// How narrow and how wide dragging may make the list.
+  ///
+  /// [minPrimaryWidth] is measured rather than chosen: it is the narrowest the
+  /// server list's cards lay out at without overflowing, which
+  /// `test/pane_width_test.dart` holds to.
   final double minPrimaryWidth;
   final double maxPrimaryWidth;
 

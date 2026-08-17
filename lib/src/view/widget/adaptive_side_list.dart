@@ -22,8 +22,8 @@ class AdaptiveSideList extends StatefulWidget {
     required this.builder,
     this.enabled = true,
     this.minWidthForSide = 800,
-    this.sideWidth = 320,
-    this.minSideWidth = 220,
+    this.sideWidth = 220,
+    this.minSideWidth = 160,
     this.maxSideWidth = 520,
     this.onSideWidthChanged,
   });
@@ -49,9 +49,16 @@ class AdaptiveSideList extends StatefulWidget {
   final double minWidthForSide;
 
   /// Starting width of the list. The user can drag from there.
+  ///
+  /// As narrow as dragging used to allow. The list is an index — what is being
+  /// read is in the other column — and the width it opened with was taken from
+  /// what the surface beside it then had to make do with.
   final double sideWidth;
 
   /// How narrow and how wide dragging may make the list.
+  ///
+  /// [minSideWidth] is what a row of this list still reads at: an entry is an
+  /// icon, a name that ellipsizes, and sometimes a trailing control.
   final double minSideWidth;
   final double maxSideWidth;
 
