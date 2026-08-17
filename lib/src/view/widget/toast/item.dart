@@ -538,7 +538,20 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(padding: _padding, child: _buildContent(theme, accent)),
+            // Opening a body is a height change, and one worth playing: the
+            // toast grows and the pile relayouts around it every frame.
+            //
+            // Not clipped here — the card's own clip is what reveals the body as
+            // the height passes over it, and a clip at this level would cut the
+            // shadow instead. No overshoot either: past the full height there is
+            // nothing left to reveal but blank space.
+            AnimatedSize(
+              duration: Durations.medium2,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              clipBehavior: Clip.none,
+              child: Padding(padding: _padding, child: _buildContent(theme, accent)),
+            ),
             _buildCountdown(accent),
           ],
         ),
