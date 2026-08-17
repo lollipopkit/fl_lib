@@ -92,10 +92,13 @@ abstract final class AppUpdateIface {
     }
 
     return switch (result.$2) {
-      AppUpdateLevel.normal => context.showSnackBarWithAction(
-          content: title,
-          action: l10n.update,
-          onTap: showUpdateDialog,
+      AppUpdateLevel.normal => Toast.show(
+          title,
+          level: ToastLevel.info,
+          // Longer than the default: an update notice whose button is gone
+          // after three seconds is a notice the user cannot act on.
+          duration: const Duration(seconds: 10),
+          action: ToastAction(label: l10n.update, onTap: showUpdateDialog),
         ),
       AppUpdateLevel.recommended => showUpdateDialog(),
       AppUpdateLevel.forced => showUpdateDialog(true),

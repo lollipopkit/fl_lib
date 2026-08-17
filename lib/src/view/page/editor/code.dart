@@ -240,7 +240,7 @@ extension on _EditorPageState {
         fn: () => File(path).writeAsString(_controller.text),
       );
       if (res == null) {
-        context.showSnackBar(libL10n.fail);
+        Toast.error(libL10n.fail);
         return;
       }
       final ret = EditorPageRet(EditorPageRetType.path, path);

@@ -35,7 +35,7 @@ final class _ExitConfirmState extends State<ExitConfirm> {
           widget.onPop(context);
         } else {
           _lastExitTS = now;
-          context.showSnackBar(l10n.exitConfirmTip);
+          Toast.show(l10n.exitConfirmTip, tag: 'exit_confirm');
         }
       },
       child: widget.child,
