@@ -350,6 +350,45 @@ void main() {
     expect(split, isFalse);
   });
 
+  testWidgets('an item deleted while its detail is open gives the width back', (
+    tester,
+  ) async {
+    // What deleting a server does. The host keeps its selection as an id and
+    // resolves it to an item every build; once the item is gone the id
+    // resolves to nothing, so both the id and the builder arrive null in the
+    // same frame. Different from closing — nobody pressed anything — and the
+    // pane must not be left holding a detail for something that no longer
+    // exists.
+    await tester.pumpWidget(harness(width: 1000, selected: 'a'));
+    await tester.pumpAndSettle();
+    expect(find.text('detail a'), findsOneWidget);
+    expect(find.text('list compact'), findsOneWidget);
+
+    await tester.pumpWidget(harness(width: 1000));
+    await tester.pumpAndSettle();
+
+    expect(find.text('detail a'), findsNothing);
+    // The whole width, the same as a launch with nothing opened.
+    expect(find.text('list'), findsOneWidget);
+    expect(find.text('list compact'), findsNothing);
+  });
+
+  testWidgets('a deeper page inside it goes with it', (tester) async {
+    // The pane has its own navigator, so a page pushed into it outlives a
+    // detail that merely changed. When the item is deleted it must not.
+    await tester.pumpWidget(harness(width: 1000, selected: 'a'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('go deeper'));
+    await tester.pumpAndSettle();
+    expect(find.text('deeper body'), findsOneWidget);
+
+    await tester.pumpWidget(harness(width: 1000));
+    await tester.pumpAndSettle();
+
+    expect(find.text('deeper body'), findsNothing);
+    expect(find.text('list'), findsOneWidget);
+  });
+
   testWidgets('the list can open a page in the pane beside it', (tester) async {
     // What the whole arrangement exists for: NavTarget.pane from a widget that
     // is not itself inside the pane.

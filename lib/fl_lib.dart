@@ -147,6 +147,7 @@ export 'src/view/widget/choice.dart';
 export 'src/view/widget/code/ctx_menu.dart';
 export 'src/view/widget/code/find_panel.dart';
 export 'src/view/widget/color_picker.dart';
+export 'src/view/widget/dispose_with.dart';
 export 'src/view/widget/error.dart';
 export 'src/view/widget/exit_confirm.dart';
 export 'src/view/widget/fade_in.dart';
