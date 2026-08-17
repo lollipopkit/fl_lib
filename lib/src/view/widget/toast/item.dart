@@ -8,13 +8,42 @@ class _ToastItem extends StatefulWidget {
   /// title fits on one line has to be decided before the row is laid out.
   final double width;
 
-  const _ToastItem({super.key, required this.entry, required this.width});
+  /// 0 is the front of the pile, the newest toast.
+  final int depth;
+
+  /// 0 piled, 1 opened. Drives what the depth is drawn as.
+  final double open;
+
+  /// Whether there is more than one toast, and so a pile at all.
+  final bool piled;
+
+  /// Whether a tap may open the body. False while piled, where a tap means the
+  /// pile instead.
+  final bool bodyAllowed;
+
+  /// Whether the countdown is held, because the pile is open and being read.
+  final bool paused;
+
+  /// Opens or closes the pile. Null when there is only this one toast.
+  final VoidCallback? onPileToggle;
+
+  const _ToastItem({
+    super.key,
+    required this.entry,
+    required this.width,
+    required this.depth,
+    required this.open,
+    required this.piled,
+    required this.bodyAllowed,
+    required this.paused,
+    required this.onPileToggle,
+  });
 
   @override
   State<_ToastItem> createState() => _ToastItemState();
 }
 
-class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMixin {
+class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   static const _animeDuration = Duration(milliseconds: 240);
   static const _radius = BorderRadius.all(Radius.circular(11));
   static const _padding = EdgeInsets.symmetric(horizontal: 12, vertical: 10);
@@ -22,11 +51,23 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
   static const _iconSize = 18.0;
   static const _lineHeight = 18.0;
   static const _chevronSlot = _iconSize + _gap;
+  static const _barHeight = 1.0;
   static const _titleStyle = TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3);
 
   late final AnimationController _anime;
+
+  /// Height and opacity, which cannot overshoot.
   late final CurvedAnimation _curve;
+
+  /// Displacement, which springs past its mark and settles back.
+  late final CurvedAnimation _slideCurve;
+
   late final Animation<Offset> _slide;
+
+  /// Drives the countdown bar only. The dismissal itself is a [Timer]: a ticker
+  /// is muted while the window is not being drawn, and how long a message stays
+  /// should not depend on that.
+  late final AnimationController _countdown;
 
   Timer? _timer;
   Timer? _copiedTimer;
@@ -49,10 +90,24 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
+    _slideCurve = CurvedAnimation(
+      parent: _anime,
+      curve: _kSpring,
+      reverseCurve: Curves.easeInCubic,
+    );
+    // In from the edge it is pinned to. The dx is in logical direction — the
+    // `SlideTransition` below is given the text direction and flips it in RTL.
     _slide = Tween<Offset>(
-      begin: Offset(ToastConfig.align.isEnd ? 0.25 : -0.25, 0),
+      begin: switch (ToastConfig.align) {
+        ToastAlign.topEnd || ToastAlign.bottomEnd => const Offset(0.25, 0),
+        ToastAlign.topStart || ToastAlign.bottomStart => const Offset(-0.25, 0),
+        ToastAlign.topCenter => const Offset(0, -0.4),
+        ToastAlign.bottomCenter => const Offset(0, 0.4),
+      },
       end: Offset.zero,
-    ).animate(_curve);
+    ).animate(_slideCurve);
+
+    _countdown = AnimationController(vsync: this, duration: _data.duration);
 
     _anime.forward();
     _restartTimer();
@@ -65,6 +120,16 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
   }
 
   @override
+  void didUpdateWidget(_ToastItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Opening the pile holds every countdown in it, and closing it releases
+    // them again — as does a body that is no longer reachable.
+    if (widget.paused != oldWidget.paused || widget.bodyAllowed != oldWidget.bodyAllowed) {
+      _restartTimer();
+    }
+  }
+
+  @override
   void dispose() {
     // Back to unowned. An entry whose host went away has nothing left to play
     // its exit animation, and must be droppable outright.
@@ -73,6 +138,8 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
     _timer?.cancel();
     _copiedTimer?.cancel();
     _curve.dispose();
+    _slideCurve.dispose();
+    _countdown.dispose();
     _anime.dispose();
     super.dispose();
   }
@@ -81,18 +148,26 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
 
   /// The countdown restarts rather than resumes once the toast is released.
   /// Pausing it means the user is reading; a message that vanishes half a
-  /// second after the pointer leaves has not been read.
+  /// second after the pointer leaves has not been read. The bar going back to
+  /// full is what says so.
   void _restartTimer() {
     _timer?.cancel();
     _timer = null;
     final duration = _data.duration;
-    if (duration <= Duration.zero || _expanded || _hovering) return;
+    if (duration <= Duration.zero) return;
+    if (_isExpanded || _hovering || widget.paused) {
+      _countdown.stop();
+      _countdown.value = 0;
+      return;
+    }
     _timer = Timer(duration, () => _ToastCtrl.dismiss(widget.entry));
+    _countdown.forward(from: 0);
   }
 
   void _onDismissing() {
     if (!widget.entry.dismissing.value) return;
     _timer?.cancel();
+    _countdown.stop();
     // Removed only after the exit animation, so that the toasts below it slide
     // up instead of jumping.
     _anime.reverse().whenCompleteOrCancel(() => _ToastCtrl.remove(widget.entry));
@@ -104,14 +179,21 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
   }
 
   void _toggleExpand() {
-    if (!_expandable) return;
+    if (!_canOpenBody) return;
     setState(() => _expanded = !_expanded);
     _restartTimer();
   }
 
+  /// A tap on the card itself.
+  ///
+  /// Every gesture has one meaning at a time: a pile answers with the pile, and
+  /// only once it is open does a tap on one of its toasts mean that toast's
+  /// body. [ToastData.onTap] takes precedence over both, being explicit.
   void _onTap() {
     final onTap = _data.onTap;
     if (onTap != null) return onTap();
+    final togglePile = widget.onPileToggle;
+    if (togglePile != null) return togglePile();
     _toggleExpand();
   }
 
@@ -135,6 +217,13 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
   }
 
   // -- Utils --
+
+  /// Whether the body is showing. [_expanded] is what the user asked for;
+  /// while piled there is no room to honour it.
+  bool get _isExpanded => _expanded && widget.bodyAllowed;
+
+  /// Whether a body can be opened at all right now.
+  bool get _canOpenBody => _expandable && widget.bodyAllowed;
 
   /// Whether there is anything to reveal.
   ///
@@ -163,36 +252,71 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
     return exceeded;
   }
 
+  /// Outwards only, the way it came in.
+  ///
+  /// Dragging a toast in the end corner towards the middle of the window is a
+  /// drag across the content it covers, and there is no edge that way. For one
+  /// pinned to no side edge the only way out is up or down.
+  ///
+  /// `startToEnd` and `endToStart` are resolved against the text direction, as
+  /// [ToastAlign.isEnd] is, so this holds in RTL too.
+  static DismissDirection get _dismissDirection {
+    final align = ToastConfig.align;
+    if (align.isEnd) return DismissDirection.startToEnd;
+    if (align.isStart) return DismissDirection.endToStart;
+    return align.isTop ? DismissDirection.up : DismissDirection.down;
+  }
+
   // -- Widget build --
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = _data.accentColor(context);
+    final fromTop = ToastConfig.align.isTop;
+    final depth = widget.depth;
 
-    return SizeTransition(
+    Widget card = SizeTransition(
       sizeFactor: _curve,
-      alignment: Alignment.topLeft,
+      // Grows from the edge the stack hangs from, so what is already there does
+      // not shift as this one arrives.
+      alignment: fromTop ? Alignment.topLeft : Alignment.bottomLeft,
       child: FadeTransition(
         opacity: _curve,
         child: SlideTransition(
           position: _slide,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: _gap),
-            child: Dismissible(
-              key: ValueKey('toast_${widget.entry.id}'),
-              direction: DismissDirection.horizontal,
-              onDismissed: (_) => _ToastCtrl.remove(widget.entry),
-              child: MouseRegion(
-                onEnter: (_) => _onHover(true),
-                onExit: (_) => _onHover(false),
-                child: _buildCard(theme, accent),
-              ),
+          textDirection: Directionality.of(context),
+          child: Dismissible(
+            key: ValueKey('toast_${widget.entry.id}'),
+            direction: _dismissDirection,
+            onDismissed: (_) => _ToastCtrl.remove(widget.entry),
+            child: MouseRegion(
+              onEnter: (_) => _onHover(true),
+              onExit: (_) => _onHover(false),
+              child: _buildCard(theme, accent),
             ),
           ),
         ),
       ),
     );
+
+    // Behind the front of the pile: drawn a little smaller, and past the peek
+    // limit not drawn at all. Both settle to normal as the pile opens. Neither
+    // is a layout change, so the pile still measures the full height it will
+    // need once open.
+    if (depth > 0) {
+      final opacity = depth <= _kMaxPeek ? 1.0 : widget.open;
+      if (opacity < 1) card = Opacity(opacity: opacity, child: card);
+      card = Transform.scale(
+        scale: _lerp(1 - depth * _kPileScaleStep, 1, widget.open),
+        alignment: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+        child: card,
+      );
+      // Under the front of a closed pile, where there is nothing to hit.
+      if (widget.piled && !widget.bodyAllowed) card = IgnorePointer(child: card);
+    }
+
+    return card;
   }
 
   Widget _buildCard(ThemeData theme, Color accent) {
@@ -215,9 +339,33 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
         ),
       ),
       child: InkWell(
-        onTap: _data.onTap != null || _expandable ? _onTap : null,
+        onTap: _data.onTap != null || widget.onPileToggle != null || _canOpenBody ? _onTap : null,
         onLongPress: _onLongPress,
-        child: Padding(padding: _padding, child: _buildContent(theme, accent)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(padding: _padding, child: _buildContent(theme, accent)),
+            _buildCountdown(accent),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// How long is left, along the bottom edge.
+  Widget _buildCountdown(Color accent) {
+    if (_data.duration <= Duration.zero) return UIs.placeholder;
+
+    return SizedBox(
+      height: _barHeight,
+      child: ValBuilder(
+        listenable: _countdown,
+        builder: (value) => FractionallySizedBox(
+          alignment: AlignmentDirectional.centerStart,
+          widthFactor: 1 - value,
+          child: ColoredBox(color: accent),
+        ),
       ),
     );
   }
@@ -246,10 +394,10 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
                   Text(
                     data.title,
                     style: _titleStyle,
-                    maxLines: _expanded ? null : 1,
-                    overflow: _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+                    maxLines: _isExpanded ? null : 1,
+                    overflow: _isExpanded ? TextOverflow.clip : TextOverflow.ellipsis,
                   ),
-                  if (_expanded && body != null) ...[
+                  if (_isExpanded && body != null) ...[
                     const SizedBox(height: 5),
                     Text(body, style: UIs.text12Grey),
                   ],
@@ -270,7 +418,7 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
               child: Text(action.label, style: UIs.text12),
             ),
           ),
-        if (_expandable) ...[
+        if (_canOpenBody) ...[
           const SizedBox(width: _gap),
           // Its own target rather than the whole card: when the call site took
           // the tap over with `onTap`, this is the only way left to open it.
@@ -280,7 +428,7 @@ class _ToastItemState extends State<_ToastItem> with SingleTickerProviderStateMi
               onTap: _toggleExpand,
               radius: 16,
               child: AnimatedRotation(
-                turns: _expanded ? 0.5 : 0,
+                turns: _isExpanded ? 0.5 : 0,
                 duration: Durations.short3,
                 child: Icon(
                   Icons.keyboard_arrow_down,

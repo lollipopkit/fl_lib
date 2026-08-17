@@ -1,5 +1,23 @@
 part of 'toast.dart';
 
+/// How many toasts show an edge from behind the front one while piled.
+const _kMaxPeek = 2;
+
+/// How much of each of those shows.
+const _kPeek = 7.0;
+
+/// Between two toasts once the pile is opened.
+const _kPileGap = 8.0;
+
+/// How much smaller each toast behind the front one is drawn.
+const _kPileScaleStep = 0.035;
+
+/// Displacement overshoots and settles instead of easing to a stop.
+///
+/// Only displacement: a size factor past 1 is blank space below the content,
+/// and an opacity past 1 asserts. Those two keep an ordinary ease.
+const _kSpring = Curves.easeOutBack;
+
 /// Where the toasts are drawn.
 ///
 /// Wrap it around the app in `MaterialApp.builder`, so that the stack sits
@@ -45,51 +63,286 @@ class _ToastHostState extends State<ToastHost> {
   }
 }
 
-class _ToastLayer extends StatelessWidget {
+class _ToastLayer extends StatefulWidget {
   const _ToastLayer();
 
   @override
-  Widget build(BuildContext context) {
-    return ValBuilder(
-      listenable: _ToastCtrl.entries,
-      builder: (entries) {
-        if (entries.isEmpty) return UIs.placeholder;
+  State<_ToastLayer> createState() => _ToastLayerState();
+}
 
-        final align = ToastConfig.align;
-        final margin = ToastConfig.margin;
-        final dir = Directionality.of(context);
-        final ltr = dir == TextDirection.ltr;
-        final mediaQuery = MediaQuery.of(context);
-        final safe = mediaQuery.padding;
+class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderStateMixin {
+  late final AnimationController _openCtrl;
+  late final CurvedAnimation _openCurve;
 
-        final width = math.min(
-          ToastConfig.maxWidth,
-          mediaQuery.size.width - margin.horizontal - safe.horizontal,
-        );
+  /// Whether the user has opened the pile. Only meaningful with more than one
+  /// toast; with one there is nothing to open and the two layouts coincide.
+  var _opened = false;
 
-        // On Windows and Linux the virtual window frame draws the minimize and
-        // close buttons across the top; a toast in that band would sit on them.
-        final caption = WindowFrameConfig.showCaption ? CustomAppBar.sysStatusBarHeight : 0.0;
-
-        return Positioned.directional(
-          textDirection: dir,
-          top: align.isTop ? safe.top + caption + margin.top : null,
-          bottom: align.isTop ? null : safe.bottom + margin.bottom,
-          start: align.isEnd ? null : (ltr ? safe.left + margin.left : safe.right + margin.right),
-          end: align.isEnd ? (ltr ? safe.right + margin.right : safe.left + margin.left) : null,
-          child: SizedBox(
-            width: width,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final entry in entries)
-                  _ToastItem(key: ValueKey(entry.id), entry: entry, width: width),
-              ],
-            ),
-          ),
-        );
-      },
+  @override
+  void initState() {
+    super.initState();
+    _openCtrl = AnimationController(vsync: this, duration: Durations.medium4);
+    _openCurve = CurvedAnimation(
+      parent: _openCtrl,
+      curve: _kSpring,
+      reverseCurve: _kSpring.flipped,
     );
   }
+
+  @override
+  void dispose() {
+    _openCurve.dispose();
+    _openCtrl.dispose();
+    super.dispose();
+  }
+
+  void _togglePile() {
+    setState(() => _opened = !_opened);
+    if (_opened) {
+      _openCtrl.forward();
+    } else {
+      _openCtrl.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValBuilder(listenable: _ToastCtrl.entries, builder: _build);
+  }
+
+  Widget _build(List<_ToastEntry> entries) {
+    if (entries.isEmpty) {
+      _resetWhenEmptied();
+      return UIs.placeholder;
+    }
+
+    final align = ToastConfig.align;
+    final margin = ToastConfig.margin;
+    final dir = Directionality.of(context);
+    final ltr = dir == TextDirection.ltr;
+    final mediaQuery = MediaQuery.of(context);
+    final safe = mediaQuery.padding;
+
+    final width = math.min(
+      ToastConfig.maxWidth,
+      mediaQuery.size.width - margin.horizontal - safe.horizontal,
+    );
+
+    // On Windows and Linux the virtual window frame draws the minimize and
+    // close buttons across the top; a toast in that band would sit on them.
+    final caption = WindowFrameConfig.showCaption ? CustomAppBar.sysStatusBarHeight : 0.0;
+    final top = align.isTop ? safe.top + caption + margin.top : null;
+    final bottom = align.isTop ? null : safe.bottom + margin.bottom;
+
+    final pile = SizedBox(
+      width: width,
+      child: AnimatedBuilder(
+        animation: _openCurve,
+        builder: (_, _) => _buildPile(entries, width, align),
+      ),
+    );
+
+    // Pinned to neither side edge: stretched across instead, and centred
+    // within that. `Align` shrink-wraps the height, which is unbounded here
+    // because only one of top and bottom is given.
+    if (align.isCenter) {
+      return Positioned(
+        top: top,
+        bottom: bottom,
+        left: 0,
+        right: 0,
+        child: Align(alignment: Alignment.topCenter, child: pile),
+      );
+    }
+
+    return Positioned.directional(
+      textDirection: dir,
+      top: top,
+      bottom: bottom,
+      start: align.isEnd ? null : (ltr ? safe.left + margin.left : safe.right + margin.right),
+      end: align.isEnd ? (ltr ? safe.right + margin.right : safe.left + margin.left) : null,
+      child: pile,
+    );
+  }
+
+  Widget _buildPile(List<_ToastEntry> entries, double width, ToastAlign align) {
+    final piled = entries.length > 1;
+    final open = _openCurve.value;
+
+    return _ToastPile(
+      open: open,
+      fromTop: align.isTop,
+      children: [
+        for (var i = 0; i < entries.length; i++)
+          _ToastItem(
+            key: ValueKey(entries[i].id),
+            entry: entries[i],
+            width: width,
+            depth: i,
+            open: open.clamp(0.0, 1.0),
+            piled: piled,
+            // A body is reachable when there is nothing else the tap could
+            // mean: one toast on screen, or a pile the user has already opened.
+            bodyAllowed: !piled || _opened,
+            // Reading a pile is why it was opened; nothing in it should expire
+            // in the middle of that.
+            paused: piled && _opened,
+            onPileToggle: piled ? _togglePile : null,
+          ),
+      ],
+    );
+  }
+
+  /// Back to a pile, ready for the next batch.
+  ///
+  /// Deferred a frame: this runs from a build, and the controller has listeners
+  /// that would be told to rebuild during it.
+  void _resetWhenEmptied() {
+    if (!_opened) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _ToastCtrl.entries.value.isNotEmpty) return;
+      setState(() => _opened = false);
+      _openCtrl.value = 0;
+    });
+  }
 }
+
+/// Lays the toasts out as a pile that opens into a list.
+///
+/// A custom layout rather than a [Stack] that gives way to a [Column]: the two
+/// arrangements have to be interpolated frame by frame, and where the third
+/// toast of the opened list goes is the sum of the heights of the two before
+/// it — which nothing but the layout knows.
+class _ToastPile extends MultiChildRenderObjectWidget {
+  /// 0 piled, 1 opened. Overshoots both while the spring settles.
+  final double open;
+
+  /// Whether the stack hangs from the top edge, in which case the front toast
+  /// is the topmost one.
+  final bool fromTop;
+
+  const _ToastPile({
+    required super.children,
+    required this.open,
+    required this.fromTop,
+  });
+
+  @override
+  _RenderToastPile createRenderObject(BuildContext context) {
+    return _RenderToastPile(open: open, fromTop: fromTop);
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderToastPile renderObject) {
+    renderObject
+      ..open = open
+      ..fromTop = fromTop;
+  }
+}
+
+class _PileParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderToastPile extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _PileParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _PileParentData> {
+  _RenderToastPile({required double open, required bool fromTop})
+      : _open = open,
+        _fromTop = fromTop;
+
+  double _open;
+  set open(double value) {
+    if (_open == value) return;
+    _open = value;
+    markNeedsLayout();
+  }
+
+  bool _fromTop;
+  set fromTop(bool value) {
+    if (_fromTop == value) return;
+    _fromTop = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderObject child) {
+    if (child.parentData is! _PileParentData) child.parentData = _PileParentData();
+  }
+
+  @override
+  void performLayout() {
+    final width = constraints.maxWidth;
+    if (childCount == 0) {
+      size = Size(width, 0);
+      return;
+    }
+
+    final childConstraints = BoxConstraints.tightFor(width: width);
+    final heights = <double>[];
+    var child = firstChild;
+    while (child != null) {
+      child.layout(childConstraints, parentUsesSize: true);
+      heights.add(child.size.height);
+      child = childAfter(child);
+    }
+
+    // Opened: one after another. Piled: each behind the one in front of it,
+    // with only an edge showing, and everything past the peek limit hidden
+    // right behind the last visible edge.
+    final opened = <double>[];
+    var openedTotal = 0.0;
+    for (final height in heights) {
+      opened.add(openedTotal);
+      openedTotal += height + _kPileGap;
+    }
+    openedTotal -= _kPileGap;
+    final piledTotal = heights.first + math.min(childCount - 1, _kMaxPeek) * _kPeek;
+
+    final height = _lerp(piledTotal, openedTotal, _open);
+    size = Size(width, math.max(0, height));
+
+    var i = 0;
+    child = firstChild;
+    while (child != null) {
+      final parentData = child.parentData! as _PileParentData;
+      final piled = math.min(i, _kMaxPeek) * _kPeek;
+      final offset = _lerp(piled, opened[i], _open);
+      // Measured from the edge the stack hangs from, whichever that is.
+      parentData.offset = Offset(0, _fromTop ? offset : height - offset - heights[i]);
+      i++;
+      child = childAfter(child);
+    }
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    // Back to front: the newest toast is the first child and has to be drawn
+    // last to sit above the rest of the pile.
+    var child = lastChild;
+    while (child != null) {
+      final parentData = child.parentData! as _PileParentData;
+      context.paintChild(child, offset + parentData.offset);
+      child = childBefore(child);
+    }
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    // Front to back, the order they are drawn in reversed.
+    var child = firstChild;
+    while (child != null) {
+      final target = child;
+      final parentData = target.parentData! as _PileParentData;
+      final hit = result.addWithPaintOffset(
+        offset: parentData.offset,
+        position: position,
+        hitTest: (result, position) => target.hitTest(result, position: position),
+      );
+      if (hit) return true;
+      child = childAfter(target);
+    }
+    return false;
+  }
+}
+
+double _lerp(double a, double b, double t) => a + (b - a) * t;

@@ -8,6 +8,7 @@ import 'package:fl_lib/src/view/widget/appbar.dart';
 import 'package:fl_lib/src/view/widget/val_builder.dart';
 import 'package:fl_lib/src/view/widget/virtual_window_frame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 part 'host.dart';
@@ -200,15 +201,32 @@ abstract final class Toast {
 /// color. [ToastLevel.none] is a plain message with neither.
 enum ToastLevel { none, success, error, warn, info }
 
-/// Which corner the toasts stack in.
+/// Where the toasts stack.
+///
+/// `start` and `end` follow the text direction: [topEnd] is the top right in a
+/// left-to-right locale and the top left in a right-to-left one.
 enum ToastAlign {
   topStart,
+  topCenter,
   topEnd,
   bottomStart,
+  bottomCenter,
   bottomEnd;
 
-  bool get isTop => this == topStart || this == topEnd;
+  /// Whether the stack hangs from the top edge, newest first.
+  bool get isTop => switch (this) {
+        topStart || topCenter || topEnd => true,
+        bottomStart || bottomCenter || bottomEnd => false,
+      };
+
+  /// Pinned to the end edge.
   bool get isEnd => this == topEnd || this == bottomEnd;
+
+  /// Pinned to the start edge.
+  bool get isStart => this == topStart || this == bottomStart;
+
+  /// Pinned to neither side edge, centred between them.
+  bool get isCenter => this == topCenter || this == bottomCenter;
 }
 
 /// App-wide defaults, so that they can be changed without touching call sites.
@@ -223,10 +241,12 @@ abstract final class ToastConfig {
   /// Width of a toast, unless the window is too narrow for it.
   static double maxWidth = 380;
 
-  /// Distance from the corner named by [align].
+  /// Distance from the window edges. The side insets are unused when [align]
+  /// is centred horizontally, other than to bound [maxWidth].
   static EdgeInsets margin = const EdgeInsets.all(12);
 
-  /// Which corner the toasts stack in.
+  /// Where the toasts stack. Also decides which way one is dragged away, which
+  /// is always towards the nearest edge.
   static ToastAlign align = ToastAlign.topEnd;
 }
 
