@@ -102,13 +102,22 @@ final class SideBarSection extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 14, 14, 6),
       child: Row(
         children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: scheme.onSurfaceVariant,
+          // Allowed to give way. Its callers pass a single word — "RUNNING",
+          // "BROWSING" — but a heading in a rail this narrow that is sized to
+          // its own text takes the rule's width and then runs past the column;
+          // a longer label in another language does it in a rail that was fine
+          // in English.
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
           ),
           const SizedBox(width: 8),

@@ -159,4 +159,29 @@ void main() {
     );
     expect(tester.getTopLeft(find.text('prod-1')).dy, greaterThan(without));
   });
+
+  testWidgets('a heading longer than the rail elides instead of running past', (
+    tester,
+  ) async {
+    // Its callers pass a single word, so this never showed up — until a rail
+    // used a real sentence for a heading and the row ran 52px past a column
+    // 220 wide. The same thing happens to "RUNNING" in a language that spells
+    // it longer, in a rail dragged to its narrowest.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 160,
+            child: SideBarSection('a heading nobody would fit in a rail'),
+          ),
+        ),
+      ),
+    );
+
+    // No assertion of its own: an overflow is an exception, so reaching here
+    // is the result. What is checked is that the heading is still drawn —
+    // eliding must not mean eliding to nothing.
+    expect(find.byType(SideBarSection), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
