@@ -128,10 +128,13 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
     final mediaQuery = MediaQuery.of(context);
     final safe = mediaQuery.padding;
 
-    final width = math.min(
-      ToastConfig.maxWidth,
-      mediaQuery.size.width - margin.horizontal - safe.horizontal,
-    );
+    // Nothing rather than a negative box: the margins and the safe area are
+    // fixed, so a window narrow enough — a phone in a split view, a desktop
+    // window mid-drag — takes what is left below zero, and `SizedBox` asserts
+    // on that before anything gets a chance to look wrong.
+    final available = mediaQuery.size.width - margin.horizontal - safe.horizontal;
+    if (available <= 0) return UIs.placeholder;
+    final width = math.min(ToastConfig.maxWidth, available);
 
     // On Windows and Linux the virtual window frame draws the minimize and
     // close buttons across the top; a toast in that band would sit on them.
