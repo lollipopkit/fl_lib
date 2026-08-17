@@ -52,6 +52,16 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   static const _lineHeight = 18.0;
   static const _chevronSlot = _iconSize + _gap;
   static const _barHeight = 1.0;
+
+  /// How far a toast can be pulled inwards, away from the edge it hangs on.
+  /// It never reaches this, only approaches it, so the pull runs out of give.
+  static const _rubberLimit = 36.0;
+
+  /// Of the axis, past which letting go throws the toast out instead of back.
+  static const _dismissAt = 0.35;
+
+  /// Or this fast, in logical pixels a second, however far it got.
+  static const _dismissSpeed = 620.0;
   static const _titleStyle = TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3);
 
   late final AnimationController _anime;
@@ -69,12 +79,30 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   /// should not depend on that.
   late final AnimationController _countdown;
 
+  /// Runs the toast back to place, or the rest of the way out.
+  late final AnimationController _settle;
+
+  /// How far it has been pulled along the axis, before the rubber band. Signed
+  /// so that positive is towards the edge the toast hangs on, whichever that is.
+  final _drag = ValueNotifier(0.0);
+
+  var _settleFrom = 0.0;
+  var _settleTo = 0.0;
+  var _throwingOut = false;
+  var _dragging = false;
+
   Timer? _timer;
   Timer? _copiedTimer;
   late bool _expanded = _data.expanded;
   var _hovering = false;
   var _copied = false;
   var _expandable = false;
+
+  /// Whether the arrival animation has finished.
+  ///
+  /// [SizeTransition] clips, which while it plays is the point and afterwards is
+  /// not: it would cut off the shadow, and anything dragged past its bounds.
+  var _settled = false;
 
   ToastData get _data => widget.entry.data;
 
@@ -109,7 +137,12 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
     _countdown = AnimationController(vsync: this, duration: _data.duration);
 
-    _anime.forward();
+    _settle = AnimationController(vsync: this, duration: Durations.short4)
+      ..addListener(_onSettleTick);
+
+    _anime
+      ..addStatusListener(_onAnimeStatus)
+      ..forward();
     _restartTimer();
   }
 
@@ -140,6 +173,8 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     _curve.dispose();
     _slideCurve.dispose();
     _countdown.dispose();
+    _settle.dispose();
+    _drag.dispose();
     _anime.dispose();
     super.dispose();
   }
@@ -155,7 +190,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     _timer = null;
     final duration = _data.duration;
     if (duration <= Duration.zero) return;
-    if (_isExpanded || _hovering || widget.paused) {
+    if (_isExpanded || _hovering || widget.paused || _dragging) {
       _countdown.stop();
       _countdown.value = 0;
       return;
@@ -176,6 +211,46 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   void _onHover(bool hovering) {
     _hovering = hovering;
     _restartTimer();
+  }
+
+  void _onAnimeStatus(AnimationStatus status) {
+    final settled = status == AnimationStatus.completed;
+    if (settled == _settled) return;
+    setState(() => _settled = settled);
+  }
+
+  void _onSettleTick() {
+    final curve = _throwingOut ? Curves.easeOut : _kSpring;
+    _drag.value = _settleFrom + (_settleTo - _settleFrom) * curve.transform(_settle.value);
+  }
+
+  void _onDragStart() {
+    _settle.stop();
+    _dragging = true;
+    _restartTimer();
+  }
+
+  /// [delta] is in screen pixels along the axis; the sign is normalised so that
+  /// what is accumulated always counts positive towards the edge.
+  void _onDragUpdate(double delta) {
+    _drag.value += delta * _outwardSign;
+  }
+
+  void _onDragEnd(double velocity) {
+    _dragging = false;
+    final outward = velocity * _outwardSign;
+    final extent = _axisExtent;
+    final thrown = _drag.value > extent * _dismissAt || outward > _dismissSpeed;
+
+    _throwingOut = thrown;
+    _settleFrom = _drag.value;
+    _settleTo = thrown ? extent + _rubberLimit : 0;
+    _settle.forward(from: 0).whenCompleteOrCancel(() {
+      if (_throwingOut) _ToastCtrl.remove(widget.entry);
+    });
+
+    // Whatever happens next, the toast is no longer under a finger.
+    if (!thrown) _restartTimer();
   }
 
   void _toggleExpand() {
@@ -252,19 +327,38 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     return exceeded;
   }
 
-  /// Outwards only, the way it came in.
+  /// Whether the toast is dragged left and right rather than up and down. One
+  /// pinned to no side edge has no edge that way, so it goes up or down instead.
+  static bool get _horizontalAxis => !ToastConfig.align.isCenter;
+
+  /// Turns a screen delta along the axis into one that counts positive towards
+  /// the edge the toast hangs on — the only direction it can leave by.
   ///
-  /// Dragging a toast in the end corner towards the middle of the window is a
-  /// drag across the content it covers, and there is no edge that way. For one
-  /// pinned to no side edge the only way out is up or down.
-  ///
-  /// `startToEnd` and `endToStart` are resolved against the text direction, as
-  /// [ToastAlign.isEnd] is, so this holds in RTL too.
-  static DismissDirection get _dismissDirection {
+  /// Dragging the other way is a drag across the content the toast covers, with
+  /// no edge at the end of it; [_rubberOf] gives it somewhere to go and nothing
+  /// to reach.
+  double get _outwardSign {
     final align = ToastConfig.align;
-    if (align.isEnd) return DismissDirection.startToEnd;
-    if (align.isStart) return DismissDirection.endToStart;
-    return align.isTop ? DismissDirection.up : DismissDirection.down;
+    if (!_horizontalAxis) return align.isTop ? -1 : 1;
+    final ltr = Directionality.of(context) == TextDirection.ltr;
+    return align.isEnd == ltr ? 1 : -1;
+  }
+
+  /// How far the toast actually moves, given how far it was pulled.
+  ///
+  /// Outwards it follows the finger. Inwards it gives way less and less, a
+  /// hyperbola that approaches [_rubberLimit] and never arrives, so the pull
+  /// runs out of travel rather than stopping at a wall.
+  static double _rubberOf(double pulled) {
+    if (pulled >= 0) return pulled;
+    final pull = -pulled;
+    return -pull * _rubberLimit / (pull + _rubberLimit);
+  }
+
+  /// Size of the toast along the drag axis, for the throw-out threshold.
+  double get _axisExtent {
+    if (_horizontalAxis) return widget.width;
+    return context.size?.height ?? 48;
   }
 
   // -- Widget build --
@@ -276,29 +370,32 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     final fromTop = ToastConfig.align.isTop;
     final depth = widget.depth;
 
-    Widget card = SizeTransition(
-      sizeFactor: _curve,
-      // Grows from the edge the stack hangs from, so what is already there does
-      // not shift as this one arrives.
-      alignment: fromTop ? Alignment.topLeft : Alignment.bottomLeft,
-      child: FadeTransition(
-        opacity: _curve,
-        child: SlideTransition(
-          position: _slide,
-          textDirection: Directionality.of(context),
-          child: Dismissible(
-            key: ValueKey('toast_${widget.entry.id}'),
-            direction: _dismissDirection,
-            onDismissed: (_) => _ToastCtrl.remove(widget.entry),
-            child: MouseRegion(
-              onEnter: (_) => _onHover(true),
-              onExit: (_) => _onHover(false),
-              child: _buildCard(theme, accent),
-            ),
+    Widget card = MouseRegion(
+      onEnter: (_) => _onHover(true),
+      onExit: (_) => _onHover(false),
+      child: _buildCard(theme, accent),
+    );
+
+    // Outside the arrival animation, which clips: a toast pulled past its own
+    // bounds has to keep showing, and so does its shadow.
+    card = _buildDraggable(card);
+
+    if (!_settled) {
+      card = SizeTransition(
+        sizeFactor: _curve,
+        // Grows from the edge the stack hangs from, so what is already there
+        // does not shift as this one arrives.
+        alignment: fromTop ? Alignment.topLeft : Alignment.bottomLeft,
+        child: FadeTransition(
+          opacity: _curve,
+          child: SlideTransition(
+            position: _slide,
+            textDirection: Directionality.of(context),
+            child: card,
           ),
         ),
-      ),
-    );
+      );
+    }
 
     // Behind the front of the pile: drawn a little smaller, and past the peek
     // limit not drawn at all. Both settle to normal as the pile opens. Neither
@@ -319,25 +416,46 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     return card;
   }
 
+  Widget _buildDraggable(Widget child) {
+    final horizontal = _horizontalAxis;
+
+    return GestureDetector(
+      onHorizontalDragStart: horizontal ? (_) => _onDragStart() : null,
+      onHorizontalDragUpdate: horizontal ? (d) => _onDragUpdate(d.delta.dx) : null,
+      onHorizontalDragEnd: horizontal ? (d) => _onDragEnd(d.velocity.pixelsPerSecond.dx) : null,
+      onVerticalDragStart: horizontal ? null : (_) => _onDragStart(),
+      onVerticalDragUpdate: horizontal ? null : (d) => _onDragUpdate(d.delta.dy),
+      onVerticalDragEnd: horizontal ? null : (d) => _onDragEnd(d.velocity.pixelsPerSecond.dy),
+      child: ValBuilder.child(
+        listenable: _drag,
+        child: child,
+        builder: (pulled, child) {
+          final moved = _rubberOf(pulled) * _outwardSign;
+          return Transform.translate(
+            offset: horizontal ? Offset(moved, 0) : Offset(0, moved),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildCard(ThemeData theme, Color accent) {
     final scheme = theme.colorScheme;
     final surface = scheme.surfaceContainerHigh;
     final tinted = _data.color == null && _data.level == ToastLevel.none
         ? surface
         : Color.alphaBlend(accent.withValues(alpha: 0.08), surface);
+    // Says a long press was taken, for the platforms with no haptics to say it.
+    // The surface rather than a border, and animated by [Material] itself.
+    final color = _copied ? Color.alphaBlend(accent.withValues(alpha: 0.22), tinted) : tinted;
 
     return Material(
-      color: tinted,
+      color: color,
       elevation: 4,
       shadowColor: Colors.black.withValues(alpha: 0.3),
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: _radius,
-        side: BorderSide(
-          color: _copied ? accent : scheme.outlineVariant.withValues(alpha: 0.5),
-          width: _copied ? 1.5 : 1,
-        ),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: _radius),
       child: InkWell(
         onTap: _data.onTap != null || widget.onPileToggle != null || _canOpenBody ? _onTap : null,
         onLongPress: _onLongPress,
