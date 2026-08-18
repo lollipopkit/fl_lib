@@ -223,13 +223,21 @@ class SqliteStore extends Store {
 
   final _listeners = _StoreListenerManager();
 
-  /// Opens the shared database if it is not open yet.
+  /// Opens the shared database, if it is not open yet.
+  ///
+  /// **Await this once before constructing or initialising anything that reads
+  /// the database**, rather than relying on a store's own [init] to do it as a
+  /// side effect. A store that touches [SqliteDb.instance] synchronously — one
+  /// creating its own tables, say — cannot be started in the same
+  /// `Future.wait` batch as the stores that are still opening the file: the
+  /// batch's elements are all *invoked* before any of them is awaited, so it
+  /// would reach a database that is still null.
   ///
   /// [dir] follows the same rule as the boxes did: the unsandboxed macOS
   /// build's documents directory is the user's own `~/Documents`, so it uses
   /// [Paths.doc] there rather than being the one part of the app writing into
   /// it.
-  Future<void> init({String? dir}) async {
+  static Future<void> openDatabase({String? dir}) async {
     if (SqliteDb.isOpen) return;
     final path =
         dir ??
@@ -240,6 +248,12 @@ class SqliteStore extends Store {
         };
     await SqliteDb.open(path);
   }
+
+  /// Kept so a store can still be brought up on its own.
+  ///
+  /// Does nothing beyond [openDatabase]: a K-V store owns no schema of its
+  /// own, every row of every store lives in the one `kv` table.
+  Future<void> init({String? dir}) => openDatabase(dir: dir);
 
   @override
   T? get<T extends Object>(String key, {StoreFromObj<T>? fromObj}) {
@@ -363,20 +377,25 @@ class SqliteStore extends Store {
     return true;
   }
 
+  /// Empties the store of everything the user put in it.
+  ///
+  /// Internal keys stay. They are this build's own bookkeeping — which
+  /// migrations have run, when each key last changed — and none of it is what
+  /// somebody means by "clear this". `lastUpdateTs` was already being read out
+  /// and put back for that reason; the rule is the same for every internal key,
+  /// and applying it to only one of them is what let a "delete all settings"
+  /// erase a migration's "already done" marker and have it run a second time
+  /// over the data that replaced it.
   @override
   bool clear({bool? updateLastUpdateTsOnClear}) {
-    final lastUpdateTsMap = lastUpdateTs;
-    final cleared = keys(includeInternalKeys: true);
-    _db.execute('DELETE FROM kv WHERE store = ?;', [name]);
-    if (lastUpdateTsMap != null) {
-      // Encoded the same way [updateLastUpdateTs] writes it. Putting the map
-      // back as a map instead would store a JSON object where every other
-      // write stores a JSON string, and the reader would hand back null —
-      // losing on `clear()` exactly the timestamps this line exists to keep.
-      set(
-        lastUpdateTsKey,
-        json.encode(lastUpdateTsMap),
-        updateLastUpdateTsOnSet: false,
+    final cleared = keys();
+    if (cleared.isNotEmpty) {
+      // By key rather than one predicate: `_` is a wildcard in `LIKE`, and the
+      // internal prefixes both start with one.
+      final placeholders = List.filled(cleared.length, '?').join(', ');
+      _db.execute(
+        'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
+        [name, ...cleared],
       );
     }
 
@@ -388,12 +407,28 @@ class SqliteStore extends Store {
     return true;
   }
 
+  /// One query for the whole store.
+  ///
+  /// The base class reads each key in turn, which was free over a Hive box and
+  /// is a prepared-statement round trip each here.
   @override
   Map<String, Object?> getAllMap({
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
-    final keys = this.keys(includeInternalKeys: includeInternalKeys);
-    return Map.fromIterables(keys, keys.map((key) => get(key)));
+    final rows = _db.select('SELECT key, value FROM kv WHERE store = ?;', [
+      name,
+    ]);
+    final map = <String, Object?>{};
+    for (final row in rows) {
+      final key = row['key'] as String;
+      if (!includeInternalKeys && isInternalKey(key)) continue;
+      try {
+        map[key] = json.decode(row['value'] as String);
+      } catch (e) {
+        dprintWarn('getAllMap()', 'stored value for "$key" is not JSON: $e');
+      }
+    }
+    return map;
   }
 
   @override
@@ -422,6 +457,32 @@ class SqliteStore extends Store {
       }
     }
     return map;
+  }
+
+  /// Runs [body] as one transaction.
+  ///
+  /// Every write is otherwise its own commit, which for a bulk one — restoring
+  /// a backup, importing a device's data — means a durability barrier per key
+  /// and a half-applied result if the process dies part way. This is the reason
+  /// the stores share one database file, so it is worth actually using.
+  ///
+  /// Not reentrant: SQLite has no nested transactions without savepoints, and
+  /// nothing here needs them.
+  static T transact<T>(T Function() body) {
+    final db = SqliteDb.instance;
+    db.execute('BEGIN;');
+    try {
+      final result = body();
+      db.execute('COMMIT;');
+      return result;
+    } catch (_) {
+      try {
+        db.execute('ROLLBACK;');
+      } catch (_) {
+        // Already rolled back by SQLite, which some errors do on their own.
+      }
+      rethrow;
+    }
   }
 
   /// The keys written in this store, as they are written.
