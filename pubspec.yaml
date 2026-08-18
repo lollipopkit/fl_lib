@@ -13,7 +13,7 @@ dependencies:
   crypto: ^3.0.3
   dio: ^5.4.2+1
   extended_image: ^10.0.0
-  file_picker: ^10.1.9
+  file_picker: ^12.0.0
   flutter:
     sdk: flutter
   flutter_highlight: ^0.7.0
@@ -25,7 +25,7 @@ dependencies:
   freezed_annotation: ^3.0.0
   hive_ce: ^2.11.3
   hive_ce_flutter: ^2.3.1
-  icloud_storage_plus: ^2.1.2
+  icloud_storage_plus: ^4.0.0
   icons_plus:
     git:
       url: https://github.com/lollipopkit/icons_plus
@@ -42,13 +42,13 @@ dependencies:
   path_provider: ^2.1.4
   pointycastle: ^4.0.0
   pretty_qr_code: ^3.3.0
-  qr_code_dart_scan: ^0.11.1
+  qr_code_dart_scan: ^0.14.0
   re_editor:
     git:
       url: https://github.com/lollipopkit/re-editor
       ref: main
   re_highlight: ^0.0.3
-  share_plus: ^12.0.0
+  share_plus: ^13.3.0
   shared_preferences: ^2.2.3
   url_launcher: ^6.2.6
   flutter_riverpod: ^3.3.1

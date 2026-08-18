@@ -16,7 +16,7 @@ class BarcodeScannerPage extends StatefulWidget {
     this.args,
   });
 
-  static const route = AppRoute<Result, BarcodeScannerPageArgs>(
+  static const route = AppRoute<ScanResult, BarcodeScannerPageArgs>(
     page: BarcodeScannerPage.new,
     path: '/barcode_scan',
   );

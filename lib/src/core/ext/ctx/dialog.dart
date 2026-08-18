@@ -384,7 +384,8 @@ $content
       case _ImportFrom.file:
         final file = await Pfs.pickFile();
         if (file == null) return null;
-        return file.bytes;
+        // Read on demand since file_picker 12, which no longer fills `bytes`.
+        return file.readAsBytes();
       case _ImportFrom.network:
         final urlCtrl = TextEditingController();
         final headersCtrl = TextEditingController();

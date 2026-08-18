@@ -114,9 +114,8 @@ enum Pfs {
   }
 
   /// Pick a file and return the [PlatformFile] object.
-  static Future<PlatformFile?> pickFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
-    return result?.files.single;
+  static Future<PlatformFile?> pickFile() {
+    return FilePicker.pickFile(type: FileType.any);
   }
 
   /// Pick a file and return the file path.
@@ -132,9 +131,9 @@ enum Pfs {
 
     switch (Pfs.type) {
       case Pfs.web:
-        final bytes = picked.bytes;
-        if (bytes == null) return null;
-        return utf8.decode(bytes);
+        // Read on demand since file_picker 12; there is no eagerly filled
+        // `bytes` to reach for any more.
+        return utf8.decode(await picked.readAsBytes());
       default:
         final path = picked.path;
         if (path == null) return null;

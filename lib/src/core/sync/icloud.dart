@@ -14,7 +14,7 @@ final class ICloud implements RemoteStorage<ICloudFile> {
     await ICloudStorage.uploadFile(
       containerId: containerId,
       localPath: localPath ?? Paths.doc.joinPath(relativePath),
-      cloudRelativePath: relativePath,
+      relativePath: relativePath,
       onProgress: (stream) {
         stream.listen(
           null,
@@ -48,7 +48,7 @@ final class ICloud implements RemoteStorage<ICloudFile> {
     final completer = Completer<void>();
     await ICloudStorage.downloadFile(
       containerId: containerId,
-      cloudRelativePath: relativePath,
+      relativePath: relativePath,
       localPath: localPath ?? Paths.doc.joinPath(relativePath),
       onProgress: (stream) {
         stream.listen(
