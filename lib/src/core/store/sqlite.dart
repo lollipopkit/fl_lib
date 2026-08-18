@@ -170,6 +170,29 @@ CREATE TABLE IF NOT EXISTS kv (
     _path = null;
   }
 
+  /// Rewrites the file without its free pages.
+  ///
+  /// What `box.compact()` was for, except that it is one call for the whole
+  /// app rather than one per store — there is one file now.
+  static void vacuum() => instance.execute('VACUUM;');
+
+  /// Size of the database on disk, or 0 before it is opened or in memory.
+  static Future<int> size() async {
+    final path = _path;
+    if (path == null) return 0;
+    final file = File(path);
+    if (!await file.exists()) return 0;
+
+    // The WAL holds committed pages that have not been checkpointed back, so
+    // the main file alone understates what the app is actually using.
+    var total = await file.length();
+    for (final suffix in const ['-wal', '-shm']) {
+      final side = File('$path$suffix');
+      if (await side.exists()) total += await side.length();
+    }
+    return total;
+  }
+
   static String _hex(Uint8List bytes) {
     final sb = StringBuffer();
     for (final b in bytes) {
@@ -401,6 +424,13 @@ class SqliteStore extends Store {
     return map;
   }
 
+  /// The keys written in this store, as they are written.
+  ///
+  /// Only writes that went through this store: it is the store that reports
+  /// them, not the database. Nothing else can reach the rows, so that is every
+  /// write — but it is worth knowing which of the two this is.
+  Stream<String> watch() => _listeners.stream;
+
   /// A property of the [SqliteStore].
   SqliteProp<T> property<T extends Object>(
     String key, {
@@ -528,7 +558,16 @@ final class SqlitePropDefault<T extends Object> extends StorePropDefault<T>
 class _StoreListenerManager {
   final Map<String, Set<VoidCallback>> _keyListeners = {};
 
+  StreamController<String>? _all;
+
+  /// Every key written in this store, for watchers that care that *something*
+  /// changed rather than about one key. What `box.watch()` was.
+  Stream<String> get stream => (_all ??= StreamController<String>.broadcast())
+      .stream;
+
   void notify(String key) {
+    _all?.add(key);
+
     final callbacks = _keyListeners[key];
     if (callbacks == null) return;
     // Over a copy: a callback is allowed to remove itself, and several do.
