@@ -1,0 +1,587 @@
+part of 'iface.dart';
+
+/// The 32 random bytes every encrypted store on this device is keyed with.
+///
+/// One secret for the whole app, held by the platform's vault. It is read
+/// through [SecureStoreProps.hivePwd] — the name is what shipped installs have
+/// in their keychain, and renaming the entry would orphan every existing key.
+///
+/// TODO: rename to a neutral key once no install can still be on Hive, which
+/// is the same moment [HiveStore] can be deleted.
+abstract final class _StoreSecret {
+  /// Where installs older than [SecureStoreProps] kept the key.
+  static const _legacyPrefKey = 'hive_key';
+
+  /// Reads the key, generating one the first time.
+  ///
+  /// Returns the raw bytes rather than the stored base64, because both callers
+  /// want bytes and the encoding is an artifact of the vault taking strings.
+  static Future<Uint8List> read() async {
+    final existing = await _stored();
+    if (existing != null) return base64Url.decode(existing);
+
+    // `Random.secure()` rather than a counter or a hash of anything on the
+    // device: this is the only thing standing between a copied `.db` file and
+    // its contents.
+    final generated = Uint8List.fromList(
+      List<int>.generate(32, (_) => Random.secure().nextInt(256)),
+    );
+    await SecureStoreProps.hivePwd.write(base64UrlEncode(generated));
+
+    // Read back rather than returning `generated`: a write that silently did
+    // not land would otherwise produce a database nothing can ever open again.
+    final confirmed = await _stored();
+    if (confirmed == null) {
+      throw StateError('Failed to persist the store encryption key');
+    }
+    return base64Url.decode(confirmed);
+  }
+
+  static Future<String?> _stored() async {
+    final fromVault = await SecureStoreProps.hivePwd.read();
+    if (fromVault != null) return fromVault;
+
+    // Installs that predate the vault kept it in preferences. Move it across
+    // on sight, so this branch stops being reachable for that device.
+    final fromPrefs =
+        PrefStore.shared.get<String>(_legacyPrefKey) ??
+        PrefStore.shared.get<String>('flutter.$_legacyPrefKey');
+    if (fromPrefs != null) await SecureStoreProps.hivePwd.write(fromPrefs);
+    return fromPrefs;
+  }
+}
+
+/// The single encrypted database file behind every [SqliteStore].
+///
+/// One file for all stores rather than one per store: they are opened together
+/// at launch and rewritten together by a backup restore, and one connection is
+/// what lets that be a single transaction. The `store` column keeps them apart.
+abstract final class SqliteDb {
+  /// Name on disk. Beside the `.hive` files it replaces, so the two are found
+  /// and copied together by a sandbox import and by anyone reading a bug
+  /// report.
+  static const fileName = 'store.db';
+
+  /// Cipher scheme, named rather than defaulted.
+  ///
+  /// ChaCha20-Poly1305 is SQLite3MultipleCiphers' own default today. Naming it
+  /// means a future release changing that default cannot silently change what
+  /// new databases on new installs are encrypted with — existing files record
+  /// their scheme in the header and are unaffected either way.
+  static const _cipher = 'chacha20';
+
+  static Database? _db;
+  static Future<Database>? _opening;
+
+  /// The open database.
+  ///
+  /// Throws when [open] has not completed. Every caller reaches this through
+  /// `SqliteStore.init`, so arriving early is a wiring bug rather than a state
+  /// worth recovering from.
+  static Database get instance {
+    final db = _db;
+    if (db == null) throw StateError('SqliteDb.open() has not completed');
+    return db;
+  }
+
+  static bool get isOpen => _db != null;
+
+  /// Full path of the file, or `null` before it is opened.
+  static String? get path => _path;
+  static String? _path;
+
+  /// Opens, keys and migrates the database at [dir].
+  ///
+  /// Concurrent callers share one attempt: `Stores.init` opens every store at
+  /// once through `Future.wait`, and two of them racing to key the same file
+  /// would make it a coin flip which connection the app ends up holding.
+  static Future<Database> open(String dir) {
+    final db = _db;
+    if (db != null) return Future.value(db);
+    return _opening ??= _open(dir).whenComplete(() => _opening = null);
+  }
+
+  static Future<Database> _open(String dir) async {
+    final key = await _StoreSecret.read();
+    final path = dir.joinPath(fileName);
+    final db = sqlite3.open(path);
+
+    try {
+      // Before the key, and both before anything reads a page: the scheme
+      // decides how `PRAGMA key` is interpreted.
+      db.execute("PRAGMA cipher = '$_cipher';");
+
+      // Raw key, not a passphrase. The bytes are already 32 bytes of CSPRNG
+      // output, so the PBKDF2 pass a quoted string would trigger costs a
+      // launch delay and adds nothing. The `x'..'` literal is the only syntax
+      // SQLite3MultipleCiphers accepts for this.
+      db.execute('PRAGMA key = "x\'${_hex(key)}\'";');
+
+      // The first statement that actually reads a page, and so the first that
+      // can fail on a wrong key. Doing it here means a bad key surfaces as a
+      // failure to open rather than as an empty store.
+      db.select('SELECT count(*) FROM sqlite_master;');
+
+      db.execute('PRAGMA journal_mode = WAL;');
+      db.execute('PRAGMA foreign_keys = ON;');
+      db.execute('''
+CREATE TABLE IF NOT EXISTS kv (
+  store      TEXT    NOT NULL,
+  key        TEXT    NOT NULL,
+  value      TEXT    NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (store, key)
+) WITHOUT ROWID;
+''');
+    } catch (_) {
+      db.close();
+      rethrow;
+    }
+
+    _db = db;
+    _path = path;
+    return db;
+  }
+
+  /// Opens an unencrypted in-memory database, for tests.
+  ///
+  /// No key: a test that has to reach the platform vault is a test that cannot
+  /// run on a bare CI machine.
+  @visibleForTesting
+  static Database openInMemory() {
+    final db = sqlite3.openInMemory();
+    db.execute('''
+CREATE TABLE IF NOT EXISTS kv (
+  store      TEXT    NOT NULL,
+  key        TEXT    NOT NULL,
+  value      TEXT    NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (store, key)
+) WITHOUT ROWID;
+''');
+    _db = db;
+    _path = null;
+    return db;
+  }
+
+  static Future<void> close() async {
+    _db?.close();
+    _db = null;
+    _path = null;
+  }
+
+  static String _hex(Uint8List bytes) {
+    final sb = StringBuffer();
+    for (final b in bytes) {
+      sb.write(b.toRadixString(16).padLeft(2, '0'));
+    }
+    return sb.toString();
+  }
+}
+
+/// The store of SQLite.
+///
+/// It implements [Store]. Values are JSON, so what comes back out of [get] is
+/// what `jsonDecode` produces — a `Map`, a `List` or a primitive — and the
+/// `fromObj` hook every caller already passes is what turns it back into a
+/// model. That is the same path [HiveStore] used for anything without a
+/// `TypeAdapter`, now the only path.
+class SqliteStore extends Store {
+  /// Constructor.
+  SqliteStore(
+    String name, {
+    super.lastUpdateTsKey,
+    super.updateLastUpdateTsOnClear,
+    super.updateLastUpdateTsOnRemove,
+    super.updateLastUpdateTsOnSet,
+  }) : super(name: name);
+
+  Database get _db => SqliteDb.instance;
+
+  final _listeners = _StoreListenerManager();
+
+  /// Opens the shared database if it is not open yet.
+  ///
+  /// [dir] follows the same rule as the boxes did: the unsandboxed macOS
+  /// build's documents directory is the user's own `~/Documents`, so it uses
+  /// [Paths.doc] there rather than being the one part of the app writing into
+  /// it.
+  Future<void> init({String? dir}) async {
+    if (SqliteDb.isOpen) return;
+    final path =
+        dir ??
+        switch (Pfs.type) {
+          Pfs.linux || Pfs.windows => Paths.doc,
+          Pfs.macos when !Pfs.isMacSandboxed => Paths.doc,
+          _ => (await getApplicationDocumentsDirectory()).path,
+        };
+    await SqliteDb.open(path);
+  }
+
+  @override
+  T? get<T extends Object>(String key, {StoreFromObj<T>? fromObj}) {
+    final rows = _db.select(
+      'SELECT value FROM kv WHERE store = ? AND key = ?;',
+      [name, key],
+    );
+    if (rows.isEmpty) return null;
+
+    final Object? val;
+    try {
+      val = json.decode(rows.first['value'] as String);
+    } catch (e) {
+      dprintWarn('get("$key")', 'stored value is not JSON: $e');
+      return null;
+    }
+
+    if (val is T) return val;
+    if (val == null) return null;
+
+    if (fromObj != null) {
+      try {
+        final converted = fromObj(val);
+        if (converted is T) return converted;
+      } catch (_) {
+        dprintWarn('get("$key")', 'fromObj failed for key "$key"');
+      }
+    }
+
+    dprintWarn('get("$key")', 'is: ${val.runtimeType}');
+    return null;
+  }
+
+  @override
+  bool set<T extends Object>(
+    String key,
+    T val, {
+    StoreToObj<T>? toObj,
+    bool? updateLastUpdateTsOnSet,
+  }) {
+    updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
+
+    final Object? raw;
+    if (toObj != null) {
+      raw = toObj(val);
+      if (raw == null) {
+        dprintWarn('set("$key")', 'toObj returned null');
+        return false;
+      }
+    } else {
+      raw = val;
+    }
+
+    final String encoded;
+    try {
+      encoded = json.encode(raw, toEncodable: _toEncodable);
+    } catch (e) {
+      dprintWarn('set("$key")', 'not JSON-encodable (${raw.runtimeType}): $e');
+      return false;
+    }
+
+    try {
+      _db.execute(
+        'INSERT INTO kv (store, key, value, updated_at) VALUES (?, ?, ?, ?) '
+        'ON CONFLICT (store, key) DO UPDATE SET '
+        'value = excluded.value, updated_at = excluded.updated_at;',
+        [name, key, encoded, DateTimeX.timestamp],
+      );
+    } catch (e) {
+      dprintWarn('set("$key")', 'write failed: $e');
+      return false;
+    }
+
+    if (updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
+    _listeners.notify(key);
+    return true;
+  }
+
+  @override
+  bool setAll<T extends Object>(
+    Map<String, T> map, {
+    StoreToObj<T>? toObj,
+    bool? updateLastUpdateTsOnSet,
+  }) {
+    updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
+    for (final entry in map.entries) {
+      final res = set(
+        entry.key,
+        entry.value,
+        toObj: toObj,
+        updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+      );
+      if (!res) {
+        dprintWarn('setAll()', 'failed to set ${entry.key}');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  Set<String> keys({
+    bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
+  }) {
+    final rows = _db.select('SELECT key FROM kv WHERE store = ?;', [name]);
+    final set_ = <String>{};
+    for (final row in rows) {
+      final key = row['key'] as String;
+      if (!includeInternalKeys && isInternalKey(key)) continue;
+      set_.add(key);
+    }
+    return set_;
+  }
+
+  @override
+  bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
+    _db.execute('DELETE FROM kv WHERE store = ? AND key = ?;', [name, key]);
+    updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
+    if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
+    _listeners.notify(key);
+    return true;
+  }
+
+  @override
+  bool clear({bool? updateLastUpdateTsOnClear}) {
+    final lastUpdateTsMap = lastUpdateTs;
+    final cleared = keys(includeInternalKeys: true);
+    _db.execute('DELETE FROM kv WHERE store = ?;', [name]);
+    if (lastUpdateTsMap != null) {
+      // Encoded the same way [updateLastUpdateTs] writes it. Putting the map
+      // back as a map instead would store a JSON object where every other
+      // write stores a JSON string, and the reader would hand back null —
+      // losing on `clear()` exactly the timestamps this line exists to keep.
+      set(
+        lastUpdateTsKey,
+        json.encode(lastUpdateTsMap),
+        updateLastUpdateTsOnSet: false,
+      );
+    }
+
+    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
+    if (updateLastUpdateTsOnClear) updateLastUpdateTs(key: null);
+    for (final key in cleared) {
+      _listeners.notify(key);
+    }
+    return true;
+  }
+
+  @override
+  Map<String, Object?> getAllMap({
+    bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
+  }) {
+    final keys = this.keys(includeInternalKeys: includeInternalKeys);
+    return Map.fromIterables(keys, keys.map((key) => get(key)));
+  }
+
+  @override
+  Map<String, T> getAllMapTyped<T extends Object>({
+    bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
+    StoreFromObj<T>? fromStr,
+  }) {
+    final keys = this.keys(includeInternalKeys: includeInternalKeys);
+    final map = <String, T>{};
+    for (final key in keys) {
+      final val = get(key);
+      if (val is T) {
+        map[key] = val;
+        continue;
+      }
+      if (val is String) {
+        try {
+          final converted = fromStr?.call(val);
+          if (converted is T) {
+            map[key] = converted;
+            continue;
+          }
+        } catch (e) {
+          dprintWarn('getAllMapTyped()', 'convert `$key`: $e');
+        }
+      }
+    }
+    return map;
+  }
+
+  /// A property of the [SqliteStore].
+  SqliteProp<T> property<T extends Object>(
+    String key, {
+    T? defaultValue,
+    bool updateLastModified = true,
+    StoreFromObj<T>? fromObj,
+    StoreToObj<T>? toObj,
+  }) {
+    return SqliteProp<T>(
+      this,
+      key,
+      updateLastUpdateTsOnSetProp: updateLastModified,
+      fromObj: fromObj,
+      toObj: toObj,
+    );
+  }
+
+  SqlitePropDefault<T> propertyDefault<T extends Object>(
+    String key,
+    T defaultValue, {
+    bool updateLastModified = StoreDefaults.defaultUpdateLastUpdateTs,
+    StoreFromObj<T>? fromObj,
+    StoreToObj<T>? toObj,
+  }) {
+    return SqlitePropDefault<T>(
+      this,
+      key,
+      defaultValue,
+      updateLastUpdateTsOnSetProp: updateLastModified,
+      fromObj: fromObj,
+      toObj: toObj,
+    );
+  }
+
+  SqlitePropDefault<List<T>> listProperty<T extends Object>(
+    String key, {
+    List<T> defaultValue = const [],
+    bool updateLastModified = StoreDefaults.defaultUpdateLastUpdateTs,
+    StoreFromObj<List<T>>? fromObj,
+    StoreToObj<List<T>>? toObj,
+  }) {
+    return SqlitePropDefault<List<T>>(
+      this,
+      key,
+      defaultValue,
+      updateLastUpdateTsOnSetProp: updateLastModified,
+      fromObj: fromObj ?? (obj) => List<T>.from(obj as Iterable),
+      toObj: toObj,
+    );
+  }
+
+  /// Turns the values `jsonEncode` cannot take on its own into ones it can.
+  ///
+  /// Enums by name rather than index: an index silently changes meaning when a
+  /// case is inserted, and these values outlive the build that wrote them.
+  /// Everything else falls through to `toJson()`, which is what `jsonEncode`
+  /// would have called anyway.
+  static Object? _toEncodable(Object? value) {
+    if (value is Enum) return value.name;
+    return (value as dynamic).toJson();
+  }
+}
+
+/// A property of the [SqliteStore].
+class SqliteProp<T extends Object> extends StoreProp<T> {
+  @override
+  final SqliteStore store;
+
+  SqliteProp(
+    this.store,
+    super.key, {
+    super.updateLastUpdateTsOnSetProp,
+    super.fromObj,
+    super.toObj,
+  });
+
+  /// {@template sqlite_store_fn_backward_compatibility}
+  /// It's preserved for backward compatibility.
+  /// {@endtemplate}
+  T? fetch() => get();
+
+  /// {@macro sqlite_store_fn_backward_compatibility}
+  void put(T value) => set(value);
+
+  void delete() => remove();
+
+  @override
+  ValueListenable<T?> listenable() => SqlitePropListenable<T>(this, key);
+}
+
+final class SqlitePropDefault<T extends Object> extends StorePropDefault<T>
+    implements SqliteProp<T> {
+  @override
+  final SqliteStore store;
+
+  SqlitePropDefault(
+    this.store,
+    super.key,
+    super.defaultValue, {
+    super.updateLastUpdateTsOnSetProp,
+    super.fromObj,
+    super.toObj,
+  });
+
+  @override
+  ValueListenable<T> listenable() =>
+      SqlitePropDefaultListenable<T>(this, key, defaultValue);
+
+  @override
+  T fetch() => get();
+
+  @override
+  void put(T value) => set(value);
+
+  @override
+  void delete() => remove();
+}
+
+/// Fans one store's writes out to the widgets watching individual keys.
+///
+/// Hive had `box.watch()` to subscribe to; SQLite has no change feed, so the
+/// store reports its own writes. That makes this exact rather than eventual —
+/// and it also means a write that bypasses [SqliteStore] is invisible here,
+/// which is why nothing outside the store is given the [Database].
+class _StoreListenerManager {
+  final Map<String, Set<VoidCallback>> _keyListeners = {};
+
+  void notify(String key) {
+    final callbacks = _keyListeners[key];
+    if (callbacks == null) return;
+    // Over a copy: a callback is allowed to remove itself, and several do.
+    for (final callback in List<VoidCallback>.of(callbacks)) {
+      callback();
+    }
+  }
+
+  void addListener(String key, VoidCallback listener) {
+    _keyListeners.putIfAbsent(key, () => {}).add(listener);
+  }
+
+  void removeListener(String key, VoidCallback listener) {
+    final callbacks = _keyListeners[key];
+    if (callbacks == null) return;
+    callbacks.remove(listener);
+    if (callbacks.isEmpty) _keyListeners.remove(key);
+  }
+}
+
+class SqlitePropListenable<T extends Object> extends ValueListenable<T?> {
+  SqlitePropListenable(this.prop, this.key);
+
+  final SqliteProp<T> prop;
+  final String key;
+
+  @override
+  void addListener(VoidCallback listener) =>
+      prop.store._listeners.addListener(key, listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      prop.store._listeners.removeListener(key, listener);
+
+  @override
+  T? get value => prop.get();
+}
+
+class SqlitePropDefaultListenable<T extends Object> extends ValueListenable<T> {
+  SqlitePropDefaultListenable(this.prop, this.key, this.defaultValue);
+
+  final SqlitePropDefault<T> prop;
+  final String key;
+  T defaultValue;
+
+  @override
+  void addListener(VoidCallback listener) =>
+      prop.store._listeners.addListener(key, listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      prop.store._listeners.removeListener(key, listener);
+
+  @override
+  T get value => prop.get();
+}
