@@ -54,7 +54,7 @@ dependencies:
   flutter_riverpod: ^3.3.1
   responsive_framework: ^1.5.1
   riverpod_annotation: ^4.0.2
-  webdav_client_plus: ^1.0.2
+  webdav_client_plus: ^2.0.0
   window_manager: ^0.5.0
   computer:
     git:
