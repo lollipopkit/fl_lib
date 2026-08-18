@@ -223,6 +223,38 @@ class SqliteStore extends Store {
 
   final _listeners = _StoreListenerManager();
 
+  /// Statements kept across calls, rebuilt when the database changes under
+  /// them.
+  ///
+  /// Preparing one is most of what a read costs — measured at 5.5us per read
+  /// against 0.8us for a statement that is reused — and a property read happens
+  /// inside `build`, where under Hive it was a lookup in an in-memory map.
+  ///
+  /// Rebuilt rather than disposed on change: sqlite3 disposes a database's
+  /// statements along with it, so the old ones are already gone and disposing
+  /// them a second time would throw. A store outlives any number of
+  /// open/close cycles, which is why this cannot assume one database for ever.
+  final Map<String, PreparedStatement> _stmts = {};
+  Database? _stmtsFor;
+
+  PreparedStatement _stmt(String sql) {
+    final db = _db;
+    if (!identical(db, _stmtsFor)) {
+      _stmts.clear();
+      _stmtsFor = db;
+    }
+    return _stmts[sql] ??= db.prepare(sql);
+  }
+
+  static const _sqlGet = 'SELECT value FROM kv WHERE store = ? AND key = ?;';
+  static const _sqlSet =
+      'INSERT INTO kv (store, key, value, updated_at) VALUES (?, ?, ?, ?) '
+      'ON CONFLICT (store, key) DO UPDATE SET '
+      'value = excluded.value, updated_at = excluded.updated_at;';
+  static const _sqlKeys = 'SELECT key FROM kv WHERE store = ?;';
+  static const _sqlAll = 'SELECT key, value FROM kv WHERE store = ?;';
+  static const _sqlRemove = 'DELETE FROM kv WHERE store = ? AND key = ?;';
+
   /// Opens the shared database, if it is not open yet.
   ///
   /// **Await this once before constructing or initialising anything that reads
@@ -257,10 +289,7 @@ class SqliteStore extends Store {
 
   @override
   T? get<T extends Object>(String key, {StoreFromObj<T>? fromObj}) {
-    final rows = _db.select(
-      'SELECT value FROM kv WHERE store = ? AND key = ?;',
-      [name, key],
-    );
+    final rows = _stmt(_sqlGet).select([name, key]);
     if (rows.isEmpty) return null;
 
     final Object? val;
@@ -316,12 +345,7 @@ class SqliteStore extends Store {
     }
 
     try {
-      _db.execute(
-        'INSERT INTO kv (store, key, value, updated_at) VALUES (?, ?, ?, ?) '
-        'ON CONFLICT (store, key) DO UPDATE SET '
-        'value = excluded.value, updated_at = excluded.updated_at;',
-        [name, key, encoded, DateTimeX.timestamp],
-      );
+      _stmt(_sqlSet).execute([name, key, encoded, DateTimeX.timestamp]);
     } catch (e) {
       dprintWarn('set("$key")', 'write failed: $e');
       return false;
@@ -358,7 +382,7 @@ class SqliteStore extends Store {
   Set<String> keys({
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
-    final rows = _db.select('SELECT key FROM kv WHERE store = ?;', [name]);
+    final rows = _stmt(_sqlKeys).select([name]);
     final set_ = <String>{};
     for (final row in rows) {
       final key = row['key'] as String;
@@ -370,7 +394,7 @@ class SqliteStore extends Store {
 
   @override
   bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
-    _db.execute('DELETE FROM kv WHERE store = ? AND key = ?;', [name, key]);
+    _stmt(_sqlRemove).execute([name, key]);
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
     _listeners.notify(key);
@@ -415,9 +439,7 @@ class SqliteStore extends Store {
   Map<String, Object?> getAllMap({
     bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys,
   }) {
-    final rows = _db.select('SELECT key, value FROM kv WHERE store = ?;', [
-      name,
-    ]);
+    final rows = _stmt(_sqlAll).select([name]);
     final map = <String, Object?>{};
     for (final row in rows) {
       final key = row['key'] as String;
