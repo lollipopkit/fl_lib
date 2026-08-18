@@ -225,15 +225,10 @@ class MockStoreProp<T extends Object> extends StoreProp<T> {
     this.store, // Store instance
     String key, // Positional key
     {
-    StoreFromObj<T>? fromStr,
-    StoreToObj<T>? toStr,
-    bool updateLastUpdateTsOnSetProp = StoreDefaults.defaultUpdateLastUpdateTs,
-  }) : super(
-          key, // Pass key to super constructor
-          fromObj: fromStr,
-          toObj: toStr,
-          updateLastUpdateTsOnSetProp: updateLastUpdateTsOnSetProp,
-        );
+    super.fromObj,
+    super.toObj,
+    super.updateLastUpdateTsOnSetProp = StoreDefaults.defaultUpdateLastUpdateTs,
+  }) : super(key);
 
   // `get`, `set`, `remove` are inherited from StoreProp and will use the MockStore's methods via `this.store`.
 
@@ -255,16 +250,10 @@ class MockStorePropDefault<T extends Object> extends StorePropDefault<T> {
     String key, // Positional key
     T defaultValue, // Positional defaultValue
     {
-    StoreFromObj<T>? fromObj,
-    StoreToObj<T>? toObj,
-    bool updateLastUpdateTsOnSetProp = StoreDefaults.defaultUpdateLastUpdateTs,
-  }) : super(
-          key, // Pass key to super constructor
-          defaultValue, // Pass defaultValue to super constructor
-          fromObj: fromObj,
-          toObj: toObj,
-          updateLastUpdateTsOnSetProp: updateLastUpdateTsOnSetProp,
-        );
+    super.fromObj,
+    super.toObj,
+    super.updateLastUpdateTsOnSetProp = StoreDefaults.defaultUpdateLastUpdateTs,
+  }) : super(key, defaultValue);
 
   // `get` (overridden in StorePropDefault), `set` are inherited and will use MockStore methods via `this.store`.
 

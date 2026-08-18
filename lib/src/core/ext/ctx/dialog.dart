@@ -314,7 +314,7 @@ extension DialogX on BuildContext {
         ],
       ),
       actions: [
-        if (actions != null) ...actions,
+        ...?actions,
         TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)),
       ],
     );
