@@ -490,20 +490,35 @@ class SqliteStore extends Store {
   ///
   /// Not reentrant: SQLite has no nested transactions without savepoints, and
   /// nothing here needs them.
+  static int _transactDepth = 0;
+
   static T transact<T>(T Function() body) {
     final db = SqliteDb.instance;
-    db.execute('BEGIN;');
+    // Savepoints rather than `BEGIN`/`COMMIT`, so this nests. The outermost
+    // one starts a transaction and releasing it commits, which is the same
+    // thing `BEGIN`/`COMMIT` did — but an inner call is now a nested unit
+    // instead of "cannot start a transaction within a transaction". Without
+    // that, anything wanting to be atomic could only be used where no caller
+    // had already opened a transaction, which is not a property a store method
+    // can know about itself.
+    final name = 'fl_tx_${_transactDepth++}';
+    db.execute('SAVEPOINT $name;');
     try {
       final result = body();
-      db.execute('COMMIT;');
+      db.execute('RELEASE $name;');
       return result;
     } catch (_) {
       try {
-        db.execute('ROLLBACK;');
+        db.execute('ROLLBACK TO $name;');
+        // `ROLLBACK TO` undoes the work but leaves the savepoint standing.
+        db.execute('RELEASE $name;');
       } catch (_) {
-        // Already rolled back by SQLite, which some errors do on their own.
+        // Some errors make SQLite roll the whole transaction back on their
+        // own, taking the savepoint with it. Nothing left to undo.
       }
       rethrow;
+    } finally {
+      _transactDepth--;
     }
   }
 
