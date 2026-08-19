@@ -41,6 +41,7 @@ abstract final class AppUpdate {
   static String? _githubStoreUrl;
   static Pfs? _githubPlatform;
   static CpuArch? _githubArch;
+  static int? _storeBuild;
 
   /// Reset mutable state between tests.
   static void resetForTest() {
@@ -53,6 +54,7 @@ abstract final class AppUpdate {
     _githubStoreUrl = null;
     _githubPlatform = null;
     _githubArch = null;
+    _storeBuild = null;
     _changelog = null;
     _releaseNotes = const [];
     _versionName = null;
@@ -103,22 +105,90 @@ abstract final class AppUpdate {
     required int build,
     String? storeUrl,
   }) async {
-    final resp = await myDio.get(
+    // Both requests go out at once: the store lookup only says anything on
+    // iOS, and must not add a round trip to the check on every other platform.
+    final releasesReq = myDio.get(
       url,
       options: Options(responseType: ResponseType.plain),
     );
+    final storeReq = _fetchAppStoreBuild(storeUrl);
+    final resp = await releasesReq;
     fromGitHubReleasesStr(
       raw: resp.data.toString(),
       build: build,
       storeUrl: storeUrl,
+      storeBuild: await storeReq,
     );
   }
 
+  /// The iTunes lookup URL for an App Store page [storeUrl], or null when it
+  /// carries no app id.
+  static String? appStoreLookupUrl(String? storeUrl) {
+    if (storeUrl == null) return null;
+    final id = RegExp(r'/id(\d+)').firstMatch(storeUrl)?.group(1);
+    if (id == null) return null;
+    return 'https://itunes.apple.com/lookup?id=$id';
+  }
+
+  /// The build number in an iTunes lookup response, or null when the response
+  /// names no version — an app id that matches nothing answers with an empty
+  /// `results` list rather than an error.
+  static int? parseAppStoreBuild(String raw) {
+    try {
+      final data = json.decode(raw);
+      if (data is! Map) return null;
+      final results = data['results'];
+      if (results is! List || results.isEmpty) return null;
+      final first = results.first;
+      if (first is! Map) return null;
+      return _parseBuild(first['version']);
+    } catch (e) {
+      _logger.warning('App Store lookup parse failed', e);
+      return null;
+    }
+  }
+
+  /// What the App Store currently serves, or null when it could not be read.
+  ///
+  /// Only asked on iOS: everywhere else the release assets say what is
+  /// installable, and macOS only reaches the store URL when a release carries
+  /// no dmg at all.
+  static Future<int?> _fetchAppStoreBuild(String? storeUrl) async {
+    if (Pfs.type != Pfs.ios) return null;
+    final url = appStoreLookupUrl(storeUrl);
+    if (url == null) return null;
+    // [myDio] sets no timeout and treats every status as success, so this has
+    // to bound itself: a store that does not answer must delay the update
+    // check by seconds, not hold it open. Timing out reads as "unknown",
+    // which trusts the tag.
+    final cancel = CancelToken();
+    try {
+      final resp = await myDio
+          .get(
+            url,
+            options: Options(responseType: ResponseType.plain),
+            cancelToken: cancel,
+          )
+          .timeout(const Duration(seconds: 5));
+      return parseAppStoreBuild(resp.data.toString());
+    } catch (e) {
+      // [Future.timeout] only stops the waiting. Without this the request
+      // itself stays open, holding a socket for a result nobody reads.
+      cancel.cancel('App Store lookup abandoned');
+      _logger.warning('App Store lookup failed', e);
+      return null;
+    }
+  }
+
   /// Load and parse a raw GitHub Releases API response.
+  ///
+  /// [storeBuild] is what the App Store serves, when known; see
+  /// [_fetchAppStoreBuild].
   static void fromGitHubReleasesStr({
     required String raw,
     required int build,
     String? storeUrl,
+    int? storeBuild,
     Pfs? platform,
     CpuArch? arch,
   }) {
@@ -139,6 +209,7 @@ abstract final class AppUpdate {
     _githubStoreUrl = storeUrl;
     _githubPlatform = platform;
     _githubArch = arch;
+    _storeBuild = storeBuild;
     _getAll();
   }
 
@@ -156,14 +227,32 @@ abstract final class AppUpdate {
   }
 
   static void _getGitHubAll() {
-    final release = _getGitHubRelease();
-    if (release == null) return;
-    final url = _getGitHubUrl(release);
-    if (url == null) return;
-    _url = url;
-    _version = AppUpdateVer(latest: release.build).parse(_build);
-    _versionName = release.tag;
-    _releaseNotes = _getGitHubReleaseNotes(release.build);
+    // The newest release this platform can install, which is not always the
+    // newest release: a version published for some platforms only, or an iOS
+    // build still in review, leaves the rest on an earlier one. Offering that
+    // earlier one beats offering nothing — the alternative is that one
+    // partial release mutes the update check until the next full one.
+    //
+    // The channel downgrade in [_getGitHubRelease] is meant to be decided by
+    // what the user can install, so the installable pass is allowed to make
+    // it. It must not stick when that pass comes back empty: the fallback
+    // below and the release notes both read [chan], and a beta user with no
+    // installable asset anywhere would otherwise be reported the newest
+    // stable and left on a channel they never chose.
+    final chanBefore = _chan;
+    final installable = _getGitHubRelease(installable: true);
+    if (installable == null) _chan = chanBefore;
+
+    // Nothing installable anywhere: still report the newest release, so the
+    // settings page names the real version instead of "unknown". [url] stays
+    // null and no update is offered, since there is nothing to offer.
+    final target = installable ?? _getGitHubRelease();
+    if (target == null) return;
+
+    _url = installable == null ? null : _getGitHubUrl(installable);
+    _version = AppUpdateVer(latest: target.build).parse(_build);
+    _versionName = target.tag;
+    _releaseNotes = _getGitHubReleaseNotes(target.build);
     _changelog = switch (_releaseNotes.length) {
       0 => null,
       1 => _releaseNotes.first.body,
@@ -345,11 +434,20 @@ abstract final class AppUpdate {
         .replaceAll('{CHAN}', chan.name);
   }
 
-  static _GitHubRelease? _getGitHubRelease() {
-    final stable = _latestGitHubRelease(prerelease: false);
+  /// The release to offer, or with [installable] the newest one that resolves
+  /// to a download for this platform.
+  ///
+  /// [_getGitHubAll] asks for the installable one first, so the channel
+  /// downgrade below is decided by what the user can actually get: a beta user
+  /// whose newest prerelease is the only one carrying their platform's asset
+  /// stays on beta rather than being dropped to an older stable.
+  static _GitHubRelease? _getGitHubRelease({bool installable = false}) {
+    final stable =
+        _latestGitHubRelease(prerelease: false, installable: installable);
     if (chan == AppUpdateChan.stable) return stable;
 
-    final beta = _latestGitHubRelease(prerelease: true);
+    final beta =
+        _latestGitHubRelease(prerelease: true, installable: installable);
     if (beta == null) {
       _updateChanRelated(AppUpdateChan.stable);
       return stable;
@@ -360,13 +458,36 @@ abstract final class AppUpdate {
     return stable;
   }
 
-  static _GitHubRelease? _latestGitHubRelease({required bool prerelease}) {
+  /// [_storeBuild], but only when it is a build number in the same space as
+  /// the release tags.
+  ///
+  /// [_parseBuild] reads the last run of digits, which is the build under this
+  /// project's `v1.0.<build>` tags but not under marketing versioning: an App
+  /// Store version of `1.4.0` reads as build 0 and `1.4.1` as build 1, and
+  /// either would reject every release and mute iOS updates permanently.
+  ///
+  /// An iOS build can only have been installed from the store, so the store
+  /// does not serve something older than what is running. A value below the
+  /// installed build means the two are not the same numbering. Answering null
+  /// then is deliberate — unknown trusts the tag, so a wrong guess here costs
+  /// one prompt too many rather than silence.
+  static int? get _comparableStoreBuild {
+    final storeBuild = _storeBuild;
+    if (storeBuild == null) return null;
+    if (storeBuild <= 0 || storeBuild < _build) return null;
+    return storeBuild;
+  }
+
+  static _GitHubRelease? _latestGitHubRelease({
+    required bool prerelease,
+    bool installable = false,
+  }) {
     _GitHubRelease? latest;
     for (final release in _githubReleases) {
       if (release.prerelease != prerelease) continue;
-      if (latest == null || release.build > latest.build) {
-        latest = release;
-      }
+      if (latest != null && release.build <= latest.build) continue;
+      if (installable && _getGitHubUrl(release) == null) continue;
+      latest = release;
     }
     return latest;
   }
@@ -401,6 +522,14 @@ abstract final class AppUpdate {
             _findGitHubAsset(dmgs, (asset) => !asset.hasAnyArch)?.url ??
             _githubStoreUrl;
       case Pfs.ios:
+        // A tag exists the moment it is pushed; the App Store build behind it
+        // can still be in review for days. Offering it would send the user to
+        // a store page that serves the build they are already running, on
+        // every launch, with no way to act on it. An unknown store build
+        // means the lookup failed, and one failed lookup must not mute
+        // updates for good — so that case still trusts the tag.
+        final storeBuild = _comparableStoreBuild;
+        if (storeBuild != null && release.build > storeBuild) return null;
         return _githubStoreUrl;
       case Pfs.web || Pfs.fuchsia || Pfs.unknown:
         return null;
@@ -529,13 +658,15 @@ final class _GitHubRelease {
       return null;
     }
   }
+}
 
-  static int? _parseBuild(Object? raw) {
-    if (raw == null) return null;
-    final matches = RegExp(r'\d+').allMatches(raw.toString()).toList();
-    if (matches.isEmpty) return null;
-    return int.tryParse(matches.last.group(0)!);
-  }
+/// The build number in a version string: the last run of digits, so a GitHub
+/// tag `v1.0.1491` and an App Store version `1.0.1491` both yield 1491.
+int? _parseBuild(Object? raw) {
+  if (raw == null) return null;
+  final matches = RegExp(r'\d+').allMatches(raw.toString()).toList();
+  if (matches.isEmpty) return null;
+  return int.tryParse(matches.last.group(0)!);
 }
 
 final class _GitHubAsset {

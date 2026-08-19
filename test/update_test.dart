@@ -390,7 +390,10 @@ void main() {
     expect(AppUpdate.url, isNull);
   });
 
-  test('github missing platform asset exposes no update', () {
+  test('github missing platform asset still names the newest version', () {
+    // No release has a Windows asset, so there is nothing to install — but the
+    // version is known and the settings page should say so rather than
+    // "unknown".
     AppUpdate.fromGitHubReleasesStr(
       raw: _githubRaw([
         _release(tag: 'v1.0.3', assets: [_asset('ServerBox.zip')]),
@@ -399,8 +402,309 @@ void main() {
       platform: Pfs.windows,
       arch: CpuArch.amd64,
     );
-    expect(AppUpdate.version, isNull);
+    expect(AppUpdate.version, (3, AppUpdateLevel.normal));
+    expect(AppUpdate.versionName, 'v1.0.3');
     expect(AppUpdate.url, isNull);
+  });
+
+  group('release published for some platforms only', () {
+    // The shape this was written for: v1.0.1491 shipped a dmg, an AppImage, a
+    // Windows zip and an ipa, and no apk at all.
+    String raw() => _githubRaw([
+          _release(
+            tag: 'v1.0.1491',
+            body: 'ninety one',
+            assets: [
+              _asset('ServerBox-1.0.1491.dmg'),
+              _asset('ServerBox_v1.0.1491_amd64.AppImage'),
+              _asset('ServerBox_v1.0.1491_windows_amd64.zip'),
+            ],
+          ),
+          _release(
+            tag: 'v1.0.1480',
+            body: 'eighty',
+            assets: [
+              _asset('ServerBox-1.0.1480.dmg'),
+              _asset('ServerBox_v1.0.1480_amd64.apk'),
+              _asset('ServerBox_v1.0.1480_arm64.apk'),
+              _asset('ServerBox_v1.0.1480_arm.apk'),
+              _asset('ServerBox_v1.0.1480_windows_amd64.zip'),
+            ],
+          ),
+        ]);
+
+    test('offers the newest release that has an asset for this platform', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        platform: Pfs.android,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1480, AppUpdateLevel.normal));
+      expect(AppUpdate.versionName, 'v1.0.1480');
+      expect(AppUpdate.url, 'https://download/ServerBox_v1.0.1480_arm64.apk');
+      // The notes stop at what is being offered: 1491 is not on the way in.
+      expect(AppUpdate.releaseNotes.map((e) => e.title).toList(), ['v1.0.1480']);
+    });
+
+    test('is up to date on the newest release carrying its asset', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1480,
+        platform: Pfs.android,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1480, AppUpdateLevel.nil));
+      expect(AppUpdate.releaseNotes, isEmpty);
+    });
+
+    test('platforms in that release are unaffected', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        platform: Pfs.windows,
+        arch: CpuArch.amd64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(
+        AppUpdate.url,
+        'https://download/ServerBox_v1.0.1491_windows_amd64.zip',
+      );
+      expect(
+        AppUpdate.releaseNotes.map((e) => e.title).toList(),
+        ['v1.0.1491', 'v1.0.1480'],
+      );
+    });
+
+    test('an arch with no asset in any release falls back to the newest', () {
+      // Linux arm64: every AppImage is amd64, so nothing is installable.
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        platform: Pfs.linux,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(AppUpdate.url, isNull);
+    });
+  });
+
+  group('ios store build', () {
+    String raw() => _githubRaw([
+          _release(tag: 'v1.0.1491', body: 'ninety one'),
+          _release(tag: 'v1.0.1480', body: 'eighty'),
+        ]);
+
+    const storeUrl = 'https://apps.apple.com/app/id1586449703';
+
+    test('a tag still in review is not offered', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1480,
+        storeUrl: storeUrl,
+        storeBuild: 1480,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      // 1491 exists on GitHub but the store still serves 1480, which is what
+      // is running: no update, rather than a prompt that cannot be acted on.
+      expect(AppUpdate.version, (1480, AppUpdateLevel.nil));
+      expect(AppUpdate.versionName, 'v1.0.1480');
+      expect(AppUpdate.url, storeUrl);
+    });
+
+    test('a released build is offered once the store serves it', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1480,
+        storeUrl: storeUrl,
+        storeBuild: 1491,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(AppUpdate.url, storeUrl);
+      expect(AppUpdate.releaseNotes.map((e) => e.title).toList(), ['v1.0.1491']);
+    });
+
+    test('a store ahead of the tag still offers the newest tag', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        storeUrl: storeUrl,
+        storeBuild: 1500,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+    });
+
+    test('an unknown store build trusts the tag', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1480,
+        storeUrl: storeUrl,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(AppUpdate.url, storeUrl);
+    });
+
+    test('a store behind every tag reports the newest and offers nothing', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        storeUrl: storeUrl,
+        storeBuild: 1466,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(AppUpdate.url, isNull);
+    });
+
+    test('a marketing version scheme is ignored rather than obeyed', () {
+      // `1.4.0` reads as build 0 under [_parseBuild], and `1.4.1` as build 1.
+      // Either would reject every release and mute iOS updates for good, so a
+      // store build below every known release is treated as unknown.
+      for (final storeBuild in [0, 1]) {
+        AppUpdate.resetForTest();
+        AppUpdate.fromGitHubReleasesStr(
+          raw: raw(),
+          build: 1480,
+          storeUrl: storeUrl,
+          storeBuild: storeBuild,
+          platform: Pfs.ios,
+          arch: CpuArch.arm64,
+        );
+
+        expect(AppUpdate.version, (1491, AppUpdateLevel.normal),
+            reason: 'storeBuild $storeBuild');
+        expect(AppUpdate.url, storeUrl, reason: 'storeBuild $storeBuild');
+      }
+    });
+
+    test('the store build does not constrain macos', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: _githubRaw([
+          _release(tag: 'v1.0.1491', assets: [_asset('ServerBox-1.0.1491.dmg')]),
+        ]),
+        build: 1480,
+        storeUrl: storeUrl,
+        storeBuild: 1480,
+        platform: Pfs.macos,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(AppUpdate.url, 'https://download/ServerBox-1.0.1491.dmg');
+    });
+  });
+
+  group('app store lookup', () {
+    test('lookup url is derived from the store page url', () {
+      expect(
+        AppUpdate.appStoreLookupUrl('https://apps.apple.com/app/id1586449703'),
+        'https://itunes.apple.com/lookup?id=1586449703',
+      );
+      expect(
+        AppUpdate.appStoreLookupUrl(
+          'https://apps.apple.com/us/app/serverbox/id1586449703?mt=8',
+        ),
+        'https://itunes.apple.com/lookup?id=1586449703',
+      );
+      expect(AppUpdate.appStoreLookupUrl(null), isNull);
+      expect(AppUpdate.appStoreLookupUrl('https://example.com/app'), isNull);
+    });
+
+    test('build is read from the version string', () {
+      expect(
+        AppUpdate.parseAppStoreBuild('{"resultCount":1,'
+            '"results":[{"version":"1.0.1480"}]}'),
+        1480,
+      );
+    });
+
+    test('a response naming no app yields null', () {
+      expect(
+        AppUpdate.parseAppStoreBuild('{"resultCount":0,"results":[]}'),
+        isNull,
+      );
+      expect(AppUpdate.parseAppStoreBuild('{"results":[{}]}'), isNull);
+      expect(AppUpdate.parseAppStoreBuild('not json'), isNull);
+      expect(AppUpdate.parseAppStoreBuild('[]'), isNull);
+    });
+  });
+
+  test('github beta stays on a prerelease that has this platform asset', () {
+    // The stable is newer but shipped no apk; downgrading the channel here
+    // would hand the beta user an older build than the one waiting for them.
+    AppUpdate.chan = AppUpdateChan.beta;
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(tag: 'v1.0.6', assets: [_asset('ServerBox-1.0.6.dmg')]),
+        _release(
+          tag: 'v1.0.5',
+          prerelease: true,
+          assets: [_asset('ServerBox_v1.0.5_arm64.apk')],
+        ),
+        _release(
+          tag: 'v1.0.4',
+          assets: [_asset('ServerBox_v1.0.4_arm64.apk')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.chan, AppUpdateChan.beta);
+    expect(AppUpdate.version, (5, AppUpdateLevel.normal));
+    expect(AppUpdate.url, 'https://download/ServerBox_v1.0.5_arm64.apk');
+  });
+
+  test('github beta keeps its channel when nothing is installable', () {
+    // The installable pass finds no prerelease and no stable, and its channel
+    // downgrade must not survive: reporting the newest stable to a beta user,
+    // and leaving them on stable, would both be wrong.
+    AppUpdate.chan = AppUpdateChan.beta;
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          body: 'five beta',
+          prerelease: true,
+          assets: [_asset('ServerBox-1.0.5.dmg')],
+        ),
+        _release(
+          tag: 'v1.0.4',
+          body: 'four',
+          assets: [_asset('ServerBox-1.0.4.dmg')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.chan, AppUpdateChan.beta);
+    expect(AppUpdate.version, (5, AppUpdateLevel.normal));
+    expect(AppUpdate.versionName, 'v1.0.5');
+    expect(AppUpdate.url, isNull);
+    expect(
+      AppUpdate.releaseNotes.map((e) => e.title).toList(),
+      ['v1.0.5', 'v1.0.4'],
+    );
   });
 }
 
