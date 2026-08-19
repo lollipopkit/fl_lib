@@ -227,13 +227,18 @@ class SqliteStore extends Store {
     super.updateLastUpdateTsOnRemove,
     super.updateLastUpdateTsOnSet,
   }) : super(name: name) {
-    _stores.add(this);
+    _stores.add(WeakReference(this));
   }
 
-  static final _stores = <SqliteStore>{};
+  static final _stores = <WeakReference<SqliteStore>>{};
 
   static void _disposeStatements(Database db) {
-    for (final store in _stores) {
+    for (final reference in _stores.toList()) {
+      final store = reference.target;
+      if (store == null) {
+        _stores.remove(reference);
+        continue;
+      }
       if (!identical(store._stmtsFor, db)) continue;
       for (final statement in store._stmts.values) {
         statement.close();

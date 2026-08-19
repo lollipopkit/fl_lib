@@ -83,7 +83,7 @@ class MockStore extends Store {
     _mem[key] = valueToStore;
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     if (updateLastUpdateTsOnSet) {
-      await updateLastUpdateTs(key: key);
+      if (!await updateLastUpdateTs(key: key)) return false;
     }
     return true;
   }
@@ -103,7 +103,7 @@ class MockStore extends Store {
 
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove && existed) {
-      await updateLastUpdateTs(key: key);
+      if (!await updateLastUpdateTs(key: key)) return false;
     }
     return true;
   }
@@ -138,7 +138,9 @@ class MockStore extends Store {
       return false;
     }
 
-    final timestampMap = (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {};
+    final timestampMap = Map<String, int>.from(
+      (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {},
+    );
     final currentTs = ts ?? DateTimeX.timestamp;
 
     if (key != null) {
@@ -150,8 +152,11 @@ class MockStore extends Store {
         timestampMap[k] = currentTs;
       }
     }
-    _mem[this.lastUpdateTsKey] = timestampMap;
-    return true;
+    return await set(
+      lastUpdateTsKey,
+      timestampMap,
+      updateLastUpdateTsOnSet: false,
+    );
   }
 
   @override

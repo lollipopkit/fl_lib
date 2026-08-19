@@ -122,11 +122,15 @@ class HiveStore extends Store {
           return false;
         }
         await box.put(key, converted);
-        if (updateLastUpdateTsOnSet) await updateLastUpdateTs(key: key);
+        if (updateLastUpdateTsOnSet && !await updateLastUpdateTs(key: key)) {
+          return false;
+        }
         return true;
       }
       await box.put(key, val);
-      if (updateLastUpdateTsOnSet) await updateLastUpdateTs(key: key);
+      if (updateLastUpdateTsOnSet && !await updateLastUpdateTs(key: key)) {
+        return false;
+      }
       return true;
     } on HiveError catch (e) {
       dprintWarn('set("$key")', 'HiveError: $e');
@@ -178,7 +182,7 @@ class HiveStore extends Store {
       await box.delete(key);
       updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
       if (updateLastUpdateTsOnRemove && existed) {
-        await updateLastUpdateTs(key: key);
+        if (!await updateLastUpdateTs(key: key)) return false;
       }
       return true;
     } catch (e) {

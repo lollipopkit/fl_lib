@@ -15,7 +15,11 @@ void main() {
       // Ensure lastUpdateTsKey is initialized as a map for tests that rely on it.
       // The MockStore constructor or Store superclass might do this if flags are true,
       // but explicit initialization here makes tests more robust against MockStore's internal implementation details.
-      await store.set(store.lastUpdateTsKey, <String, int>{});
+      await store.set(
+        store.lastUpdateTsKey,
+        <String, int>{},
+        updateLastUpdateTsOnSet: false,
+      );
     });
 
     test('set and get basic types', () async {
@@ -283,14 +287,10 @@ void main() {
 
     test('clear keeps internal bookkeeping keys', () async {
       final store = SqliteStore('clear-test');
-      store.set('user-key', 'value', updateLastUpdateTsOnSet: false);
+      expect(store.set('user-key', 'value', updateLastUpdateTsOnSet: false), isTrue);
       const internalKey = '${StoreDefaults.prefixKey}migration';
-      store.set(internalKey, 'value', updateLastUpdateTsOnSet: false);
-      store.set(
-        store.lastUpdateTsKey,
-        <String, int>{'user-key': 1},
-        updateLastUpdateTsOnSet: false,
-      );
+      expect(store.set(internalKey, 'value', updateLastUpdateTsOnSet: false), isTrue);
+      expect(store.set(store.lastUpdateTsKey, <String, int>{'user-key': 1}, updateLastUpdateTsOnSet: false), isTrue);
 
       expect(await store.clear(updateLastUpdateTsOnClear: false), isTrue);
       expect(store.get<String>('user-key'), isNull);
@@ -306,7 +306,11 @@ void main() {
 
     setUp(() async {
       store = MockStore(updateLastUpdateTsOnSet: true);
-      await store.set(store.lastUpdateTsKey, <String, int>{}); // Ensure TS map is init
+      await store.set(
+        store.lastUpdateTsKey,
+        <String, int>{},
+        updateLastUpdateTsOnSet: false,
+      ); // Ensure TS map is init
       prop = MockStoreProp<String>(store, testKey);
     });
 
@@ -374,7 +378,11 @@ void main() {
 
     setUp(() async {
       store = MockStore(updateLastUpdateTsOnSet: true);
-      await store.set(store.lastUpdateTsKey, <String, int>{}); // Ensure TS map is init
+      await store.set(
+        store.lastUpdateTsKey,
+        <String, int>{},
+        updateLastUpdateTsOnSet: false,
+      ); // Ensure TS map is init
       propDefault = MockStorePropDefault<String>(store, testKey, defaultValue);
     });
 

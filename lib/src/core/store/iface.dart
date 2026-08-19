@@ -126,6 +126,9 @@ sealed class Store {
   /// If [key] is `null`, it's triggered by [clear].
   ///
   /// {@macro store_last_update_ts}
+  ///
+  /// [mutation] must not call [updateLastUpdateTs] or [clear] on this store:
+  /// this queue is intentionally non-reentrant.
   Future<T> _serializeLastUpdateTsMutation<T>(
     FutureOr<T> Function() mutation,
   ) {
