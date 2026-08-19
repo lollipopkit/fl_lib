@@ -149,6 +149,9 @@ CREATE TABLE IF NOT EXISTS kv (
   /// run on a bare CI machine.
   @visibleForTesting
   static Database openInMemory() {
+    if (_db != null || _opening != null) {
+      throw StateError('SqliteDb is already open or opening');
+    }
     final db = sqlite3.openInMemory();
     db.execute('''
 CREATE TABLE IF NOT EXISTS kv (
@@ -165,7 +168,13 @@ CREATE TABLE IF NOT EXISTS kv (
   }
 
   static Future<void> close() async {
-    _db?.close();
+    final opening = _opening;
+    if (opening != null) await opening;
+    final db = _db;
+    if (db != null) {
+      SqliteStore._disposeStatements(db);
+      db.close();
+    }
     _db = null;
     _path = null;
   }
@@ -217,7 +226,27 @@ class SqliteStore extends Store {
     super.updateLastUpdateTsOnClear,
     super.updateLastUpdateTsOnRemove,
     super.updateLastUpdateTsOnSet,
-  }) : super(name: name);
+  }) : super(name: name) {
+    _stores.add(WeakReference(this));
+  }
+
+  static final _stores = <WeakReference<SqliteStore>>{};
+
+  static void _disposeStatements(Database db) {
+    for (final reference in _stores.toList()) {
+      final store = reference.target;
+      if (store == null) {
+        _stores.remove(reference);
+        continue;
+      }
+      if (!identical(store._stmtsFor, db)) continue;
+      for (final statement in store._stmts.values) {
+        statement.close();
+      }
+      store._stmts.clear();
+      store._stmtsFor = null;
+    }
+  }
 
   Database get _db => SqliteDb.instance;
 
@@ -411,25 +440,30 @@ class SqliteStore extends Store {
   /// erase a migration's "already done" marker and have it run a second time
   /// over the data that replaced it.
   @override
-  bool clear({bool? updateLastUpdateTsOnClear}) {
-    final cleared = keys();
-    if (cleared.isNotEmpty) {
-      // By key rather than one predicate: `_` is a wildcard in `LIKE`, and the
-      // internal prefixes both start with one.
-      final placeholders = List.filled(cleared.length, '?').join(', ');
-      _db.execute(
-        'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
-        [name, ...cleared],
-      );
-    }
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
+      _serializeLastUpdateTsMutation(() async {
+        final cleared = keys();
+        if (cleared.isNotEmpty) {
+          // By key rather than one predicate: `_` is a wildcard in `LIKE`, and
+          // the internal prefixes both start with one.
+          final placeholders = List.filled(cleared.length, '?').join(', ');
+          _db.execute(
+            'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
+            [name, ...cleared],
+          );
+        }
 
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) updateLastUpdateTs(key: null);
-    for (final key in cleared) {
-      _listeners.notify(key);
-    }
-    return true;
-  }
+        final shouldUpdateLastUpdateTs =
+            updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
+        if (shouldUpdateLastUpdateTs &&
+            !await _updateLastUpdateTs(key: null)) {
+          return false;
+        }
+        for (final key in cleared) {
+          _listeners.notify(key);
+        }
+        return true;
+      });
 
   /// One query for the whole store.
   ///

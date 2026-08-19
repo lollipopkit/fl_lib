@@ -6,12 +6,12 @@ import 'package:fl_lib/src/core/store/iface.dart';
 typedef _OnMove<T> = void Function(List<T>);
 
 extension OrderX<T> on List<T> {
-  void move(
+  Future<void> move(
     int oldIndex,
     int newIndex, {
     StoreProp<List<T>>? property,
     _OnMove<T>? onMove,
-  }) {
+  }) async {
     if (oldIndex == newIndex) return;
     if (oldIndex < newIndex) {
       newIndex -= 1;
@@ -19,7 +19,7 @@ extension OrderX<T> on List<T> {
     final item = this[oldIndex];
     removeAt(oldIndex);
     insert(newIndex, item);
-    property?.set(this);
+    await property?.set(this);
     onMove?.call(this);
   }
 
@@ -33,7 +33,7 @@ extension OrderX<T> on List<T> {
     return indexOf(id);
   }
 
-  void moveByItem(
+  Future<void> moveByItem(
     int o,
     int n, {
     /// The list after filtering.
@@ -42,7 +42,7 @@ extension OrderX<T> on List<T> {
     List<T>? filtered,
     StoreProp<List<T>>? property,
     _OnMove<T>? onMove,
-  }) {
+  }) async {
     if (o == n) return;
     if (o < n) {
       n -= 1;
@@ -54,7 +54,7 @@ extension OrderX<T> on List<T> {
     if (o < n) {
       newIndex += 1;
     }
-    move(index, newIndex, property: property, onMove: onMove);
+    await move(index, newIndex, property: property, onMove: onMove);
   }
 
   /// order: ['d', 'b', 'e']

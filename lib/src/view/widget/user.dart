@@ -66,10 +66,14 @@ final class _UserCardState extends State<UserCard> {
     return ElevatedButton(
       onPressed: () async {
         final token = await Pfs.paste();
-        if (token == null || token.isEmpty) return;
+        if (!mounted || token == null || token.isEmpty) return;
         showTokenPaste.value = false;
-        UserApi.tokenProp.set(token);
-        contextSafe?.showLoadingDialog(fn: UserApi.refresh);
+        await context.showLoadingDialog(
+          fn: () => UserApi.authenticate(token),
+          onErr: (_, _) {
+            if (mounted) showTokenPaste.value = true;
+          },
+        );
       },
       child: Text('${l10n.paste} Token'),
     );

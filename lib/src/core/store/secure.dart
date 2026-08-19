@@ -61,7 +61,48 @@ abstract final class SecureStoreProps {
   static const bakPwd = SecureProp('bakPwd');
 
   /// Password of [HiveStore].
-  static const hivePwd = SecureProp('hivePwd'); 
+  static const hivePwd = SecureProp('hivePwd');
+
+  /// Password used to authenticate to WebDAV.
+  static const webdavPwd = SecureProp('webdavPwd');
+
+  /// GitHub token used for Gist access.
+  static const githubToken = SecureProp('githubToken');
+
+  /// Moves secrets written by older builds out of SharedPreferences.
+  static Future<void> migrateLegacyPrefs() async {
+    try {
+      // ignore: deprecated_member_use_from_same_package
+      await _migrateLegacyPref(PrefProps.webdavPwd, webdavPwd);
+    } catch (e) {
+      dprint('Failed to migrate WebDAV password: $e');
+    }
+    try {
+      // ignore: deprecated_member_use_from_same_package
+      await _migrateLegacyPref(PrefProps.githubToken, githubToken);
+    } catch (e) {
+      dprint('Failed to migrate GitHub token: $e');
+    }
+  }
+
+  static Future<void> _migrateLegacyPref(
+    PrefProp<String> legacy,
+    SecureProp secure,
+  ) async {
+    final secured = await secure.read();
+    if (secured != null) {
+      await legacy.remove();
+      return;
+    }
+
+    final value = legacy.get();
+    if (value == null) return;
+    await secure.write(value);
+    if (await secure.read() != value) {
+      throw StateError('Failed to verify migrated secret ${legacy.key}');
+    }
+    await legacy.remove();
+  }
 }
 
 /// The secure store.

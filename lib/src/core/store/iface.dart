@@ -36,6 +36,12 @@ typedef StoreToObj<T extends Object> = Object? Function(T? value);
 /// It's designed that only one timestamp for all the data in one store.
 /// {@endtemplate}
 sealed class Store {
+  /// Serializes changes that read, replace, or restore [lastUpdateTs].
+  ///
+  /// The map is persisted as one value, so two asynchronous writers cannot
+  /// safely read it independently and both write their own modified copy.
+  Future<void>? _lastUpdateTsMutation;
+
   /// Get the key for the last update timestamp.
   final String lastUpdateTsKey;
 
@@ -54,7 +60,7 @@ sealed class Store {
   /// Name of the store
   final String name;
 
-  const Store({
+  Store({
     required this.name,
     this.updateLastUpdateTsOnSet = StoreDefaults.defaultUpdateLastUpdateTs,
     this.updateLastUpdateTsOnRemove = StoreDefaults.defaultUpdateLastUpdateTs,
@@ -120,7 +126,32 @@ sealed class Store {
   /// If [key] is `null`, it's triggered by [clear].
   ///
   /// {@macro store_last_update_ts}
-  FutureOr<bool> updateLastUpdateTs({int? ts, required String? key}) async {
+  ///
+  /// [mutation] must not call [updateLastUpdateTs] or [clear] on this store:
+  /// this queue is intentionally non-reentrant.
+  Future<T> _serializeLastUpdateTsMutation<T>(
+    FutureOr<T> Function() mutation,
+  ) {
+    final previous = _lastUpdateTsMutation;
+    final current = previous == null
+        ? Future<T>.sync(mutation)
+        : previous.then((_) => Future<T>.sync(mutation));
+
+    // Keep the queue usable after a failed persistence operation.
+    final completion = current.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    _lastUpdateTsMutation = completion;
+    completion.then<void>((_) {
+      if (identical(_lastUpdateTsMutation, completion)) {
+        _lastUpdateTsMutation = null;
+      }
+    });
+    return current;
+  }
+
+  Future<bool> _updateLastUpdateTs({int? ts, required String? key}) async {
     if (key != null && isInternalKey(key)) {
       // dprintWarn('updateLastUpdateTs()', 'key `$key` is an internal key, ignored.');
       return false;
@@ -142,8 +173,17 @@ sealed class Store {
         map[k] = ts;
       }
     }
-    return set(lastUpdateTsKey, json.encode(map), updateLastUpdateTsOnSet: false);
+    return await set(
+      lastUpdateTsKey,
+      json.encode(map),
+      updateLastUpdateTsOnSet: false,
+    );
   }
+
+  Future<bool> updateLastUpdateTs({int? ts, required String? key}) =>
+      _serializeLastUpdateTsMutation(
+        () => _updateLastUpdateTs(ts: ts, key: key),
+      );
 
   /// Get the last update timestamp.
   ///
@@ -282,10 +322,24 @@ abstract class StoreProp<T extends Object> {
   /// Set the value of the key.
   ///
   /// If you want to set `null`, use `remove()` instead.
-  FutureOr<void> set(T value) => store.set(key, value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+  Future<void> set(T value) async {
+    final saved = await store.set(
+      key,
+      value,
+      toObj: toObj,
+      updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+    );
+    if (!saved) {
+      throw StateError('Failed to persist "$key"');
+    }
+  }
 
   /// Remove the key.
-  FutureOr<void> remove() => store.remove(key);
+  Future<void> remove() async {
+    if (!await store.remove(key)) {
+      throw StateError('Failed to remove "$key"');
+    }
+  }
 
   /// {@template store_prop_listenable}
   /// Get the [ValueListenable] of the key.
@@ -327,7 +381,7 @@ abstract class StorePropDefault<T extends Object> extends StoreProp<T> {
 
   /// Set the value of the key.
   @override
-  FutureOr<void> set(T value) => store.set(key, value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+  Future<void> set(T value) => super.set(value);
 
   /// {@macro store_prop_listenable}
   @override

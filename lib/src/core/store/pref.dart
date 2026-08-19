@@ -20,6 +20,7 @@ abstract final class PrefProps {
   static const webdavUser = PrefProp<String>('webdav_user');
 
   /// {@macro webdav_settings}
+  @Deprecated('Use SecureStoreProps.webdavPwd')
   static const webdavPwd = PrefProp<String>('webdav_pwd');
 
   /// {@macro webdav_settings}
@@ -29,6 +30,7 @@ abstract final class PrefProps {
   static const icloudSync = PrefPropDefault('icloud_sync', false, updateLastUpdateTsOnSetProp: false);
 
   /// GitHub token used for Gist access
+  @Deprecated('Use SecureStoreProps.githubToken')
   static const githubToken = PrefProp<String>('github_token');
 
   /// Gist id holding backup file(s)
@@ -143,14 +145,14 @@ final class PrefStore extends Store {
     T val, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     final instance = _instance;
     if (instance == null) {
       dprintWarn('set("$key")', 'instance not initialized');
       return Future.value(false);
     }
 
-    final res = _set(key, val, ifNotSupported: () async {
+    final res = await _set(key, val, ifNotSupported: () async {
       if (toObj == null) {
         dprintWarn('set("$key")', 'invalid type: ${val.runtimeType}');
         return false;
@@ -164,7 +166,10 @@ final class PrefStore extends Store {
       }
       return instance.remove(key);
     });
-    if (updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
+    if (!res) return false;
+    if (updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) {
+      if (!await updateLastUpdateTs(key: key)) return false;
+    }
     return res;
   }
 
@@ -193,22 +198,29 @@ final class PrefStore extends Store {
 
   /// Remove the key.
   @override
-  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove}) {
+  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove}) async {
     final instance = _instance;
     if (instance == null) {
       dprintWarn('remove("$key")', 'instance not initialized');
       return Future.value(false);
     }
 
-    final ret = instance.remove(key);
+    final existed = instance.containsKey(key);
+    final ret = await instance.remove(key);
+    if (!ret) return false;
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
+    if (updateLastUpdateTsOnRemove &&
+        existed &&
+        !await updateLastUpdateTs(key: key)) {
+      return false;
+    }
     return ret;
   }
 
   /// Clear the store.
   @override
-  Future<bool> clear({bool? updateLastUpdateTsOnClear}) {
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
+      _serializeLastUpdateTsMutation(() async {
     final instance = _instance;
     if (instance == null) {
       dprintWarn('clear()', 'instance not initialized');
@@ -216,15 +228,24 @@ final class PrefStore extends Store {
     }
 
     final lastUpTsMap = lastUpdateTs;
-    final ret = instance.clear();
+    final ret = await instance.clear();
+    if (!ret) return false;
     if (lastUpTsMap != null) {
-      set(lastUpdateTsKey, lastUpTsMap, updateLastUpdateTsOnSet: false);
+      final restored = await set(
+        lastUpdateTsKey,
+        lastUpTsMap,
+        updateLastUpdateTsOnSet: false,
+      );
+      if (!restored) return false;
     }
 
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) updateLastUpdateTs(key: null);
+    final shouldUpdateLastUpdateTs = updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
+    if (shouldUpdateLastUpdateTs &&
+        !await _updateLastUpdateTs(key: null)) {
+      return false;
+    }
     return ret;
-  }
+      });
 
   Future<bool> _set<T extends Object>(
     String key,

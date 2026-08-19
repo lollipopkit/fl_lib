@@ -3,7 +3,7 @@ part of 'iface.dart';
 // ignore_for_file: unnecessary_this
 
 /// A mock implementation of [Store] that keeps data in memory.
-/// All operations are synchronous.
+/// Persistence operations complete asynchronously, matching production stores.
 class MockStore extends Store {
   final Map<String, Object> _mem = {};
 
@@ -62,12 +62,12 @@ class MockStore extends Store {
   }
 
   @override
-  bool set<T extends Object>(
+  Future<bool> set<T extends Object>(
     String key,
     T val, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     Object? valueToStore;
     if (toObj != null) {
       final strVal = toObj(val);
@@ -83,7 +83,7 @@ class MockStore extends Store {
     _mem[key] = valueToStore;
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     if (updateLastUpdateTsOnSet) {
-      updateLastUpdateTs(key: key);
+      if (!await updateLastUpdateTs(key: key)) return false;
     }
     return true;
   }
@@ -97,40 +97,50 @@ class MockStore extends Store {
   }
 
   @override
-  bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
+  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove}) async {
     final existed = _mem.containsKey(key);
     _mem.remove(key);
 
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove && existed) {
-      updateLastUpdateTs(key: key);
+      if (!await updateLastUpdateTs(key: key)) return false;
     }
     return true;
   }
 
   @override
-  bool clear({bool? updateLastUpdateTsOnClear}) {
-    final lastUpTsMap = _mem[this.lastUpdateTsKey];
-    _mem.clear();
-    if (lastUpTsMap != null) {
-      _mem[this.lastUpdateTsKey] = lastUpTsMap;
-    }
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
+      _serializeLastUpdateTsMutation(() async {
+        final lastUpTsMap = _mem[this.lastUpdateTsKey];
+        _mem.clear();
+        if (lastUpTsMap != null) {
+          _mem[this.lastUpdateTsKey] = lastUpTsMap;
+        }
 
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) {
-      updateLastUpdateTs(key: null);
-    }
-    return true;
-  }
+        final shouldUpdateLastUpdateTs =
+            updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
+        if (shouldUpdateLastUpdateTs &&
+            !await _updateMockLastUpdateTs(key: null)) {
+          return false;
+        }
+        return true;
+      });
 
   @override
-  bool updateLastUpdateTs({int? ts, required String? key}) {
+  Future<bool> updateLastUpdateTs({int? ts, required String? key}) =>
+      _serializeLastUpdateTsMutation(
+        () => _updateMockLastUpdateTs(ts: ts, key: key),
+      );
+
+  Future<bool> _updateMockLastUpdateTs({int? ts, required String? key}) async {
     if (key != null && isInternalKey(key)) {
       dprintWarn('updateLastUpdateTs()', 'Attempted to update timestamp for internal key "$key". Ignored.');
       return false;
     }
 
-    final timestampMap = (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {};
+    final timestampMap = Map<String, int>.from(
+      (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {},
+    );
     final currentTs = ts ?? DateTimeX.timestamp;
 
     if (key != null) {
@@ -142,8 +152,11 @@ class MockStore extends Store {
         timestampMap[k] = currentTs;
       }
     }
-    _mem[this.lastUpdateTsKey] = timestampMap;
-    return true;
+    return await set(
+      lastUpdateTsKey,
+      timestampMap,
+      updateLastUpdateTsOnSet: false,
+    );
   }
 
   @override
@@ -200,13 +213,18 @@ class MockStore extends Store {
   }
 
   @override
-  bool setAll<T extends Object>(
+  Future<bool> setAll<T extends Object>(
     Map<String, T> map, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     for (final entry in map.entries) {
-      final res = set(entry.key, entry.value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+      final res = await set(
+        entry.key,
+        entry.value,
+        toObj: toObj,
+        updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+      );
       if (!res) {
         dprintWarn('setAllSync()', 'failed to set ${entry.key}');
         return false;

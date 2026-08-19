@@ -22,15 +22,23 @@ class WindowState {
 
 final class WindowStateListener extends WindowListener {
   final StoreProp<WindowState> windowSize;
+  Future<void> _updateTail = Future.value();
 
   WindowStateListener(this.windowSize);
 
-  void _updateState() async {
-    final state = WindowState(
-      await windowManager.getSize(),
-      await windowManager.getPosition(),
+  Future<void> _updateState() {
+    final update = _updateTail.then((_) async {
+      final state = WindowState(
+        await windowManager.getSize(),
+        await windowManager.getPosition(),
+      );
+      await windowSize.set(state);
+    });
+    _updateTail = update.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
     );
-    windowSize.set(state);
+    return update;
   }
 
   @override

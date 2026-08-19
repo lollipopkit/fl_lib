@@ -23,11 +23,11 @@ abstract final class UserApi {
   }
 
   /// Logout, clear token and user.
-  static void logout(AnonUserConfirmFn anonConfirm) async {
+  static Future<void> logout(AnonUserConfirmFn anonConfirm) async {
     if (user.value?.isAnon == true) {
       if (!await anonConfirm()) return;
     }
-    tokenProp.remove();
+    await tokenProp.remove();
     user.value = null;
   }
 
@@ -72,17 +72,29 @@ abstract final class UserApi {
   ///
   /// It will update [UserApi.user] value.
   static Future<void> refresh() async {
+    user.value = await _fetchUser();
+    dprint(user.value);
+  }
+
+  /// Validate [token], then persist it and update the current user.
+  static Future<void> authenticate(String token) async {
+    final nextUser = await _fetchUser(token: token);
+    await tokenProp.set(token);
+    user.value = nextUser;
+    dprint(user.value);
+  }
+
+  static Future<User> _fetchUser({String? token}) async {
     final resp = await myDio.get(
       ApiUrls.user,
       options: Options(
-        headers: authHeaders,
+        headers: token == null ? authHeaders : {'Authorization': token},
         responseType: ResponseType.json,
       ),
     );
     final data = _getRespData<Map<dynamic, dynamic>>(resp.data);
     if (data == null) throw 'Invalid resp: ${resp.data}';
-    user.value = User.fromJson(data.cast());
-    dprint(user.value);
+    return User.fromJson(data.cast());
   }
 
   /// Delete current user.
@@ -96,7 +108,7 @@ abstract final class UserApi {
       ApiUrls.user,
       options: Options(headers: authHeaders),
     );
-    logout(() async => true);
+    await logout(() async => true);
   }
 
   static Future<void> init() async {

@@ -67,8 +67,7 @@ abstract final class DeepLinks {
       case '/oauth-callback':
         final token = params['token'];
         if (token == null) return;
-        UserApi.tokenProp.set(token);
-        await UserApi.refresh();
+        await UserApi.authenticate(token);
         break;
       default:
         Loggers.app.warning('[AppLinksHandler] Unknown path: ${uri.path}');

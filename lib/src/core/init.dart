@@ -30,6 +30,8 @@ abstract final class Inits {
 
     await Paths.init(appName, bakName: bakName); // Keep this first.
     await PrefStore.shared.init();
+    await SecureStoreProps.migrateLegacyPrefs();
+    await Future.wait([GistRs.initShared(), Webdav.initShared()]);
 
     // You can view [Future.wait]'s implementation to understand why it's used here
     // and why put the [Paths.init] out of this.
