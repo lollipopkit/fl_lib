@@ -2,9 +2,9 @@ part of 'iface.dart';
 
 /// The store of Hive.
 ///
-/// It implements [Store].
-class HiveStore extends Store {
-  /// The internal hive box for this [Store].
+/// It implements [KvStore].
+class HiveStore extends KvStore {
+  /// The internal hive box for this [KvStore].
   ///
   /// Not `final`: [init] may run a second time on the same instance after
   /// `Hive.close()`, which is how an app recovers from box files it turned out

@@ -46,7 +46,7 @@ abstract class Mergeable {
   /// Returns true if any changes were made to the store.
   static Future<bool> mergeStore({
     required Map<String, Object?> backupData,
-    required Store store,
+    required KvStore store,
     required bool force,
   }) async {
     bool hasChanges = false;
