@@ -165,7 +165,11 @@ CREATE TABLE IF NOT EXISTS kv (
   }
 
   static Future<void> close() async {
-    _db?.close();
+    final db = _db;
+    if (db != null) {
+      SqliteStore._disposeStatements(db);
+      db.close();
+    }
     _db = null;
     _path = null;
   }
@@ -217,7 +221,22 @@ class SqliteStore extends Store {
     super.updateLastUpdateTsOnClear,
     super.updateLastUpdateTsOnRemove,
     super.updateLastUpdateTsOnSet,
-  }) : super(name: name);
+  }) : super(name: name) {
+    _stores.add(this);
+  }
+
+  static final _stores = <SqliteStore>{};
+
+  static void _disposeStatements(Database db) {
+    for (final store in _stores) {
+      if (!identical(store._stmtsFor, db)) continue;
+      for (final statement in store._stmts.values) {
+        statement.close();
+      }
+      store._stmts.clear();
+      store._stmtsFor = null;
+    }
+  }
 
   Database get _db => SqliteDb.instance;
 

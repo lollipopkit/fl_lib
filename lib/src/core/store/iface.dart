@@ -75,7 +75,7 @@ sealed class Store {
   /// calling [toObj].
   /// - If you want to set to `null`, use [remove] instead.
   /// {@endtemplate}
-  Future<bool> set<T extends Object>(
+  FutureOr<bool> set<T extends Object>(
     String key,
     T val, {
     StoreToObj<T>? toObj,
@@ -85,7 +85,7 @@ sealed class Store {
   /// Set the map of key-value pairs.
   ///
   /// {@macro store_set}
-  Future<bool> setAll<T extends Object>(
+  FutureOr<bool> setAll<T extends Object>(
     Map<String, T> map, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
@@ -108,10 +108,10 @@ sealed class Store {
   FutureOr<Set<String>> keys({bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys});
 
   /// Remove the key.
-  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove});
+  FutureOr<bool> remove(String key, {bool? updateLastUpdateTsOnRemove});
 
   /// Clear the store.
-  Future<bool> clear({bool? updateLastUpdateTsOnClear});
+  FutureOr<bool> clear({bool? updateLastUpdateTsOnClear});
 
   /// Update the last update timestamp.
   ///
@@ -120,7 +120,7 @@ sealed class Store {
   /// If [key] is `null`, it's triggered by [clear].
   ///
   /// {@macro store_last_update_ts}
-  Future<bool> updateLastUpdateTs({int? ts, required String? key}) async {
+  FutureOr<bool> updateLastUpdateTs({int? ts, required String? key}) async {
     if (key != null && isInternalKey(key)) {
       // dprintWarn('updateLastUpdateTs()', 'key `$key` is an internal key, ignored.');
       return false;
