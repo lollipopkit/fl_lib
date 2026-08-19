@@ -22,13 +22,16 @@ final class Webdav implements RemoteStorage<String> {
   /// {@endtemplate}
   WebdavClient? client;
 
-  static final shared = Webdav(
-    client: WebdavClient.basicAuth(
+  static final shared = Webdav();
+
+  static Future<void> initShared() async {
+    final pwd = await SecureStoreProps.webdavPwd.read() ?? '';
+    shared.client = WebdavClient.basicAuth(
       url: PrefProps.webdavUrl.get() ?? '',
       user: PrefProps.webdavUser.get() ?? '',
-      pwd: PrefProps.webdavPwd.get() ?? '',
-    ),
-  );
+      pwd: pwd,
+    );
+  }
 
   static Future<void> test(String url, String user, String pwd) async {
     await WebdavClient.basicAuth(url: url, user: user, pwd: pwd).ping();

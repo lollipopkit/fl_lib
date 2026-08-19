@@ -11,12 +11,11 @@ final class GistRs implements RemoteStorage<String> {
   /// Target gist id. If null, will create one on first upload.
   String? gistId;
 
-  /// GitHub token used for auth. If null, reads from [PrefProps.githubToken].
+  /// GitHub token used for auth. The shared client loads it from secure storage.
   String? token;
 
-  GistRs({String? gistId, String? token, Dio? client})
+  GistRs({String? gistId, this.token, Dio? client})
       : gistId = gistId ?? PrefProps.gistId.get(),
-        token = token ?? PrefProps.githubToken.get(),
         _client = client ??
             Dio(
               BaseOptions(
@@ -29,6 +28,11 @@ final class GistRs implements RemoteStorage<String> {
 
   /// Shared instance reading config from preferences.
   static final shared = GistRs();
+
+  static Future<void> initShared() async {
+    shared.gistId = PrefProps.gistId.get();
+    shared.token = await SecureStoreProps.githubToken.read();
+  }
 
   static Future<void> test({required String token, String? gistId}) async {
     final dio = Dio(
@@ -51,9 +55,9 @@ final class GistRs implements RemoteStorage<String> {
   }
 
   Map<String, dynamic> _authHeaders() {
-    final t = token ?? PrefProps.githubToken.get();
+    final t = token;
     if (t == null || t.isEmpty) {
-      throw StateError('GitHub token is missing. Set PrefProps.githubToken.');
+      throw StateError('GitHub token is missing. Configure Gist access first.');
     }
     return {
       'Authorization': 'token $t',

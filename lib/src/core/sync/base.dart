@@ -17,7 +17,14 @@ part 'gist.dart';
 
 /// Impl this interface to provide a backup service.
 abstract class SyncIface<T extends Mergeable, I> {
-  const SyncIface();
+  SyncIface();
+
+  Timer? _syncTimer;
+  Completer<void>? _scheduledSync;
+  RemoteStorage<I>? _scheduledStorage;
+  Future<void>? _syncInFlight;
+  RemoteStorage<I>? _pendingStorage;
+  bool _syncDirty = false;
 
   /// Init
   FutureOr<void> init() {}
@@ -44,12 +51,59 @@ abstract class SyncIface<T extends Mergeable, I> {
   }
 
   /// Sync data with remote storage.
-  FutureOr<void> sync({int throttleMilli = 5000, RemoteStorage<I>? rs, int milliDelay = 0}) async {
+  Future<void> sync({
+    int throttleMilli = 5000,
+    RemoteStorage<I>? rs,
+    int milliDelay = 0,
+  }) async {
     if (milliDelay > 0) {
       await Future.delayed(Duration(milliseconds: milliDelay));
     }
-    if (throttleMilli == 0) return await _sync(rs);
-    Fns.throttle(() => _sync(rs), id: 'SyncIface.sync', duration: throttleMilli);
+    if (throttleMilli == 0) return _enqueueSync(rs);
+
+    _scheduledStorage = rs ?? _scheduledStorage;
+    _syncTimer?.cancel();
+    final completer = _scheduledSync ??= Completer<void>();
+    _syncTimer = Timer(Duration(milliseconds: throttleMilli), () async {
+      final storage = _scheduledStorage;
+      _scheduledStorage = null;
+      _syncTimer = null;
+      _scheduledSync = null;
+      try {
+        await _enqueueSync(storage);
+        if (!completer.isCompleted) completer.complete();
+      } catch (error, stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _enqueueSync(RemoteStorage<I>? rs) {
+    _pendingStorage = rs ?? _pendingStorage;
+    _syncDirty = true;
+
+    final running = _syncInFlight;
+    if (running != null) return running;
+
+    final future = _drainSyncQueue();
+    _syncInFlight = future;
+    return future;
+  }
+
+  Future<void> _drainSyncQueue() async {
+    try {
+      while (_syncDirty) {
+        _syncDirty = false;
+        final storage = _pendingStorage;
+        _pendingStorage = null;
+        await _sync(storage);
+      }
+    } finally {
+      _syncInFlight = null;
+    }
   }
 
   FutureOr<void> _sync([RemoteStorage<I>? rs]) async {
@@ -83,11 +137,12 @@ abstract class SyncIface<T extends Mergeable, I> {
         await dlBak.merge();
       } catch (e, s) {
         Loggers.app.warning('Merge backup', e, s);
+        return;
       }
     }
 
     // Upload merged or new backup
     await Future.delayed(const Duration(milliseconds: 77));
-    await backup();
+    await backup(rs);
   }
 }

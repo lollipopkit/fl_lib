@@ -25,7 +25,7 @@ class HiveStore extends Store {
 
   /// Initialize the [HiveStore].
   Future<void> init() async {
-    if (_HiveEnc._cipher == null) await _HiveEnc._initCipher();
+    final cipher = await _HiveEnc.cipher;
 
     final path = switch (Pfs.type) {
       /// The default path of Hive is the HOME dir
@@ -41,22 +41,33 @@ class HiveStore extends Store {
     final enc = await Hive.openBox(
       '${boxName}_enc',
       path: path,
-      encryptionCipher: _HiveEnc._cipher,
+      encryptionCipher: cipher,
     );
 
     final unencryptedFile = File('${path.joinPath(boxName)}.hive');
     if (await unencryptedFile.exists()) {
       // Do migration
+      Box<dynamic>? unencrypted;
       try {
-        final unencrypted = await Hive.openBox(boxName, path: path);
-        for (final key in unencrypted.keys) {
-          enc.put(key, unencrypted.get(key));
+        unencrypted = await Hive.openBox(boxName, path: path);
+        final migrated = <dynamic, dynamic>{
+          for (final key in unencrypted.keys) key: unencrypted.get(key),
+        };
+        await enc.putAll(migrated);
+        await enc.flush();
+        for (final entry in migrated.entries) {
+          if (enc.get(entry.key) != entry.value) {
+            throw StateError('Failed to verify migrated key ${entry.key}');
+          }
         }
         await unencrypted.close();
+        unencrypted = null;
         await unencryptedFile.delete();
         dprint('Migrated $boxName');
       } catch (e) {
         dprint('Failed to migrate $boxName: $e');
+      } finally {
+        await unencrypted?.close();
       }
     }
 
@@ -85,12 +96,12 @@ class HiveStore extends Store {
   }
 
   @override
-  bool set<T extends Object>(
+  Future<bool> set<T extends Object>(
     String key,
     T val, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     try {
       if (toObj != null) {
@@ -99,12 +110,12 @@ class HiveStore extends Store {
           dprintWarn('set("$key")', 'toObj returned null');
           return false;
         }
-        box.put(key, converted);
-        if (updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
+        await box.put(key, converted);
+        if (updateLastUpdateTsOnSet) await updateLastUpdateTs(key: key);
         return true;
       }
-      box.put(key, val);
-      if (updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
+      await box.put(key, val);
+      if (updateLastUpdateTsOnSet) await updateLastUpdateTs(key: key);
       return true;
     } on HiveError catch (e) {
       dprintWarn('set("$key")', 'HiveError: $e');
@@ -116,14 +127,19 @@ class HiveStore extends Store {
   }
 
   @override
-  bool setAll<T extends Object>(
+  Future<bool> setAll<T extends Object>(
     Map<String, T> map, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     for (final entry in map.entries) {
-      final res = set(entry.key, entry.value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+      final res = await set(
+        entry.key,
+        entry.value,
+        toObj: toObj,
+        updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+      );
       if (!res) {
         dprintWarn('setAll()', 'failed to set ${entry.key}');
         return false;
@@ -145,24 +161,38 @@ class HiveStore extends Store {
   }
 
   @override
-  bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
-    box.delete(key);
-    updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
-    return true;
+  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove}) async {
+    try {
+      await box.delete(key);
+      updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
+      if (updateLastUpdateTsOnRemove) await updateLastUpdateTs(key: key);
+      return true;
+    } catch (e) {
+      dprintWarn('remove("$key")', 'failed: $e');
+      return false;
+    }
   }
 
   @override
-  bool clear({bool? updateLastUpdateTsOnClear}) {
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) async {
     final lastUpdateTsMap = lastUpdateTs;
-    box.clear();
-    if (lastUpdateTsMap != null) {
-      set(lastUpdateTsKey, lastUpdateTsMap, updateLastUpdateTsOnSet: false);
-    }
+    try {
+      await box.clear();
+      if (lastUpdateTsMap != null) {
+        await set(
+          lastUpdateTsKey,
+          lastUpdateTsMap,
+          updateLastUpdateTsOnSet: false,
+        );
+      }
 
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) updateLastUpdateTs(key: null);
-    return true;
+      updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
+      if (updateLastUpdateTsOnClear) await updateLastUpdateTs(key: null);
+      return true;
+    } catch (e) {
+      dprintWarn('clear()', 'failed: $e');
+      return false;
+    }
   }
 
   @override
@@ -407,32 +437,61 @@ class HivePropDefaultListenable<T extends Object> extends ValueListenable<T> {
 extension _HiveEnc on HiveStore {
   /// The cipher of the [HiveStore].
   static HiveAesCipher? _cipher;
+  static Future<HiveAesCipher>? _cipherFuture;
 
   static const _hiveEncKey = 'hive_key';
 
   /// The encryption key of the [HiveStore].
   static Future<String?> get _encryptionKey async {
     final secureStoreHiveKey = await SecureStoreProps.hivePwd.read();
-    if (secureStoreHiveKey != null) return secureStoreHiveKey;
+    if (secureStoreHiveKey != null) {
+      await _removeLegacyKeys();
+      return secureStoreHiveKey;
+    }
     final hiveKey = PrefStore.shared.get<String>(_hiveEncKey) ?? PrefStore.shared.get<String>('flutter.$_hiveEncKey');
     if (hiveKey != null) {
-      SecureStoreProps.hivePwd.write(hiveKey);
+      await SecureStoreProps.hivePwd.write(hiveKey);
+      final persisted = await SecureStoreProps.hivePwd.read();
+      if (persisted != hiveKey) {
+        throw StateError('Failed to verify migrated Hive encryption key');
+      }
+      await _removeLegacyKeys();
     }
     return hiveKey;
   }
 
+  static Future<void> _removeLegacyKeys() async {
+    await PrefStore.shared.remove(_hiveEncKey);
+    await PrefStore.shared.remove('flutter.$_hiveEncKey');
+  }
+
+  /// The single cipher initialization shared by every box opened at startup.
+  static Future<HiveAesCipher> get cipher {
+    final existing = _cipher;
+    if (existing != null) return Future.value(existing);
+    return _cipherFuture ??= _initCipher().then(
+      (value) {
+        _cipher = value;
+        return value;
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        _cipherFuture = null;
+        Error.throwWithStackTrace(error, stackTrace);
+      },
+    );
+  }
+
   /// Initialize the [SecureStore].
-  static Future<void> _initCipher() async {
-    final encryptionKeyString = await _encryptionKey;
-    if (encryptionKeyString == null) {
-      final key = Hive.generateSecureKey();
-      await SecureStoreProps.hivePwd.write(base64UrlEncode(key));
-    }
-    final key = await _encryptionKey;
+  static Future<HiveAesCipher> _initCipher() async {
+    var key = await _encryptionKey;
     if (key == null) {
-      throw Exception('Failed to init SecureStore');
+      key = base64UrlEncode(Hive.generateSecureKey());
+      await SecureStoreProps.hivePwd.write(key);
+      final persisted = await SecureStoreProps.hivePwd.read();
+      if (persisted != key) {
+        throw StateError('Failed to verify generated Hive encryption key');
+      }
     }
-    final encryptionKeyUint8List = base64Url.decode(key);
-    _cipher = HiveAesCipher(encryptionKeyUint8List);
+    return HiveAesCipher(base64Url.decode(key));
   }
 }

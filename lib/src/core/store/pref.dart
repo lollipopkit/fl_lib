@@ -20,6 +20,7 @@ abstract final class PrefProps {
   static const webdavUser = PrefProp<String>('webdav_user');
 
   /// {@macro webdav_settings}
+  @Deprecated('Use SecureStoreProps.webdavPwd')
   static const webdavPwd = PrefProp<String>('webdav_pwd');
 
   /// {@macro webdav_settings}
@@ -29,6 +30,7 @@ abstract final class PrefProps {
   static const icloudSync = PrefPropDefault('icloud_sync', false, updateLastUpdateTsOnSetProp: false);
 
   /// GitHub token used for Gist access
+  @Deprecated('Use SecureStoreProps.githubToken')
   static const githubToken = PrefProp<String>('github_token');
 
   /// Gist id holding backup file(s)
