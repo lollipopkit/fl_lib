@@ -270,17 +270,22 @@ abstract class StoreProp<T extends Object> {
   ///
   /// If you want to set `null`, use `remove()` instead.
   Future<void> set(T value) async {
-    await store.set(
+    final saved = await store.set(
       key,
       value,
       toObj: toObj,
       updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
     );
+    if (!saved) {
+      throw StateError('Failed to persist "$key"');
+    }
   }
 
   /// Remove the key.
   Future<void> remove() async {
-    await store.remove(key);
+    if (!await store.remove(key)) {
+      throw StateError('Failed to remove "$key"');
+    }
   }
 
   /// {@template store_prop_listenable}

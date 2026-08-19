@@ -302,6 +302,14 @@ void main() {
       expect(store.get<String>(testKey), isNull);
     });
 
+    test('set and remove report persistence failures', () async {
+      final failingStore = _FailingMockStore();
+      final failingProp = MockStoreProp<String>(failingStore, testKey);
+
+      await expectLater(failingProp.set('value'), throwsStateError);
+      await expectLater(failingProp.remove(), throwsStateError);
+    });
+
     test('listenable returns a ValueNotifier with current value', () async {
       await store.set<String>(testKey, 'listenableValue');
       final listener = prop.listenable();
@@ -358,4 +366,20 @@ void main() {
       expect(listener2.value, 'specificValue');
     });
   });
+}
+
+final class _FailingMockStore extends MockStore {
+  @override
+  Future<bool> set<T extends Object>(
+    String key,
+    T val, {
+    StoreToObj<T>? toObj,
+    bool? updateLastUpdateTsOnSet,
+  }) async => false;
+
+  @override
+  Future<bool> remove(
+    String key, {
+    bool? updateLastUpdateTsOnRemove,
+  }) async => false;
 }
