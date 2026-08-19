@@ -26,7 +26,7 @@ typedef StoreFromObj<T extends Object> = T? Function(Object? val);
 /// {@macro store_from_to}
 typedef StoreToObj<T extends Object> = Object? Function(T? value);
 
-/// The interface of any [Store].
+/// The interface of any [KvStore].
 ///
 /// The provider of the store can be `shared_preferences`, `hive`, `sqflite`, etc.
 ///
@@ -35,7 +35,7 @@ typedef StoreToObj<T extends Object> = Object? Function(T? value);
 ///
 /// It's designed that only one timestamp for all the data in one store.
 /// {@endtemplate}
-sealed class Store {
+sealed class KvStore {
   /// Serializes changes that read, replace, or restore [lastUpdateTs].
   ///
   /// The map is persisted as one value, so two asynchronous writers cannot
@@ -60,7 +60,7 @@ sealed class Store {
   /// Name of the store
   final String name;
 
-  Store({
+  KvStore({
     required this.name,
     this.updateLastUpdateTsOnSet = StoreDefaults.defaultUpdateLastUpdateTs,
     this.updateLastUpdateTsOnRemove = StoreDefaults.defaultUpdateLastUpdateTs,
@@ -279,7 +279,7 @@ sealed class Store {
   }
 }
 
-/// The interface of a single Property in any [Store].
+/// The interface of a single Property in any [KvStore].
 ///
 /// Such as the `user_token` in `shared_preferences`, `user` in `hive`, etc.
 abstract class StoreProp<T extends Object> {
@@ -304,7 +304,7 @@ abstract class StoreProp<T extends Object> {
   /// - [fromObj] & [toObj], you can refer to [StoreFromObj] & [StoreToObj].
   /// - [store] is the store of the property.
   /// - [updateLastUpdateTsOnSetProp] is whether to update the last update timestamp
-  ///of this [Store] when setting a value for this property.
+  ///of this [KvStore] when setting a value for this property.
   /// {@endtemplate}
   const StoreProp(
     this.key, {
@@ -313,8 +313,8 @@ abstract class StoreProp<T extends Object> {
     this.updateLastUpdateTsOnSetProp = StoreDefaults.defaultUpdateLastUpdateTs,
   });
 
-  /// It's [Store].
-  Store get store;
+  /// It's [KvStore].
+  KvStore get store;
 
   /// Get the value of the key.
   T? get() => store.get(key, fromObj: fromObj);
@@ -355,7 +355,7 @@ abstract class StoreProp<T extends Object> {
   bool get updateLastUpdateTsOnSet => store.updateLastUpdateTsOnSet && updateLastUpdateTsOnSetProp;
 }
 
-/// The interface of a single Property in any [Store] which has a default value.
+/// The interface of a single Property in any [KvStore] which has a default value.
 ///
 /// Such as the `user_token` in `shared_preferences`, `user` in `hive`, etc.
 abstract class StorePropDefault<T extends Object> extends StoreProp<T> {
@@ -389,7 +389,7 @@ abstract class StorePropDefault<T extends Object> extends StoreProp<T> {
 }
 
 /// The keys used internally in the store.
-extension StoreDefaults on Store {
+extension StoreDefaults on KvStore {
   /// {@template store_defaults_prefix_key}
   /// The prefix of the internal keys.
   ///

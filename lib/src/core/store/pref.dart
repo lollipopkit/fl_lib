@@ -53,7 +53,7 @@ typedef PrefStoreKeyListener = void Function(String key);
 /// {@template PrefStore.init}
 /// `MUST` call [init] before using any pref stores.
 /// {@endtemplate}
-final class PrefStore extends Store {
+final class PrefStore extends KvStore {
   /// The prefix of SharedPreferences.
   ///
   /// Defaults to `''`.

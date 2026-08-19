@@ -2,9 +2,9 @@ part of 'iface.dart';
 
 // ignore_for_file: unnecessary_this
 
-/// A mock implementation of [Store] that keeps data in memory.
+/// A mock implementation of [KvStore] that keeps data in memory.
 /// Persistence operations complete asynchronously, matching production stores.
-class MockStore extends Store {
+class MockStore extends KvStore {
   final Map<String, Object> _mem = {};
 
   MockStore({

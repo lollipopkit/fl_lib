@@ -213,12 +213,12 @@ CREATE TABLE IF NOT EXISTS kv (
 
 /// The store of SQLite.
 ///
-/// It implements [Store]. Values are JSON, so what comes back out of [get] is
+/// It implements [KvStore]. Values are JSON, so what comes back out of [get] is
 /// what `jsonDecode` produces — a `Map`, a `List` or a primitive — and the
 /// `fromObj` hook every caller already passes is what turns it back into a
 /// model. That is the same path [HiveStore] used for anything without a
 /// `TypeAdapter`, now the only path.
-class SqliteStore extends Store {
+class SqliteStore extends KvStore {
   /// Constructor.
   SqliteStore(
     String name, {
