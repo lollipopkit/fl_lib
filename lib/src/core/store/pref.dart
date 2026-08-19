@@ -205,10 +205,12 @@ final class PrefStore extends Store {
       return Future.value(false);
     }
 
+    final existed = instance.containsKey(key);
     final ret = await instance.remove(key);
     if (!ret) return false;
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove &&
+        existed &&
         !await updateLastUpdateTs(key: key)) {
       return false;
     }

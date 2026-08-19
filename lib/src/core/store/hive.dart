@@ -166,9 +166,12 @@ class HiveStore extends Store {
   @override
   Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove}) async {
     try {
+      final existed = box.containsKey(key);
       await box.delete(key);
       updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-      if (updateLastUpdateTsOnRemove) await updateLastUpdateTs(key: key);
+      if (updateLastUpdateTsOnRemove && existed) {
+        await updateLastUpdateTs(key: key);
+      }
       return true;
     } catch (e) {
       dprintWarn('remove("$key")', 'failed: $e');
@@ -452,6 +455,7 @@ extension _HiveEnc on HiveStore {
   static Future<String?> get _encryptionKey async {
     final secureStoreHiveKey = await SecureStoreProps.hivePwd.read();
     if (secureStoreHiveKey != null && secureStoreHiveKey.isNotEmpty) {
+      _decodeEncryptionKey(secureStoreHiveKey);
       await _removeLegacyKeys();
       return secureStoreHiveKey;
     }
@@ -463,6 +467,7 @@ extension _HiveEnc on HiveStore {
         ? flutterKey
         : null;
     if (hiveKey != null) {
+      _decodeEncryptionKey(hiveKey);
       await SecureStoreProps.hivePwd.write(hiveKey);
       final persisted = await SecureStoreProps.hivePwd.read();
       if (persisted != hiveKey) {
@@ -474,8 +479,24 @@ extension _HiveEnc on HiveStore {
   }
 
   static Future<void> _removeLegacyKeys() async {
-    await PrefStore.shared.remove(_hiveEncKey);
-    await PrefStore.shared.remove('flutter.$_hiveEncKey');
+    for (final key in [_hiveEncKey, 'flutter.$_hiveEncKey']) {
+      if (PrefStore.shared.get<String>(key) == null) continue;
+      if (!await PrefStore.shared.remove(key)) {
+        throw StateError('Failed to remove legacy Hive encryption key $key');
+      }
+    }
+  }
+
+  static List<int> _decodeEncryptionKey(String key) {
+    try {
+      final decoded = base64Url.decode(key);
+      if (decoded.length != 32) {
+        throw const FormatException('Hive encryption key must be 32 bytes');
+      }
+      return decoded;
+    } catch (e) {
+      throw StateError('Invalid Hive encryption key: $e');
+    }
   }
 
   /// The single cipher initialization shared by every box opened at startup.
@@ -505,6 +526,6 @@ extension _HiveEnc on HiveStore {
         throw StateError('Failed to verify generated Hive encryption key');
       }
     }
-    return HiveAesCipher(base64Url.decode(key));
+    return HiveAesCipher(_decodeEncryptionKey(key));
   }
 }

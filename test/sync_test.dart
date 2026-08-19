@@ -41,6 +41,29 @@ void main() {
     expect(sync.saveCount, 2);
   });
 
+  test('sync drains a dirty change after an in-flight upload fails', () async {
+    final error = StateError('first upload failed');
+    final uploadGate = Completer<void>();
+    final firstUploadStarted = Completer<void>();
+    final remote = _TestRemoteStorage(
+      uploadGate: uploadGate,
+      firstUploadStarted: firstUploadStarted,
+      uploadError: error,
+      uploadFailureCount: 1,
+    );
+    final sync = _TestSync(remote);
+
+    final first = sync.sync(throttleMilli: 0);
+    await firstUploadStarted.future;
+    final second = sync.sync(throttleMilli: 0);
+    uploadGate.complete();
+
+    await expectLater(first, throwsA(same(error)));
+    await expectLater(second, throwsA(same(error)));
+    expect(remote.uploadCount, 2);
+    expect(sync.saveCount, 2);
+  });
+
   test('sync never uploads after a remote merge failure', () async {
     final remote = _TestRemoteStorage(remoteExists: true);
     final sync = _TestSync(remote, failToReadRemote: true);
@@ -112,12 +135,14 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
     this.uploadGate,
     this.firstUploadStarted,
     this.uploadError,
+    this.uploadFailureCount,
   });
 
   final bool remoteExists;
   final Completer<void>? uploadGate;
   final Completer<void>? firstUploadStarted;
   final Object? uploadError;
+  final int? uploadFailureCount;
   int downloadCount = 0;
   int uploadCount = 0;
 
@@ -144,13 +169,16 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
     String? localPath,
   }) async {
     uploadCount++;
-    final error = uploadError;
-    if (error != null) throw error;
     if (uploadCount == 1) {
       if (firstUploadStarted?.isCompleted == false) {
         firstUploadStarted!.complete();
       }
       await uploadGate?.future;
+    }
+    final error = uploadError;
+    if (error != null &&
+        (uploadFailureCount == null || uploadCount <= uploadFailureCount!)) {
+      throw error;
     }
   }
 }

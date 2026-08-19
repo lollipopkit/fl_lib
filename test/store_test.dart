@@ -1,5 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('MockStore', () {
@@ -219,6 +220,33 @@ void main() {
         }
       }
       expect(streamData, equals(data));
+    });
+  });
+
+  group('PrefStore', () {
+    late PrefStore store;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      store = PrefStore(
+        updateLastUpdateTsOnSet: true,
+        updateLastUpdateTsOnRemove: true,
+      );
+      await store.init();
+      await store.set(
+        store.lastUpdateTsKey,
+        <String, int>{},
+        updateLastUpdateTsOnSet: false,
+      );
+    });
+
+    test('remove does not timestamp a missing key', () async {
+      const key = 'missing';
+      expect(store.lastUpdateTs![key], isNull);
+
+      expect(await store.remove(key), isTrue);
+
+      expect(store.lastUpdateTs![key], isNull);
     });
   });
 

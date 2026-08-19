@@ -31,7 +31,14 @@ final class GistRs implements RemoteStorage<String> {
 
   static Future<void> initShared() async {
     shared.gistId = PrefProps.gistId.get();
-    shared.token = await SecureStoreProps.githubToken.read();
+    String? token;
+    try {
+      token = await SecureStoreProps.githubToken.read();
+    } catch (e) {
+      dprint('Failed to read migrated GitHub token: $e');
+    }
+    // ignore: deprecated_member_use_from_same_package
+    shared.token = token ?? PrefProps.githubToken.get();
   }
 
   static Future<void> test({required String token, String? gistId}) async {

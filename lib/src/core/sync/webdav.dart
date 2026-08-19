@@ -25,11 +25,18 @@ final class Webdav implements RemoteStorage<String> {
   static final shared = Webdav();
 
   static Future<void> initShared() async {
-    final pwd = await SecureStoreProps.webdavPwd.read() ?? '';
+    String? pwd;
+    try {
+      pwd = await SecureStoreProps.webdavPwd.read();
+    } catch (e) {
+      dprint('Failed to read migrated WebDAV password: $e');
+    }
+    // ignore: deprecated_member_use_from_same_package
+    pwd ??= PrefProps.webdavPwd.get();
     shared.client = WebdavClient.basicAuth(
       url: PrefProps.webdavUrl.get() ?? '',
       user: PrefProps.webdavUser.get() ?? '',
-      pwd: pwd,
+      pwd: pwd ?? '',
     );
   }
 

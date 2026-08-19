@@ -94,12 +94,23 @@ abstract class SyncIface<T extends Mergeable, I> {
   }
 
   Future<void> _drainSyncQueue() async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
     try {
       while (_syncDirty) {
         _syncDirty = false;
         final storage = _pendingStorage;
         _pendingStorage = null;
-        await _sync(storage);
+        try {
+          await _sync(storage);
+        } catch (error, stackTrace) {
+          firstError ??= error;
+          firstStackTrace ??= stackTrace;
+          if (!_syncDirty) rethrow;
+        }
+      }
+      if (firstError != null) {
+        Error.throwWithStackTrace(firstError, firstStackTrace!);
       }
     } finally {
       _syncInFlight = null;
