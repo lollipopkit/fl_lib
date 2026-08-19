@@ -188,30 +188,32 @@ class HiveStore extends Store {
   }
 
   @override
-  Future<bool> clear({bool? updateLastUpdateTsOnClear}) async {
-    final lastUpdateTsMap = lastUpdateTs;
-    try {
-      await box.clear();
-      if (lastUpdateTsMap != null) {
-        final restored = await set(
-          lastUpdateTsKey,
-          lastUpdateTsMap,
-          updateLastUpdateTsOnSet: false,
-        );
-        if (!restored) return false;
-      }
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
+      _serializeLastUpdateTsMutation(() async {
+        final lastUpdateTsMap = lastUpdateTs;
+        try {
+          await box.clear();
+          if (lastUpdateTsMap != null) {
+            final restored = await set(
+              lastUpdateTsKey,
+              lastUpdateTsMap,
+              updateLastUpdateTsOnSet: false,
+            );
+            if (!restored) return false;
+          }
 
-      updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-      if (updateLastUpdateTsOnClear &&
-          !await updateLastUpdateTs(key: null)) {
-        return false;
-      }
-      return true;
-    } catch (e) {
-      dprintWarn('clear()', 'failed: $e');
-      return false;
-    }
-  }
+          final shouldUpdateLastUpdateTs =
+              updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
+          if (shouldUpdateLastUpdateTs &&
+              !await _updateLastUpdateTs(key: null)) {
+            return false;
+          }
+          return true;
+        } catch (e) {
+          dprintWarn('clear()', 'failed: $e');
+          return false;
+        }
+      });
 
   @override
   Map<String, Object?> getAllMap({

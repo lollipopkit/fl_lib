@@ -109,22 +109,30 @@ class MockStore extends Store {
   }
 
   @override
-  Future<bool> clear({bool? updateLastUpdateTsOnClear}) async {
-    final lastUpTsMap = _mem[this.lastUpdateTsKey];
-    _mem.clear();
-    if (lastUpTsMap != null) {
-      _mem[this.lastUpdateTsKey] = lastUpTsMap;
-    }
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
+      _serializeLastUpdateTsMutation(() async {
+        final lastUpTsMap = _mem[this.lastUpdateTsKey];
+        _mem.clear();
+        if (lastUpTsMap != null) {
+          _mem[this.lastUpdateTsKey] = lastUpTsMap;
+        }
 
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear) {
-      await updateLastUpdateTs(key: null);
-    }
-    return true;
-  }
+        final shouldUpdateLastUpdateTs =
+            updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
+        if (shouldUpdateLastUpdateTs &&
+            !await _updateMockLastUpdateTs(key: null)) {
+          return false;
+        }
+        return true;
+      });
 
   @override
-  Future<bool> updateLastUpdateTs({int? ts, required String? key}) async {
+  Future<bool> updateLastUpdateTs({int? ts, required String? key}) =>
+      _serializeLastUpdateTsMutation(
+        () => _updateMockLastUpdateTs(ts: ts, key: key),
+      );
+
+  Future<bool> _updateMockLastUpdateTs({int? ts, required String? key}) async {
     if (key != null && isInternalKey(key)) {
       dprintWarn('updateLastUpdateTs()', 'Attempted to update timestamp for internal key "$key". Ignored.');
       return false;

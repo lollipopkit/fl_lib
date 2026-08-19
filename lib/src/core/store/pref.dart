@@ -219,7 +219,8 @@ final class PrefStore extends Store {
 
   /// Clear the store.
   @override
-  Future<bool> clear({bool? updateLastUpdateTsOnClear}) async {
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
+      _serializeLastUpdateTsMutation(() async {
     final instance = _instance;
     if (instance == null) {
       dprintWarn('clear()', 'instance not initialized');
@@ -238,13 +239,13 @@ final class PrefStore extends Store {
       if (!restored) return false;
     }
 
-    updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-    if (updateLastUpdateTsOnClear &&
-        !await updateLastUpdateTs(key: null)) {
+    final shouldUpdateLastUpdateTs = updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
+    if (shouldUpdateLastUpdateTs &&
+        !await _updateLastUpdateTs(key: null)) {
       return false;
     }
     return ret;
-  }
+      });
 
   Future<bool> _set<T extends Object>(
     String key,

@@ -250,6 +250,55 @@ void main() {
     });
   });
 
+  group('Store timestamp serialization', () {
+    test('retains every concurrent timestamp update', () async {
+      final store = _DelayedMockStore();
+      await store.set(
+        store.lastUpdateTsKey,
+        <String, int>{},
+        updateLastUpdateTsOnSet: false,
+      );
+
+      await Future.wait([
+        store.updateLastUpdateTs(key: 'one', ts: 1),
+        store.updateLastUpdateTs(key: 'two', ts: 2),
+        store.updateLastUpdateTs(key: 'three', ts: 3),
+      ]);
+
+      expect(store.lastUpdateTs, {'one': 1, 'two': 2, 'three': 3});
+    });
+  });
+
+  group('SqliteStore', () {
+    setUp(() async {
+      await SqliteDb.close();
+      SqliteDb.openInMemory();
+    });
+
+    tearDown(SqliteDb.close);
+
+    test('does not replace an active in-memory database', () {
+      expect(SqliteDb.openInMemory, throwsStateError);
+    });
+
+    test('clear keeps internal bookkeeping keys', () async {
+      final store = SqliteStore('clear-test');
+      store.set('user-key', 'value', updateLastUpdateTsOnSet: false);
+      const internalKey = '${StoreDefaults.prefixKey}migration';
+      store.set(internalKey, 'value', updateLastUpdateTsOnSet: false);
+      store.set(
+        store.lastUpdateTsKey,
+        <String, int>{'user-key': 1},
+        updateLastUpdateTsOnSet: false,
+      );
+
+      expect(await store.clear(updateLastUpdateTsOnClear: false), isTrue);
+      expect(store.get<String>('user-key'), isNull);
+      expect(store.get<String>(internalKey), 'value');
+      expect(store.lastUpdateTs, {'user-key': 1});
+    });
+  });
+
   group('MockStoreProp', () {
     late MockStore store;
     late MockStoreProp<String> prop;
@@ -392,4 +441,22 @@ final class _FailingMockStore extends MockStore {
     String key, {
     bool? updateLastUpdateTsOnRemove,
   }) async => false;
+}
+
+final class _DelayedMockStore extends MockStore {
+  @override
+  Future<bool> set<T extends Object>(
+    String key,
+    T val, {
+    StoreToObj<T>? toObj,
+    bool? updateLastUpdateTsOnSet,
+  }) async {
+    await Future<void>.delayed(Duration.zero);
+    return super.set(
+      key,
+      val,
+      toObj: toObj,
+      updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+    );
+  }
 }
