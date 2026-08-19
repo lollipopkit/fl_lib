@@ -37,8 +37,13 @@ abstract final class AppUpdateIface {
     }
 
     final newest = result.$1;
+    final fileUrl = AppUpdate.url;
 
-    newestBuild.value = newest;
+    // Only a build that can be installed from here, or the one already
+    // running, belongs on screen. The settings page reads "click to update"
+    // off [newestBuild], so publishing a version with no asset for this
+    // platform would put a tap there with nothing behind it.
+    if (fileUrl != null || newest <= build) newestBuild.value = newest;
 
     if (!force && newest <= build) {
       Loggers.app.info('Update ignored: $build >= $newest');
@@ -46,16 +51,11 @@ abstract final class AppUpdateIface {
     }
     Loggers.app.info('Update available: $newest');
 
-    final fileUrl = AppUpdate.url;
     if (fileUrl == null) {
       // A newer build exists, but no release carries an asset for this
-      // platform — an arch the project does not ship, in practice. Staying
-      // quiet is deliberate: there is nothing the user could act on, and this
-      // state does not clear on its own.
-      // TODO: [newestBuild] is set, so the settings page reads "click to
-      // update" and the tap then does nothing. It needs a third state for
-      // "newer version exists, no build for this platform", which needs a
-      // string in libL10n.
+      // platform — an arch the project does not ship, in practice. Silence is
+      // deliberate: there is nothing the user could act on, and the state does
+      // not clear on its own, so a notice would repeat on every launch.
       Loggers.app.warning('No update asset for ${Pfs.type} at build $newest');
       return;
     }
