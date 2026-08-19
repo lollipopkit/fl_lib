@@ -344,6 +344,16 @@ void main() {
       expect(propDefault.get(), 'newActualValue');
     });
 
+    test('set reports persistence failures', () async {
+      final failingProp = MockStorePropDefault<String>(
+        _FailingMockStore(),
+        testKey,
+        defaultValue,
+      );
+
+      await expectLater(failingProp.set('value'), throwsStateError);
+    });
+
     test('set updates lastUpdateTs if configured on prop', () async {
       final propDefUpdateTs = MockStorePropDefault<String>(store, 'propDefUpdateTsKey', 'def', updateLastUpdateTsOnSetProp: true);
       await propDefUpdateTs.set('initial');

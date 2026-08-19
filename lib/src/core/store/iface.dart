@@ -328,14 +328,7 @@ abstract class StorePropDefault<T extends Object> extends StoreProp<T> {
 
   /// Set the value of the key.
   @override
-  Future<void> set(T value) async {
-    await store.set(
-      key,
-      value,
-      toObj: toObj,
-      updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
-    );
-  }
+  Future<void> set(T value) => super.set(value);
 
   /// {@macro store_prop_listenable}
   @override
