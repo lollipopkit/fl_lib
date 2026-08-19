@@ -43,7 +43,13 @@ abstract final class AppUpdateIface {
     // running, belongs on screen. The settings page reads "click to update"
     // off [newestBuild], so publishing a version with no asset for this
     // platform would put a tap there with nothing behind it.
-    if (fileUrl != null || newest <= build) newestBuild.value = newest;
+    //
+    // Cleared rather than left alone in that case: this notifier outlives the
+    // check, so an earlier one that did find an asset would otherwise keep
+    // offering that build after it stopped being on offer. A null [fileUrl]
+    // means no release carries an asset for this platform at all, so there is
+    // nothing left to point at.
+    newestBuild.value = fileUrl != null || newest <= build ? newest : null;
 
     if (!force && newest <= build) {
       Loggers.app.info('Update ignored: $build >= $newest');
