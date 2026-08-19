@@ -64,6 +64,28 @@ void main() {
     expect(sync.saveCount, 2);
   });
 
+  test('sync preserves the first error when a queued retry also fails', () async {
+    final firstError = StateError('first upload failed');
+    final secondError = StateError('second upload failed');
+    final uploadGate = Completer<void>();
+    final firstUploadStarted = Completer<void>();
+    final remote = _TestRemoteStorage(
+      uploadGate: uploadGate,
+      firstUploadStarted: firstUploadStarted,
+      uploadErrors: [firstError, secondError],
+    );
+    final sync = _TestSync(remote);
+
+    final first = sync.sync(throttleMilli: 0);
+    await firstUploadStarted.future;
+    final second = sync.sync(throttleMilli: 0);
+    uploadGate.complete();
+
+    await expectLater(first, throwsA(same(firstError)));
+    await expectLater(second, throwsA(same(firstError)));
+    expect(remote.uploadCount, 2);
+  });
+
   test('sync never uploads after a remote merge failure', () async {
     final remote = _TestRemoteStorage(remoteExists: true);
     final sync = _TestSync(remote, failToReadRemote: true);
@@ -136,6 +158,7 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
     this.firstUploadStarted,
     this.uploadError,
     this.uploadFailureCount,
+    this.uploadErrors,
   });
 
   final bool remoteExists;
@@ -143,6 +166,7 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
   final Completer<void>? firstUploadStarted;
   final Object? uploadError;
   final int? uploadFailureCount;
+  final List<Object>? uploadErrors;
   int downloadCount = 0;
   int uploadCount = 0;
 
@@ -179,6 +203,10 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
     if (error != null &&
         (uploadFailureCount == null || uploadCount <= uploadFailureCount!)) {
       throw error;
+    }
+    final errors = uploadErrors;
+    if (errors != null && uploadCount <= errors.length) {
+      throw errors[uploadCount - 1];
     }
   }
 }

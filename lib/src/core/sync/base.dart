@@ -106,7 +106,6 @@ abstract class SyncIface<T extends Mergeable, I> {
         } catch (error, stackTrace) {
           firstError ??= error;
           firstStackTrace ??= stackTrace;
-          if (!_syncDirty) rethrow;
         }
       }
       if (firstError != null) {
