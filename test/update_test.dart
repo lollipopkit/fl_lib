@@ -573,6 +573,27 @@ void main() {
       expect(AppUpdate.url, isNull);
     });
 
+    test('a marketing version scheme is ignored rather than obeyed', () {
+      // `1.4.0` reads as build 0 under [_parseBuild], and `1.4.1` as build 1.
+      // Either would reject every release and mute iOS updates for good, so a
+      // store build below every known release is treated as unknown.
+      for (final storeBuild in [0, 1]) {
+        AppUpdate.resetForTest();
+        AppUpdate.fromGitHubReleasesStr(
+          raw: raw(),
+          build: 1480,
+          storeUrl: storeUrl,
+          storeBuild: storeBuild,
+          platform: Pfs.ios,
+          arch: CpuArch.arm64,
+        );
+
+        expect(AppUpdate.version, (1491, AppUpdateLevel.normal),
+            reason: 'storeBuild $storeBuild');
+        expect(AppUpdate.url, storeUrl, reason: 'storeBuild $storeBuild');
+      }
+    });
+
     test('the store build does not constrain macos', () {
       AppUpdate.fromGitHubReleasesStr(
         raw: _githubRaw([
@@ -650,6 +671,40 @@ void main() {
     expect(AppUpdate.chan, AppUpdateChan.beta);
     expect(AppUpdate.version, (5, AppUpdateLevel.normal));
     expect(AppUpdate.url, 'https://download/ServerBox_v1.0.5_arm64.apk');
+  });
+
+  test('github beta keeps its channel when nothing is installable', () {
+    // The installable pass finds no prerelease and no stable, and its channel
+    // downgrade must not survive: reporting the newest stable to a beta user,
+    // and leaving them on stable, would both be wrong.
+    AppUpdate.chan = AppUpdateChan.beta;
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          body: 'five beta',
+          prerelease: true,
+          assets: [_asset('ServerBox-1.0.5.dmg')],
+        ),
+        _release(
+          tag: 'v1.0.4',
+          body: 'four',
+          assets: [_asset('ServerBox-1.0.4.dmg')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.chan, AppUpdateChan.beta);
+    expect(AppUpdate.version, (5, AppUpdateLevel.normal));
+    expect(AppUpdate.versionName, 'v1.0.5');
+    expect(AppUpdate.url, isNull);
+    expect(
+      AppUpdate.releaseNotes.map((e) => e.title).toList(),
+      ['v1.0.5', 'v1.0.4'],
+    );
   });
 }
 

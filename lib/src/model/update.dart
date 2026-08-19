@@ -157,16 +157,24 @@ abstract final class AppUpdate {
     if (Pfs.type != Pfs.ios) return null;
     final url = appStoreLookupUrl(storeUrl);
     if (url == null) return null;
+    // [myDio] sets no timeout and treats every status as success, so this has
+    // to bound itself: a store that does not answer must delay the update
+    // check by seconds, not hold it open. Timing out reads as "unknown",
+    // which trusts the tag.
+    final cancel = CancelToken();
     try {
-      // [myDio] sets no timeout and treats every status as success, so this
-      // has to bound itself: a store that does not answer must delay the
-      // update check by seconds, not hold it open. Timing out reads as
-      // "unknown", which trusts the tag.
       final resp = await myDio
-          .get(url, options: Options(responseType: ResponseType.plain))
+          .get(
+            url,
+            options: Options(responseType: ResponseType.plain),
+            cancelToken: cancel,
+          )
           .timeout(const Duration(seconds: 5));
       return parseAppStoreBuild(resp.data.toString());
     } catch (e) {
+      // [Future.timeout] only stops the waiting. Without this the request
+      // itself stays open, holding a socket for a result nobody reads.
+      cancel.cancel('App Store lookup abandoned');
       _logger.warning('App Store lookup failed', e);
       return null;
     }
@@ -224,7 +232,16 @@ abstract final class AppUpdate {
     // build still in review, leaves the rest on an earlier one. Offering that
     // earlier one beats offering nothing — the alternative is that one
     // partial release mutes the update check until the next full one.
+    //
+    // The channel downgrade in [_getGitHubRelease] is meant to be decided by
+    // what the user can install, so the installable pass is allowed to make
+    // it. It must not stick when that pass comes back empty: the fallback
+    // below and the release notes both read [chan], and a beta user with no
+    // installable asset anywhere would otherwise be reported the newest
+    // stable and left on a channel they never chose.
+    final chanBefore = _chan;
     final installable = _getGitHubRelease(installable: true);
+    if (installable == null) _chan = chanBefore;
 
     // Nothing installable anywhere: still report the newest release, so the
     // settings page names the real version instead of "unknown". [url] stays
@@ -441,6 +458,26 @@ abstract final class AppUpdate {
     return stable;
   }
 
+  /// [_storeBuild], but only when it is a build number in the same space as
+  /// the release tags.
+  ///
+  /// [_parseBuild] reads the last run of digits, which is the build under this
+  /// project's `v1.0.<build>` tags but not under marketing versioning: an App
+  /// Store version of `1.4.0` reads as build 0 and `1.4.1` as build 1, and
+  /// either would reject every release and mute iOS updates permanently.
+  ///
+  /// An iOS build can only have been installed from the store, so the store
+  /// does not serve something older than what is running. A value below the
+  /// installed build means the two are not the same numbering. Answering null
+  /// then is deliberate — unknown trusts the tag, so a wrong guess here costs
+  /// one prompt too many rather than silence.
+  static int? get _comparableStoreBuild {
+    final storeBuild = _storeBuild;
+    if (storeBuild == null) return null;
+    if (storeBuild <= 0 || storeBuild < _build) return null;
+    return storeBuild;
+  }
+
   static _GitHubRelease? _latestGitHubRelease({
     required bool prerelease,
     bool installable = false,
@@ -491,7 +528,8 @@ abstract final class AppUpdate {
         // every launch, with no way to act on it. An unknown store build
         // means the lookup failed, and one failed lookup must not mute
         // updates for good — so that case still trusts the tag.
-        if (_storeBuild != null && release.build > _storeBuild!) return null;
+        final storeBuild = _comparableStoreBuild;
+        if (storeBuild != null && release.build > storeBuild) return null;
         return _githubStoreUrl;
       case Pfs.web || Pfs.fuchsia || Pfs.unknown:
         return null;
