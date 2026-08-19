@@ -23,11 +23,11 @@ abstract final class UserApi {
   }
 
   /// Logout, clear token and user.
-  static void logout(AnonUserConfirmFn anonConfirm) async {
+  static Future<void> logout(AnonUserConfirmFn anonConfirm) async {
     if (user.value?.isAnon == true) {
       if (!await anonConfirm()) return;
     }
-    tokenProp.remove();
+    await tokenProp.remove();
     user.value = null;
   }
 
@@ -96,7 +96,7 @@ abstract final class UserApi {
       ApiUrls.user,
       options: Options(headers: authHeaders),
     );
-    logout(() async => true);
+    await logout(() async => true);
   }
 
   static Future<void> init() async {

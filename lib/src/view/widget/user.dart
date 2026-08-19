@@ -68,7 +68,7 @@ final class _UserCardState extends State<UserCard> {
         final token = await Pfs.paste();
         if (token == null || token.isEmpty) return;
         showTokenPaste.value = false;
-        UserApi.tokenProp.set(token);
+        await UserApi.tokenProp.set(token);
         contextSafe?.showLoadingDialog(fn: UserApi.refresh);
       },
       child: Text('${l10n.paste} Token'),

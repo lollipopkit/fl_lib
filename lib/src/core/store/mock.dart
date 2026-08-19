@@ -3,7 +3,7 @@ part of 'iface.dart';
 // ignore_for_file: unnecessary_this
 
 /// A mock implementation of [Store] that keeps data in memory.
-/// All operations are synchronous.
+/// Persistence operations complete asynchronously, matching production stores.
 class MockStore extends Store {
   final Map<String, Object> _mem = {};
 
@@ -62,12 +62,12 @@ class MockStore extends Store {
   }
 
   @override
-  bool set<T extends Object>(
+  Future<bool> set<T extends Object>(
     String key,
     T val, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     Object? valueToStore;
     if (toObj != null) {
       final strVal = toObj(val);
@@ -83,7 +83,7 @@ class MockStore extends Store {
     _mem[key] = valueToStore;
     updateLastUpdateTsOnSet ??= this.updateLastUpdateTsOnSet;
     if (updateLastUpdateTsOnSet) {
-      updateLastUpdateTs(key: key);
+      await updateLastUpdateTs(key: key);
     }
     return true;
   }
@@ -97,19 +97,19 @@ class MockStore extends Store {
   }
 
   @override
-  bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
+  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove}) async {
     final existed = _mem.containsKey(key);
     _mem.remove(key);
 
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove && existed) {
-      updateLastUpdateTs(key: key);
+      await updateLastUpdateTs(key: key);
     }
     return true;
   }
 
   @override
-  bool clear({bool? updateLastUpdateTsOnClear}) {
+  Future<bool> clear({bool? updateLastUpdateTsOnClear}) async {
     final lastUpTsMap = _mem[this.lastUpdateTsKey];
     _mem.clear();
     if (lastUpTsMap != null) {
@@ -118,13 +118,13 @@ class MockStore extends Store {
 
     updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
     if (updateLastUpdateTsOnClear) {
-      updateLastUpdateTs(key: null);
+      await updateLastUpdateTs(key: null);
     }
     return true;
   }
 
   @override
-  bool updateLastUpdateTs({int? ts, required String? key}) {
+  Future<bool> updateLastUpdateTs({int? ts, required String? key}) async {
     if (key != null && isInternalKey(key)) {
       dprintWarn('updateLastUpdateTs()', 'Attempted to update timestamp for internal key "$key". Ignored.');
       return false;
@@ -200,13 +200,18 @@ class MockStore extends Store {
   }
 
   @override
-  bool setAll<T extends Object>(
+  Future<bool> setAll<T extends Object>(
     Map<String, T> map, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
-  }) {
+  }) async {
     for (final entry in map.entries) {
-      final res = set(entry.key, entry.value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+      final res = await set(
+        entry.key,
+        entry.value,
+        toObj: toObj,
+        updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+      );
       if (!res) {
         dprintWarn('setAllSync()', 'failed to set ${entry.key}');
         return false;

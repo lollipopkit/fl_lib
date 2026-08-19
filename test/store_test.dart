@@ -5,7 +5,7 @@ void main() {
   group('MockStore', () {
     late MockStore store;
 
-    setUp(() {
+    setUp(() async {
       store = MockStore(
         updateLastUpdateTsOnSet: true,
         updateLastUpdateTsOnRemove: true,
@@ -14,20 +14,20 @@ void main() {
       // Ensure lastUpdateTsKey is initialized as a map for tests that rely on it.
       // The MockStore constructor or Store superclass might do this if flags are true,
       // but explicit initialization here makes tests more robust against MockStore's internal implementation details.
-      store.set(store.lastUpdateTsKey, <String, int>{});
+      await store.set(store.lastUpdateTsKey, <String, int>{});
     });
 
-    test('set and get basic types', () {
-      expect(store.set<String>('stringKey', 'stringValue'), isTrue);
+    test('set and get basic types', () async {
+      expect(await store.set<String>('stringKey', 'stringValue'), isTrue);
       expect(store.get<String>('stringKey'), 'stringValue');
 
-      expect(store.set<int>('intKey', 123), isTrue);
+      expect(await store.set<int>('intKey', 123), isTrue);
       expect(store.get<int>('intKey'), 123);
 
-      expect(store.set<double>('doubleKey', 123.456), isTrue);
+      expect(await store.set<double>('doubleKey', 123.456), isTrue);
       expect(store.get<double>('doubleKey'), 123.456);
 
-      expect(store.set<bool>('boolKey', true), isTrue);
+      expect(await store.set<bool>('boolKey', true), isTrue);
       expect(store.get<bool>('boolKey'), true);
     });
 
@@ -35,26 +35,26 @@ void main() {
       expect(store.get<String>('nonExistentKey'), isNull);
     });
 
-    test('get with fromStr', () {
-      store.set<String>('parsableKey', '123');
+    test('get with fromStr', () async {
+      await store.set<String>('parsableKey', '123');
       expect(store.get<int>('parsableKey', fromObj: (s) => int.tryParse(s as String)), 123);
 
-      store.set<String>('nonParsableKey', 'abc');
+      await store.set<String>('nonParsableKey', 'abc');
       expect(store.get<int>('nonParsableKey', fromObj: (s) => int.tryParse(s as String)), isNull);
     });
 
-    test('get with type mismatch and no fromStr', () {
-      store.set<int>('intKeyForStringGet', 123);
+    test('get with type mismatch and no fromStr', () async {
+      await store.set<int>('intKeyForStringGet', 123);
       expect(store.get<String>('intKeyForStringGet'), '123');
 
-      store.set<String>('stringKeyForIntGet', 'stringValue');
+      await store.set<String>('stringKeyForIntGet', 'stringValue');
       expect(store.get<int>('stringKeyForIntGet'), isNull);
     });
 
-    test('set with toStr', () {
+    test('set with toStr', () async {
       final complexObject = {'a': 1, 'b': 'test'};
       expect(
-          store.set<Map<String, dynamic>>(
+          await store.set<Map<String, dynamic>>(
             'complexKey',
             complexObject,
             toObj: (val) => val.toString(),
@@ -64,34 +64,34 @@ void main() {
       expect(store.get<Map<String, dynamic>>('complexKey'), isNull);
     });
 
-    test('set with toStr returning null', () {
-      expect(store.set<String>('key', 'value', toObj: (val) => null), isFalse);
+    test('set with toStr returning null', () async {
+      expect(await store.set<String>('key', 'value', toObj: (val) => null), isFalse);
       expect(store.get<String>('key'), isNull);
     });
 
-    test('keys', () {
-      store.set<String>('key1', 'value1');
-      store.set<String>('key2', 'value2');
+    test('keys', () async {
+      await store.set<String>('key1', 'value1');
+      await store.set<String>('key2', 'value2');
       // lastUpdateTsKey is an internal key, set directly for testing its exclusion/inclusion
-      store.set<Map<String, int>>(store.lastUpdateTsKey, {'internal_ts_key': 123});
+      await store.set<Map<String, int>>(store.lastUpdateTsKey, {'internal_ts_key': 123});
 
       expect(store.keys(), equals({'key1', 'key2'}));
       expect(store.keys(includeInternalKeys: true), equals({'key1', 'key2', store.lastUpdateTsKey}));
     });
 
-    test('remove', () {
-      store.set<String>('keyToRemove', 'value');
-      expect(store.remove('keyToRemove'), isTrue);
+    test('remove', () async {
+      await store.set<String>('keyToRemove', 'value');
+      expect(await store.remove('keyToRemove'), isTrue);
       expect(store.get<String>('keyToRemove'), isNull);
-      expect(store.remove('nonExistentKey'), isTrue);
+      expect(await store.remove('nonExistentKey'), isTrue);
     });
 
     test('clear', () async {
-      store.set<String>('key1', 'value1');
-      store.set<String>('key2', 'value2');
-      store.updateLastUpdateTs(key: 'key1');
+      await store.set<String>('key1', 'value1');
+      await store.set<String>('key2', 'value2');
+      await store.updateLastUpdateTs(key: 'key1');
       final tsKey1Before = store.lastUpdateTs!['key1'];
-      store.updateLastUpdateTs(key: 'key2');
+      await store.updateLastUpdateTs(key: 'key2');
       final tsKey2Before = store.lastUpdateTs!['key2'];
 
       final initialTs = store.lastUpdateTs;
@@ -100,7 +100,7 @@ void main() {
       expect(initialTs.containsKey('key2'), isTrue);
 
       await Future.delayed(const Duration(milliseconds: 10)); // Ensure lastUpdateTs is updated after clear
-      expect(store.clear(), isTrue);
+      expect(await store.clear(), isTrue);
       expect(store.keys().isEmpty, isTrue);
       // lastUpdateTsKey should remain after clear if MockStore preserves it
       expect(store.keys(includeInternalKeys: true), equals({store.lastUpdateTsKey}));
@@ -114,7 +114,7 @@ void main() {
       expect(tsAfterClear['key2'], greaterThan(tsKey2Before!));
     });
 
-    test('updateLastUpdateTs and lastUpdateTs', () {
+    test('updateLastUpdateTs and lastUpdateTs', () async {
       // store.set(store.lastUpdateTsKey, <String, int>{}); // Already in global setUp
       const key1 = 'tsKey1';
       const key2 = 'tsKey2';
@@ -124,18 +124,18 @@ void main() {
       // expect(ts, isEmpty); // Might not be empty if setUp initialized something
 
       final ts1 = DateTimeX.timestamp;
-      store.updateLastUpdateTs(key: key1, ts: ts1);
+      await store.updateLastUpdateTs(key: key1, ts: ts1);
       ts = store.lastUpdateTs;
       expect(ts![key1], ts1);
 
       final ts2 = DateTimeX.timestamp + 10;
-      store.updateLastUpdateTs(key: key2, ts: ts2);
+      await store.updateLastUpdateTs(key: key2, ts: ts2);
       ts = store.lastUpdateTs;
       expect(ts![key1], ts1);
       expect(ts[key2], ts2);
 
       final tsClear = DateTimeX.timestamp + 20;
-      store.updateLastUpdateTs(key: null, ts: tsClear);
+      await store.updateLastUpdateTs(key: null, ts: tsClear);
       ts = store.lastUpdateTs;
       expect(ts![key1], tsClear);
       expect(ts[key2], tsClear);
@@ -146,44 +146,44 @@ void main() {
       const key = 'setTsKey';
       const val = 'value';
 
-      store.set<String>(key, val, updateLastUpdateTsOnSet: true);
+      await store.set<String>(key, val, updateLastUpdateTsOnSet: true);
       await Future.delayed(const Duration(milliseconds: 1));
       final tsAfterSet = store.lastUpdateTs![key];
       expect(tsAfterSet, isNotNull);
 
       await Future.delayed(const Duration(milliseconds: 1));
-      store.set<String>(key, 'newValue', updateLastUpdateTsOnSet: true);
+      await store.set<String>(key, 'newValue', updateLastUpdateTsOnSet: true);
       final tsAfterSecondSet = store.lastUpdateTs![key];
       expect(tsAfterSecondSet, greaterThan(tsAfterSet!));
 
-      store.set<String>('anotherKey', 'anotherValue', updateLastUpdateTsOnSet: false);
+      await store.set<String>('anotherKey', 'anotherValue', updateLastUpdateTsOnSet: false);
       expect(store.lastUpdateTs!['anotherKey'], isNull);
     });
 
     test('remove updates lastUpdateTs if configured and key existed', () async {
       // store.set(store.lastUpdateTsKey, <String, int>{}); // Already in global setUp
       const key = 'removeTsKey';
-      store.set<String>(key, 'value');
+      await store.set<String>(key, 'value');
       final tsAfterSet = store.lastUpdateTs![key];
       expect(tsAfterSet, isNotNull);
 
       await Future.delayed(const Duration(milliseconds: 1));
-      store.remove(key, updateLastUpdateTsOnRemove: true);
+      await store.remove(key, updateLastUpdateTsOnRemove: true);
       final tsAfterRemove = store.lastUpdateTs![key];
       expect(tsAfterRemove, isNotNull);
       expect(tsAfterRemove, greaterThan(tsAfterSet!));
 
       const nonExistentKey = 'nonExistentForTs';
       final tsBeforeNonExistentRemove = store.lastUpdateTs![nonExistentKey];
-      store.remove(nonExistentKey, updateLastUpdateTsOnRemove: true);
+      await store.remove(nonExistentKey, updateLastUpdateTsOnRemove: true);
       final tsAfterNonExistentRemove = store.lastUpdateTs![nonExistentKey];
       expect(tsAfterNonExistentRemove, tsBeforeNonExistentRemove);
 
       const keyNoUpdate = 'keyNoUpdateOnRemove';
-      store.set<String>(keyNoUpdate, 'value');
+      await store.set<String>(keyNoUpdate, 'value');
       final tsAfterSetNoUpdate = store.lastUpdateTs![keyNoUpdate];
       await Future.delayed(const Duration(milliseconds: 1));
-      store.remove(keyNoUpdate, updateLastUpdateTsOnRemove: false);
+      await store.remove(keyNoUpdate, updateLastUpdateTsOnRemove: false);
       final tsAfterRemoveNoUpdate = store.lastUpdateTs![keyNoUpdate];
       expect(tsAfterRemoveNoUpdate, tsAfterSetNoUpdate);
     });
@@ -194,7 +194,7 @@ void main() {
         'b': 'banana',
         'c': 'cherry',
       };
-      store.setAll(data);
+      await store.setAll(data);
 
       expect(store.get<String>('a'), 'apple');
       expect(store.get<String>('b'), 'banana');
@@ -227,55 +227,55 @@ void main() {
     late MockStoreProp<String> prop;
     const testKey = 'testPropKey';
 
-    setUp(() {
+    setUp(() async {
       store = MockStore(updateLastUpdateTsOnSet: true);
-      store.set(store.lastUpdateTsKey, <String, int>{}); // Ensure TS map is init
+      await store.set(store.lastUpdateTsKey, <String, int>{}); // Ensure TS map is init
       prop = MockStoreProp<String>(store, testKey);
     });
 
-    test('get uses store.get', () {
-      store.set<String>(testKey, 'propValue');
+    test('get uses store.get', () async {
+      await store.set<String>(testKey, 'propValue');
       expect(prop.get(), 'propValue');
     });
 
-    test('set uses store.set', () {
-      prop.set('newPropValue');
+    test('set uses store.set', () async {
+      await prop.set('newPropValue');
       expect(store.get<String>(testKey), 'newPropValue');
       expect(prop.get(), 'newPropValue');
     });
 
     test('set updates lastUpdateTs if configured on prop', () async {
       final propUpdateTs = MockStoreProp<String>(store, 'propUpdateTsKey', updateLastUpdateTsOnSetProp: true);
-      propUpdateTs.set('initial');
+      await propUpdateTs.set('initial');
       final ts1 = store.lastUpdateTs!['propUpdateTsKey'];
       expect(ts1, isNotNull);
 
       await Future.delayed(const Duration(milliseconds: 1));
-      propUpdateTs.set('updated');
+      await propUpdateTs.set('updated');
       final ts2 = store.lastUpdateTs!['propUpdateTsKey'];
       expect(ts2, greaterThan(ts1!));
     });
 
     test('set does not update lastUpdateTs if configured false on prop', () async {
       final propNoUpdateTs = MockStoreProp<String>(store, 'propNoUpdateTsKey', updateLastUpdateTsOnSetProp: false);
-      propNoUpdateTs.set('initial');
+      await propNoUpdateTs.set('initial');
       final ts1 = store.lastUpdateTs!['propNoUpdateTsKey'];
       expect(ts1, isNull);
 
       await Future.delayed(const Duration(milliseconds: 1));
-      propNoUpdateTs.set('updated');
+      await propNoUpdateTs.set('updated');
       final ts2 = store.lastUpdateTs!['propNoUpdateTsKey'];
       expect(ts2, isNull);
     });
 
-    test('remove uses store.remove', () {
-      store.set<String>(testKey, 'valueToRemove');
-      prop.remove();
+    test('remove uses store.remove', () async {
+      await store.set<String>(testKey, 'valueToRemove');
+      await prop.remove();
       expect(store.get<String>(testKey), isNull);
     });
 
-    test('listenable returns a ValueNotifier with current value', () {
-      store.set<String>(testKey, 'listenableValue');
+    test('listenable returns a ValueNotifier with current value', () async {
+      await store.set<String>(testKey, 'listenableValue');
       final listener = prop.listenable();
       expect(listener.value, 'listenableValue');
     });
@@ -287,14 +287,14 @@ void main() {
     const testKey = 'testPropDefaultKey';
     const defaultValue = 'defaultValue';
 
-    setUp(() {
+    setUp(() async {
       store = MockStore(updateLastUpdateTsOnSet: true);
-      store.set(store.lastUpdateTsKey, <String, int>{}); // Ensure TS map is init
+      await store.set(store.lastUpdateTsKey, <String, int>{}); // Ensure TS map is init
       propDefault = MockStorePropDefault<String>(store, testKey, defaultValue);
     });
 
-    test('get returns value from store if exists', () {
-      store.set<String>(testKey, 'actualValue');
+    test('get returns value from store if exists', () async {
+      await store.set<String>(testKey, 'actualValue');
       expect(propDefault.get(), 'actualValue');
     });
 
@@ -302,29 +302,29 @@ void main() {
       expect(propDefault.get(), defaultValue);
     });
 
-    test('set uses store.set', () {
-      propDefault.set('newActualValue');
+    test('set uses store.set', () async {
+      await propDefault.set('newActualValue');
       expect(store.get<String>(testKey), 'newActualValue');
       expect(propDefault.get(), 'newActualValue');
     });
 
     test('set updates lastUpdateTs if configured on prop', () async {
       final propDefUpdateTs = MockStorePropDefault<String>(store, 'propDefUpdateTsKey', 'def', updateLastUpdateTsOnSetProp: true);
-      propDefUpdateTs.set('initial');
+      await propDefUpdateTs.set('initial');
       final ts1 = store.lastUpdateTs!['propDefUpdateTsKey'];
       expect(ts1, isNotNull);
 
       await Future.delayed(const Duration(milliseconds: 1));
-      propDefUpdateTs.set('updated');
+      await propDefUpdateTs.set('updated');
       final ts2 = store.lastUpdateTs!['propDefUpdateTsKey'];
       expect(ts2, greaterThan(ts1!));
     });
 
-    test('listenable returns a ValueNotifier with current value or default', () {
+    test('listenable returns a ValueNotifier with current value or default', () async {
       final listener1 = propDefault.listenable();
       expect(listener1.value, defaultValue);
 
-      store.set<String>(testKey, 'specificValue');
+      await store.set<String>(testKey, 'specificValue');
       final propDefaultWithValue = MockStorePropDefault<String>(store, testKey, defaultValue);
       final listener2 = propDefaultWithValue.listenable();
       expect(listener2.value, 'specificValue');

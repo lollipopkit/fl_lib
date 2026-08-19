@@ -62,6 +62,19 @@ void main() {
     expect(defaultStorage.uploadCount, 0);
     expect(selectedStorage.uploadCount, 1);
   });
+
+  for (final throttleMilli in [0, 20]) {
+    test('sync propagates upload failures with throttle $throttleMilli', () async {
+      final error = StateError('upload failed');
+      final remote = _TestRemoteStorage(uploadError: error);
+      final sync = _TestSync(remote);
+
+      await expectLater(
+        sync.sync(throttleMilli: throttleMilli),
+        throwsA(same(error)),
+      );
+    });
+  }
 }
 
 final class _TestSync extends SyncIface<_TestMergeable, String> {
@@ -98,11 +111,13 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
     this.remoteExists = false,
     this.uploadGate,
     this.firstUploadStarted,
+    this.uploadError,
   });
 
   final bool remoteExists;
   final Completer<void>? uploadGate;
   final Completer<void>? firstUploadStarted;
+  final Object? uploadError;
   int downloadCount = 0;
   int uploadCount = 0;
 
@@ -129,6 +144,8 @@ final class _TestRemoteStorage extends RemoteStorage<String> {
     String? localPath,
   }) async {
     uploadCount++;
+    final error = uploadError;
+    if (error != null) throw error;
     if (uploadCount == 1) {
       if (firstUploadStarted?.isCompleted == false) {
         firstUploadStarted!.complete();

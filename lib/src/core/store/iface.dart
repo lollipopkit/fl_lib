@@ -72,7 +72,7 @@ sealed class Store {
   /// calling [toObj].
   /// - If you want to set to `null`, use [remove] instead.
   /// {@endtemplate}
-  FutureOr<bool> set<T extends Object>(
+  Future<bool> set<T extends Object>(
     String key,
     T val, {
     StoreToObj<T>? toObj,
@@ -82,7 +82,7 @@ sealed class Store {
   /// Set the map of key-value pairs.
   ///
   /// {@macro store_set}
-  FutureOr<bool> setAll<T extends Object>(
+  Future<bool> setAll<T extends Object>(
     Map<String, T> map, {
     StoreToObj<T>? toObj,
     bool? updateLastUpdateTsOnSet,
@@ -105,10 +105,10 @@ sealed class Store {
   FutureOr<Set<String>> keys({bool includeInternalKeys = StoreDefaults.defaultIncludeInternalKeys});
 
   /// Remove the key.
-  FutureOr<bool> remove(String key, {bool? updateLastUpdateTsOnRemove});
+  Future<bool> remove(String key, {bool? updateLastUpdateTsOnRemove});
 
   /// Clear the store.
-  FutureOr<bool> clear({bool? updateLastUpdateTsOnClear});
+  Future<bool> clear({bool? updateLastUpdateTsOnClear});
 
   /// Update the last update timestamp.
   ///
@@ -117,7 +117,7 @@ sealed class Store {
   /// If [key] is `null`, it's triggered by [clear].
   ///
   /// {@macro store_last_update_ts}
-  FutureOr<bool> updateLastUpdateTs({int? ts, required String? key}) async {
+  Future<bool> updateLastUpdateTs({int? ts, required String? key}) async {
     if (key != null && isInternalKey(key)) {
       // dprintWarn('updateLastUpdateTs()', 'key `$key` is an internal key, ignored.');
       return false;
@@ -269,10 +269,19 @@ abstract class StoreProp<T extends Object> {
   /// Set the value of the key.
   ///
   /// If you want to set `null`, use `remove()` instead.
-  FutureOr<void> set(T value) => store.set(key, value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+  Future<void> set(T value) async {
+    await store.set(
+      key,
+      value,
+      toObj: toObj,
+      updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+    );
+  }
 
   /// Remove the key.
-  FutureOr<void> remove() => store.remove(key);
+  Future<void> remove() async {
+    await store.remove(key);
+  }
 
   /// {@template store_prop_listenable}
   /// Get the [ValueListenable] of the key.
@@ -314,7 +323,14 @@ abstract class StorePropDefault<T extends Object> extends StoreProp<T> {
 
   /// Set the value of the key.
   @override
-  FutureOr<void> set(T value) => store.set(key, value, toObj: toObj, updateLastUpdateTsOnSet: updateLastUpdateTsOnSet);
+  Future<void> set(T value) async {
+    await store.set(
+      key,
+      value,
+      toObj: toObj,
+      updateLastUpdateTsOnSet: updateLastUpdateTsOnSet,
+    );
+  }
 
   /// {@macro store_prop_listenable}
   @override

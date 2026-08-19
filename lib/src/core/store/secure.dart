@@ -71,8 +71,18 @@ abstract final class SecureStoreProps {
 
   /// Moves secrets written by older builds out of SharedPreferences.
   static Future<void> migrateLegacyPrefs() async {
-    await _migrateLegacyPref(PrefProps.webdavPwd, webdavPwd);
-    await _migrateLegacyPref(PrefProps.githubToken, githubToken);
+    try {
+      // ignore: deprecated_member_use_from_same_package
+      await _migrateLegacyPref(PrefProps.webdavPwd, webdavPwd);
+    } catch (e) {
+      dprint('Failed to migrate WebDAV password: $e');
+    }
+    try {
+      // ignore: deprecated_member_use_from_same_package
+      await _migrateLegacyPref(PrefProps.githubToken, githubToken);
+    } catch (e) {
+      dprint('Failed to migrate GitHub token: $e');
+    }
   }
 
   static Future<void> _migrateLegacyPref(
@@ -80,7 +90,7 @@ abstract final class SecureStoreProps {
     SecureProp secure,
   ) async {
     final secured = await secure.read();
-    if (secured != null && secured.isNotEmpty) {
+    if (secured != null) {
       await legacy.remove();
       return;
     }

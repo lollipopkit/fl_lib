@@ -30,7 +30,7 @@ final class WindowStateListener extends WindowListener {
       await windowManager.getSize(),
       await windowManager.getPosition(),
     );
-    windowSize.set(state);
+    await windowSize.set(state);
   }
 
   @override

@@ -51,10 +51,13 @@ class HiveStore extends Store {
       try {
         unencrypted = await Hive.openBox(boxName, path: path);
         final migrated = <dynamic, dynamic>{
-          for (final key in unencrypted.keys) key: unencrypted.get(key),
+          for (final key in unencrypted.keys)
+            if (!enc.containsKey(key)) key: unencrypted.get(key),
         };
-        await enc.putAll(migrated);
-        await enc.flush();
+        if (migrated.isNotEmpty) {
+          await enc.putAll(migrated);
+          await enc.flush();
+        }
         for (final entry in migrated.entries) {
           if (enc.get(entry.key) != entry.value) {
             throw StateError('Failed to verify migrated key ${entry.key}');
@@ -179,15 +182,19 @@ class HiveStore extends Store {
     try {
       await box.clear();
       if (lastUpdateTsMap != null) {
-        await set(
+        final restored = await set(
           lastUpdateTsKey,
           lastUpdateTsMap,
           updateLastUpdateTsOnSet: false,
         );
+        if (!restored) return false;
       }
 
       updateLastUpdateTsOnClear ??= this.updateLastUpdateTsOnClear;
-      if (updateLastUpdateTsOnClear) await updateLastUpdateTs(key: null);
+      if (updateLastUpdateTsOnClear &&
+          !await updateLastUpdateTs(key: null)) {
+        return false;
+      }
       return true;
     } catch (e) {
       dprintWarn('clear()', 'failed: $e');
@@ -302,9 +309,9 @@ class HiveProp<T extends Object> extends StoreProp<T> {
   T? fetch() => get();
 
   /// {@macro hive_store_fn_backward_compatibility}
-  void put(T value) => set(value);
+  Future<void> put(T value) => set(value);
 
-  void delete() => remove();
+  Future<void> delete() => remove();
 
   @override
   ValueListenable<T?> listenable() {
@@ -334,10 +341,10 @@ final class HivePropDefault<T extends Object> extends StorePropDefault<T> implem
   T fetch() => get();
 
   @override
-  void put(T value) => set(value);
+  Future<void> put(T value) => set(value);
 
   @override
-  void delete() => remove();
+  Future<void> delete() => remove();
 }
 
 class _BoxListenerManager {
@@ -444,11 +451,17 @@ extension _HiveEnc on HiveStore {
   /// The encryption key of the [HiveStore].
   static Future<String?> get _encryptionKey async {
     final secureStoreHiveKey = await SecureStoreProps.hivePwd.read();
-    if (secureStoreHiveKey != null) {
+    if (secureStoreHiveKey != null && secureStoreHiveKey.isNotEmpty) {
       await _removeLegacyKeys();
       return secureStoreHiveKey;
     }
-    final hiveKey = PrefStore.shared.get<String>(_hiveEncKey) ?? PrefStore.shared.get<String>('flutter.$_hiveEncKey');
+    final directKey = PrefStore.shared.get<String>(_hiveEncKey);
+    final flutterKey = PrefStore.shared.get<String>('flutter.$_hiveEncKey');
+    final hiveKey = directKey != null && directKey.isNotEmpty
+        ? directKey
+        : flutterKey != null && flutterKey.isNotEmpty
+        ? flutterKey
+        : null;
     if (hiveKey != null) {
       await SecureStoreProps.hivePwd.write(hiveKey);
       final persisted = await SecureStoreProps.hivePwd.read();
@@ -484,7 +497,7 @@ extension _HiveEnc on HiveStore {
   /// Initialize the [SecureStore].
   static Future<HiveAesCipher> _initCipher() async {
     var key = await _encryptionKey;
-    if (key == null) {
+    if (key == null || key.isEmpty) {
       key = base64UrlEncode(Hive.generateSecureKey());
       await SecureStoreProps.hivePwd.write(key);
       final persisted = await SecureStoreProps.hivePwd.read();

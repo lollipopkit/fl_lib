@@ -67,7 +67,7 @@ abstract final class DeepLinks {
       case '/oauth-callback':
         final token = params['token'];
         if (token == null) return;
-        UserApi.tokenProp.set(token);
+        await UserApi.tokenProp.set(token);
         await UserApi.refresh();
         break;
       default:
