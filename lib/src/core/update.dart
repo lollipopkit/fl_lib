@@ -48,7 +48,15 @@ abstract final class AppUpdateIface {
 
     final fileUrl = AppUpdate.url;
     if (fileUrl == null) {
-      Loggers.app.warning('Update file not available: $fileUrl');
+      // A newer build exists, but no release carries an asset for this
+      // platform — an arch the project does not ship, in practice. Staying
+      // quiet is deliberate: there is nothing the user could act on, and this
+      // state does not clear on its own.
+      // TODO: [newestBuild] is set, so the settings page reads "click to
+      // update" and the tap then does nothing. It needs a third state for
+      // "newer version exists, no build for this platform", which needs a
+      // string in libL10n.
+      Loggers.app.warning('No update asset for ${Pfs.type} at build $newest');
       return;
     }
 
