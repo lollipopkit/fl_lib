@@ -1,16 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 part 'hive.dart';
 part 'pref.dart';
 part 'mock.dart';
+part 'sqlite.dart';
 
 /// {@template store_from_to}
 /// If there is a type which is not supported by the store, the store will call
@@ -151,6 +154,16 @@ sealed class Store {
         return json.decode(raw).cast<String, int>();
       } else if (raw is Map<String, int>) {
         return raw;
+      } else if (raw is Map) {
+        // A JSON round-trip widens this to `Map<String, dynamic>`, and so did
+        // a Hive box to `Map<dynamic, dynamic>`. Matching only the exact type
+        // above meant any store that had been through either handed back null
+        // and silently restarted its timestamps from zero.
+        return {
+          for (final e in raw.entries)
+            if (e.key is String && e.value is num)
+              e.key as String: (e.value as num).toInt(),
+        };
       }
       return null;
     });

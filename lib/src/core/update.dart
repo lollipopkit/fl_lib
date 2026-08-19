@@ -37,8 +37,19 @@ abstract final class AppUpdateIface {
     }
 
     final newest = result.$1;
+    final fileUrl = AppUpdate.url;
 
-    newestBuild.value = newest;
+    // Only a build that can be installed from here, or the one already
+    // running, belongs on screen. The settings page reads "click to update"
+    // off [newestBuild], so publishing a version with no asset for this
+    // platform would put a tap there with nothing behind it.
+    //
+    // Cleared rather than left alone in that case: this notifier outlives the
+    // check, so an earlier one that did find an asset would otherwise keep
+    // offering that build after it stopped being on offer. A null [fileUrl]
+    // means no release carries an asset for this platform at all, so there is
+    // nothing left to point at.
+    newestBuild.value = fileUrl != null || newest <= build ? newest : null;
 
     if (!force && newest <= build) {
       Loggers.app.info('Update ignored: $build >= $newest');
@@ -46,9 +57,12 @@ abstract final class AppUpdateIface {
     }
     Loggers.app.info('Update available: $newest');
 
-    final fileUrl = AppUpdate.url;
     if (fileUrl == null) {
-      Loggers.app.warning('Update file not available: $fileUrl');
+      // A newer build exists, but no release carries an asset for this
+      // platform — an arch the project does not ship, in practice. Silence is
+      // deliberate: there is nothing the user could act on, and the state does
+      // not clear on its own, so a notice would repeat on every launch.
+      Loggers.app.warning('No update asset for ${Pfs.type} at build $newest');
       return;
     }
 
