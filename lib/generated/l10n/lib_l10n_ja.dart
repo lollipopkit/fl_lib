@@ -276,6 +276,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get found => '見つかりました';
 
   @override
+  String get general => '一般';
+
+  @override
   String get goBackQ => '戻りますか？';
 
   @override

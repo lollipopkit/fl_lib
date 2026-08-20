@@ -277,6 +277,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get found => 'Bulundu';
 
   @override
+  String get general => 'Genel';
+
+  @override
   String get goBackQ => 'Geri dön?';
 
   @override

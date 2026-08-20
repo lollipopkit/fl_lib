@@ -277,6 +277,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get found => 'Ditemukan';
 
   @override
+  String get general => 'Umum';
+
+  @override
   String get goBackQ => 'Datang kembali?';
 
   @override

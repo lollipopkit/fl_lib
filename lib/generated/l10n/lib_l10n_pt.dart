@@ -277,6 +277,9 @@ class LibLocalizationsPt extends LibLocalizations {
   String get found => 'Encontrado';
 
   @override
+  String get general => 'Geral';
+
+  @override
   String get goBackQ => 'Voltar?';
 
   @override

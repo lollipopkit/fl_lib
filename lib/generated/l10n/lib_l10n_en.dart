@@ -277,6 +277,9 @@ class LibLocalizationsEn extends LibLocalizations {
   String get found => 'Found';
 
   @override
+  String get general => 'General';
+
+  @override
   String get goBackQ => 'Go back?';
 
   @override

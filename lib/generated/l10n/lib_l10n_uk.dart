@@ -277,6 +277,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get found => 'Знайдено';
 
   @override
+  String get general => 'Загальні';
+
+  @override
   String get goBackQ => 'Повернутися назад?';
 
   @override

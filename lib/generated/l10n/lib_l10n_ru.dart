@@ -277,6 +277,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get found => 'Найдено';
 
   @override
+  String get general => 'Общие';
+
+  @override
   String get goBackQ => 'Вернуться?';
 
   @override

@@ -277,6 +277,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get found => 'Gevonden';
 
   @override
+  String get general => 'Algemeen';
+
+  @override
   String get goBackQ => 'Terug gaan?';
 
   @override

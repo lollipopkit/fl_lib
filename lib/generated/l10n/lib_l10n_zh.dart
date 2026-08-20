@@ -276,6 +276,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get found => '已找到';
 
   @override
+  String get general => '通用';
+
+  @override
   String get goBackQ => '返回？';
 
   @override
@@ -1032,6 +1035,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get found => '找到';
+
+  @override
+  String get general => '通用';
 
   @override
   String get goBackQ => '返回？';

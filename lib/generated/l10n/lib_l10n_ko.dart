@@ -276,6 +276,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get found => '찾음';
 
   @override
+  String get general => '일반';
+
+  @override
   String get goBackQ => '돌아가시겠습니까?';
 
   @override

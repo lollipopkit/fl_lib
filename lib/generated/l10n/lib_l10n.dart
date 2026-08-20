@@ -639,6 +639,12 @@ abstract class LibLocalizations {
   /// **'Found'**
   String get found;
 
+  /// No description provided for @general.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get general;
+
   /// No description provided for @goBackQ.
   ///
   /// In en, this message translates to:
