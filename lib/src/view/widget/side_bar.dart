@@ -247,7 +247,20 @@ final class SideBarTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                ?trailing,
+                if (trailing != null)
+                  // A Material control sizes itself to a 48pt tap target
+                  // whatever its own constraints say, and that is taller than
+                  // this row's text — so a row carrying one came out 58pt
+                  // against 35pt, and a name grew by two thirds the moment a
+                  // session opened behind it and gave it a close button. The
+                  // row owns its height, so the override belongs here rather
+                  // than in each caller's trailing widget.
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: trailing!,
+                  ),
               ],
             ),
           ),

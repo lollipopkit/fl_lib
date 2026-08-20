@@ -184,4 +184,29 @@ void main() {
     expect(find.byType(SideBarSection), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a trailing control does not make the row taller', (
+    tester,
+  ) async {
+    // A Material control sizes itself to a 48pt tap target whatever its own
+    // constraints say, and `_CloseButton` already asked for 26 and got 40. So
+    // a row with a close button measured 58pt against 35pt without one, and
+    // the name of a target grew by two thirds the moment a session opened
+    // behind it and moved it into the running section.
+    await tester.pumpWidget(
+      harness(names: const ['add', 'alpine'], index: 1),
+    );
+
+    final running = tester
+        .getSize(find.widgetWithText(SideBarTile, 'alpine'))
+        .height;
+    final target = tester
+        .getSize(find.widgetWithText(SideBarTile, 'prod-1'))
+        .height;
+
+    // Not equality: the button is a point taller than the text beside it, and
+    // pinning the exact figure would fail on a font metric change that costs
+    // the rail nothing.
+    expect(running - target, lessThanOrEqualTo(2.0));
+  });
 }
