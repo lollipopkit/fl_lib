@@ -102,52 +102,14 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
 
   /// The name, what it is one of, and the way to the rest.
   Widget _buildSwitcher(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final name = index >= 0 && index < names.length ? names[index] : '';
-    // Sessions, so the leading tab is not one of them: "2/4" counts terminals,
-    // not pages.
-    final total = names.length - 1;
-
-    final label = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_onLeading)
-          Icon(leadingIcon, size: _iconSize, color: scheme.onSurfaceVariant)
-        // One session is not a set, and "1/1" is a fact nobody needed.
-        else if (total > 1)
-          _SessionCounter(position: index, total: total),
-        const SizedBox(width: 7),
-        Flexible(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            softWrap: false,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-          ),
-        ),
-        if (_anyTabs)
-          Icon(Icons.expand_more, size: 18, color: scheme.onSurfaceVariant),
-      ],
-    );
-
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 5),
-        child: _anyTabs
-            ? _SessionTabInk(
-                onTap: () => _showSheet(context),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
-                  child: label,
-                ),
-              )
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
-                child: label,
-              ),
-      ),
+    return SessionSwitcherLabel(
+      name: index >= 0 && index < names.length ? names[index] : '',
+      // Sessions, so the leading tab is not one of them: "2/4" counts
+      // terminals, not pages.
+      total: names.length - 1,
+      position: _onLeading ? null : index,
+      icon: leadingIcon,
+      onTap: _anyTabs ? () => _showSheet(context) : null,
     );
   }
 
@@ -169,6 +131,84 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     // page, not the sheet, is what asks whether to close.
     if (picked.close) return onClose(picked.index);
     if (picked.index != index) onTap(picked.index);
+  }
+}
+
+/// Which one of how many, its name, and the way to the rest.
+///
+/// The switcher half of [SessionTabBar], on its own because the Agent tab has
+/// the same shape of problem — one conversation on screen and the others a tap
+/// away — but its own list to open, with renaming and clearing on it, rather
+/// than this file's sheet. Sharing the label is what keeps the three tabs one
+/// weight; sharing the sheet would have meant growing it a menu for one caller.
+final class SessionSwitcherLabel extends StatelessWidget {
+  const SessionSwitcherLabel({
+    super.key,
+    required this.name,
+    this.position,
+    this.total = 0,
+    this.icon,
+    this.onTap,
+  });
+
+  final String name;
+
+  /// Which one this is, counting from 1. Null shows [icon] instead — for a
+  /// page that is not one of the set, such as the picker at its head.
+  final int? position;
+
+  final int total;
+
+  final IconData? icon;
+
+  /// Null makes this a label rather than a way anywhere: no chevron, no ink.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final position_ = position;
+    final icon_ = icon;
+
+    final label = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (position_ == null) ...[
+          if (icon_ != null)
+            Icon(icon_, size: _iconSize, color: scheme.onSurfaceVariant),
+        ]
+        // One of anything is not a set, and "1/1" is a fact nobody needed.
+        else if (total > 1)
+          _SessionCounter(position: position_, total: total),
+        const SizedBox(width: 7),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          ),
+        ),
+        if (onTap != null)
+          Icon(Icons.expand_more, size: 18, color: scheme.onSurfaceVariant),
+      ],
+    );
+
+    const padding = EdgeInsets.fromLTRB(9, 5, 5, 5);
+    final onTap_ = onTap;
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 5),
+        child: onTap_ == null
+            ? Padding(padding: padding, child: label)
+            : _SessionTabInk(
+                onTap: onTap_,
+                child: Padding(padding: padding, child: label),
+              ),
+      ),
+    );
   }
 }
 
