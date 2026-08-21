@@ -113,7 +113,7 @@ final class MasonryList extends StatelessWidget {
     this.columnWidth = UIs.columnWidth,
     this.maxColumns = 10,
     this.padding = kPadding,
-    this.spacing = 8,
+    this.spacing = kSpacing,
     this.controller,
   }) : itemCount = children.length,
        itemBuilder = ((_, i) => children[i]);
@@ -127,7 +127,7 @@ final class MasonryList extends StatelessWidget {
     this.columnWidth = UIs.columnWidth,
     this.maxColumns = 10,
     this.padding = kPadding,
-    this.spacing = 8,
+    this.spacing = kSpacing,
     this.controller,
   });
 
@@ -151,7 +151,20 @@ final class MasonryList extends StatelessWidget {
   final ScrollController? controller;
 
   /// Enough to keep cards off the window edge and each other, and no more.
-  static const kPadding = EdgeInsets.symmetric(horizontal: 8, vertical: 8);
+  ///
+  /// Read with [kSpacing]: the cards here are [CardX], and a `Card` brings a
+  /// 4pt margin of its own. So what shows above the first card is this plus
+  /// that, and what shows between two of them is [kSpacing] plus two of them —
+  /// which is how a nominal 8 and 8 drew as 12 and 16, and why the vertical
+  /// rhythm of every tab that uses this read as loose.
+  static const kPadding = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+
+  /// Between one card and the next, before their own margins are added.
+  ///
+  /// Shared with `PageColumns`, which does the same column arithmetic for the
+  /// pages that switch between the two layouts and used to spell this out a
+  /// second time.
+  static const kSpacing = 4.0;
 
   /// How many columns [width] holds. Public so a caller that has to size
   /// itself around the same answer gets the same one.
