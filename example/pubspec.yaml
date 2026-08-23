@@ -22,10 +22,6 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 
 dependency_overrides:
-#   webdav_client_plus:
-#     path: ../webdav_client
-# flutter_markdown_latex:
-#   path: ../flutter_markdown_latex
   flutter_math_fork: ^0.7.4
   gtk: # TODO: remove it after fixed in upstream
     git:
