@@ -8,6 +8,7 @@ final class ChoiceWidget<T> extends StatelessWidget {
     this.clearable = false,
     this.multi = false,
     this.display,
+    this.avatar,
     required this.items,
     required this.selected,
     required this.onChanged,
@@ -16,6 +17,14 @@ final class ChoiceWidget<T> extends StatelessWidget {
   final bool multi;
   final bool clearable;
   final String? Function(T)? display;
+
+  /// Drawn inside each chip, before its label.
+  ///
+  /// For a list whose entries are instances of something with a mark of its
+  /// own — servers, say. Null for the whole list, or for one item, leaves the
+  /// chip as it was.
+  final Widget? Function(T)? avatar;
+
   final List<T> items;
   final List<T> selected;
   final void Function(List<T>) onChanged;
@@ -36,6 +45,7 @@ final class ChoiceWidget<T> extends StatelessWidget {
             return ChoiceChipX<T>(
               key: ValueKey(item),
               label: display?.call(item) ?? item.toString(),
+              avatar: avatar?.call(item),
               state: state,
               value: item,
             );
@@ -52,6 +62,7 @@ class ChoiceChipX<T> extends StatelessWidget {
     required this.label,
     required this.state,
     required this.value,
+    this.avatar,
     this.onSelected,
     this.outPadding,
     this.padding = const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
@@ -61,6 +72,11 @@ class ChoiceChipX<T> extends StatelessWidget {
   });
 
   final String label;
+
+  /// Drawn before the label. Sized by the caller; `ChoiceChip` gives it the
+  /// height of the label's line either way.
+  final Widget? avatar;
+
   final ChoiceController<T> state;
   final T value;
   final void Function(T, bool)? onSelected;
@@ -82,6 +98,7 @@ class ChoiceChipX<T> extends StatelessWidget {
       padding: outPadding,
       child: ChoiceChip(
         label: Text(label),
+        avatar: avatar,
         side: BorderSide.none,
         showCheckmark: showCheckmark,
         padding: padding,

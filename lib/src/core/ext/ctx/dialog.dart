@@ -139,6 +139,7 @@ extension DialogX on BuildContext {
     String? title,
     required List<T> items,
     String Function(T)? display,
+    Widget? Function(T)? avatar,
     bool multi = true,
     List<T>? initial,
     bool clearable = false,
@@ -168,6 +169,7 @@ extension DialogX on BuildContext {
         items: itemsList,
         selected: vals,
         display: display,
+        avatar: avatar,
       );
     }
 
@@ -230,6 +232,7 @@ extension DialogX on BuildContext {
     String? title,
     required List<T> items,
     String Function(T)? display,
+    Widget? Function(T)? avatar,
     T? initial,
     bool clearable = false,
     List<Widget>? actions,
@@ -240,6 +243,7 @@ extension DialogX on BuildContext {
       title: title,
       items: items,
       display: display,
+      avatar: avatar,
       multi: false,
       initial: initial == null ? null : [initial],
       actions: actions,
@@ -270,6 +274,7 @@ extension DialogX on BuildContext {
     required List<T?> Function(String tag) itemsBuilder,
     required ValueNotifier<Set<String>> tags,
     String Function(T)? display,
+    Widget? Function(T)? avatar,
     List<T>? initial,
     bool clearable = false,
     bool multi = false,
