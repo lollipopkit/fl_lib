@@ -32,6 +32,13 @@ class ContextMenuAction {
   final bool destructive;
 }
 
+/// Opens a menu for something, at [at] or — for a long press, which has a
+/// finger over the spot — in the middle.
+///
+/// The shape [showContextMenu] takes, so a widget offering "the other thing"
+/// can hand its caller the position without knowing what the menu will be.
+typedef ContextMenuOpener = void Function(Offset? at);
+
 /// Shows [actions], where the pointer is or in the middle of the screen.
 ///
 /// [at] is a global position — what `WidgetSecondaryX.onSecondary` hands over.

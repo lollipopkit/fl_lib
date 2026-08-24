@@ -150,6 +150,8 @@ final class SideBarTile extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.onLongPress,
+    this.onMenu,
+    this.menuEnabled = true,
   });
 
   final String title;
@@ -185,12 +187,41 @@ final class SideBarTile extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
+  /// A menu for this row, rather than the single action [onLongPress] is.
+  ///
+  /// For an entry with more than one thing to do to it. Drawn as a button in
+  /// [trailing] — a row that has a menu has to say so, since holding is
+  /// something you have to be told about — and reachable by holding or
+  /// right-clicking the row as well, which is how the rest of this app asks
+  /// for the other thing. A caller that fills [trailing] itself keeps the
+  /// gestures and loses the button.
+  ///
+  /// Takes precedence over [onLongPress] on both gestures — pass one or the
+  /// other, not both.
+  final ContextMenuOpener? onMenu;
+
+  /// Whether [onMenu] can be used right now.
+  ///
+  /// The button stays and greys out rather than going away: rows whose menu
+  /// comes and goes with some other state would change width underneath the
+  /// reader, which looks like the list moving rather than like an action being
+  /// unavailable.
+  final bool menuEnabled;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     // Right-click reaches whatever the long press does — see
-    // `WidgetSecondaryX`, which is where the reasoning lives.
+    // `WidgetSecondaryX`, which is where the reasoning lives. A menu is the
+    // exception: it wants the pointer's position, which `asSecondary` drops.
+    final onMenu = menuEnabled ? this.onMenu : null;
+    final onHold = onMenu == null ? onLongPress : () => onMenu(null);
+    final void Function(Offset)? onSecondaryTap =
+        onMenu ?? asSecondary(onLongPress);
+    final trailing =
+        this.trailing ??
+        (this.onMenu == null ? null : _MenuButton(onMenu: onMenu));
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       child: Material(
@@ -198,7 +229,7 @@ final class SideBarTile extends StatelessWidget {
         child: InkWell(
           borderRadius: _kTileRadius,
           onTap: onTap,
-          onLongPress: onLongPress,
+          onLongPress: onHold,
           child: AnimatedContainer(
             duration: MediaQuery.disableAnimationsOf(context)
                 ? Duration.zero
@@ -259,7 +290,7 @@ final class SideBarTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (trailing != null)
+                if (trailing case final trailing?)
                   // A Material control sizes itself to a 48pt tap target
                   // whatever its own constraints say, and that is taller than
                   // this row's text — so a row carrying one came out 58pt
@@ -271,18 +302,55 @@ final class SideBarTile extends StatelessWidget {
                     data: Theme.of(context).copyWith(
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: trailing!,
+                    child: trailing,
                   ),
               ],
             ),
           ),
         ),
       ),
-    ).onSecondary(asSecondary(onLongPress));
+    ).onSecondary(onSecondaryTap);
   }
 }
 
 final _kTileRadius = BorderRadius.circular(9);
+
+/// What [SideBarTile.onMenu] draws: the row saying it has a menu.
+///
+/// Opens at itself rather than in the middle of the screen. A tap on a button
+/// leaves nothing covering the button, so the menu can come out beside it —
+/// unlike a long press, where a finger is over the spot and
+/// [showContextMenu] falls back to a dialog.
+final class _MenuButton extends StatelessWidget {
+  const _MenuButton({required this.onMenu});
+
+  /// Null while the menu is unavailable, which is what greys the button.
+  final ContextMenuOpener? onMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    final onMenu = this.onMenu;
+    return Builder(
+      builder: (ctx) => IconButton(
+        icon: const Icon(Icons.more_vert, size: 17),
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+        visualDensity: VisualDensity.compact,
+        onPressed: onMenu == null
+            ? null
+            : () {
+                final box = ctx.findRenderObject();
+                onMenu(
+                  box is RenderBox && box.hasSize
+                      ? box.localToGlobal(box.size.center(Offset.zero))
+                      : null,
+                );
+              },
+      ),
+    );
+  }
+}
 
 class _CloseButton extends StatelessWidget {
   const _CloseButton({required this.onTap});
