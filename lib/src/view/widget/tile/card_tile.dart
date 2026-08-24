@@ -17,6 +17,7 @@ class CardTile extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.icon,
+    this.leading,
     this.trailing = const Icon(Icons.chevron_right),
     this.onTap,
     this.onLongPress,
@@ -34,6 +35,11 @@ class CardTile extends StatelessWidget {
   /// icon.
   final IconData? icon;
 
+  /// [icon]'s slot, for a caller with something other than an icon to put in
+  /// it — a picture, or a widget that decides for itself whether to draw at
+  /// all. Wins over [icon] when both are given.
+  final Widget? leading;
+
   /// Defaults to the chevron. Pass null for a row that opens nothing, or a
   /// widget of your own for one that also acts.
   final Widget? trailing;
@@ -49,7 +55,7 @@ class CardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return CardX(
       child: ListTile(
-        leading: icon == null ? null : Icon(icon),
+        leading: leading ?? (icon == null ? null : Icon(icon)),
         title: Text(
           title,
           style: UIs.text18,
