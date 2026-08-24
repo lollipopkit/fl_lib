@@ -173,11 +173,15 @@ sealed class KvStore {
         map[k] = ts;
       }
     }
-    return await set(
-      lastUpdateTsKey,
-      json.encode(map),
-      updateLastUpdateTsOnSet: false,
-    );
+    // The map itself, not a string holding it. A backend encodes what it is
+    // given — `SqliteStore.set` calls `json.encode` on it — so encoding here
+    // too stored `"{\"a\":1}"`: twice the bytes, and unreadable as anything
+    // but one escaped line wherever the store is shown.
+    //
+    // No migration: this row is rewritten on the next write to the store,
+    // which is to say almost immediately. Until then the string branch in
+    // [lastUpdateTs] reads it, as it already did for Hive.
+    return await set(lastUpdateTsKey, map, updateLastUpdateTsOnSet: false);
   }
 
   Future<bool> updateLastUpdateTs({int? ts, required String? key}) =>
