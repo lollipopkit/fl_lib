@@ -146,6 +146,7 @@ final class SideBarTile extends StatelessWidget {
     this.selected = false,
     this.live = false,
     this.icon,
+    this.leading,
     this.trailing,
     this.onTap,
     this.onLongPress,
@@ -159,6 +160,14 @@ final class SideBarTile extends StatelessWidget {
   /// a list of servers reads faster without the same icon down the side of it,
   /// while a list of subjects is quicker to find your place in with them.
   final IconData? icon;
+
+  /// Drawn where [icon] would be, for a mark that is not one of Material's.
+  ///
+  /// Sized and coloured by the caller, since whatever goes here is the
+  /// caller's own — this only reserves the column and the gap after it, so a
+  /// rail mixing the two keeps one edge for its names to start from. [icon]
+  /// wins if both are given.
+  final Widget? leading;
 
   /// Whether this is the entry being shown.
   final bool selected;
@@ -232,6 +241,9 @@ final class SideBarTile extends StatelessWidget {
                     size: 17,
                     color: selected ? scheme.primary : scheme.onSurfaceVariant,
                   ),
+                  const SizedBox(width: 9),
+                ] else if (leading != null) ...[
+                  SizedBox(width: 17, height: 17, child: leading),
                   const SizedBox(width: 9),
                 ],
                 Expanded(
