@@ -134,18 +134,24 @@ final class MasonryList extends StatelessWidget {
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
 
+  /// {@template masonry_column_width}
   /// How wide a column wants to be. The real width is whatever is left after
   /// dividing the space between however many of these fit.
+  /// {@endtemplate}
   final double columnWidth;
 
+  /// {@template masonry_max_columns}
   /// A ceiling on the columns, for content that stops being readable when it
   /// is spread across a whole desktop window.
+  /// {@endtemplate}
   final int maxColumns;
 
   final EdgeInsets padding;
 
+  /// {@template masonry_spacing}
   /// Between columns and between cards, the same on both axes: the grid should
   /// read as one field of cards rather than as rows or as columns.
+  /// {@endtemplate}
   final double spacing;
 
   final ScrollController? controller;
