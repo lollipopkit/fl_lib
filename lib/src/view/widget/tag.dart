@@ -25,6 +25,15 @@ class TagSwitcher extends StatelessWidget implements PreferredSizeWidget {
   /// Only works when [singleLine] is true.
   final bool reversed;
 
+  /// Whether the row takes the width of the tags in it rather than all it is
+  /// given. Only works when [singleLine] is true.
+  ///
+  /// For a switcher that floats over a page instead of spanning a bar: it has
+  /// to say how wide it is, and once whatever holds it runs out of room it
+  /// scrolls rather than overflowing. Off by default, which is a row that
+  /// fills its bar.
+  final bool shrinkWrap;
+
   final EdgeInsetsGeometry padding;
 
   const TagSwitcher({
@@ -34,6 +43,7 @@ class TagSwitcher extends StatelessWidget implements PreferredSizeWidget {
     this.initTag = kDefaultTag,
     this.singleLine = false,
     this.reversed = false,
+    this.shrinkWrap = false,
     this.padding = const EdgeInsets.symmetric(horizontal: 13),
   });
 
@@ -86,6 +96,7 @@ class TagSwitcher extends StatelessWidget implements PreferredSizeWidget {
   Widget _buildListView(List<String> items, ChoiceController<String> state) {
     return ListView.builder(
       scrollDirection: Axis.horizontal,
+      shrinkWrap: shrinkWrap,
       itemCount: items.length,
       reverse: reversed,
       padding: padding,
