@@ -2,11 +2,19 @@ import 'package:fl_lib/src/core/ext/ctx/dialog.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/widget/btn/btn.dart';
+import 'package:fl_lib/src/view/widget/markdown.dart';
 import 'package:flutter/material.dart';
 
 final class TipText extends StatelessWidget {
   final String text;
   final String tip;
+
+  /// Whether [tip] is markdown.
+  ///
+  /// It was declared, defaulted and accepted for a long time without ever
+  /// being read — `build` always rendered a plain `Text`, so passing true did
+  /// nothing at all and nothing said so. Honoured now, which also makes a
+  /// link in a tip work: [SimpleMarkdown] launches what it is tapped on.
   final bool isMarkdown;
   final TextStyle? textStyle;
 
@@ -41,7 +49,9 @@ final class TipText extends StatelessWidget {
               onTap: () {
                 context.showRoundDialog(
                   title: l10n.note,
-                  child: Text(tip),
+                  child: isMarkdown
+                      ? SingleChildScrollView(child: SimpleMarkdown(data: tip))
+                      : Text(tip),
                   actions: Btnx.oks,
                 );
               },
