@@ -108,7 +108,11 @@ class _NestedNavigatorState extends State<NestedNavigator> {
     // swallowing the gesture there would strand the user on a screen the
     // button appears to be for.
     return NavigatorPopHandler(
-      onPopWithResult: (_) => _navigatorKey.currentState?.pop(),
+      // The route may have a PopScope of its own. `pop` removes it regardless
+      // of that scope's disposition, which can empty this navigator's only
+      // route and leave the region blank. `maybePop` lets the route reject the
+      // gesture and deliver its callback instead.
+      onPopWithResult: (_) => _navigatorKey.currentState?.maybePop(),
       child: Navigator(
         key: _navigatorKey,
         observers: widget.observers,
