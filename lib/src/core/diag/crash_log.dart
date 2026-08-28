@@ -188,11 +188,26 @@ abstract final class CrashLog {
     }
   }
 
-  /// Records that this run ended on something nothing handled.
+  /// Records that *this* run ended on something nothing handled.
   ///
-  /// Exposed so a platform channel reporting a native crash, or a sink that
-  /// caught an error outside Flutter's handlers, can mark the run the same way.
+  /// Exposed so a sink that caught an error outside Flutter's handlers can
+  /// mark the run the same way the handlers here do. Writes the marker, which
+  /// the next launch reads — so it does nothing before [attach].
   static void markUnhandled() => _leaveMarker();
+
+  /// Records that the *previous* run ended badly, on some other authority.
+  ///
+  /// For a platform that keeps its own record of how the process died —
+  /// Android's `ApplicationExitInfo`, iOS's MetricKit. Those cover the deaths
+  /// the marker cannot: a native crash takes the process with it, so no
+  /// handler here runs and no marker is written, and the next launch would
+  /// otherwise see a clean start.
+  ///
+  /// Sets the answer directly rather than writing a marker for the launch
+  /// after this one. The platform is reporting a conclusion about a run that
+  /// is already over, and routing that through a file would delay it by a
+  /// launch for no reason.
+  static void reportPreviousRunCrashed() => _lastRunEndedBadly = true;
 
   /// The previous run's log, or null when there is none to read.
   static Future<String?> readPrevious() async {

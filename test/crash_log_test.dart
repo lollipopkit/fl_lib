@@ -149,6 +149,23 @@ void main() {
     expect(CrashLog.lastRunEndedBadly, isTrue);
   });
 
+  test('reportPreviousRunCrashed answers for this launch, not the next',
+      () async {
+    // What a platform crash record does. Unlike the marker, it is a conclusion
+    // about a run that is already over, so routing it through a file would
+    // delay the prompt by a launch for no reason.
+    await launch();
+    expect(CrashLog.lastRunEndedBadly, isFalse);
+
+    CrashLog.reportPreviousRunCrashed();
+
+    expect(CrashLog.lastRunEndedBadly, isTrue);
+    // And it leaves nothing behind for the launch after this one to find.
+    await CrashLog.resetForTest();
+    await launch();
+    expect(CrashLog.lastRunEndedBadly, isFalse);
+  });
+
   test('a run that loops on an error stops growing the file', () async {
     await launch();
     // One line past the ceiling rather than a hundred thousand real ones: the
