@@ -96,6 +96,19 @@ class DiagnosticsSink {
   /// Something failed. [source] names what noticed, not what broke.
   void error(Object error, StackTrace? stack, {String? source}) {}
 
+  /// A log line, as it is written.
+  ///
+  /// Distinct from [breadcrumb], and the distinction is when it is sent. A
+  /// crumb is context for a failure that has not happened yet, so a sink holds
+  /// it and attaches it to whatever goes wrong later — if nothing does, it is
+  /// discarded. A log line is delivered as it happens, which is what makes a
+  /// problem visible that never produces an error at all.
+  ///
+  /// Most sinks should ignore this. The local one already has the line — it is
+  /// what wrote it — and a network sink forwarding every line is a decision
+  /// about bandwidth and storage, not a default.
+  void log(DiagLevel level, String message, {String? logger}) {}
+
   /// A fact about this run that every later event should be read with — the
   /// platform, the schema version, whether an SSH engine is present.
   ///
@@ -123,6 +136,10 @@ final class FanOutSink extends DiagnosticsSink {
   @override
   void error(Object error, StackTrace? stack, {String? source}) =>
       _each((s) => s.error(error, stack, source: source));
+
+  @override
+  void log(DiagLevel level, String message, {String? logger}) =>
+      _each((s) => s.log(level, message, logger: logger));
 
   @override
   void tag(String key, String? value) => _each((s) => s.tag(key, value));

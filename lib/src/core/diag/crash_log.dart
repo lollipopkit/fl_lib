@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:fl_lib/src/core/diag/diag.dart';
+import 'package:fl_lib/src/core/diag/sink.dart';
 import 'package:fl_lib/src/core/ext/string.dart';
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:flutter/foundation.dart';
@@ -312,6 +314,17 @@ abstract final class CrashLog {
     final trace = record.stackTrace;
     if (trace != null) buf.write('\n$trace');
     write(buf.toString());
+
+    // Also offered live, for a sink that streams logs rather than waiting for
+    // a failure. SEVERE is withheld: it reaches a sink through `error` on its
+    // own path, and forwarding it here as well would send every crash twice.
+    if (record.level < Level.SEVERE) {
+      Diag.log(
+        record.level >= Level.WARNING ? DiagLevel.warning : DiagLevel.info,
+        record.message,
+        logger: record.loggerName,
+      );
+    }
   }
 
   /// Logged and marked. The mark is what the next launch reads.

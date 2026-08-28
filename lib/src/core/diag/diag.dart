@@ -58,6 +58,10 @@ abstract final class Diag {
   static void error(Object error, [StackTrace? stack, String? source]) =>
       _sink.error(error, stack, source: source);
 
+  /// Forwards a log line to sinks that stream them. See [DiagnosticsSink.log].
+  static void log(DiagLevel level, String message, {String? logger}) =>
+      _sink.log(level, message, logger: logger);
+
   /// A fact about this run to read every later event with. Null clears it.
   static void tag(String key, String? value) => _sink.tag(key, value);
 
