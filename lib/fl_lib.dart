@@ -85,6 +85,11 @@ export 'src/core/sync/base.dart';
 // --- Other Core ---
 // Logging, app links, HTTP overrides, and other core functionality
 export 'src/core/app_link.dart';
+export 'src/core/diag/crash_log.dart';
+export 'src/core/diag/diag.dart';
+export 'src/core/diag/local_sink.dart';
+export 'src/core/diag/redact.dart';
+export 'src/core/diag/sink.dart';
 export 'src/core/dio.dart';
 export 'src/core/http_override.dart';
 export 'src/core/logger.dart';
