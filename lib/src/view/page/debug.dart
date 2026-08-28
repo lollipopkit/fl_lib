@@ -25,7 +25,7 @@ class DebugPage extends StatelessWidget {
     return Scaffold(
       appBar: CustomAppBar(
         leading: IconButton(
-          onPressed: () => context.popDialog(),
+          onPressed: () => context.pop(),
           icon: const Icon(Icons.arrow_back),
         ),
         title: Text(args?.title ?? l10n.log, style: const TextStyle(fontSize: 17)),
