@@ -39,6 +39,11 @@ final class LocalDiagnosticsSink extends DiagnosticsSink {
     Loggers.app.severe(source ?? 'Diag', error, stack);
   }
 
+  /// Lines are written as they arrive and are already safe against the process
+  /// dying; this is the fsync, at the one moment it is worth paying for.
+  @override
+  Future<void> flush() async => CrashLog.flush();
+
   @override
   void tag(String key, String? value) {
     if (value == null) {

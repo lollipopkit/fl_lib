@@ -9,11 +9,21 @@ import 'package:fl_lib/src/core/diag/sink.dart';
 /// also live before the container is, since the errors worth catching most
 /// happen during startup.
 ///
-/// Doing nothing until [install] is called is the intended default. An app that
-/// installs no sink pays one virtual call per crumb and keeps no state, so
-/// leaving instrumentation in a build that reports nothing costs nothing.
+/// Doing nothing until [install] is called is the intended default: an app that
+/// installs no sink keeps no state and pays one virtual call per crumb.
+///
+/// The call is not the whole cost, though. Dart evaluates arguments before the
+/// call, so a crumb whose `data` hashes an address or walks a list pays for
+/// that whether or not anything is listening. Where that matters — a hot path,
+/// or an isolate that installs no sink at all — guard it with [enabled].
 abstract final class Diag {
-  static DiagnosticsSink _sink = const DiagnosticsSink();
+  static const _noop = DiagnosticsSink();
+  static DiagnosticsSink _sink = _noop;
+
+  /// Whether anything is listening.
+  ///
+  /// For call sites where building a crumb costs more than making one.
+  static bool get enabled => !identical(_sink, _noop);
 
   /// The sink everything below goes to.
   static DiagnosticsSink get sink => _sink;
@@ -26,7 +36,7 @@ abstract final class Diag {
   /// What turning the setting off has to do: a sink is not asked to be quiet,
   /// it is taken out, so a backend that batches cannot send one last batch
   /// after consent was withdrawn.
-  static void uninstall() => _sink = const DiagnosticsSink();
+  static void uninstall() => _sink = _noop;
 
   /// Records that something happened. See [Breadcrumb] on what may go in
   /// [data] — the short version is that it will be published.

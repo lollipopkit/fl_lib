@@ -124,8 +124,6 @@ abstract final class CrashLog {
       final dir = await Directory(dirPath).create(recursive: true);
       _dir = dir;
 
-      _lastRunEndedBadly = await _takeMarker(dir);
-
       final current = File(_path(dir, currentName));
       if (await current.exists()) {
         // `rename` over an existing file replaces it on POSIX and throws on
@@ -138,6 +136,13 @@ abstract final class CrashLog {
       _file = await current.open(mode: FileMode.writeOnlyAppend);
       _written = 0;
       _truncated = false;
+
+      // Last, and only once there is somewhere to write. Taking it first
+      // meant a rotation that threw — a locked file on Windows, a full
+      // volume — consumed the marker on the way past: the crash it recorded
+      // became unreportable *and* unrepeatable, since the next launch would
+      // then see a clean start too.
+      _lastRunEndedBadly = await _takeMarker(dir);
 
       final pending = List.of(_pending);
       _pending.clear();
@@ -175,16 +180,35 @@ abstract final class CrashLog {
       if (_written + bytes.length > maxBytes) {
         _truncated = true;
         file.writeStringSync('--- log full, further lines dropped ---\n');
-        file.flushSync();
         return;
       }
+      // Written, not fsynced. `writeFromSync` hands the bytes to the kernel,
+      // and a process dying does not take the kernel's copy with it — which
+      // is the whole failure this file exists for. `flushSync` would only add
+      // durability against power loss, at the price of an fsync on the
+      // calling isolate: a crumb is emitted on every route change and every
+      // container operation, so that was an fsync per screen transition on
+      // the isolate drawing frames.
       file.writeFromSync(bytes);
-      file.flushSync();
       _written += bytes.length;
     } catch (e) {
       // A full disk, or a file the OS took away. Dropping the line is the only
       // option that does not turn logging into its own crash.
       debugPrint('CrashLog write: $e');
+    }
+  }
+
+  /// Forces what has been written out to storage.
+  ///
+  /// Not needed to survive a crash — the kernel already holds those bytes —
+  /// but it is what survives the battery going flat or the device being
+  /// yanked, which is worth one fsync at the point the app is going away
+  /// anyway. Called from the lifecycle handler, not per line.
+  static void flush() {
+    try {
+      _file?.flushSync();
+    } catch (e) {
+      debugPrint('CrashLog flush: $e');
     }
   }
 
