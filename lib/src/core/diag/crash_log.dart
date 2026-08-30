@@ -328,8 +328,25 @@ abstract final class CrashLog {
   }
 
   /// Logged and marked. The mark is what the next launch reads.
+  ///
+  /// Through [Diag], because this is the path [_onRecord] withholds SEVERE
+  /// for. Between them they were the only two ways an error reached a sink,
+  /// and neither took it: `_onRecord` skips SEVERE on the grounds that it
+  /// "reaches a sink through `error` on its own path", and that path did not
+  /// call [Diag.error]. So an installed sink heard about every log line and
+  /// every crumb, and never about the one error that ended the run.
+  ///
+  /// [LocalDiagnosticsSink.error] writes to the file by way of [Loggers], so
+  /// logging here as well would record every crash twice. With no sink
+  /// installed nothing would be written at all — and that is most of startup,
+  /// since [handleErrors] deliberately runs before anything calls
+  /// [Diag.install] — so the direct logger call is what covers that window.
   static void _recordUnhandled(String source, Object error, StackTrace? stack) {
-    Loggers.app.severe('Unhandled ($source)', error, stack);
+    if (Diag.enabled) {
+      Diag.error(error, stack, 'Unhandled ($source)');
+    } else {
+      Loggers.app.severe('Unhandled ($source)', error, stack);
+    }
     _leaveMarker();
   }
 

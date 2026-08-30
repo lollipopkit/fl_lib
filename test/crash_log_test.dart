@@ -5,6 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 
+/// Remembers what reached a sink, so "did the unhandled error get out" is
+/// asserted rather than assumed. Nothing else can tell: the local file is
+/// written either way, which is exactly how the gap stayed invisible.
+final class _RecordingSink extends DiagnosticsSink {
+  final errors = <({Object error, String? source})>[];
+
+  @override
+  void error(Object error, StackTrace? stack, {String? source}) =>
+      errors.add((error: error, source: source));
+}
+
 /// The file this writes is the only thing a crashed run leaves behind, and it
 /// is written once and read on a launch that has already gone wrong. A bug here
 /// is silence — an empty report, or a crash that never announces itself — so
@@ -136,6 +147,57 @@ void main() {
 
     await launch();
     expect(CrashLog.lastRunEndedBadly, isFalse);
+  });
+
+  group('an unhandled error reaches an installed sink', () {
+    test('as an error, not only as a line in the file', () async {
+      final sink = _RecordingSink();
+      Diag.install(FanOutSink([LocalDiagnosticsSink(), sink]));
+      addTearDown(Diag.uninstall);
+      await launch();
+
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: StateError('boom'),
+        stack: StackTrace.current,
+      ));
+
+      // The gap this closes: `_onRecord` withholds SEVERE on the grounds that
+      // it arrives through `error` instead, and for a while nothing called
+      // `Diag.error` at all — so a sink that uploads heard about every log
+      // line and every crumb, and never about the error that ended the run.
+      expect(sink.errors, hasLength(1));
+      expect(sink.errors.single.error, isA<StateError>());
+      expect(sink.errors.single.source, contains('FlutterError'));
+    });
+
+    test('and is written to the file exactly once', () async {
+      Diag.install(FanOutSink([LocalDiagnosticsSink(), _RecordingSink()]));
+      addTearDown(Diag.uninstall);
+      await launch();
+
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: StateError('boom')),
+      );
+      CrashLog.flush();
+
+      // `LocalDiagnosticsSink.error` puts it through `Loggers`, which this is
+      // already listening to, so logging it here as well would record every
+      // crash twice.
+      expect('boom'.allMatches(await current().readAsString()), hasLength(1));
+    });
+
+    test('with no sink installed it still reaches the file', () async {
+      await launch();
+
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: StateError('boom')),
+      );
+      CrashLog.flush();
+
+      // Most of startup is this case: `handleErrors` runs first, deliberately,
+      // and nothing has installed a sink yet.
+      expect(await current().readAsString(), contains('boom'));
+    });
   });
 
   test('markUnhandled marks a run the handlers never saw', () async {
