@@ -72,7 +72,11 @@ class TagSwitcher extends StatelessWidget implements PreferredSizeWidget {
 
   Widget _buildItem(String item, ChoiceController<String> state) {
     return ChoiceChipX<String>(
-      outPadding: const EdgeInsets.only(right: 5),
+      // Half the gap on each side rather than the whole of it after every
+      // chip. That put the extra 5 points on the last one, so the row sat 5
+      // points off centre inside anything that measured it — which the tag
+      // pill on the server page does, being as wide as what is in it.
+      outPadding: const EdgeInsets.symmetric(horizontal: 2.5),
       padding: const EdgeInsets.symmetric(horizontal: 3),
       showCheckmark: false,
       label: item.isEmpty ? libL10n.all : '#$item',
