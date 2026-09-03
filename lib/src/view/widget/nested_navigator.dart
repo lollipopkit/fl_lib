@@ -49,56 +49,28 @@ class _NestedNavigatorState extends State<NestedNavigator> {
   late final _navigatorKey =
       widget.navigatorKey ?? GlobalKey<NavigatorState>();
 
-  /// Which root route [rootBuilder] currently describes.
+  /// What the current root page is keyed by.
   ///
-  /// Rebuilding a `Navigator` rebuilds the page of *every* route in its stack:
-  /// the framework calls `changedExternalState` on all of them, which drops
-  /// each route's cached page. So the route on its way out ran [rootBuilder]
-  /// again and rendered whatever was selected *now* — putting the newly picked
-  /// page on screen twice, once immediately underneath and once more as the
-  /// incoming route animated in over it. Two of everything for the length of
-  /// the transition, and two of any work the page does when it is created.
-  Object? _current;
+  /// Its own object rather than [NestedNavigator.rootId], because the same id
+  /// can be selected again after another one and the two roots would then
+  /// share a key — which the navigator reads as the page never having
+  /// changed.
+  Object _pageKey = Object();
+
+  /// Whether the change now being animated is a way *back*.
+  ///
+  /// Going to no selection at all is: the pane is being closed, not opened on
+  /// something else. Read once by the delegate below, per change.
+  bool _backwards = false;
 
   @override
   void didUpdateWidget(NestedNavigator oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.rootId == oldWidget.rootId) return;
-    // Replaces rather than pushes: what was on the stack belonged to the
-    // previous root, and a back gesture into another server's edit page would
-    // be a surprise at best.
-    _navigatorKey.currentState?.pushAndRemoveUntil(
-      _rootRoute(),
-      (route) => false,
-    );
-  }
-
-  /// The platform's own page transition, via [MaterialPageRoute].
-  ///
-  /// A hand-rolled fade read better for a lateral move — one item of a list to
-  /// another is neither further in nor back out — but it was also a second
-  /// implementation of something the framework already does, and the
-  /// framework's is the one that has been through every case.
-  Route<void> _rootRoute() {
-    // Identity of this route, held so the builder below can tell whether it is
-    // still the one the caller is describing. The id cannot answer that: the
-    // same one can be selected again after another, and both routes would then
-    // claim to be current.
-    final token = _current = Object();
-    Widget? shown;
-    return MaterialPageRoute<void>(
-      settings: RouteSettings(name: '${widget.rootId}'),
-      builder: (context) {
-        // Superseded, so this route is on its way out. It keeps what it last
-        // showed until it is removed — the same widget instance, which leaves
-        // the outgoing page's subtree untouched rather than rebuilding it into
-        // the incoming page's content.
-        if (!identical(_current, token)) {
-          return shown ?? const SizedBox.shrink();
-        }
-        return shown = widget.rootBuilder(context);
-      },
-    );
+    setState(() {
+      _pageKey = Object();
+      _backwards = widget.rootId == null && oldWidget.rootId != null;
+    });
   }
 
   @override
@@ -116,8 +88,79 @@ class _NestedNavigatorState extends State<NestedNavigator> {
       child: Navigator(
         key: _navigatorKey,
         observers: widget.observers,
-        onGenerateRoute: (_) => _rootRoute(),
+        transitionDelegate: _backwards
+            ? const _BackwardsTransitionDelegate()
+            : const DefaultTransitionDelegate<void>(),
+        // Declared rather than pushed. Told to replace the root with
+        // `pushAndRemoveUntil`, the navigator has no way to know whether that
+        // was a way in or a way out, and animated every one of them as a way
+        // in: closing a pane looked like the empty pane being opened over the
+        // page being left. A page list is a description, and the delegate
+        // below is where the direction is said.
+        //
+        // It also retires a workaround. Rebuilding a `Navigator` used to
+        // rebuild the page of *every* route in its stack, so the route on its
+        // way out ran `rootBuilder` again and rendered whatever was selected
+        // *now* — the incoming page, twice, for the length of the transition.
+        // A `Page`'s child is a value: the outgoing route keeps the one it was
+        // given.
+        pages: [
+          MaterialPage<void>(
+            key: ValueKey(_pageKey),
+            name: '${widget.rootId}',
+            child: Builder(builder: widget.rootBuilder),
+          ),
+        ],
+        // Pages are replaced here, never popped one at a time — a root going
+        // away takes the whole stack with it. Nothing to do, and required.
+        onDidRemovePage: (_) {},
       ),
     );
+  }
+}
+
+/// Runs a page replacement as a way back rather than a way in.
+///
+/// The arriving page is added underneath with no transition of its own, and
+/// the departing one pops over it — which is what a back *is*, and so gets the
+/// platform's own back animation rather than an imitation of it.
+///
+/// Anything pushed on top of the departing page goes without a transition: it
+/// is above the page that is animating out, so a second animation there would
+/// be two pages leaving in different directions.
+class _BackwardsTransitionDelegate extends TransitionDelegate<void> {
+  const _BackwardsTransitionDelegate();
+
+  @override
+  Iterable<RouteTransitionRecord> resolve({
+    required List<RouteTransitionRecord> newPageRouteHistory,
+    required Map<RouteTransitionRecord?, RouteTransitionRecord>
+    locationToExitingPageRoute,
+    required Map<RouteTransitionRecord?, List<RouteTransitionRecord>>
+    pageRouteToPagelessRoutes,
+  }) {
+    final results = <RouteTransitionRecord>[];
+
+    // The new root first, so it ends up *below* what is leaving. This is the
+    // whole of the difference from the default, which puts the exiting route
+    // at the bottom and pushes the new one over it.
+    for (final entering in newPageRouteHistory) {
+      if (entering.isWaitingForEnteringDecision) entering.markForAdd();
+      results.add(entering);
+    }
+
+    for (final exiting in locationToExitingPageRoute.values) {
+      if (exiting.isWaitingForExitingDecision) {
+        for (final pageless in pageRouteToPagelessRoutes[exiting] ?? const []) {
+          if (pageless.isWaitingForExitingDecision) {
+            pageless.markForComplete(pageless.route.currentResult);
+          }
+        }
+        exiting.markForPop(exiting.route.currentResult);
+      }
+      results.add(exiting);
+    }
+
+    return results;
   }
 }

@@ -386,7 +386,7 @@ class SideBarActions extends StatelessWidget {
   /// Fixed, or the rail jumps when a search opens: a row of `IconButton`s
   /// stands at their minimum touch size and a dense field is shorter, so the
   /// swap moved everything under it by the difference.
-  static const height = kMinInteractiveDimension - 8;
+  static const height = kMinInteractiveDimension;
 
   @override
   Widget build(BuildContext context) {

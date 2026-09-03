@@ -77,28 +77,39 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
     final scheme = Theme.of(context).colorScheme;
     final draggable = widget.onDrag != null;
 
-    Widget handle = AnimatedContainer(
+    // Bigger under a finger, and scaled rather than sized: the grip is placed
+    // by its left edge, so growing its width would move it sideways instead of
+    // swelling in place — and a control that shifts while being held reads as
+    // having been dragged.
+    Widget handle = AnimatedScale(
+      scale: _pressed ? 1.2 : 1,
       duration: Durations.short3,
       curve: Curves.easeOut,
-      width: PaneCollapseHandle.width,
-      height: PaneCollapseHandle.height,
-      // The icon is centred by the container rather than by a `Center` inside
-      // it, so nothing between the two can offset it.
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: _active
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainerHighest.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(PaneCollapseHandle.width / 2),
-        border: Border.all(
-          color: Hairline.color(context),
-          width: Hairline.thickness,
+      child: AnimatedContainer(
+        duration: Durations.short3,
+        curve: Curves.easeOut,
+        width: PaneCollapseHandle.width,
+        height: PaneCollapseHandle.height,
+        // The icon is centred by the container rather than by a `Center`
+        // inside it, so nothing between the two can offset it.
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _active
+              ? scheme.secondaryContainer
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(PaneCollapseHandle.width / 2),
+          border: Border.all(
+            color: Hairline.color(context),
+            width: Hairline.thickness,
+          ),
         ),
-      ),
-      child: Icon(
-        widget.collapsed ? Icons.chevron_right : Icons.chevron_left,
-        size: PaneCollapseHandle._iconSize,
-        color: _active ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+        child: Icon(
+          widget.collapsed ? Icons.chevron_right : Icons.chevron_left,
+          size: PaneCollapseHandle._iconSize,
+          color: _active
+              ? scheme.onSecondaryContainer
+              : scheme.onSurfaceVariant,
+        ),
       ),
     );
 
