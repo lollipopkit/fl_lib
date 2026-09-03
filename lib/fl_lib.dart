@@ -183,6 +183,7 @@ export 'src/view/widget/qr/share_btn.dart';
 export 'src/view/widget/row.dart';
 export 'src/view/widget/side_bar.dart';
 export 'src/view/widget/session_tab_bar.dart';
+export 'src/view/widget/sheet.dart';
 export 'src/view/widget/session_tabs.dart';
 export 'src/view/widget/slide_trans.dart';
 export 'src/view/widget/store/store_field.dart';

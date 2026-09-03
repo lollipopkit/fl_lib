@@ -114,16 +114,36 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   }
 
   Future<void> _showSheet(BuildContext context) async {
-    final picked = await showModalBottomSheet<({int index, bool close})>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      builder: (_) => _SessionSheet(
-        names: names,
-        index: index,
-        leadingIcon: leadingIcon,
-        detailOf: detailOf,
-      ),
+    final picked = await showRowsSheet<({int index, bool close})>(
+      context,
+      rows: (ctx) {
+        void pick(int at, {bool close = false}) =>
+            Navigator.of(ctx).pop((index: at, close: close));
+
+        return [
+          for (var i = 1; i < names.length; i++)
+            _SessionRow(
+              position: i,
+              name: names[i],
+              detail: detailOf?.call(i),
+              selected: i == index,
+              onTap: () => pick(i),
+              onClose: () => pick(i, close: true),
+            ),
+          const Divider(height: 17, indent: 17, endIndent: 17),
+          // Last, because it is what to do when none of the above is what you
+          // wanted — and because a list of open sessions should open on the
+          // sessions.
+          ListTile(
+            leading: SizedBox(
+              width: _numberWidth,
+              child: Center(child: Icon(leadingIcon, size: _iconSize)),
+            ),
+            title: Text(names.first),
+            onTap: () => pick(0),
+          ),
+        ];
+      },
     );
     if (picked == null) return;
     // Acted on once the sheet is gone. It drew a snapshot of the names, and
@@ -265,57 +285,6 @@ final class _SessionCounter extends StatelessWidget {
 ///
 /// Numbered down the leading edge in the same figures the counter uses, so the
 /// sheet reads as that counter opened out rather than as a menu of its own.
-final class _SessionSheet extends StatelessWidget {
-  const _SessionSheet({
-    required this.names,
-    required this.index,
-    required this.leadingIcon,
-    required this.detailOf,
-  });
-
-  final List<String> names;
-  final int index;
-  final IconData leadingIcon;
-  final SessionDetailOf? detailOf;
-
-  @override
-  Widget build(BuildContext context) {
-    void pick(int at, {bool close = false}) =>
-        Navigator.of(context).pop((index: at, close: close));
-
-    return SafeArea(
-      top: false,
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 8),
-        children: [
-          for (var i = 1; i < names.length; i++)
-            _SessionRow(
-              position: i,
-              name: names[i],
-              detail: detailOf?.call(i),
-              selected: i == index,
-              onTap: () => pick(i),
-              onClose: () => pick(i, close: true),
-            ),
-          const Divider(height: 17, indent: 17, endIndent: 17),
-          // Last, because it is what to do when none of the above is what you
-          // wanted — and because a list of open sessions should open on the
-          // sessions.
-          ListTile(
-            leading: SizedBox(
-              width: _numberWidth,
-              child: Center(child: Icon(leadingIcon, size: _iconSize)),
-            ),
-            title: Text(names.first),
-            onTap: () => pick(0),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 final class _SessionRow extends StatelessWidget {
   const _SessionRow({
     required this.position,
