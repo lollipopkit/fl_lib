@@ -390,11 +390,28 @@ class SideBarActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final row = Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        for (final action in actions) ...[action, const SizedBox(width: 4)],
-      ],
+    // Scrollable, and anchored at the end rather than the start.
+    //
+    // A plain `Row` here overflows the moment a caller has one action more
+    // than the narrowest rail fits, which at the minimum width dragging allows
+    // is five — and an overflow both clips the buttons and prints an error, so
+    // the failure is worse than the crowding. `reverse` keeps the *last*
+    // action visible, which is where the primary one goes: what scrolls out of
+    // reach on a very narrow rail is the least-used, not "add".
+    //
+    // When the actions do fit, this lays them out exactly as the `Row` did:
+    // content narrower than the viewport sits against the end.
+    final row = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      reverse: true,
+      child: Row(
+        // Not `max` with `MainAxisAlignment.end`: inside a scroll view the
+        // width is unbounded, and a row told to fill it is an assertion.
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final action in actions) ...[action, const SizedBox(width: 4)],
+        ],
+      ),
     );
 
     return SizedBox(
