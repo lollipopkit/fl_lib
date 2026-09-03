@@ -342,6 +342,13 @@ class _AdaptivePanesState extends State<AdaptivePanes>
             final keepsList = widget._isDetail;
 
             final row = Row(
+              // Stretched, or every column is as tall as what is in it: the
+              // default centres them and hands each a loose height, under
+              // which a page's own scroll view takes the height of its
+              // contents — so a list longer than the window ended partway
+              // down it and was cut off there rather than scrolling. The
+              // split view this replaced stretched its areas for free.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (keepsList || split)
                   SizedBox(

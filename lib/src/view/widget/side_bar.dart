@@ -25,7 +25,7 @@ final class SessionSideBar extends StatelessWidget {
     required this.onClose,
     required this.targets,
     this.actions = const [],
-    this.header,
+    this.search,
     this.runningLabel,
   });
 
@@ -48,12 +48,12 @@ final class SessionSideBar extends StatelessWidget {
   /// sorting it, searching it, adding to it.
   final List<Widget> actions;
 
-  /// Put at the head of the rail in place of [actions].
+  /// Turns [actions] into a search field while a search is on.
   ///
-  /// Where the row of buttons becomes something else for a moment — a search
-  /// field, in every rail that can be searched. The rail is a `ListView`, so
-  /// this scrolls with it rather than sitting over it.
-  final Widget? header;
+  /// Null in a rail that cannot be searched. The rail is a `ListView`, so the
+  /// row scrolls with it rather than sitting over it — and the swap is crossed
+  /// rather than cut, which is [InlineSearchBar]'s doing.
+  final InlineSearchController? search;
 
   /// Heading over the running sessions. Defaults to [LibLocalizations.running].
   final String? runningLabel;
@@ -63,24 +63,8 @@ final class SessionSideBar extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(bottom: 12),
       children: [
-        if (header case final header?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-            child: header,
-          )
-        else if (actions.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                for (final action in actions) ...[
-                  action,
-                  const SizedBox(width: 4),
-                ],
-              ],
-            ),
-          ),
+        if (actions.isNotEmpty)
+          SideBarActions(actions: actions, search: search),
         if (names.length > 1) ...[
           SideBarSection(runningLabel ?? libL10n.running),
           for (var i = 1; i < names.length; i++)
@@ -112,7 +96,7 @@ final class SideBarSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 14, 14, 6),
+      padding: const EdgeInsets.fromLTRB(18, 4, 14, 6),
       child: Row(
         children: [
           // Allowed to give way. Its callers pass a single word — "RUNNING",
@@ -380,5 +364,45 @@ class _CloseButton extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       onPressed: onTap,
     );
+  }
+}
+
+/// The row of buttons at the head of a rail, and the field it becomes.
+///
+/// Its own widget because not every rail is a [SessionSideBar] — the server
+/// list builds its own, and a row of buttons that sat at a different inset or
+/// swapped without the crossing would read as a different rail.
+class SideBarActions extends StatelessWidget {
+  const SideBarActions({super.key, required this.actions, this.search});
+
+  final List<Widget> actions;
+
+  /// Turns the row into a search field while a search is on. Null in a rail
+  /// that cannot be searched.
+  final InlineSearchController? search;
+
+  /// How tall the row is, whichever of the two it is showing.
+  ///
+  /// Fixed, or the rail jumps when a search opens: a row of `IconButton`s
+  /// stands at their minimum touch size and a dense field is shorter, so the
+  /// swap moved everything under it by the difference.
+  static const height = kMinInteractiveDimension - 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        for (final action in actions) ...[action, const SizedBox(width: 4)],
+      ],
+    );
+
+    return SizedBox(
+        height: height,
+        child: switch (search) {
+          final search? => InlineSearchBar(controller: search, child: row),
+          null => row,
+        },
+      );
   }
 }
