@@ -8,6 +8,15 @@ final class AutoHide extends StatefulWidget {
   final double offset;
   final AutoHideController? hideController;
 
+  /// Whether to stay put while the page is too short to scroll.
+  ///
+  /// Scrolling is what brings this back, so on a page that cannot scroll,
+  /// hiding is one-way — which is what this guards against. Turn it off where
+  /// something else can call [AutoHideController.show]: a tap anywhere on the
+  /// page, a button elsewhere. Without that, a page with one item in it keeps
+  /// its chrome forever and the timer looks broken.
+  final bool requireScrollable;
+
   const AutoHide({
     super.key,
     required this.child,
@@ -15,6 +24,7 @@ final class AutoHide extends StatefulWidget {
     required this.direction,
     this.hideController,
     this.offset = 55,
+    this.requireScrollable = true,
   })  : assert(offset >= 0, 'Offset must be greater than or equal to 0'),
         assert(key is! GlobalKey, 'GlobalKey is not recommended, use hideController instead');
 
@@ -60,9 +70,11 @@ final class AutoHideState extends State<AutoHide> {
       // Don't hide if already hidden
       if (!_controller.visible) return;
 
-      // Check if scrolling is possible
-      final canScroll = widget.scrollController.hasClients && widget.scrollController.position.maxScrollExtent > 0;
-      if (!canScroll) return;
+      if (widget.requireScrollable) {
+        final canScroll =
+            widget.scrollController.hasClients && widget.scrollController.position.maxScrollExtent > 0;
+        if (!canScroll) return;
+      }
 
       // Hide the widget
       _controller.hide();

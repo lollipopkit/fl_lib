@@ -204,6 +204,11 @@ final class _AnimatedMasonryState extends State<AnimatedMasonry>
     return SingleChildScrollView(
       controller: widget.controller,
       padding: widget.padding,
+      // Scrollable even when what is in it fits. Anything floating over this
+      // — a bar at the top, a button at the bottom — can be dragged out from
+      // under, and pull-to-refresh needs somewhere to pull from; a page of one
+      // card had neither, and read as frozen rather than as short.
+      physics: const AlwaysScrollableScrollPhysics(),
       child: _MasonryFlow(
         columnWidth: widget.columnWidth,
         maxColumns: widget.maxColumns,
