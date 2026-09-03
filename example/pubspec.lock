@@ -807,14 +807,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.0"
-  multi_split_view:
-    dependency: transitive
-    description:
-      name: multi_split_view
-      sha256: "06f5126a65d3010ce0a9d5c003e793041fe99377b23e3534bb05059f79a580e9"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.6.1"
   native_toolchain_c:
     dependency: transitive
     description:

@@ -41,7 +41,7 @@ class AdaptivePanes extends StatefulWidget {
     required this.detailBuilder,
     this.detailId,
     this.onCloseDetail,
-    this.minWidthForSplit = 800,
+    this.minWidthForSplit = kSplitWidth,
     this.listWidth = 220,
     this.minListWidth = 160,
     this.maxListWidth = 520,
@@ -64,7 +64,7 @@ class AdaptivePanes extends StatefulWidget {
     required this.listBuilder,
     required this.surfaceBuilder,
     this.enabled = true,
-    this.minWidthForSplit = 800,
+    this.minWidthForSplit = kSplitWidth,
     this.listWidth = 220,
     this.minListWidth = 160,
     this.maxListWidth = 520,
@@ -106,9 +106,24 @@ class AdaptivePanes extends StatefulWidget {
   /// Whether a column is worth reserving at all — see [AdaptivePanes.surface].
   final bool enabled;
 
-  /// Below this the second column cannot be earned. Set for the narrowest
-  /// device that should still get two: an 11" iPad in portrait is 834pt.
+  /// Below this the second column cannot be earned.
+  ///
+  /// Defaults to [kSplitWidth], which is also what everything else deciding
+  /// between a phone's layout and a window's should read — see it.
   final double minWidthForSplit;
+
+  /// The width at which this app stops being one column.
+  ///
+  /// Set for the narrowest device that should still get two: an 11" iPad in
+  /// portrait is 834pt.
+  ///
+  /// Public, and the one place it is written down. A layout answering this
+  /// question with its own number — or with a `ResponsiveBreakpoints` class,
+  /// whose MOBILE ends at 600 — put the app in two minds between the two
+  /// figures: a navigation rail down the side of a page too narrow to give any
+  /// tab a second column, a settings menu beside content on a window where no
+  /// other page had a menu.
+  static const kSplitWidth = 800.0;
 
   /// Starting width of the list. The user can drag from there.
   ///
