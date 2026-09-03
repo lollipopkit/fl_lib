@@ -166,6 +166,7 @@ export 'src/view/widget/hide_on_scroll.dart';
 export 'src/view/widget/hover.dart';
 export 'src/view/widget/img/compare.dart';
 export 'src/view/widget/img/image.dart';
+export 'src/view/widget/inline_search.dart';
 export 'src/view/widget/input.dart';
 export 'src/view/widget/list.dart';
 export 'src/view/widget/loading.dart';

@@ -25,6 +25,7 @@ final class SessionSideBar extends StatelessWidget {
     required this.onClose,
     required this.targets,
     this.actions = const [],
+    this.header,
     this.runningLabel,
   });
 
@@ -47,6 +48,13 @@ final class SessionSideBar extends StatelessWidget {
   /// sorting it, searching it, adding to it.
   final List<Widget> actions;
 
+  /// Put at the head of the rail in place of [actions].
+  ///
+  /// Where the row of buttons becomes something else for a moment — a search
+  /// field, in every rail that can be searched. The rail is a `ListView`, so
+  /// this scrolls with it rather than sitting over it.
+  final Widget? header;
+
   /// Heading over the running sessions. Defaults to [LibLocalizations.running].
   final String? runningLabel;
 
@@ -55,7 +63,12 @@ final class SessionSideBar extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(bottom: 12),
       children: [
-        if (actions.isNotEmpty)
+        if (header case final header?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: header,
+          )
+        else if (actions.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: Row(

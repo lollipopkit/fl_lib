@@ -29,6 +29,40 @@ Future<T?> showRowsSheet<T>(
   );
 }
 
+/// One of a set of choices, in a [showRowsSheet].
+///
+/// The tick is what says which one is on. `ListTile.selected` alone only
+/// recolours the text and the icon, which on a list where every row is the
+/// same shape reads as "this one is a different colour" rather than as an
+/// answer — and not at all to anyone who cannot tell the two colours apart.
+class SheetChoiceTile extends StatelessWidget {
+  const SheetChoiceTile({
+    super.key,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return ListTile(
+      selected: selected,
+      leading: icon == null ? null : Icon(icon),
+      title: Text(title),
+      trailing: selected ? Icon(Icons.check, color: scheme.primary) : null,
+      onTap: onTap,
+    );
+  }
+}
+
 /// The body of a [showRowsSheet], and what makes one row-sized.
 class RowsSheet extends StatelessWidget {
   const RowsSheet({super.key, required this.children});
