@@ -2,99 +2,20 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
-/// A widget that displays multiple lists in columns, adapting layout for mobile and desktop.
-final class MultiList extends StatefulWidget {
-  /// List of columns, each containing a list of widgets.
-  final List<List<Widget>> children;
-
-  /// Padding around the entire list.
-  final EdgeInsetsGeometry outerPadding;
-
-  /// Padding between columns.
-  final double betweenPadding;
-
-  /// Number used to divide available width for column sizing.
-  final double widthDivider;
-  final double scrollbarGutter;
-
-  const MultiList({
-    super.key,
-    required this.children,
-    this.outerPadding = kOuterPadding,
-    this.widthDivider = 2.2,
-    this.betweenPadding = 10,
-    this.scrollbarGutter = 12,
-  }) : assert(scrollbarGutter >= 0);
-
-  /// Default outer padding.
-  static const kOuterPadding = EdgeInsets.symmetric(horizontal: 17, vertical: 13);
-
-  @override
-  State<MultiList> createState() => _MultiListState();
-}
-
-/// State for MultiList, handles layout adaptation and scrolling.
-final class _MultiListState extends State<MultiList> {
-  var _isMobile = false;
-
-  /// Controller for horizontal scrolling on desktop.
-  final _horizonScroll = ScrollController();
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _isMobile = context.isMobile;
-  }
-
-  @override
-  void dispose() {
-    _horizonScroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isMobile) {
-      return ListView(
-        padding: widget.outerPadding,
-        children: widget.children.expand((list) => list).toList(),
-      );
-    }
-
-    return _buildDesktop(context);
-  }
-
-  Widget _buildDesktop(BuildContext context) {
-    return LayoutBuilder(builder: (_, cons) {
-      final len = widget.children.length;
-      final totalBetweenPadding = widget.betweenPadding * (len - 1);
-      final columnWidth = (cons.maxWidth - widget.outerPadding.horizontal - totalBetweenPadding) / widget.widthDivider;
-
-      return Scrollbar(
-        controller: _horizonScroll,
-        child: ListView.separated(
-          padding: widget.outerPadding,
-          controller: _horizonScroll,
-          scrollDirection: Axis.horizontal,
-          itemCount: len,
-          separatorBuilder: (_, _) => SizedBox(width: widget.betweenPadding),
-          itemBuilder: (_, i) {
-            final col = widget.children[i];
-
-            return SizedBox(
-              width: columnWidth,
-              child: ListView.builder(
-                padding: EdgeInsetsDirectional.only(end: widget.scrollbarGutter),
-                itemCount: col.length,
-                itemBuilder: (_, index) => col[index],
-              ),
-            );
-          },
-        ),
-      );
-    });
-  }
-}
+// `MultiList` was here: a list per group, side by side above 600pt and
+// stacked below it. Two things were wrong with the wide half. Each column
+// scrolled on its own inside a row that scrolled horizontally, so a page of
+// cards had no one position to be at — the same fault [MasonryList] was
+// written to fix, and its doc used to point here for grouped content. And it
+// split at 600 while the layouts around it split at 800, so between the two a
+// page reached for a second column at a width that had already been judged too
+// narrow for one.
+//
+// The groups it took are titles in a single list now. Nothing was reading its
+// columns as columns; they were sections, and a section is a heading.
+//
+// `kOuterPadding` went with it, having always been [UIs.roundRectCardPadding]
+// spelled a second time.
 
 /// Cards flowing down as many columns as the width allows, each landing in
 /// whichever column is currently shortest.
@@ -104,8 +25,9 @@ final class _MultiListState extends State<MultiList> {
 /// one long card left its neighbour half empty; worse, each column scrolled on
 /// its own, and a page of cards had no single position to be at.
 ///
-/// Use [MultiList] instead where the grouping means something — a settings
-/// page whose columns are sections. Here the columns are only how many fit.
+/// The columns here are only how many fit. Where the grouping means something,
+/// the sections belong in one list under their own headings — see the note
+/// above, where a widget that made each of them a column used to be.
 final class MasonryList extends StatelessWidget {
   MasonryList({
     super.key,
