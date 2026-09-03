@@ -29,13 +29,15 @@ abstract final class Hairline {
 class PaneDivider extends StatefulWidget {
   const PaneDivider({super.key, required this.onDrag, this.onDragEnd});
 
-  /// The line stays a hairline; the grab area does not, because a 1px target is
-  /// not something a pointer can find.
-  /// What `multi_split_view` wants either side of its own line to add up to
-  /// [hitWidth]: it takes `thickness + 2 * buffer`. Stated once, here, rather
-  /// than as arithmetic at a call site that cannot explain it.
-  static const handleBuffer = (hitWidth - Hairline.thickness) / 2;
-
+  /// How wide this is to a pointer. The line stays a hairline; the grab area
+  /// does not, because a 1px target is not something a pointer can find.
+  ///
+  /// It is also the width this takes in a layout, and those being the same
+  /// number is what lets anything measuring against the seam — the fold, the
+  /// grip that sits on it — do so with one constant. `handleBuffer` was here
+  /// for when they were not: `multi_split_view` laid its divider out at the
+  /// line's thickness and widened the grab area by overlapping its
+  /// neighbours, so every such measurement had a second geometry to match.
   static const hitWidth = 13.0;
 
   /// Pointer movement since the last call, in logical pixels.
