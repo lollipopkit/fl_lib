@@ -189,6 +189,31 @@ final class GistRs implements RemoteStorage<String> {
   }
 
   @override
+  Future<String?> versionTag(String relativePath) async {
+    try {
+      final id = gistId ?? PrefProps.gistId.get();
+      if (id == null || id.isEmpty) return null;
+
+      final res = await _client.get('/gists/$id', options: Options(headers: _authHeaders()));
+      final data = res.data as Map<String, dynamic>;
+      final file = (data['files'] as Map)[relativePath];
+      if (file == null) return null;
+
+      // The gist's own `updated_at` moves on any edit to any file in it, so on
+      // its own it would report a change this file did not have. The size is
+      // what narrows it back; both together is still an over-report at worst,
+      // which costs a round trip rather than an edit.
+      final updated = data['updated_at'];
+      final size = file is Map ? file['size'] : null;
+      if (updated == null) return null;
+      return '$updated/${size ?? -1}';
+    } catch (e) {
+      Loggers.app.warning('Gist version tag', e);
+      return null;
+    }
+  }
+
+  @override
   Future<List<String>> list() async {
     try {
       final headers = _authHeaders();

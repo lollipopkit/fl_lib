@@ -38,6 +38,51 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// {@macro remote_storage}
   FutureOr<RemoteStorage<I>?> get remoteStorage;
 
+  /// A cheap fingerprint of what [saveToFile] would write.
+  ///
+  /// Cheap is the requirement: this is read on every sync, and a sync runs on
+  /// every launch. Hashing the produced file is not an option — the payload is
+  /// encrypted with a fresh nonce each time, so identical data gives a
+  /// different file every time.
+  ///
+  /// Null disables [_skippable], which is what an implementer with no cheap
+  /// answer should return.
+  FutureOr<String?> get localVersionTag => null;
+
+  /// The `(remote, local)` pair the last *completed* sync ended on.
+  ///
+  /// Device-local bookkeeping, and it must not be part of what gets synced —
+  /// it describes this device's position, not the user's data.
+  FutureOr<(String, String)?> get syncCheckpoint => null;
+
+  /// Records a new [syncCheckpoint]. Called only after a full cycle succeeded.
+  FutureOr<void> saveSyncCheckpoint(String remote, String local) {}
+
+  /// Whether both sides are still exactly where the last sync left them.
+  ///
+  /// The tags are compared for equality only, never for order: an ETag has no
+  /// order, and a clock that went backwards would make one wrong anyway.
+  ///
+  /// Either tag being null means "cannot tell", and that always syncs. So does
+  /// having no checkpoint, which is the first sync on this device and the one
+  /// that must not be skipped.
+  Future<bool> _skippable(RemoteStorage<I> rs, String? localTag) async {
+    if (localTag == null) return false;
+    final last = await syncCheckpoint;
+    if (last == null) return false;
+    final remoteTag = await rs.versionTag(Paths.bakName);
+    if (remoteTag == null) return false;
+    return last.$1 == _remoteKey(rs, remoteTag) && last.$2 == localTag;
+  }
+
+  /// The backend's identity travels with its tag.
+  ///
+  /// Without it, moving a user from one remote to another leaves a checkpoint
+  /// describing a file on the old one, and two backends answering the same
+  /// string would skip the first sync against the new remote — which is the
+  /// one that had everything to do.
+  String _remoteKey(RemoteStorage<I> rs, String tag) => '${rs.runtimeType}:$tag';
+
   /// Backup data to remote storage.
   FutureOr<void> backup([RemoteStorage<I>? rs]) async {
     rs ??= await remoteStorage;
@@ -123,6 +168,13 @@ abstract class SyncIface<T extends Mergeable, I> {
       return;
     }
 
+    // The common case, and the reason this check comes first: a sync runs on
+    // every launch, and most launches changed nothing on either side. What
+    // used to happen then was a full download, a decrypt, a merge that wrote
+    // nothing, a re-encrypt and a full upload. This is one request.
+    final localTag = await localVersionTag;
+    if (await _skippable(rs, localTag)) return;
+
     final remoteExists = await rs.exists(Paths.bakName);
 
     // Only try to merge if the remote backup file exists
@@ -154,5 +206,17 @@ abstract class SyncIface<T extends Mergeable, I> {
     // Upload merged or new backup
     await Future.delayed(const Duration(milliseconds: 77));
     await backup(rs);
+
+    // Only here, and only on the path that got this far. Every early return
+    // above leaves the checkpoint alone, so a failed download or an unreadable
+    // remote is retried on the next launch rather than recorded as done.
+    //
+    // Both tags are re-read: the merge may have changed local data, and the
+    // upload certainly changed the remote.
+    final afterLocal = await localVersionTag;
+    if (afterLocal == null) return;
+    final afterRemote = await rs.versionTag(Paths.bakName);
+    if (afterRemote == null) return;
+    await saveSyncCheckpoint(_remoteKey(rs, afterRemote), afterLocal);
   }
 }

@@ -86,6 +86,26 @@ final class Webdav implements RemoteStorage<String> {
     }
   }
 
+  @override
+  Future<String?> versionTag(String relativePath) async {
+    try {
+      final props = await client!.readProps(prefix + relativePath);
+      if (props == null) return null;
+      final eTag = props.eTag;
+      if (eTag != null && eTag.isNotEmpty) return eTag;
+      // Not every server sends an ETag. Modification time paired with size is
+      // the fallback — weaker, since a same-size rewrite within the clock's
+      // resolution reads as unchanged, and good enough for a check whose
+      // failure mode is one extra round trip.
+      final modified = props.modified;
+      if (modified == null) return null;
+      return '${modified.millisecondsSinceEpoch}/${props.size ?? -1}';
+    } catch (e) {
+      Loggers.app.warning('WebDAV version tag', e);
+      return null;
+    }
+  }
+
   /// {@macro webdav_client}
   @override
   Future<List<String>> list() async {

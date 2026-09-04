@@ -71,4 +71,36 @@ final class ICloud implements RemoteStorage<ICloudFile> {
       return false;
     }
   }
+
+  @override
+  Future<String?> versionTag(String relativePath) async {
+    try {
+      ICloudFile? newest;
+      for (final file in await list()) {
+        if (file.relativePath != relativePath) continue;
+        // Answers null mid-transfer, deliberately. `contentChangeDate` is
+        // already the new one while the bytes are still arriving, so a tag
+        // taken now would describe a file this device cannot yet read — and
+        // recording it would skip the download that was about to bring it.
+        if (file.isDownloading || file.isUploading) return null;
+
+        final date = file.contentChangeDate;
+        if (date == null) continue;
+        // The container can hold more than one record for a path while a
+        // conflict is unresolved. Newest wins, matching what a reader gets.
+        final best = newest?.contentChangeDate;
+        if (best == null || date.isAfter(best)) newest = file;
+      }
+
+      final changed = newest?.contentChangeDate;
+      if (changed == null) return null;
+      // Size joins the date because the date's resolution is a second on some
+      // filesystems, and two writes inside one are not that rare during a
+      // restore.
+      return '${changed.millisecondsSinceEpoch}/${newest?.sizeInBytes ?? -1}';
+    } catch (e) {
+      Loggers.app.warning('iCloud version tag', e);
+      return null;
+    }
+  }
 }

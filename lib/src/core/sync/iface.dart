@@ -35,6 +35,22 @@ abstract base class RemoteStorage<ListItemType> {
 
   /// List files in remote storage
   Future<List<ListItemType>> list();
+
+  /// An opaque token that changes when the remote copy of [relativePath] does.
+  ///
+  /// An ETag where the backend has one, a modification time and size where it
+  /// does not. Never compared for order — only for equality with the token the
+  /// last completed sync ended on.
+  ///
+  /// **Null means "assume it changed".** The file is absent, the backend
+  /// cannot answer, or the lookup failed: all three take the same branch,
+  /// because the two mistakes are not equally bad. Syncing when nothing
+  /// changed costs a round trip; skipping a sync that was needed costs the
+  /// user an edit.
+  ///
+  /// Defaulted rather than abstract so an existing implementation keeps
+  /// working — it simply never takes the shortcut.
+  Future<String?> versionTag(String relativePath) async => null;
 }
 
 abstract class Mergeable {
