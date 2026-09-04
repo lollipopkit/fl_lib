@@ -449,8 +449,6 @@ class _AdaptivePanesState extends State<AdaptivePanes>
                           ? widget.expandTooltip
                           : widget.collapseTooltip,
                       onTap: () => onCollapsed(!widget.collapsed),
-                      onDrag: _onSeamDrag,
-                      onDragEnd: _onSeamDragEnd,
                     ),
                   ),
                 ),

@@ -13,17 +13,14 @@ import 'package:flutter/material.dart';
 /// reached by touch as well, where there is no hover to reveal anything, and a
 /// control that only exists under a mouse leaves a tablet with no way back.
 ///
-/// It drags as well as taps, because it sits on the divider and covers the
-/// part of it a pointer aims for: a grip that swallowed the drag would take
-/// resizing away at exactly the place people reach for it. Both gestures on
-/// one target, the way the divider itself carries hover and drag.
+/// This is a button rather than part of the divider's drag target. Keeping the
+/// two hit regions separate makes the pointer tell the truth: the chevron
+/// clicks, while the visible line above and below it resizes.
 class PaneCollapseHandle extends StatefulWidget {
   const PaneCollapseHandle({
     super.key,
     required this.collapsed,
     required this.onTap,
-    this.onDrag,
-    this.onDragEnd,
     this.tooltip,
   });
 
@@ -31,15 +28,6 @@ class PaneCollapseHandle extends StatefulWidget {
   final bool collapsed;
 
   final VoidCallback onTap;
-
-  /// Pointer movement since the last call, in logical pixels.
-  ///
-  /// Null makes this a button and nothing else — for a layout whose column is
-  /// not resizable, where a drag would have nothing to move.
-  final ValueChanged<double>? onDrag;
-
-  /// The drag is over. Where a width is persisted, this is the moment for it.
-  final VoidCallback? onDragEnd;
 
   final String? tooltip;
 
@@ -75,7 +63,12 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final draggable = widget.onDrag != null;
+    final localizations = MaterialLocalizations.of(context);
+    final semanticsLabel =
+        widget.tooltip ??
+        (widget.collapsed
+            ? localizations.collapsedIconTapHint
+            : localizations.expandedIconTapHint);
 
     // Bigger under a finger, and scaled rather than sized: the grip is placed
     // by its left edge, so growing its width would move it sideways instead of
@@ -118,12 +111,7 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
     }
 
     return MouseRegion(
-      // What the pointer can do here, and dragging is the one that would
-      // otherwise be a surprise: a click cursor over a part of the divider
-      // says the resize stops at this square.
-      cursor: draggable
-          ? SystemMouseCursors.resizeColumn
-          : SystemMouseCursors.click,
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => _setHovered(true),
       onExit: (_) => _setHovered(false),
       // Lit from the moment of contact rather than once a drag is recognised —
@@ -133,16 +121,16 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
         onPointerDown: (_) => _setPressed(true),
         onPointerUp: (_) => _setPressed(false),
         onPointerCancel: (_) => _setPressed(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        child: Semantics(
+          label: semanticsLabel,
+          button: true,
           onTap: widget.onTap,
-          onHorizontalDragUpdate: widget.onDrag == null
-              ? null
-              : (details) => widget.onDrag!(details.delta.dx),
-          onHorizontalDragEnd: widget.onDrag == null
-              ? null
-              : (_) => widget.onDragEnd?.call(),
-          child: handle,
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: handle,
+          ),
         ),
       ),
     );
