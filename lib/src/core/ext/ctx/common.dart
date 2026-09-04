@@ -20,12 +20,11 @@ extension ContextX on BuildContext {
   }
 
   void pop<T extends Object?>([T? result]) {
-    // final splitCtx = SplitViewNavigator.of(this);
-    // final canPopSplitView = splitCtx?.canPop ?? false;
-    // if (canPopSplitView) {
-    //   splitCtx?.pop<T>(result);
-    //   return;
-    // }
+    // A commented-out `SplitViewNavigator` branch was here. That widget kept a
+    // navigation stack inside a pane and is gone: `AdaptivePanes.detail` has
+    // the caller own the selection and asks for it to be cleared through
+    // `PaneScope.closeDetailOf`, so there is no second stack for this to
+    // choose between.
     if (!canPop) return;
     Navigator.of(this).pop<T>(result);
   }

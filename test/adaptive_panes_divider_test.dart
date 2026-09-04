@@ -1,21 +1,27 @@
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:multi_split_view/multi_split_view.dart';
 
 /// The seam between the two panes, on a touchscreen.
 ///
-/// [PaneDivider] — the line drawn by hand where there is no split view — was
-/// fixed to answer a finger as well as a cursor. This is the other line, the
-/// one `multi_split_view` lays out between the panes, and it is a different
-/// widget reached by a different path: whether the same thing is true of it
-/// was never measured, only assumed either way.
+/// A touchscreen has no hover, and a horizontal drag is not recognised until
+/// the finger has already travelled past the slop — so waiting for the drag
+/// means the line lights up only once it has started moving, which is the
+/// moment the user no longer needs telling which line they got. [PaneDivider]
+/// answers the pointer instead, through a `Listener` that sees it before the
+/// gesture arena resolves.
+///
+/// This used to measure `multi_split_view`'s `DividerWidget` and read its
+/// `highlighted` flag. That package is gone and so is the flag; what replaced
+/// both draws the state directly, so this reads the colour on screen — which is
+/// what the old test said it wanted and had to approximate.
 void main() {
   Future<void> pump(WidgetTester tester) async {
-    // Wide enough to earn two panes. Sized on the view rather than the
-    // surface: `MediaQuery` reports the view, and `AdaptivePanes` asks the
-    // constraints it is given — so a test that set the surface alone would be
-    // laying out a tablet inside a phone's window.
+    // Wide enough to earn two panes, and therefore a seam between them. Sized
+    // on the view rather than the surface: `MediaQuery` reports the view, and
+    // `AdaptivePanes` asks the constraints it is given — so a test that set the
+    // surface alone would be laying out a tablet inside a phone's window.
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -23,8 +29,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: AdaptivePanes(
-            primaryBuilder: (_, _) => const Text('list'),
+          body: AdaptivePanes.detail(
+            listBuilder: (_, _) => const Text('list'),
             detailBuilder: (_) => const Text('detail'),
           ),
         ),
@@ -33,62 +39,80 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Whether the package considers the divider grabbed.
-  ///
-  /// This flag is the whole input to what is drawn: it is handed to the
-  /// painter, and it is what starts the 250ms fade from the resting hairline
-  /// to `Hairline.activeColor`. Nothing sits between it and the pixels.
-  bool highlighted(WidgetTester tester) =>
-      tester.widget<DividerWidget>(find.byType(DividerWidget)).highlighted;
+  final line = find.descendant(
+    of: find.byType(PaneDivider),
+    matching: find.byType(Container),
+  );
 
-  /// Lets go, and drains what the package schedules on drag end — a
-  /// zero-duration `Future.delayed`, which a bare `pump` does not reach and
-  /// which then fails the test as a pending timer.
-  Future<void> release(WidgetTester tester, TestGesture touch) async {
-    await touch.up();
-    await tester.pump(const Duration(milliseconds: 1));
+  /// Whether the line is drawn as grabbed.
+  ///
+  /// The painted colour, not a flag: it is the whole of what this behaviour is
+  /// for, and reading it leaves nothing between the assertion and the pixels.
+  bool active(WidgetTester tester) {
+    final context = tester.element(find.byType(PaneDivider));
+    return tester.widget<Container>(line).color ==
+        Hairline.activeColor(context);
   }
 
   testWidgets('a finger on it lights it up before the drag is recognised', (
     tester,
   ) async {
     await pump(tester);
-    expect(highlighted(tester), isFalse);
+    expect(active(tester), isFalse);
 
     final touch = await tester.startGesture(
-      tester.getCenter(find.byType(DividerWidget)),
+      tester.getCenter(find.byType(PaneDivider)),
     );
     await tester.pump();
 
-    // Not after moving: a horizontal drag is not recognised until the finger
-    // has travelled past the slop, and by then the user is already dragging
-    // and no longer needs telling which line they got.
-    expect(
-      highlighted(tester),
-      isTrue,
-      reason: 'a touchscreen has no hover, so this press is the only chance '
-          'the line has to say it was grabbed',
-    );
+    // Not after moving. By the time a horizontal drag is recognised the user
+    // is already dragging, and this is the only chance the line has to say it
+    // was the one they got.
+    expect(active(tester), isTrue);
 
-    await release(tester, touch);
+    await touch.up();
+    await tester.pump();
 
-    expect(highlighted(tester), isFalse);
+    expect(active(tester), isFalse);
   });
 
   testWidgets('and lets go when the pointer is cancelled', (tester) async {
     await pump(tester);
 
     final touch = await tester.startGesture(
-      tester.getCenter(find.byType(DividerWidget)),
+      tester.getCenter(find.byType(PaneDivider)),
     );
     await tester.pump();
-    expect(highlighted(tester), isTrue);
+    expect(active(tester), isTrue);
 
     // A scroll elsewhere taking over the gesture leaves the line lit
     // otherwise, and nothing later would put it back.
     await touch.cancel();
-    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
 
-    expect(highlighted(tester), isFalse);
+    expect(active(tester), isFalse);
+  });
+
+  testWidgets('a mouse leaving after a drag does not leave it lit', (
+    tester,
+  ) async {
+    // Both ways of holding the line are true at once for a mouse drag, and
+    // letting go of one must not undo the other — `_active` is the or of them.
+    await pump(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.byType(PaneDivider)));
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    expect(active(tester), isTrue, reason: 'hovering counts');
+
+    await mouse.down(tester.getCenter(find.byType(PaneDivider)));
+    await tester.pump();
+    await mouse.up();
+    await tester.pump();
+    expect(active(tester), isTrue, reason: 'still hovering after the release');
+
+    await mouse.moveTo(const Offset(5, 5));
+    await tester.pump();
+    expect(active(tester), isFalse);
   });
 }

@@ -5,6 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// Stands for whatever the surface holds that cannot simply be rebuilt — a
 /// terminal with a connection behind it. Counts its own lifetimes, so a test
 /// can say whether it was torn down.
+///
+/// This is the whole reason `AdaptivePanes.surface` exists beside
+/// `AdaptivePanes.detail`: a route can be thrown away and built again wherever
+/// it goes, so a narrow window keeps the list and pushes the detail over it. A
+/// connection cannot, so it is the list that moves instead.
 class _Session extends StatefulWidget {
   const _Session();
 
@@ -39,7 +44,7 @@ class _SessionState extends State<_Session> {
   }
 }
 
-const _sideKey = ValueKey('side');
+const _listKey = ValueKey('list');
 const _mainKey = ValueKey('main');
 
 /// The divider, found by the only thing that is uniquely true of it.
@@ -62,26 +67,26 @@ void main() {
     WidgetTester tester, {
     required double width,
     bool enabled = true,
-    double minWidthForSide = 800,
-    double sideWidth = 320,
-    ValueChanged<double>? onSideWidthChanged,
+    double minWidthForSplit = 800,
+    double listWidth = 320,
+    ValueChanged<double>? onListWidthChanged,
   }) async {
     await tester.binding.setSurfaceSize(Size(width, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: AdaptiveSideList(
+          body: AdaptivePanes.surface(
             enabled: enabled,
-            minWidthForSide: minWidthForSide,
-            sideWidth: sideWidth,
-            onSideWidthChanged: onSideWidthChanged,
-            sideBuilder: (_) => const ColoredBox(
-              key: _sideKey,
+            minWidthForSplit: minWidthForSplit,
+            listWidth: listWidth,
+            onListWidthChanged: onListWidthChanged,
+            listBuilder: (_, _) => const ColoredBox(
+              key: _listKey,
               color: Colors.transparent,
               child: Center(child: Text('list')),
             ),
-            builder: (_, split) => ColoredBox(
+            surfaceBuilder: (_, split) => ColoredBox(
               key: _mainKey,
               color: Colors.transparent,
               child: Column(
@@ -114,7 +119,7 @@ void main() {
 
     expect(find.text('list'), findsOneWidget);
     expect(find.text('folded out'), findsOneWidget);
-    expect(tester.getSize(find.byKey(_sideKey)).width, 320);
+    expect(tester.getSize(find.byKey(_listKey)).width, 320);
   });
 
   testWidgets('disabled keeps one column at any width', (tester) async {
@@ -153,60 +158,60 @@ void main() {
     tester,
   ) async {
     final reported = <double>[];
-    await pumpAt(tester, width: 1000, sideWidth: 300, onSideWidthChanged: reported.add);
+    await pumpAt(tester, width: 1000, listWidth: 300, onListWidthChanged: reported.add);
 
     await tester.drag(_divider, const Offset(60, 0));
     await tester.pump();
 
-    expect(tester.getSize(find.byKey(_sideKey)).width, closeTo(360, 0.01));
+    expect(tester.getSize(find.byKey(_listKey)).width, closeTo(360, 0.01));
     expect(reported, hasLength(1), reason: 'at the end, not once per frame');
     expect(reported.single, closeTo(360, 0.01));
   });
 
   testWidgets('the list cannot take more than half the width', (tester) async {
-    await pumpAt(tester, width: 900, sideWidth: 800);
+    await pumpAt(tester, width: 900, listWidth: 800);
 
-    expect(tester.getSize(find.byKey(_sideKey)).width, 450);
+    expect(tester.getSize(find.byKey(_listKey)).width, 450);
   });
 
   testWidgets('a width given later replaces the one it opened with', (
     tester,
   ) async {
-    await pumpAt(tester, width: 1000, sideWidth: 300);
-    expect(tester.getSize(find.byKey(_sideKey)).width, 300);
+    await pumpAt(tester, width: 1000, listWidth: 300);
+    expect(tester.getSize(find.byKey(_listKey)).width, 300);
 
     // What several of these sharing one stored width look like: the page on
     // screen writes it, and this one — kept alive behind it — is rebuilt with
     // the new number. Ignoring it made one setting behave as one per page.
-    await pumpAt(tester, width: 1000, sideWidth: 420);
+    await pumpAt(tester, width: 1000, listWidth: 420);
 
-    expect(tester.getSize(find.byKey(_sideKey)).width, 420);
+    expect(tester.getSize(find.byKey(_listKey)).width, 420);
   });
 
   testWidgets('a drag survives a rebuild carrying the same given width', (
     tester,
   ) async {
-    await pumpAt(tester, width: 1000, sideWidth: 300);
+    await pumpAt(tester, width: 1000, listWidth: 300);
     await tester.drag(_divider, const Offset(60, 0));
     await tester.pump();
-    expect(tester.getSize(find.byKey(_sideKey)).width, closeTo(360, 0.01));
+    expect(tester.getSize(find.byKey(_listKey)).width, closeTo(360, 0.01));
 
     // The caller re-reads the store and passes what it had before the drag
     // ended. Copying it back unconditionally would snap the list to 300.
-    await pumpAt(tester, width: 1000, sideWidth: 300);
+    await pumpAt(tester, width: 1000, listWidth: 300);
 
-    expect(tester.getSize(find.byKey(_sideKey)).width, closeTo(360, 0.01));
+    expect(tester.getSize(find.byKey(_listKey)).width, closeTo(360, 0.01));
   });
 
   testWidgets('a wider start than the range allows is clamped down', (
     tester,
   ) async {
-    await pumpAt(tester, width: 2000, sideWidth: 900);
+    await pumpAt(tester, width: 2000, listWidth: 900);
 
     expect(
-      tester.getSize(find.byKey(_sideKey)).width,
+      tester.getSize(find.byKey(_listKey)).width,
       520,
-      reason: 'maxSideWidth still applies when half the window is more',
+      reason: 'maxListWidth still applies when half the window is more',
     );
   });
 }

@@ -10,7 +10,7 @@ void main() {
   Widget harness({
     required double width,
     String? selected,
-    double minWidthForDetail = 800,
+    double minWidthForSplit = 800,
     VoidCallback? onClose,
   }) {
     return MaterialApp(
@@ -19,11 +19,11 @@ void main() {
           child: SizedBox(
             width: width,
             height: 600,
-            child: AdaptivePanes(
-              minWidthForDetail: minWidthForDetail,
+            child: AdaptivePanes.detail(
+              minWidthForSplit: minWidthForSplit,
               detailId: selected,
               onCloseDetail: onClose,
-              primaryBuilder: (_, split) => Text(split ? 'list compact' : 'list'),
+              listBuilder: (_, split) => Text(split ? 'list compact' : 'list'),
               detailBuilder: selected == null
                   ? null
                   : (context) => Scaffold(
@@ -55,10 +55,10 @@ void main() {
 
     Widget at(double width) => MaterialApp(
       home: Scaffold(
-        body: AdaptivePanes(
-          primaryWidth: width,
+        body: AdaptivePanes.detail(
+          listWidth: width,
           detailId: 'a',
-          primaryBuilder: (_, _) =>
+          listBuilder: (_, _) =>
               const ColoredBox(key: ValueKey('primary'), color: Colors.grey),
           detailBuilder: (_) => const Scaffold(body: Text('detail')),
         ),
@@ -306,8 +306,8 @@ void main() {
           child: SizedBox(
             width: 1000,
             height: 600,
-            child: AdaptivePanes(
-              primaryBuilder: (ctx, _) {
+            child: AdaptivePanes.detail(
+              listBuilder: (ctx, _) {
                 split = PaneScope.isSplit(ctx);
                 return const Text('list');
               },
@@ -334,8 +334,8 @@ void main() {
           child: SizedBox(
             width: 700,
             height: 600,
-            child: AdaptivePanes(
-              primaryBuilder: (ctx, _) {
+            child: AdaptivePanes.detail(
+              listBuilder: (ctx, _) {
                 split = PaneScope.isSplit(ctx);
                 return const Text('list');
               },
@@ -403,9 +403,9 @@ void main() {
           body: SizedBox(
             width: 1000,
             height: 600,
-            child: AdaptivePanes(
+            child: AdaptivePanes.detail(
               detailId: 'a',
-              primaryBuilder: (ctx, _) => TextButton(
+              listBuilder: (ctx, _) => TextButton(
                 onPressed: () => route.go(ctx, target: NavTarget.pane),
                 child: const Text('open'),
               ),
