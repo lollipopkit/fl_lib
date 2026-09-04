@@ -189,6 +189,20 @@ final class GistRs implements RemoteStorage<String> {
   }
 
   @override
+  String get identity => gistId ?? PrefProps.gistId.get() ?? '';
+
+  /// The gist's current revision SHA.
+  ///
+  /// `history[0].version` is a commit id: unique per revision, and it moves on
+  /// every write and only on a write. It replaced `updated_at` paired with the
+  /// file's size, which was two lossy values standing in for one exact one —
+  /// a second of resolution on the timestamp, and a length that a different
+  /// revision can easily share.
+  ///
+  /// Over-reports, and that is the safe direction: the SHA covers the whole
+  /// gist, so an edit to another file in it reads as a change to this one and
+  /// costs a round trip. The opposite mistake costs an update.
+  @override
   Future<String?> versionTag(String relativePath) async {
     try {
       final id = gistId ?? PrefProps.gistId.get();
@@ -196,17 +210,14 @@ final class GistRs implements RemoteStorage<String> {
 
       final res = await _client.get('/gists/$id', options: Options(headers: _authHeaders()));
       final data = res.data as Map<String, dynamic>;
-      final file = (data['files'] as Map)[relativePath];
-      if (file == null) return null;
+      if ((data['files'] as Map?)?.containsKey(relativePath) != true) {
+        return null;
+      }
 
-      // The gist's own `updated_at` moves on any edit to any file in it, so on
-      // its own it would report a change this file did not have. The size is
-      // what narrows it back; both together is still an over-report at worst,
-      // which costs a round trip rather than an edit.
-      final updated = data['updated_at'];
-      final size = file is Map ? file['size'] : null;
-      if (updated == null) return null;
-      return '$updated/${size ?? -1}';
+      final history = data['history'];
+      if (history is! List || history.isEmpty) return null;
+      final version = (history.first as Map?)?['version'];
+      return version is String && version.isNotEmpty ? version : null;
     } catch (e) {
       Loggers.app.warning('Gist version tag', e);
       return null;

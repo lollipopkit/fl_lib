@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:icloud_storage_plus/icloud_storage.dart';
@@ -49,14 +50,33 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// answer should return.
   FutureOr<String?> get localVersionTag => null;
 
-  /// The `(remote, local)` pair the last *completed* sync ended on.
+  /// The `(remote, local, recordedAtMs)` the last *completed* sync ended on.
   ///
   /// Device-local bookkeeping, and it must not be part of what gets synced —
   /// it describes this device's position, not the user's data.
-  FutureOr<(String, String)?> get syncCheckpoint => null;
+  FutureOr<(String, String, int)?> get syncCheckpoint => null;
 
   /// Records a new [syncCheckpoint]. Called only after a full cycle succeeded.
-  FutureOr<void> saveSyncCheckpoint(String remote, String local) {}
+  FutureOr<void> saveSyncCheckpoint(String remote, String local, int atMs) {}
+
+  /// How long a checkpoint is believed.
+  ///
+  /// **The remote tag read after an upload is not provably the upload's.**
+  /// Between this device's write and its read of the new tag, another device
+  /// can write; the tag then names content this one has never merged, and the
+  /// pair is recorded as though it had been. Every later launch matches it and
+  /// skips, so the two diverge until something edits data locally.
+  ///
+  /// Closing that needs a compare-and-swap the interface does not have — a
+  /// conditional `If-Match` write, or an upload that returns the revision it
+  /// created. WebDAV's client exposes neither and iCloud has no notion of one,
+  /// so a full fix would mean giving up the shortcut on both.
+  ///
+  /// This bounds it instead: a checkpoint older than this is not believed, so
+  /// a divergence heals on its own within a day rather than lasting until the
+  /// next local edit. It bounds every other way the checkpoint could be wrong
+  /// too, which is the right property for what is ultimately a cache.
+  Duration get syncCheckpointTtl => const Duration(hours: 12);
 
   /// Whether both sides are still exactly where the last sync left them.
   ///
@@ -74,16 +94,33 @@ abstract class SyncIface<T extends Mergeable, I> {
     if (localTag == null || remoteTag == null) return false;
     final last = await syncCheckpoint;
     if (last == null) return false;
+
+    // Ages out — see [syncCheckpointTtl]. Also covers a clock that moved
+    // backwards, where the age reads negative and the checkpoint is dropped:
+    // believing one recorded in the future would be the longer mistake.
+    final age = DateTime.now().millisecondsSinceEpoch - last.$3;
+    if (age < 0 || age > syncCheckpointTtl.inMilliseconds) return false;
+
     return last.$1 == _remoteKey(rs, remoteTag) && last.$2 == localTag;
   }
 
   /// The backend's identity travels with its tag.
   ///
-  /// Without it, moving a user from one remote to another leaves a checkpoint
-  /// describing a file on the old one, and two backends answering the same
-  /// string would skip the first sync against the new remote — which is the
-  /// one that had everything to do.
-  String _remoteKey(RemoteStorage<I> rs, String tag) => '${rs.runtimeType}:$tag';
+  /// Both halves: the class, and *which configuration of it* — see
+  /// [RemoteStorage.identity]. Without the second, two WebDAV servers or two
+  /// gists are the same key, and switching between them compares a checkpoint
+  /// from one against a tag from the other.
+  ///
+  /// The identity is hashed rather than stored, so a URL naming someone's
+  /// server does not end up in a second preference key. Truncated because this
+  /// is a discriminator, not a commitment: 12 hex characters is 48 bits, and a
+  /// collision costs one skipped sync rather than a wrong one.
+  String _remoteKey(RemoteStorage<I> rs, String tag) {
+    final identity = rs.identity;
+    if (identity.isEmpty) return '${rs.runtimeType}:$tag';
+    final digest = sha256.convert(utf8.encode(identity)).toString();
+    return '${rs.runtimeType}@${digest.substring(0, 12)}:$tag';
+  }
 
   /// Backup data to remote storage.
   FutureOr<void> backup([RemoteStorage<I>? rs]) async {
@@ -240,6 +277,10 @@ abstract class SyncIface<T extends Mergeable, I> {
       Loggers.app.info('Sync checkpoint skipped: the remote did not change');
       return;
     }
-    await saveSyncCheckpoint(_remoteKey(rs, afterRemote), afterLocal);
+    await saveSyncCheckpoint(
+      _remoteKey(rs, afterRemote),
+      afterLocal,
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 }

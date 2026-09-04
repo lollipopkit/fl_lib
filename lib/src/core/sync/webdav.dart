@@ -87,19 +87,22 @@ final class Webdav implements RemoteStorage<String> {
   }
 
   @override
+  String get identity => '${client?.url ?? ''}|$prefix';
+
+  /// The ETag, and nothing else.
+  ///
+  /// There was a modification-time-and-size fallback here for servers that
+  /// send no ETag, and it is the wrong kind of weak. `getlastmodified` is an
+  /// HTTP date — **one second of resolution** — so a write that lands in the
+  /// same second as the one already recorded, at the same length, reads as no
+  /// change at all and the sync is skipped. That is a missed update, which is
+  /// the failure this check must not have. Answering null costs those servers
+  /// the shortcut and nothing else.
+  @override
   Future<String?> versionTag(String relativePath) async {
     try {
-      final props = await client!.readProps(prefix + relativePath);
-      if (props == null) return null;
-      final eTag = props.eTag;
-      if (eTag != null && eTag.isNotEmpty) return eTag;
-      // Not every server sends an ETag. Modification time paired with size is
-      // the fallback — weaker, since a same-size rewrite within the clock's
-      // resolution reads as unchanged, and good enough for a check whose
-      // failure mode is one extra round trip.
-      final modified = props.modified;
-      if (modified == null) return null;
-      return '${modified.millisecondsSinceEpoch}/${props.size ?? -1}';
+      final eTag = (await client!.readProps(prefix + relativePath))?.eTag;
+      return eTag == null || eTag.isEmpty ? null : eTag;
     } catch (e) {
       Loggers.app.warning('WebDAV version tag', e);
       return null;

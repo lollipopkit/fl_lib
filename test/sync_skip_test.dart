@@ -15,6 +15,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Answers whatever the test tells it to, and counts what it was asked.
 final class _FakeRemote extends RemoteStorage<String> {
+  _FakeRemote({this.identity = 'one'});
+
+  /// Which configuration of this backend it is, as a real one answers with
+  /// its URL, gist id or container.
+  @override
+  String identity;
+
   String? tag;
   var versionTagCalls = 0;
   var existsCalls = 0;
@@ -22,6 +29,7 @@ final class _FakeRemote extends RemoteStorage<String> {
 
   /// Moved by [upload], so a cycle that really uploaded is distinguishable
   /// from one that returned without doing anything.
+  /// Set by a test that models the same file behind a second configuration.
   var _uploads = 0;
 
   @override
@@ -69,7 +77,7 @@ final class _FakeSyncer extends SyncIface<_NoopMergeable, String> {
   final _FakeRemote remote;
 
   String? localTag = 'local-1';
-  (String, String)? checkpoint;
+  (String, String, int)? checkpoint;
   var saveToFileCalls = 0;
 
   /// Makes [backup] decline by returning, the way `BakSyncer`'s override does
@@ -89,11 +97,11 @@ final class _FakeSyncer extends SyncIface<_NoopMergeable, String> {
   String? get localVersionTag => localTag;
 
   @override
-  (String, String)? get syncCheckpoint => checkpoint;
+  (String, String, int)? get syncCheckpoint => checkpoint;
 
   @override
-  void saveSyncCheckpoint(String remote, String local) {
-    checkpoint = (remote, local);
+  void saveSyncCheckpoint(String remote, String local, int atMs) {
+    checkpoint = (remote, local, atMs);
   }
 
   @override
@@ -203,6 +211,111 @@ void main() {
     expect(syncer.checkpoint?.$1, contains('_FakeRemote'));
     expect(syncer.checkpoint?.$1, contains('etag-1'));
     expect(syncer.checkpoint?.$2, 'local-1');
+  });
+
+  /// The runtime type alone is not enough: two WebDAV servers, or two gists,
+  /// are the same class. Without the configuration in the key, switching
+  /// between them compares a checkpoint from one against a tag from the other
+  /// -- and equal tags skip the first sync against the new remote, which is
+  /// the one with everything to do.
+  group('two configurations of the same backend', () {
+    test('do not share a checkpoint even when their tags match', () async {
+      remote.tag = 'etag-1';
+      await runSync();
+      expect(remote.uploadCalls, 1);
+
+      // The same class, the same tag, a different server. `_uploads` is part
+      // of the fake's tag, so carrying it over is what makes the two answer
+      // the same string.
+      final other = _FakeRemote(identity: 'two')
+        ..tag = 'etag-1'
+        .._uploads = remote._uploads;
+      final moved = _FakeSyncer(other)
+        ..checkpoint = syncer.checkpoint
+        ..localTag = syncer.localTag;
+
+      await moved.sync(throttleMilli: 0);
+
+      expect(other.existsCalls, 1, reason: 'it did not skip');
+      expect(other.uploadCalls, 1);
+    });
+
+    test('the same configuration still skips', () async {
+      remote.tag = 'etag-1';
+      await runSync();
+
+      final same = _FakeRemote(identity: 'one')
+        ..tag = 'etag-1'
+        .._uploads = remote._uploads;
+      final again = _FakeSyncer(same)
+        ..checkpoint = syncer.checkpoint
+        ..localTag = syncer.localTag;
+
+      await again.sync(throttleMilli: 0);
+
+      expect(same.existsCalls, 0, reason: 'it skipped');
+      expect(same.uploadCalls, 0);
+    });
+
+    test('the identity is hashed, not written out', () async {
+      remote.identity = 'https://dav.example.com/private/';
+      remote.tag = 'etag-1';
+      await runSync();
+
+      expect(syncer.checkpoint?.$1, isNot(contains('dav.example.com')));
+    });
+  });
+
+  /// The remote tag read after an upload is not provably the upload's -- see
+  /// `syncCheckpointTtl`. Nothing here can close that window, so the
+  /// checkpoint ages out and a divergence heals on its own.
+  group('a checkpoint that has aged out', () {
+    test('is not believed', () async {
+      remote.tag = 'etag-1';
+      await runSync();
+
+      final stale = syncer.checkpoint!;
+      syncer.checkpoint = (
+        stale.$1,
+        stale.$2,
+        stale.$3 -
+            syncer.syncCheckpointTtl.inMilliseconds -
+            const Duration(minutes: 1).inMilliseconds,
+      );
+
+      await runSync();
+      expect(remote.existsCalls, 2, reason: 'it did not skip');
+    });
+
+    test('one recorded in the future is not believed either', () async {
+      remote.tag = 'etag-1';
+      await runSync();
+
+      final ahead = syncer.checkpoint!;
+      syncer.checkpoint = (
+        ahead.$1,
+        ahead.$2,
+        ahead.$3 + const Duration(days: 1).inMilliseconds,
+      );
+
+      await runSync();
+      expect(remote.existsCalls, 2, reason: 'a clock that moved backwards');
+    });
+
+    test('one inside the window still skips', () async {
+      remote.tag = 'etag-1';
+      await runSync();
+
+      final fresh = syncer.checkpoint!;
+      syncer.checkpoint = (
+        fresh.$1,
+        fresh.$2,
+        fresh.$3 - const Duration(hours: 1).inMilliseconds,
+      );
+
+      await runSync();
+      expect(remote.existsCalls, 1, reason: 'it skipped');
+    });
   });
 
   /// `backup` is overridable and an override may decline by *returning*

@@ -36,6 +36,24 @@ abstract base class RemoteStorage<ListItemType> {
   /// List files in remote storage
   Future<List<ListItemType>> list();
 
+  /// Which *configuration* of this backend this is.
+  ///
+  /// The runtime type is not enough to key a checkpoint on: pointing WebDAV at
+  /// a different server, or naming a different gist, leaves the same class
+  /// behind. A checkpoint recorded against the old one is then compared with
+  /// the new one's tag, and two that happen to answer the same string skip the
+  /// first sync against the new remote — which is the one with everything to
+  /// do. A modification time and size collide across servers far more easily
+  /// than an ETag does.
+  ///
+  /// Hashed by the caller, so nothing that names an endpoint is written into
+  /// device-local preferences a second time.
+  ///
+  /// Empty means "this backend has one configuration", which is true of none
+  /// of them and is the safe default: it reproduces the behaviour of not
+  /// having this at all rather than claiming an identity that is not there.
+  String get identity => '';
+
   /// An opaque token that changes when the remote copy of [relativePath] does.
   ///
   /// An ETag where the backend has one, a modification time and size where it

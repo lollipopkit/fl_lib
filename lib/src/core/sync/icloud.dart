@@ -73,6 +73,18 @@ final class ICloud implements RemoteStorage<ICloudFile> {
   }
 
   @override
+  String get identity => containerId;
+
+  /// Kept on `contentChangeDate` and size, unlike WebDAV and Gist.
+  ///
+  /// There is no revision token to move to — `ICloudFile` carries no version,
+  /// generation or etag — so the choice is this or nothing, and nothing means
+  /// no device on the platform where iCloud is the default ever takes the
+  /// shortcut. It is also the strongest of the three timestamps: an `NSDate`
+  /// with sub-second precision, against WebDAV's one-second HTTP date, so the
+  /// collision that made the WebDAV fallback unsafe needs two writes inside
+  /// the same millisecond at the same length.
+  @override
   Future<String?> versionTag(String relativePath) async {
     try {
       ICloudFile? newest;
