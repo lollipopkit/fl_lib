@@ -49,11 +49,33 @@ abstract final class CrashLog {
   /// the disk. Past this the file stops growing and says so on its last line.
   static const maxBytes = 512 * 1024;
 
+  /// How much of an error and its stack the marker keeps.
+  ///
+  /// The marker is read on the launch after the crash and is the only thing
+  /// that survives it, so it holds the error rather than only the fact of one.
+  /// Bounded because a stack from a deeply nested async chain has no natural
+  /// size, and this file is written from inside a failing process.
+  static const maxMarkerChars = 8 * 1024;
+
+  /// Whether an error handed to a sink right now is being uploaded.
+  ///
+  /// Set by an app that uploads crashes; left null by one that does not, where
+  /// every crash is worth describing to the next launch.
+  ///
+  /// Read when the marker is written, and it decides whether the marker keeps
+  /// a *detail*. An error a sink has already sent needs none: the next launch
+  /// reading one is what makes it report the crash again, and a crash sent
+  /// live and replayed the following launch is one bug filed as two. What is
+  /// left with a detail is the case the live path cannot reach — an error
+  /// before there is a sink at all, which is most of startup.
+  static bool Function()? uploadsNow;
+
   static Directory? _dir;
   static RandomAccessFile? _file;
   static int _written = 0;
   static bool _truncated = false;
   static bool _lastRunEndedBadly = false;
+  static String? _lastRunError;
   static StreamSubscription<LogRecord>? _sub;
   static bool _installed = false;
   static FlutterExceptionHandler? _prevFlutterOnError;
@@ -75,8 +97,24 @@ abstract final class CrashLog {
   /// being killed, so a flag like that reads a backgrounded app as a crash.
   static bool get lastRunEndedBadly => _lastRunEndedBadly;
 
+  /// What ended the previous run, when the marker was left with a detail.
+  ///
+  /// The error's own text and its stack, separated by a newline. Null both
+  /// when the run ended normally and when it ended on an error something had
+  /// already uploaded — see [uploadsNow]. So this is not "was there a crash",
+  /// which is [lastRunEndedBadly]; it is "is there a crash nobody has heard
+  /// about yet".
+  static String? get lastRunError => _lastRunError;
+
   /// Whether [attach] has found somewhere to write.
   static bool get isAttached => _file != null;
+
+  /// Where the logs are, once [attach] has run.
+  ///
+  /// So that a caller keeping something of its own beside them — a composed
+  /// report, say — does not have to be told the same path a second time and
+  /// then be the thing that disagrees about it.
+  static String? get dirPath => _dir?.path;
 
   /// Installs the error handlers and starts buffering.
   ///
@@ -219,7 +257,13 @@ abstract final class CrashLog {
   /// Exposed so a sink that caught an error outside Flutter's handlers can
   /// mark the run the same way the handlers here do. Writes the marker, which
   /// the next launch reads — so it does nothing before [attach].
-  static void markUnhandled() => _leaveMarker();
+  ///
+  /// [error] and [stack] are what the next launch reads back as
+  /// [lastRunError], and passing them is worth doing even when a sink is
+  /// installed: whether they are kept is decided here, by [uploadsNow], rather
+  /// than by each caller working out whether anything heard about the error.
+  static void markUnhandled([Object? error, StackTrace? stack]) =>
+      _leaveMarker(error, stack);
 
   /// Records that the *previous* run ended badly, on some other authority.
   ///
@@ -275,6 +319,7 @@ abstract final class CrashLog {
         if (await file.exists()) await file.delete();
       }
       _lastRunEndedBadly = false;
+      _lastRunError = null;
       final current = File(_path(dir, currentName));
       _file = await current.open(mode: FileMode.writeOnlyAppend);
       _written = 0;
@@ -296,6 +341,8 @@ abstract final class CrashLog {
     _written = 0;
     _truncated = false;
     _lastRunEndedBadly = false;
+    _lastRunError = null;
+    uploadsNow = null;
     if (_installed) {
       FlutterError.onError = _prevFlutterOnError;
       PlatformDispatcher.instance.onError = _prevPlatformOnError;
@@ -347,17 +394,31 @@ abstract final class CrashLog {
     } else {
       Loggers.app.severe('Unhandled ($source)', error, stack);
     }
-    _leaveMarker();
+    _leaveMarker(error, stack);
   }
 
-  static void _leaveMarker() {
+  static void _leaveMarker([Object? error, StackTrace? stack]) {
     final dir = _dir;
     if (dir == null) return;
     try {
-      File(_path(dir, markerName)).writeAsStringSync('');
+      File(_path(dir, markerName)).writeAsStringSync(_markerBody(error, stack));
     } catch (e) {
       debugPrint('CrashLog marker: $e');
     }
+  }
+
+  /// What the marker says, which is the error and nothing around it.
+  ///
+  /// Empty for a crash a sink is already uploading — see [uploadsNow] — and
+  /// empty when the caller had nothing to describe, which is every marker left
+  /// by a platform's own crash record rather than by a Dart handler.
+  static String _markerBody(Object? error, StackTrace? stack) {
+    if (error == null) return '';
+    if (uploadsNow?.call() ?? false) return '';
+    final body = stack == null ? '$error' : '$error\n$stack';
+    return body.length > maxMarkerChars
+        ? body.substring(0, maxMarkerChars)
+        : body;
   }
 
   /// Reads the marker and removes it, so one crash is reported once.
@@ -365,7 +426,19 @@ abstract final class CrashLog {
     try {
       final marker = File(_path(dir, markerName));
       if (!await marker.exists()) return false;
+      // Read separately from the delete, and not allowed to prevent it. A
+      // marker whose contents will not decode still answers the question this
+      // is here to answer; leaving it behind because the detail was unreadable
+      // would report the same crash on every launch from now on.
+      String body;
+      try {
+        body = await marker.readAsString();
+      } catch (e) {
+        debugPrint('CrashLog marker body: $e');
+        body = '';
+      }
       await marker.delete();
+      _lastRunError = body.isEmpty ? null : body;
       return true;
     } catch (e) {
       debugPrint('CrashLog marker: $e');

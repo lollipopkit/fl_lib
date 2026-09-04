@@ -211,6 +211,75 @@ void main() {
     expect(CrashLog.lastRunEndedBadly, isTrue);
   });
 
+  /// The marker used to be an empty file, and the launch that read it knew only
+  /// *that* the previous run died. These decide whether it also knows *what*
+  /// killed it — which is what lets a crash from before there was a sink be
+  /// reported at all, and what must not happen for one a sink already sent.
+  group('the marker carries the error', () {
+    test('when nothing uploaded it', () async {
+      await launch();
+      CrashLog.markUnhandled(StateError('boom'), StackTrace.current);
+      await CrashLog.resetForTest();
+
+      await launch();
+      expect(CrashLog.lastRunError, contains('boom'));
+      // The stack follows the message on its own lines, so the reader can put
+      // the two back into an error and a trace.
+      expect(CrashLog.lastRunError, contains('\n'));
+    });
+
+    test('and not when a sink was already uploading it', () async {
+      await launch();
+      // The crash is on its way to a backend as this is written. A detail kept
+      // here would be replayed on the next launch and file the same bug twice.
+      CrashLog.uploadsNow = () => true;
+      CrashLog.markUnhandled(StateError('boom'), StackTrace.current);
+      await CrashLog.resetForTest();
+
+      await launch();
+      expect(
+        CrashLog.lastRunEndedBadly,
+        isTrue,
+        reason: 'the run still ended badly, which is a separate question',
+      );
+      expect(CrashLog.lastRunError, isNull);
+    });
+
+    test('and not when the caller had nothing to describe', () async {
+      // Every marker left by a platform crash record, which reports the death
+      // on its own path rather than through this one.
+      await launch();
+      CrashLog.markUnhandled();
+      await CrashLog.resetForTest();
+
+      await launch();
+      expect(CrashLog.lastRunEndedBadly, isTrue);
+      expect(CrashLog.lastRunError, isNull);
+    });
+
+    test('bounded, because a stack has no natural size', () async {
+      await launch();
+      CrashLog.markUnhandled(StateError('x' * (CrashLog.maxMarkerChars * 2)));
+      await CrashLog.resetForTest();
+
+      await launch();
+      expect(CrashLog.lastRunError, hasLength(CrashLog.maxMarkerChars));
+    });
+
+    test('and is consumed with the marker', () async {
+      await launch();
+      CrashLog.markUnhandled(StateError('boom'));
+      await CrashLog.resetForTest();
+
+      await launch();
+      expect(CrashLog.lastRunError, isNotNull);
+      await CrashLog.resetForTest();
+
+      await launch();
+      expect(CrashLog.lastRunError, isNull);
+    });
+  });
+
   test('reportPreviousRunCrashed answers for this launch, not the next',
       () async {
     // What a platform crash record does. Unlike the marker, it is a conclusion
