@@ -63,6 +63,12 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final localizations = MaterialLocalizations.of(context);
+    final semanticsLabel =
+        widget.tooltip ??
+        (widget.collapsed
+            ? localizations.collapsedIconTapHint
+            : localizations.expandedIconTapHint);
 
     // Bigger under a finger, and scaled rather than sized: the grip is placed
     // by its left edge, so growing its width would move it sideways instead of
@@ -115,10 +121,16 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
         onPointerDown: (_) => _setPressed(true),
         onPointerUp: (_) => _setPressed(false),
         onPointerCancel: (_) => _setPressed(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        child: Semantics(
+          label: semanticsLabel,
+          button: true,
           onTap: widget.onTap,
-          child: handle,
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: handle,
+          ),
         ),
       ),
     );
