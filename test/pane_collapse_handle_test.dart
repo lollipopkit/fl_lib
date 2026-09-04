@@ -10,17 +10,24 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     bool? collapsed;
+    var paneCollapsed = false;
     double? savedWidth;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: AdaptivePanes.surface(
-            listBuilder: (_, _) => const ColoredBox(color: Colors.grey),
-            surfaceBuilder: (_, _) => const ColoredBox(color: Colors.white),
-            onCollapsedChanged: (value) => collapsed = value,
-            onListWidthChanged: (value) => savedWidth = value,
-            collapseTooltip: 'Hide list',
-            expandTooltip: 'Show list',
+          body: StatefulBuilder(
+            builder: (context, setState) => AdaptivePanes.surface(
+              listBuilder: (_, _) => const ColoredBox(color: Colors.grey),
+              surfaceBuilder: (_, _) => const ColoredBox(color: Colors.white),
+              collapsed: paneCollapsed,
+              onCollapsedChanged: (value) {
+                collapsed = value;
+                setState(() => paneCollapsed = value);
+              },
+              onListWidthChanged: (value) => savedWidth = value,
+              collapseTooltip: 'Hide list',
+              expandTooltip: 'Show list',
+            ),
           ),
         ),
       ),
@@ -50,7 +57,13 @@ void main() {
     expect(collapsed, isNull);
 
     await tester.tap(handle);
+    await tester.pumpAndSettle();
     expect(collapsed, isTrue);
+    expect(find.bySemanticsLabel('Hide list'), findsNothing);
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Show list')),
+      matchesSemantics(label: 'Show list', isButton: true, hasTapAction: true),
+    );
   });
 
   testWidgets('a missing tooltip falls back to the localized action', (
