@@ -20,10 +20,15 @@ final class _FakeRemote extends RemoteStorage<String> {
   var existsCalls = 0;
   var uploadCalls = 0;
 
+  /// Moved by [upload], so a cycle that really uploaded is distinguishable
+  /// from one that returned without doing anything.
+  var _uploads = 0;
+
   @override
   Future<String?> versionTag(String relativePath) async {
     versionTagCalls++;
-    return tag;
+    final base = tag;
+    return base == null ? null : '$base/$_uploads';
   }
 
   /// Reached only when the skip did not happen, which is what the tests below
@@ -37,6 +42,7 @@ final class _FakeRemote extends RemoteStorage<String> {
   @override
   Future<void> upload({required String relativePath, String? localPath}) async {
     uploadCalls++;
+    _uploads++;
   }
 
   @override
@@ -65,6 +71,16 @@ final class _FakeSyncer extends SyncIface<_NoopMergeable, String> {
   String? localTag = 'local-1';
   (String, String)? checkpoint;
   var saveToFileCalls = 0;
+
+  /// Makes [backup] decline by returning, the way `BakSyncer`'s override does
+  /// when the remote turned out to be newer than this build can read.
+  var refuseUpload = false;
+
+  @override
+  Future<void> backup([RemoteStorage<String>? rs]) async {
+    if (refuseUpload) return;
+    return super.backup(rs);
+  }
 
   @override
   RemoteStorage<String> get remoteStorage => remote;
@@ -187,5 +203,52 @@ void main() {
     expect(syncer.checkpoint?.$1, contains('_FakeRemote'));
     expect(syncer.checkpoint?.$1, contains('etag-1'));
     expect(syncer.checkpoint?.$2, 'local-1');
+  });
+
+  /// `backup` is overridable and an override may decline by *returning*
+  /// rather than throwing -- ServerBox's refuses when the remote turned out to
+  /// be newer than it can read. Recording that as a completed cycle would
+  /// describe a file this device never wrote, and every later launch would
+  /// match it and skip: the sync stops for good, and says nothing.
+  group('an upload that did not happen', () {
+    test('is not recorded as a completed cycle', () async {
+      remote.tag = 'etag-1';
+      syncer.refuseUpload = true;
+
+      await runSync();
+
+      expect(remote.uploadCalls, 0);
+      expect(syncer.checkpoint, isNull);
+    });
+
+    test('leaves the next launch to try again', () async {
+      remote.tag = 'etag-1';
+      syncer.refuseUpload = true;
+      await runSync();
+      await runSync();
+      expect(remote.existsCalls, 2, reason: 'neither one skipped');
+
+      // And once the refusal is over, the cycle completes and records.
+      syncer.refuseUpload = false;
+      await runSync();
+      expect(remote.uploadCalls, 1);
+      expect(syncer.checkpoint, isNotNull);
+      await runSync();
+      expect(remote.uploadCalls, 1, reason: 'now it skips');
+    });
+
+    /// The guard is "the remote moved", so a checkpoint recorded before a
+    /// refusal must not be widened into one that covers it.
+    test('does not overwrite the checkpoint of the one before it', () async {
+      remote.tag = 'etag-1';
+      await runSync();
+      final good = syncer.checkpoint;
+
+      syncer.localTag = 'local-2';
+      syncer.refuseUpload = true;
+      await runSync();
+
+      expect(syncer.checkpoint, good);
+    });
   });
 }

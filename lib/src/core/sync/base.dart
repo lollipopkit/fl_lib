@@ -66,12 +66,14 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// Either tag being null means "cannot tell", and that always syncs. So does
   /// having no checkpoint, which is the first sync on this device and the one
   /// that must not be skipped.
-  Future<bool> _skippable(RemoteStorage<I> rs, String? localTag) async {
-    if (localTag == null) return false;
+  Future<bool> _skippable(
+    RemoteStorage<I> rs,
+    String? localTag,
+    String? remoteTag,
+  ) async {
+    if (localTag == null || remoteTag == null) return false;
     final last = await syncCheckpoint;
     if (last == null) return false;
-    final remoteTag = await rs.versionTag(Paths.bakName);
-    if (remoteTag == null) return false;
     return last.$1 == _remoteKey(rs, remoteTag) && last.$2 == localTag;
   }
 
@@ -173,7 +175,10 @@ abstract class SyncIface<T extends Mergeable, I> {
     // used to happen then was a full download, a decrypt, a merge that wrote
     // nothing, a re-encrypt and a full upload. This is one request.
     final localTag = await localVersionTag;
-    if (await _skippable(rs, localTag)) return;
+    final beforeRemote = localTag == null
+        ? null
+        : await rs.versionTag(Paths.bakName);
+    if (await _skippable(rs, localTag, beforeRemote)) return;
 
     final remoteExists = await rs.exists(Paths.bakName);
 
@@ -212,11 +217,29 @@ abstract class SyncIface<T extends Mergeable, I> {
     // remote is retried on the next launch rather than recorded as done.
     //
     // Both tags are re-read: the merge may have changed local data, and the
-    // upload certainly changed the remote.
+    // upload should have changed the remote.
     final afterLocal = await localVersionTag;
     if (afterLocal == null) return;
     final afterRemote = await rs.versionTag(Paths.bakName);
     if (afterRemote == null) return;
+
+    // **The remote has to have actually moved.** [backup] is overridable and
+    // an override may decline to upload by *returning* rather than throwing —
+    // this app's refuses when the remote turned out to be newer than it can
+    // read, and `_inheritLegacyRemote` can leave that flag set on a path where
+    // nothing clears it. Recording a checkpoint then describes a file this
+    // device never wrote, and every later launch matches it and skips: the
+    // sync stops for good, silently, which is the one outcome worse than
+    // syncing too often.
+    //
+    // Safe when a backend answers the same tag for a real upload as well: the
+    // cycle simply is not recorded, and the next launch does it again. Getting
+    // here at all means one of the two sides had changed, so an upload that
+    // did happen wrote different bytes.
+    if (afterRemote == beforeRemote) {
+      Loggers.app.info('Sync checkpoint skipped: the remote did not change');
+      return;
+    }
     await saveSyncCheckpoint(_remoteKey(rs, afterRemote), afterLocal);
   }
 }
