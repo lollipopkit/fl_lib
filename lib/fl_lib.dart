@@ -68,11 +68,6 @@ export 'src/core/utils/responsive.dart';
 export 'src/core/utils/ui.dart';
 export 'src/core/utils/window_state.dart';
 
-// --- Backend & HTTP ---
-// HTTP client, API abstractions, and file caching
-export 'src/core/backend/api.dart';
-export 'src/core/backend/file/cached.dart';
-
 // --- Storage ---
 // Data persistence with secure storage, preferences, and database interfaces
 export 'src/core/store/iface.dart';
@@ -108,7 +103,6 @@ export 'src/provider/debug.dart';
 // Data models, business logic, error handling, and serialization
 
 export 'src/model/async_queue.dart';
-export 'src/model/backend/user.dart';
 export 'src/model/brightness_related.dart';
 export 'src/model/err.dart';
 export 'src/model/json.dart';
@@ -136,7 +130,6 @@ export 'src/view/page/intro.dart';
 export 'src/view/page/local_auth.dart';
 export 'src/view/page/scan.dart';
 export 'src/view/page/search.dart';
-export 'src/view/page/user.dart';
 
 // --- Widgets ---
 // Reusable UI components and specialized widgets
@@ -196,8 +189,6 @@ export 'src/view/widget/tile/card_tile.dart';
 export 'src/view/widget/tile/expand_tile.dart';
 export 'src/view/widget/tile/tiles.dart';
 export 'src/view/widget/toast/toast.dart';
-export 'src/view/widget/turnstile.dart';
-export 'src/view/widget/user.dart';
 export 'src/view/widget/val_builder.dart';
 export 'src/view/widget/virtual_window_frame.dart';
 

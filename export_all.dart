@@ -13,7 +13,6 @@ void main() async {
     'Core - Initialization': [],
     'Core - Extensions': [],
     'Core - Utilities': [],
-    'Core - Backend': [],
     'Core - Storage': [],
     'Core - Sync': [],
     'Core - Mixins': [],
@@ -53,8 +52,6 @@ void main() async {
         categories['Core - Extensions']!.add(exportPath);
       } else if (exportPath.startsWith('src/core/utils/')) {
         categories['Core - Utilities']!.add(exportPath);
-      } else if (exportPath.startsWith('src/core/backend/')) {
-        categories['Core - Backend']!.add(exportPath);
       } else if (exportPath.startsWith('src/core/store/')) {
         categories['Core - Storage']!.add(exportPath);
       } else if (exportPath.startsWith('src/core/sync/')) {
@@ -152,18 +149,6 @@ void _writeCoreSection(StringBuffer buffer, Map<String, List<String>> categories
     buffer.writeln('// Platform abstractions, UI helpers, crypto, localization, and common functions');
     utilities.sort();
     for (final path in utilities) {
-      buffer.writeln("export '$path';");
-    }
-    buffer.writeln('');
-  }
-
-  // Backend
-  final backend = categories['Core - Backend']!;
-  if (backend.isNotEmpty) {
-    buffer.writeln('// --- Backend & HTTP ---');
-    buffer.writeln('// HTTP client, API abstractions, and file caching');
-    backend.sort();
-    for (final path in backend) {
       buffer.writeln("export '$path';");
     }
     buffer.writeln('');
