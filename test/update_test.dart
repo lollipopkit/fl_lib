@@ -371,6 +371,9 @@ void main() {
       raw: raw,
       build: 1,
       storeUrl: 'https://apps.apple.com/app/id1586449703',
+      // The release carries a dmg and nothing else; iOS still goes to the
+      // store. A store build is needed for anything to be offered at all.
+      storeBuild: 3,
       platform: Pfs.ios,
       arch: CpuArch.arm64,
     );
@@ -533,7 +536,7 @@ void main() {
       expect(AppUpdate.releaseNotes.map((e) => e.title).toList(), ['v1.0.1491']);
     });
 
-    test('a store ahead of the tag still offers the newest tag', () {
+    test('a store ahead of the tag reports what the store serves', () {
       AppUpdate.fromGitHubReleasesStr(
         raw: raw(),
         build: 1466,
@@ -543,10 +546,16 @@ void main() {
         arch: CpuArch.arm64,
       );
 
-      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      // A version shipped to the store and never tagged. 1491 is the newest
+      // tag, but installing sends the user to the store, which serves 1500.
+      expect(AppUpdate.version, (1500, AppUpdateLevel.normal));
+      expect(AppUpdate.url, storeUrl);
+      // No tag carries 1500, so there is no name for it; the caller falls
+      // back to `v1.0.<build>`.
+      expect(AppUpdate.versionName, isNull);
     });
 
-    test('an unknown store build trusts the tag', () {
+    test('an unknown store build offers nothing', () {
       AppUpdate.fromGitHubReleasesStr(
         raw: raw(),
         build: 1480,
@@ -555,11 +564,13 @@ void main() {
         arch: CpuArch.arm64,
       );
 
-      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
-      expect(AppUpdate.url, storeUrl);
+      // The store is the only place an iOS build updates from, so a lookup
+      // that did not answer leaves nothing to compare against.
+      expect(AppUpdate.version, isNull);
+      expect(AppUpdate.url, isNull);
     });
 
-    test('a store behind every tag reports the newest and offers nothing', () {
+    test('a store behind every tag reports the store, not the tag', () {
       AppUpdate.fromGitHubReleasesStr(
         raw: raw(),
         build: 1466,
@@ -569,14 +580,17 @@ void main() {
         arch: CpuArch.arm64,
       );
 
-      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      // Both tags are ahead of what review has let through, and the store
+      // serves what is already running: no update.
+      expect(AppUpdate.version, (1466, AppUpdateLevel.nil));
       expect(AppUpdate.url, isNull);
     });
 
-    test('a marketing version scheme is ignored rather than obeyed', () {
+    test('a marketing version scheme silences the check', () {
       // `1.4.0` reads as build 0 under [_parseBuild], and `1.4.1` as build 1.
-      // Either would reject every release and mute iOS updates for good, so a
-      // store build below every known release is treated as unknown.
+      // Obeying either would report a version below every release. Treated as
+      // unknown instead, which on iOS means nothing is offered — so a store
+      // that stops using `x.y.<build>` mutes the check until it is noticed.
       for (final storeBuild in [0, 1]) {
         AppUpdate.resetForTest();
         AppUpdate.fromGitHubReleasesStr(
@@ -588,10 +602,27 @@ void main() {
           arch: CpuArch.arm64,
         );
 
-        expect(AppUpdate.version, (1491, AppUpdateLevel.normal),
-            reason: 'storeBuild $storeBuild');
-        expect(AppUpdate.url, storeUrl, reason: 'storeBuild $storeBuild');
+        expect(AppUpdate.version, isNull, reason: 'storeBuild $storeBuild');
+        expect(AppUpdate.url, isNull, reason: 'storeBuild $storeBuild');
       }
+    });
+
+    test('the newest tag below the store build names the version', () {
+      // The ordinary case: the store has caught up to a tag, so that tag's
+      // name and notes are the ones shown.
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        storeUrl: storeUrl,
+        storeBuild: 1491,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      expect(AppUpdate.version, (1491, AppUpdateLevel.normal));
+      expect(AppUpdate.versionName, 'v1.0.1491');
+      expect(AppUpdate.releaseNotes.map((e) => e.title).toList(),
+          ['v1.0.1491', 'v1.0.1480']);
     });
 
     test('the store build does not constrain macos', () {
