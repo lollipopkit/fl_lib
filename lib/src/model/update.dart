@@ -249,16 +249,51 @@ abstract final class AppUpdate {
     final target = installable ?? _getGitHubRelease();
     if (target == null) return;
 
-    _url = installable == null ? null : _getGitHubUrl(installable);
-    _version = AppUpdateVer(latest: target.build).parse(_build);
-    _versionName = target.tag;
-    _releaseNotes = _getGitHubReleaseNotes(target.build);
+    final newest = _newestBuild(target);
+    if (newest == null) return;
+
+    // Where [newest] can be had. On iOS that is the store page, which does
+    // not depend on a release carrying an asset — or on a matching release
+    // existing at all. Deriving it from one would silence the very case this
+    // is for: a store build no tag reaches down to, which happens to an
+    // install older than every release the API returned, and to a build
+    // published to the store and never tagged. [newest] is already non-null
+    // there, so the store build is known.
+    _url = switch (_platform) {
+      Pfs.ios => _githubStoreUrl,
+      _ => installable == null ? null : _getGitHubUrl(installable),
+    };
+    _version = AppUpdateVer(latest: newest).parse(_build);
+    // A store build the tags never caught up to has no name to give it; the
+    // caller falls back to `v1.0.<build>`.
+    _versionName = newest == target.build ? target.tag : null;
+    _releaseNotes = _getGitHubReleaseNotes(newest);
     _changelog = switch (_releaseNotes.length) {
       0 => null,
       1 => _releaseNotes.first.body,
       _ => _releaseNotes.map((e) => '## ${e.title}\n\n${e.body}').join('\n\n'),
     };
   }
+
+  /// What "newest" means here, or null when it cannot be said.
+  ///
+  /// Everywhere but iOS that is the newest tag: the release assets are what
+  /// gets installed, so the tag is the thing being offered. An iOS build comes
+  /// from the App Store and updates through it, and the store sits on either
+  /// side of the tag at different times — behind it while a pushed tag is in
+  /// review, ahead of it when a version ships to the store and is never
+  /// tagged. Both name a version the user cannot act on, so the store decides.
+  ///
+  /// Null when the lookup did not answer, or answered something that is not a
+  /// build number in the tags' space. iOS has no second source to fall back
+  /// to, so nothing is reported rather than a tag the store may not serve.
+  static int? _newestBuild(_GitHubRelease target) {
+    if (_platform != Pfs.ios) return target.build;
+    return _comparableStoreBuild;
+  }
+
+  /// The platform being resolved for, which tests override.
+  static Pfs get _platform => _githubPlatform ?? Pfs.type;
 
   /// The notes of every release between the installed build and [newest],
   /// newest first.
@@ -468,9 +503,10 @@ abstract final class AppUpdate {
   ///
   /// An iOS build can only have been installed from the store, so the store
   /// does not serve something older than what is running. A value below the
-  /// installed build means the two are not the same numbering. Answering null
-  /// then is deliberate — unknown trusts the tag, so a wrong guess here costs
-  /// one prompt too many rather than silence.
+  /// installed build means the two are not the same numbering, and answering
+  /// null then keeps a misread version out of the comparison entirely —
+  /// obeying it would report a version far below every release and reject
+  /// them all.
   static int? get _comparableStoreBuild {
     final storeBuild = _storeBuild;
     if (storeBuild == null) return null;
@@ -493,7 +529,7 @@ abstract final class AppUpdate {
   }
 
   static String? _getGitHubUrl(_GitHubRelease release) {
-    final platform = _githubPlatform ?? Pfs.type;
+    final platform = _platform;
     final arch = _githubArch ?? CpuArch.current;
     final assets = release.assets;
 
@@ -525,11 +561,14 @@ abstract final class AppUpdate {
         // A tag exists the moment it is pushed; the App Store build behind it
         // can still be in review for days. Offering it would send the user to
         // a store page that serves the build they are already running, on
-        // every launch, with no way to act on it. An unknown store build
-        // means the lookup failed, and one failed lookup must not mute
-        // updates for good — so that case still trusts the tag.
+        // every launch, with no way to act on it.
+        //
+        // An unknown store build offers nothing either: the store is the only
+        // place an iOS build can update from, so without knowing what it
+        // serves there is nothing to point at. That silences the check while
+        // the lookup is failing, which is the trade [_newestBuild] describes.
         final storeBuild = _comparableStoreBuild;
-        if (storeBuild != null && release.build > storeBuild) return null;
+        if (storeBuild == null || release.build > storeBuild) return null;
         return _githubStoreUrl;
       case Pfs.web || Pfs.fuchsia || Pfs.unknown:
         return null;
