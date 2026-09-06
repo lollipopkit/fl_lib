@@ -252,7 +252,17 @@ abstract final class AppUpdate {
     final newest = _newestBuild(target);
     if (newest == null) return;
 
-    _url = installable == null ? null : _getGitHubUrl(installable);
+    // Where [newest] can be had. On iOS that is the store page, which does
+    // not depend on a release carrying an asset — or on a matching release
+    // existing at all. Deriving it from one would silence the very case this
+    // is for: a store build no tag reaches down to, which happens to an
+    // install older than every release the API returned, and to a build
+    // published to the store and never tagged. [newest] is already non-null
+    // there, so the store build is known.
+    _url = switch (_platform) {
+      Pfs.ios => _githubStoreUrl,
+      _ => installable == null ? null : _getGitHubUrl(installable),
+    };
     _version = AppUpdateVer(latest: newest).parse(_build);
     // A store build the tags never caught up to has no name to give it; the
     // caller falls back to `v1.0.<build>`.
@@ -278,9 +288,12 @@ abstract final class AppUpdate {
   /// build number in the tags' space. iOS has no second source to fall back
   /// to, so nothing is reported rather than a tag the store may not serve.
   static int? _newestBuild(_GitHubRelease target) {
-    if ((_githubPlatform ?? Pfs.type) != Pfs.ios) return target.build;
+    if (_platform != Pfs.ios) return target.build;
     return _comparableStoreBuild;
   }
+
+  /// The platform being resolved for, which tests override.
+  static Pfs get _platform => _githubPlatform ?? Pfs.type;
 
   /// The notes of every release between the installed build and [newest],
   /// newest first.
@@ -516,7 +529,7 @@ abstract final class AppUpdate {
   }
 
   static String? _getGitHubUrl(_GitHubRelease release) {
-    final platform = _githubPlatform ?? Pfs.type;
+    final platform = _platform;
     final arch = _githubArch ?? CpuArch.current;
     final assets = release.assets;
 

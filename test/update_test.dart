@@ -581,9 +581,33 @@ void main() {
       );
 
       // Both tags are ahead of what review has let through, and the store
-      // serves what is already running: no update.
+      // serves what is already running: no update. The store page is still
+      // where this build came from, so it is still the url.
       expect(AppUpdate.version, (1466, AppUpdateLevel.nil));
-      expect(AppUpdate.url, isNull);
+      expect(AppUpdate.url, storeUrl);
+    });
+
+    test('a store build no tag reaches down to is still offered', () {
+      AppUpdate.fromGitHubReleasesStr(
+        raw: raw(),
+        build: 1466,
+        storeUrl: storeUrl,
+        storeBuild: 1470,
+        platform: Pfs.ios,
+        arch: CpuArch.arm64,
+      );
+
+      // 1470 is behind every tag the API returned, so no release is
+      // installable and none names it. The store still serves it and the
+      // user is still behind: deriving the url from a release would report
+      // an update with nowhere to get it, which reads as no update at all.
+      expect(AppUpdate.version, (1470, AppUpdateLevel.normal));
+      expect(AppUpdate.url, storeUrl);
+      expect(AppUpdate.versionName, isNull);
+      // No tag sits between the installed build and 1470, so there is
+      // nothing to show as notes.
+      expect(AppUpdate.releaseNotes, isEmpty);
+      expect(AppUpdate.changelog, isNull);
     });
 
     test('a marketing version scheme silences the check', () {
