@@ -245,7 +245,7 @@ extension StringImgX on String {
   /// Get the image provider from the string.
   ///
   /// - [catchErr] If true, returns a placeholder image when the image fails to load.
-  /// - [headers] is the headers of the network image. It will override the default headers ([UserApi.authHeaders]).
+  /// - [headers] is the headers of the network image.
   /// - [cache] / [headers] / [retries] / [cancelToken] only work for the network image.
   ImageProvider getImageProvider({
     bool cache = true,
@@ -257,12 +257,9 @@ extension StringImgX on String {
   }) {
     try {
       if (startsWith(httpReg)) {
-        final isLpktApi = startsWith(ApiUrls.base);
-        final headers_ = (isLpktApi ? UserApi.authHeaders : null) ?? <String, String>{};
-        if (headers != null) headers_.addAll(headers);
         return ExtendedNetworkImageProvider(
           this,
-          headers: headers_,
+          headers: headers,
           cache: cache,
           retries: retries,
           cancelToken: cancelToken,

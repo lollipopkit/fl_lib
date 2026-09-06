@@ -108,13 +108,9 @@ final class ImagePage extends StatelessWidget {
 
 Future<String> _getImgData(String url) async {
   if (url.startsWith('http')) {
-    final headers = url.startsWith(ApiUrls.base) ? UserApi.authHeaders : null;
     final resp = await myDio.get(
       url,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: headers,
-      ),
+      options: Options(responseType: ResponseType.bytes),
     );
     final data = resp.data as Uint8List;
     final path = '${Paths.temp}/gptbox_temp_${data.md5Sum}.jpg';

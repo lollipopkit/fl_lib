@@ -37,7 +37,6 @@ class MainPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final previews = [
-      _PreviewEntry('User Page', const UserPage()),
       _PreviewEntry('Debug Page', const DebugPage()),
       _PreviewEntry('Intro Page', const PreviewIntroPage()),
       _PreviewEntry('File Page', const PreviewFilePage()),
