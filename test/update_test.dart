@@ -362,14 +362,19 @@ void main() {
   test('github macos picks the signed dmg for this architecture', () {
     // What a release ships since the macOS build was split: a notarized dmg
     // per architecture, and CI's ad-hoc signed one beside each of them.
+    //
+    // Each unsigned one is listed *before* the signed one it stands next to,
+    // because the resolver takes the first asset that matches: with the signed
+    // ones first this passes whether or not unsigned dmgs are skipped at all,
+    // which is the only thing it is here to check.
     String raw() => _githubRaw([
           _release(
             tag: 'v1.0.1580',
             assets: [
-              _asset('ServerBox-1.0.1580-amd64.dmg'),
-              _asset('ServerBox-1.0.1580-arm64.dmg'),
               _asset('ServerBox_v1.0.1580_NoSign_amd64.dmg'),
+              _asset('ServerBox-1.0.1580-amd64.dmg'),
               _asset('ServerBox_v1.0.1580_NoSign_arm64.dmg'),
+              _asset('ServerBox-1.0.1580-arm64.dmg'),
             ],
           ),
         ]);
