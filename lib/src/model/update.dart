@@ -553,7 +553,18 @@ abstract final class AppUpdate {
               asset.hasArch(arch),
         )?.url;
       case Pfs.macos:
-        final dmgs = assets.where((asset) => asset.name.endsWith('.dmg'));
+        // A release carries a dmg per architecture, and next to each one the
+        // unsigned build CI publishes for inspection. Gatekeeper refuses that
+        // one, so it must never be what an update points at — and which of the
+        // two the API happens to list first is not something to rely on. A
+        // release with nothing but unsigned dmgs offers the store page
+        // instead, which is at least openable.
+        //
+        // The archless pass is for releases that predate the split, which
+        // shipped one universal dmg.
+        final dmgs = assets.where(
+          (asset) => asset.name.endsWith('.dmg') && !asset.isUnsigned,
+        );
         return _findGitHubAsset(dmgs, (asset) => asset.hasArch(arch))?.url ??
             _findGitHubAsset(dmgs, (asset) => !asset.hasAnyArch)?.url ??
             _githubStoreUrl;
@@ -737,6 +748,13 @@ final class _GitHubAsset {
   }
 
   bool get hasAnyArch => CpuArch.values.any(hasArch);
+
+  /// Whether this is an artifact that carries no usable signature.
+  ///
+  /// `fl_build` names them `_NoSign`, and a release publishes them so a build
+  /// can be looked at rather than installed: the ipa needs re-signing and the
+  /// dmg is ad-hoc signed, which Gatekeeper refuses.
+  bool get isUnsigned => name.toLowerCase().contains('nosign');
 }
 
 /// Update channels supported by the app.

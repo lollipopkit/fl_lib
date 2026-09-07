@@ -359,6 +359,61 @@ void main() {
     expect(AppUpdate.url, 'https://download/App-1.0.3-arm64.dmg');
   });
 
+  test('github macos picks the signed dmg for this architecture', () {
+    // What a release ships since the macOS build was split: a notarized dmg
+    // per architecture, and CI's ad-hoc signed one beside each of them.
+    //
+    // Each unsigned one is listed *before* the signed one it stands next to,
+    // because the resolver takes the first asset that matches: with the signed
+    // ones first this passes whether or not unsigned dmgs are skipped at all,
+    // which is the only thing it is here to check.
+    String raw() => _githubRaw([
+          _release(
+            tag: 'v1.0.1580',
+            assets: [
+              _asset('ServerBox_v1.0.1580_NoSign_amd64.dmg'),
+              _asset('ServerBox-1.0.1580-amd64.dmg'),
+              _asset('ServerBox_v1.0.1580_NoSign_arm64.dmg'),
+              _asset('ServerBox-1.0.1580-arm64.dmg'),
+            ],
+          ),
+        ]);
+
+    AppUpdate.fromGitHubReleasesStr(
+      raw: raw(),
+      build: 1574,
+      platform: Pfs.macos,
+      arch: CpuArch.arm64,
+    );
+    expect(AppUpdate.url, 'https://download/ServerBox-1.0.1580-arm64.dmg');
+
+    AppUpdate.fromGitHubReleasesStr(
+      raw: raw(),
+      build: 1574,
+      platform: Pfs.macos,
+      arch: CpuArch.amd64,
+    );
+    expect(AppUpdate.url, 'https://download/ServerBox-1.0.1580-amd64.dmg');
+  });
+
+  test('github macos never offers an unsigned dmg', () {
+    // Gatekeeper refuses it, so the store page — which at least opens — is the
+    // better answer than a download that cannot be run.
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.1580',
+          assets: [_asset('ServerBox_v1.0.1580_NoSign_arm64.dmg')],
+        ),
+      ]),
+      build: 1574,
+      storeUrl: 'https://apps.apple.com/app/id1586449703',
+      platform: Pfs.macos,
+      arch: CpuArch.arm64,
+    );
+    expect(AppUpdate.url, 'https://apps.apple.com/app/id1586449703');
+  });
+
   test('github ios always uses store url', () {
     final raw = _githubRaw([
       _release(
