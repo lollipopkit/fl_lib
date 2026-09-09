@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
+import 'lib_l10n_az.dart';
 import 'lib_l10n_de.dart';
 import 'lib_l10n_en.dart';
 import 'lib_l10n_es.dart';
@@ -106,6 +107,7 @@ abstract class LibLocalizations {
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
+    Locale('az'),
     Locale('de'),
     Locale('en'),
     Locale('es'),
@@ -1605,6 +1607,7 @@ class _LibLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
+    'az',
     'de',
     'en',
     'es',
@@ -1640,6 +1643,8 @@ LibLocalizations lookupLibLocalizations(Locale locale) {
 
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
+    case 'az':
+      return LibLocalizationsAz();
     case 'de':
       return LibLocalizationsDe();
     case 'en':

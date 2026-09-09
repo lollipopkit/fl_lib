@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:fl_lib/src/core/dio.dart';
 import 'package:fl_lib/src/core/utils/platform/arch.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 
 /// Parse and provide app update metadata from a JSON manifest.
@@ -44,6 +45,7 @@ abstract final class AppUpdate {
   static int? _storeBuild;
 
   /// Reset mutable state between tests.
+  @visibleForTesting
   static void resetForTest() {
     _chan = AppUpdateChan.stable;
     _build = 0;
