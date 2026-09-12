@@ -2,6 +2,8 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/material.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 
+export 'package:pretty_qr_code/pretty_qr_code.dart' show QrErrorCorrectLevel;
+
 final class QrView extends StatelessWidget {
   final String data;
   final int size;
@@ -14,6 +16,16 @@ final class QrView extends StatelessWidget {
 
   final ImageProvider? centerImg;
 
+  /// One of [QrErrorCorrectLevel].
+  ///
+  /// M is right for a code that will be printed, photographed or stuck on
+  /// something. [QrErrorCorrectLevel.L] is worth asking for when the payload
+  /// is long and the code is shown on a screen and read in the same room: it
+  /// takes the symbol down a version or two, and what decides whether such a
+  /// code can be read is how many camera pixels land on a module, not how much
+  /// damage the symbol can survive.
+  final int errorCorrectLevel;
+
   const QrView({
     super.key,
     required this.data,
@@ -21,6 +33,7 @@ final class QrView extends StatelessWidget {
     this.tip,
     this.tip2,
     this.centerImg,
+    this.errorCorrectLevel = QrErrorCorrectLevel.M,
   });
 
   @override
@@ -28,7 +41,7 @@ final class QrView extends StatelessWidget {
     const qrForegroundColor = Colors.black;
     final qrImg = QrImage(QrCode.fromData(
       data: data,
-      errorCorrectLevel: QrErrorCorrectLevel.M,
+      errorCorrectLevel: errorCorrectLevel,
     ));
     final qrDecoration = PrettyQrDecoration(
       background: Colors.white,
