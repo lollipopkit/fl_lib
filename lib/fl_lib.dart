@@ -175,6 +175,7 @@ export 'src/view/widget/popup_menu.dart';
 export 'src/view/widget/qr/qr.dart';
 export 'src/view/widget/qr/share_btn.dart';
 export 'src/view/widget/row.dart';
+export 'src/view/widget/segmented.dart';
 export 'src/view/widget/side_bar.dart';
 export 'src/view/widget/session_tab_bar.dart';
 export 'src/view/widget/sheet.dart';
