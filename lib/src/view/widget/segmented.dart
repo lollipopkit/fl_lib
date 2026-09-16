@@ -65,6 +65,17 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>> {
 
   void _measure() {
     if (!mounted) return;
+
+    // A selection that names no segment leaves nothing to mark. Returning
+    // early instead would keep the last rect, and the marker would go on
+    // insisting on a segment the caller has moved off. Told apart from "the
+    // segment is there but has not been laid out yet", which is every first
+    // frame and must wait rather than clear.
+    if (!widget.segments.any((segment) => segment.value == widget.selected)) {
+      if (_marker != null) setState(() => _marker = null);
+      return;
+    }
+
     final track = _trackKey.currentContext?.findRenderObject();
     final segment = _segmentKeys[widget.selected]?.currentContext
         ?.findRenderObject();
@@ -79,6 +90,13 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>> {
 
   @override
   Widget build(BuildContext context) {
+    assert(
+      widget.segments.map((segment) => segment.value).toSet().length ==
+          widget.segments.length,
+      'SegmentedTabs segments must have distinct values: the value keys the '
+      'GlobalKey the marker is measured from, so two segments sharing one put '
+      'the same key in the tree twice.',
+    );
     final scheme = Theme.of(context).colorScheme;
 
     // Measured after every build, which covers a new selection, a changed set

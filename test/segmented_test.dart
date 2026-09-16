@@ -127,4 +127,51 @@ void main() {
     expect(centers[2] - centers[1], closeTo(centers[1] - centers[0], 1));
     expect(tester.takeException(), isNull);
   });
+
+  // Keeping the last rect would leave the marker insisting on a segment the
+  // caller has moved off, which is the one thing it exists to not do.
+  testWidgets('a selection that names no segment clears the marker', (
+    tester,
+  ) async {
+    final selected = ValueNotifier('a');
+    addTearDown(selected.dispose);
+
+    await pumpTabs(tester, selected: selected);
+    await tester.pump();
+    expect(find.byKey(marker), findsOneWidget);
+
+    selected.value = 'nothing-here';
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(marker), findsNothing);
+
+    // And comes back when the selection names one again.
+    selected.value = 'b';
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(marker), findsOneWidget);
+    expect(
+      tester.getCenter(find.byKey(marker)).dx,
+      closeTo(tester.getCenter(find.text('Beta')).dx, 1),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('duplicate segment values are refused in debug', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SegmentedTabs<String>(
+            segments: const [
+              SegmentedTab(value: 'a', label: 'Alpha'),
+              SegmentedTab(value: 'a', label: 'Also alpha'),
+            ],
+            selected: 'a',
+            onSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isA<AssertionError>());
+  });
 }
