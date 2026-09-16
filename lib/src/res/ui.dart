@@ -52,11 +52,13 @@ abstract final class UIs {
 
   /// Misc
 
+  /// 18 matches the icons in an app bar, and the glyph is all that shrinks:
+  /// the padding around it is the tap target, which stays where it was.
   static const popMenuChild = Padding(
     padding: EdgeInsets.symmetric(horizontal: 5, vertical: 3),
     child: Icon(
       Icons.more_vert,
-      size: 21,
+      size: 18,
     ),
   );
 

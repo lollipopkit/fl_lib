@@ -39,7 +39,17 @@ class PopupMenu<T> extends StatelessWidget {
       tooltip: tooltip,
       borderRadius: borderRadius,
       enabled: enabled,
-      child: child,
+      // `IconButton` resolves to `onSurfaceVariant` in Material 3; an `Icon`
+      // with no colour of its own falls back to the ambient `IconTheme`,
+      // which is `onSurface` — near white on a dark theme, and louder than a
+      // row's own text. Merged rather than set, so a caller that coloured its
+      // child deliberately still wins.
+      child: IconTheme.merge(
+        data: IconThemeData(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        child: child,
+      ),
     );
   }
 }
