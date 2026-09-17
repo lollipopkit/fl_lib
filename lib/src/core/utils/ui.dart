@@ -81,7 +81,14 @@ abstract final class SystemUIs {
 
     final windowOptions = WindowOptions(
       center: position == null,
-      backgroundColor: Colors.transparent,
+      // Left alone on macOS, where the system title bar draws the window's
+      // background: `window_manager` turns a transparent color into
+      // `NSColor.clear`, and on macOS 27 a visible title bar with that
+      // background is fully see-through (alpha 0 in a rendered frame, against
+      // 1 with the default). The default, `windowBackgroundColor`, follows the
+      // system appearance, as the title text drawn on it does. With the title
+      // bar hidden the Flutter view covers that area, so nothing else shows it.
+      backgroundColor: isMacOS ? null : Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: hideTitleBar ? TitleBarStyle.hidden : null,
       minimumSize: const Size(300, 300),
