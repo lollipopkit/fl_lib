@@ -10,8 +10,13 @@ extension ThemeDataX on ThemeData {
         appBarTheme: const AppBarTheme(backgroundColor: Colors.black, scrolledUnderElevation: 0),
         dialogTheme: const DialogThemeData(backgroundColor: Colors.black),
         bottomSheetTheme: const BottomSheetThemeData(backgroundColor: bgInDark),
-        listTileTheme: const ListTileThemeData(tileColor: bgInDark),
-        cardTheme: const CardThemeData(color: bgInDark),
+        // Copied onto what the theme already carries, not replaced with. These
+        // two slots are the ones an app configures for shape — a tile's
+        // padding and height, a card's radius — and a fresh `…ThemeData`
+        // holding one colour silently drops all of it, in the AMOLED theme
+        // only, which is not where anyone looks for a metric that moved.
+        listTileTheme: listTileTheme.copyWith(tileColor: bgInDark),
+        cardTheme: cardTheme.copyWith(color: bgInDark),
         navigationBarTheme:
             const NavigationBarThemeData(backgroundColor: Colors.black),
         popupMenuTheme: const PopupMenuThemeData(color: Colors.black),

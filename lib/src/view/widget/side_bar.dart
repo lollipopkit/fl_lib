@@ -97,38 +97,56 @@ final class SideBarSection extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 14, 6),
-      child: Row(
-        children: [
-          // Allowed to give way. Its callers pass a single word — "RUNNING",
-          // "BROWSING" — but a heading in a rail this narrow that is sized to
-          // its own text takes the rule's width and then runs past the column;
-          // a longer label in another language does it in a rail that was fine
-          // in English.
-          Flexible(
-            child: Text(
-              label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: scheme.onSurfaceVariant,
+      // Measured first, because the label and the rule want opposite things
+      // and `Flexible` cannot give them both. As two flex children they split
+      // the free space evenly, so the rule was the same length under every
+      // heading and stopped halfway across the rail whatever the label said;
+      // as a bare `Text` the label takes its natural width and a longer one in
+      // another language pushes the rule out of a column that was fine in
+      // English. Held back to what is left over [_minRule], the label is its
+      // own width until there is no room for it to be, and the rule takes
+      // everything else.
+      child: LayoutBuilder(
+        builder: (_, cons) {
+          final labelMax = cons.maxWidth.isFinite
+              ? (cons.maxWidth - _gap - _minRule).clamp(0.0, cons.maxWidth)
+              : double.infinity;
+          return Row(
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: labelMax),
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Divider(
-              height: Hairline.thickness,
-              thickness: Hairline.thickness,
-              color: Hairline.color(context),
-            ),
-          ),
-        ],
+              const SizedBox(width: _gap),
+              Expanded(
+                child: Divider(
+                  height: Hairline.thickness,
+                  thickness: Hairline.thickness,
+                  color: Hairline.color(context),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
+
+  static const _gap = 8.0;
+
+  /// What the rule keeps for itself. Enough to read as a rule rather than as
+  /// a mark after the label.
+  static const _minRule = 24.0;
 }
 
 /// One entry in a side rail.

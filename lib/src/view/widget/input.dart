@@ -93,33 +93,61 @@ class _InputState extends State<Input> {
 
   @override
   Widget build(BuildContext context) {
-    final icon = widget.icon.nullOr((i) => Icon(i).paddingOnly(left: 5));
-    final child = _buildField(icon);
+    final icon = widget.icon;
+    // Laid out here rather than handed to `InputDecoration.icon`, which puts a
+    // hard-coded 16 between the icon and the field and takes no say in it. A
+    // `ListTile` leaves `horizontalTitleGap` — 13 — so the two stacked in one
+    // form had their icons on one line and their text on another.
+    final child = icon == null
+        ? _buildField()
+        : Row(
+            children: [
+              Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 13),
+              Expanded(child: _buildField()),
+            ],
+          );
 
     if (widget.noWrap) return child;
 
     return CardX(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
         child: child,
       ),
     );
   }
 
-  Widget _buildField(Widget? icon) {
+  Widget _buildField() {
     return _obscureText.listenVal((obscureText) {
       return TextField(
         controller: widget.controller,
         maxLines: widget.maxLines,
         minLines: widget.minLines,
         obscureText: obscureText,
+        // What is typed here is a value of a form row, the same thing a tile's
+        // title is, and Material's 16 made every field outweigh the tiles
+        // stacked against it.
+        style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: widget.hint,
           labelText: widget.label,
           errorText: widget.errorText,
           border: InputBorder.none,
-          icon: icon,
           suffixIcon: _buildSuffix(obscureText),
+          // Material sizes a field to be picked out of a page of prose. These
+          // are rows of a form, each already inside a card of its own and
+          // stacked against tiles that are 44 high, and at the default the
+          // label and the value sat in the middle of a box half again as tall
+          // as either of its neighbours.
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 7),
+          // Sitting in the field, the label is the value's size, because that
+          // is the slot it is standing in for. Risen, it is a caption over the
+          // value — set outright rather than left to the 0.75 the float
+          // applies, which off 13 would land at 9.75.
+          labelStyle: const TextStyle(fontSize: 14),
+          floatingLabelStyle: const TextStyle(fontSize: 12),
         ),
         keyboardType: widget.type,
         textInputAction: widget.action,
@@ -145,6 +173,11 @@ class _InputState extends State<Input> {
     if (!widget.obscureText) return null;
 
     return IconButton(
+      // An `IconButton` is 48 square at its smallest, which is taller than the
+      // field it sits in — so a password field was the one row on the page
+      // whose height came from its button rather than its content. Compact is
+      // 40, still a target worth aiming at.
+      visualDensity: VisualDensity.compact,
       icon: Icon(obscureText ? Icons.visibility : Icons.visibility_off),
       onPressed: () {
         _obscureText.value = !obscureText;

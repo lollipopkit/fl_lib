@@ -36,13 +36,22 @@ final class TipText extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, cons) {
         final width = cons.maxWidth;
+        // Unbounded when this is a row's non-flexible child — a tile's title
+        // beside a trailing widget, say. There is no width to fill or to hold
+        // the text back to, so the row is just as wide as what is in it;
+        // taking `width` on faith made `SizedBox` and `ConstrainedBox` both
+        // infinite and the layout threw.
+        final bounded = width.isFinite;
         final row = Row(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: width - 13 - 23),
-                child: textWidget),
+            if (bounded)
+              ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width - 13 - 23),
+                  child: textWidget)
+            else
+              textWidget,
             UIs.width13,
             InkWell(
               borderRadius: BorderRadius.circular(20),
@@ -63,7 +72,7 @@ final class TipText extends StatelessWidget {
             ),
           ],
         );
-        return SizedBox(width: width, child: row);
+        return bounded ? SizedBox(width: width, child: row) : row;
       },
     );
   }
@@ -93,8 +102,13 @@ class TwoLineText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      // The two lines are a name and what it belongs to, and they are never
+      // the same width. Centred, neither edge lines up with the other or with
+      // anything else on the bar; on the left they share one edge, which is
+      // also the edge the bar's own title sits on.
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           up,

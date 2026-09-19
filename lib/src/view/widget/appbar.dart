@@ -10,7 +10,12 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     super.key,
     this.title,
     this.actions,
-    this.centerTitle = true,
+    // Left, which is where a title that is more than one line has to be
+    // anyway: a centred `Column` puts a name over a subtitle of a different
+    // width and lines up neither of their edges with anything else on the bar.
+    // Null would hand the answer to the platform, and the platform's answer
+    // differs between iOS and Android for the same page.
+    this.centerTitle = false,
     this.leading,
     this.backgroundColor,
     this.bottom,

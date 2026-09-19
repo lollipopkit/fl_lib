@@ -38,7 +38,7 @@ class _StoreSwitchState extends State<StoreSwitch> {
       listenable: widget.prop.listenable(),
       builder: (value) {
         if (isBusy) return SizedLoading.medium.paddingOnly(right: 17);
-        return Switch(value: value, onChanged: _handleChange);
+        return SwitchX(value: value, onChanged: _handleChange);
       },
     );
   }
