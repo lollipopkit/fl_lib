@@ -23,6 +23,7 @@ class ExpandableTile extends StatefulWidget {
     this.leading,
     this.summary,
     this.initiallyExpanded = false,
+    this.maintainState = false,
     this.expandedColor,
     this.padding = const EdgeInsets.all(13),
     this.onExpansionChanged,
@@ -44,6 +45,18 @@ class ExpandableTile extends StatefulWidget {
   final List<Widget> children;
 
   final bool initiallyExpanded;
+
+  /// Whether [children] are built while the group is closed.
+  ///
+  /// False, as `ExpansionTile`'s is, and for the same reason: a group is
+  /// closed most of the time, and building what is inside it costs whatever
+  /// its rows cost to build — a provider watched, a store read, a request
+  /// made. A form of six of these built all six on the way to showing none.
+  ///
+  /// Nothing that belongs to the page is lost by it. A field's text lives in
+  /// the controller the page holds, not in the widget, so a group folded
+  /// mid-edit comes back with what was typed in it.
+  final bool maintainState;
 
   /// The header's background **while it is open**, closed being the card
   /// colour like every other row.
@@ -95,11 +108,10 @@ class _ExpandableTileState extends State<ExpandableTile>
   /// is gone. Driven by [_expanded] instead, the header would go back to
   /// looking like an ordinary row with rows still visible under it.
   ///
-  /// It is also what takes the children out of the tree's reach. They stay in
-  /// it either way, so a half-typed field survives a fold, but while they are
-  /// not on screen they are kept away from focus traversal and the ticker, or
-  /// a tab lands in a text field nobody can see. This is what `ExpansionTile`
-  /// does and the reason it does it.
+  /// It is also what drops the children, or — under [maintainState] — merely
+  /// takes them out of the tree's reach: off screen they are kept away from
+  /// focus traversal and the ticker, or a tab lands in a text field nobody can
+  /// see. This is what `ExpansionTile` does and the reason it does it.
   bool get _closed => !_expanded && _ctrl.isDismissed;
 
   @override
@@ -128,23 +140,27 @@ class _ExpandableTileState extends State<ExpandableTile>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildHeader(context),
-        Offstage(
-          offstage: _closed,
-          child: TickerMode(
-            enabled: !_closed,
-            child: SizeTransition(
-              sizeFactor: _curve,
-              // Anchored to the top, so the rows unroll downwards from under
-              // the header instead of growing out of their own middle.
-              alignment: Alignment.topCenter,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: widget.children,
+        // Not built at all while closed, unless asked to be. `Offstage` alone
+        // would still build them — it only declines to paint what it is given.
+        if (!_closed || widget.maintainState)
+          Offstage(
+            offstage: _closed,
+            child: TickerMode(
+              enabled: !_closed,
+              child: SizeTransition(
+                sizeFactor: _curve,
+                // Anchored to the top, so the rows unroll downwards from
+                // under the header instead of growing out of their own
+                // middle.
+                alignment: Alignment.topCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: widget.children,
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
