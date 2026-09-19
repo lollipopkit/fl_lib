@@ -445,7 +445,7 @@ $content
       case _ImportFrom.clipboard:
         final text = await Pfs.paste();
         if (text == null) return null;
-        return Uint8List.fromList(text.codeUnits);
+        return utf8.encode(text);
     }
   }
 
