@@ -21,11 +21,7 @@ void main() {
             onTap: onTap ?? (_) {},
             onClose: onClose ?? (_) {},
             actions: actions,
-            targets:
-                targets ??
-                const [
-                  SideBarTile(title: 'prod-1'),
-                ],
+            targets: targets ?? const [SideBarTile(title: 'prod-1')],
           ),
         ),
       ),
@@ -53,9 +49,7 @@ void main() {
   });
 
   testWidgets('a running entry is marked and a target is not', (tester) async {
-    await tester.pumpWidget(
-      harness(names: const ['add', 'alpine'], index: 1),
-    );
+    await tester.pumpWidget(harness(names: const ['add', 'alpine'], index: 1));
 
     final running = tester.widget<SideBarTile>(
       find.widgetWithText(SideBarTile, 'alpine'),
@@ -80,17 +74,13 @@ void main() {
 
     expect(
       tester
-          .widget<SideBarTile>(
-            find.widgetWithText(SideBarTile, 'alpine'),
-          )
+          .widget<SideBarTile>(find.widgetWithText(SideBarTile, 'alpine'))
           .selected,
       isFalse,
     );
     expect(
       tester
-          .widget<SideBarTile>(
-            find.widgetWithText(SideBarTile, 'alpine(1)'),
-          )
+          .widget<SideBarTile>(find.widgetWithText(SideBarTile, 'alpine(1)'))
           .selected,
       isTrue,
     );
@@ -125,9 +115,7 @@ void main() {
   });
 
   testWidgets('only a running entry can be closed', (tester) async {
-    await tester.pumpWidget(
-      harness(names: const ['add', 'alpine'], index: 1),
-    );
+    await tester.pumpWidget(harness(names: const ['add', 'alpine'], index: 1));
 
     expect(
       find.descendant(
@@ -145,9 +133,7 @@ void main() {
     );
   });
 
-  testWidgets('no actions means no room spent on an empty row', (
-    tester,
-  ) async {
+  testWidgets('no actions means no room spent on an empty row', (tester) async {
     await tester.pumpWidget(harness(names: const ['add']));
     final without = tester.getTopLeft(find.text('prod-1')).dy;
 
@@ -158,6 +144,38 @@ void main() {
       ),
     );
     expect(tester.getTopLeft(find.text('prod-1')).dy, greaterThan(without));
+  });
+
+  testWidgets('actions center when they fit and scroll when they do not', (
+    tester,
+  ) async {
+    Widget page(double width, int count) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: width,
+          child: SideBarActions(
+            actions: [
+              for (var i = 0; i < count; i++)
+                IconButton(
+                  key: ValueKey('action-$i'),
+                  icon: const Icon(Icons.add),
+                  onPressed: () {},
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(page(320, 1));
+    final rail = tester.getRect(find.byType(SideBarActions));
+    final action = tester.getRect(find.byKey(const ValueKey('action-0')));
+    expect(action.center.dx, closeTo(rail.center.dx, 0.1));
+
+    await tester.pumpWidget(page(120, 4));
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    expect(scrollable.position.maxScrollExtent, greaterThan(0));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a heading longer than the rail elides instead of running past', (
@@ -193,9 +211,7 @@ void main() {
     // a row with a close button measured 58pt against 35pt without one, and
     // the name of a target grew by two thirds the moment a session opened
     // behind it and moved it into the running section.
-    await tester.pumpWidget(
-      harness(names: const ['add', 'alpine'], index: 1),
-    );
+    await tester.pumpWidget(harness(names: const ['add', 'alpine'], index: 1));
 
     final running = tester
         .getSize(find.widgetWithText(SideBarTile, 'alpine'))
