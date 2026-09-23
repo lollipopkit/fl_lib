@@ -19,6 +19,9 @@ enum BtnType {
   /// Row( Icon, Text ) or Row( Text, Icon ) based on LTR or RTL
   row,
 
+  /// A row sized and shaped like a card tile.
+  tile,
+
   /// Text only
   text,
 
@@ -30,7 +33,6 @@ enum BtnType {
 
   /// [ElevatedButton]
   elevated,
-  ;
 }
 
 /// Just a placeholder for the default onTap.
@@ -124,13 +126,13 @@ final class Btn extends StatelessWidget {
     this.textStyle,
     this.padding,
     this.onLongTap,
-  })  : type = BtnType.text,
-        gap = null,
-        mainAxisAlignment = null,
-        mainAxisSize = null,
-        borderRadius = null,
-        popVal = null,
-        icon = null;
+  }) : type = BtnType.text,
+       gap = null,
+       mainAxisAlignment = null,
+       mainAxisSize = null,
+       borderRadius = null,
+       popVal = null,
+       icon = null;
 
   /// IconButton
   const Btn.icon({
@@ -140,13 +142,13 @@ final class Btn extends StatelessWidget {
     this.onTap = _defaultOnTap,
     this.padding = _kPadding,
     this.onLongTap,
-  })  : type = BtnType.icon,
-        gap = null,
-        mainAxisAlignment = null,
-        mainAxisSize = null,
-        borderRadius = null,
-        popVal = null,
-        textStyle = null;
+  }) : type = BtnType.icon,
+       gap = null,
+       mainAxisAlignment = null,
+       mainAxisSize = null,
+       borderRadius = null,
+       popVal = null,
+       textStyle = null;
 
   /// Column( Icon, Text )
   const Btn.column({
@@ -159,10 +161,10 @@ final class Btn extends StatelessWidget {
     this.padding = _kPadding,
     this.mainAxisAlignment,
     this.mainAxisSize,
-    this.borderRadius = _kBorderRadius,
+    this.borderRadius,
     this.onLongTap,
-  })  : type = BtnType.column,
-        popVal = null;
+  }) : type = BtnType.column,
+       popVal = null;
 
   /// Row( Icon, Text ) or Row( Text, Icon ) based on LTR or RTL
   const Btn.row({
@@ -175,10 +177,10 @@ final class Btn extends StatelessWidget {
     this.padding = _kPadding,
     this.mainAxisAlignment,
     this.mainAxisSize,
-    this.borderRadius = _kBorderRadius,
+    this.borderRadius,
     this.onLongTap,
-  })  : type = BtnType.row,
-        popVal = null;
+  }) : type = BtnType.row,
+       popVal = null;
 
   /// Row( Icon, Text ) or Row( Text, Icon ) based on LTR or RTL
   const Btn.tile({
@@ -191,10 +193,10 @@ final class Btn extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(vertical: 13, horizontal: 20),
     this.mainAxisAlignment,
     this.mainAxisSize,
-    this.borderRadius = const BorderRadius.all(Radius.circular(13)),
+    this.borderRadius,
     this.onLongTap,
-  })  : type = BtnType.row,
-        popVal = null;
+  }) : type = BtnType.tile,
+       popVal = null;
 
   const Btn.elevated({
     super.key,
@@ -206,10 +208,10 @@ final class Btn extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(vertical: 13, horizontal: 20),
     this.mainAxisAlignment,
     this.mainAxisSize,
-    this.borderRadius = const BorderRadius.all(Radius.circular(13)),
+    this.borderRadius,
     this.onLongTap,
-  })  : type = BtnType.elevated,
-        popVal = null;
+  }) : type = BtnType.elevated,
+       popVal = null;
 
   /// {@template btn_ok_pop}
   /// It will pop `true` if [onTap] is null.
@@ -219,16 +221,16 @@ final class Btn extends StatelessWidget {
     this.onTap = _defaultOnTap,
     bool red = false,
     this.onLongTap,
-  })  : text = l10n.ok,
-        icon = null,
-        type = BtnType.text,
-        gap = null,
-        padding = null,
-        mainAxisAlignment = null,
-        mainAxisSize = null,
-        borderRadius = null,
-        popVal = true,
-        textStyle = red ? UIs.textRed : null;
+  }) : text = l10n.ok,
+       icon = null,
+       type = BtnType.text,
+       gap = null,
+       padding = null,
+       mainAxisAlignment = null,
+       mainAxisSize = null,
+       borderRadius = null,
+       popVal = true,
+       textStyle = red ? UIs.textRed : null;
 
   /// {@template btn_cancel_pop}
   /// It pops nothing — a null result — if [onTap] is null.
@@ -239,33 +241,29 @@ final class Btn extends StatelessWidget {
   /// did nothing. Null is the one result every `T` accepts, and a caller
   /// asking whether something was confirmed reads `== true` either way.
   /// {@endtemplate}
-  Btn.cancel({
-    super.key,
-    this.onTap = _defaultOnTap,
-    this.onLongTap,
-  })  : text = l10n.cancel,
-        icon = null,
-        type = BtnType.text,
-        gap = null,
-        padding = null,
-        mainAxisAlignment = null,
-        mainAxisSize = null,
-        borderRadius = null,
-        popVal = null,
-        textStyle = null;
+  Btn.cancel({super.key, this.onTap = _defaultOnTap, this.onLongTap})
+    : text = l10n.cancel,
+      icon = null,
+      type = BtnType.text,
+      gap = null,
+      padding = null,
+      mainAxisAlignment = null,
+      mainAxisSize = null,
+      borderRadius = null,
+      popVal = null,
+      textStyle = null;
 
   /// Right-click reaches [onLongTap], for the same reason every other tile
   /// does — see `WidgetSecondaryX`. Wrapped once here rather than in each of
   /// the six shapes below, which all carry the same callback.
   @override
   Widget build(BuildContext context) => switch (type) {
-        BtnType.text => _text(context),
-        BtnType.icon => _icon(context),
-        BtnType.column => _column(context),
-        BtnType.row => _row(context),
-        BtnType.elevated => _elevated(context),
-      }
-          .onSecondary(asSecondary(onLongTap));
+    BtnType.text => _text(context),
+    BtnType.icon => _icon(context),
+    BtnType.column => _column(context),
+    BtnType.row || BtnType.tile => _row(context),
+    BtnType.elevated => _elevated(context),
+  }.onSecondary(asSecondary(onLongTap));
 
   VoidCallback? _resolveOnTap(BuildContext c) {
     if (onTap == _defaultOnTap) {
@@ -290,6 +288,20 @@ final class Btn extends StatelessWidget {
           : null,
       child: Text(text, style: textStyle),
     );
+  }
+
+  BorderRadius _resolvedRadius(BuildContext context) {
+    if (borderRadius case final radius?) return radius;
+    final themedShape = type == BtnType.tile
+        ? Theme.of(context).cardTheme.shape
+        : Theme.of(context).elevatedButtonTheme.style?.shape?.resolve({});
+    if (themedShape is RoundedRectangleBorder &&
+        themedShape.borderRadius is BorderRadius) {
+      return themedShape.borderRadius as BorderRadius;
+    }
+    return type == BtnType.tile
+        ? const BorderRadius.all(Radius.circular(13))
+        : _kBorderRadius;
   }
 
   Widget _icon(BuildContext context) {
@@ -317,7 +329,7 @@ final class Btn extends StatelessWidget {
     );
     if (padding != null) child = Padding(padding: padding!, child: child);
     return InkWell(
-      borderRadius: borderRadius ?? _kBorderRadius,
+      borderRadius: _resolvedRadius(context),
       onTap: _resolveOnTap(context),
       onLongPress: onLongTap,
       child: child,
@@ -340,7 +352,7 @@ final class Btn extends StatelessWidget {
       child = Padding(padding: padding!, child: child);
     }
     return InkWell(
-      borderRadius: borderRadius ?? _kBorderRadius,
+      borderRadius: _resolvedRadius(context),
       onTap: _resolveOnTap(context),
       onLongPress: onLongTap,
       child: child,
@@ -367,7 +379,7 @@ final class Btn extends StatelessWidget {
       child = Padding(padding: padding!, child: child);
     }
     return InkWell(
-      borderRadius: borderRadius ?? _kBorderRadius,
+      borderRadius: _resolvedRadius(context),
       onTap: _resolveOnTap(context),
       onLongPress: onLongTap,
       child: child,
@@ -379,7 +391,7 @@ final class Btn extends StatelessWidget {
     final btnStyle = ButtonStyle(
       padding: WidgetStateProperty.all(padding),
       shape: WidgetStateProperty.all(
-        RoundedRectangleBorder(borderRadius: borderRadius ?? _kBorderRadius),
+        RoundedRectangleBorder(borderRadius: _resolvedRadius(context)),
       ),
     );
     final text_ = Text(text, style: textStyle);

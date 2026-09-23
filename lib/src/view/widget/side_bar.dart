@@ -226,6 +226,12 @@ final class SideBarTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tileShape = Theme.of(context).listTileTheme.shape;
+    final tileRadius =
+        tileShape is RoundedRectangleBorder &&
+            tileShape.borderRadius is BorderRadius
+        ? tileShape.borderRadius as BorderRadius
+        : _kTileRadius;
     // Right-click reaches whatever the long press does — see
     // `WidgetSecondaryX`, which is where the reasoning lives. A menu is the
     // exception: it wants the pointer's position, which `asSecondary` drops.
@@ -242,7 +248,7 @@ final class SideBarTile extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: _kTileRadius,
+          borderRadius: tileRadius,
           onTap: onTap,
           onLongPress: onHold,
           child: AnimatedContainer(
@@ -251,7 +257,7 @@ final class SideBarTile extends StatelessWidget {
                 : Durations.short3,
             curve: Curves.easeOut,
             decoration: BoxDecoration(
-              borderRadius: _kTileRadius,
+              borderRadius: tileRadius,
               color: selected
                   // Soft, because this marks where you are and not what you
                   // just picked out of a list.
@@ -433,11 +439,11 @@ class SideBarActions extends StatelessWidget {
     );
 
     return SizedBox(
-        height: height,
-        child: switch (search) {
-          final search? => InlineSearchBar(controller: search, child: row),
-          null => row,
-        },
-      );
+      height: height,
+      child: switch (search) {
+        final search? => InlineSearchBar(controller: search, child: row),
+        null => row,
+      },
+    );
   }
 }

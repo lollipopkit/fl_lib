@@ -13,7 +13,7 @@ class CardX extends StatelessWidget {
   final Color? color;
 
   /// The border radius of the card.
-  /// If null, uses [borderRadius] (13px circular radius).
+  /// If null, uses the theme's card shape, then [borderRadius].
   final BorderRadius? radius;
 
   /// The clip behavior of the card.
@@ -45,20 +45,26 @@ class CardX extends StatelessWidget {
   @override
   String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return switch (minLevel) {
-      DiagnosticLevel.debug => 'CardX(child: $child, color: $color, radius: $radius)',
+      DiagnosticLevel.debug =>
+        'CardX(child: $child, color: $color, radius: $radius)',
       _ => 'CardX(${child.runtimeType})',
     };
   }
 
   @override
   Widget build(BuildContext context) {
+    final themedShape = Theme.of(context).cardTheme.shape;
     return Card(
       key: key,
       clipBehavior: clipBehavior,
       color: color,
       margin: margin,
       shape: RoundedRectangleBorder(
-        borderRadius: radius ?? borderRadius,
+        borderRadius:
+            radius ??
+            (themedShape is RoundedRectangleBorder
+                ? themedShape.borderRadius
+                : borderRadius),
       ),
       elevation: 0,
       child: child,

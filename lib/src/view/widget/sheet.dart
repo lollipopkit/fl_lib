@@ -1,4 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Text editors retain their own caret-navigation shortcuts.
+class _RowTraversalActivator extends SingleActivator {
+  const _RowTraversalActivator(super.trigger);
+
+  @override
+  bool accepts(KeyEvent event, HardwareKeyboard state) {
+    final editor = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<EditableText>();
+    return editor == null && super.accepts(event, state);
+  }
+}
 
 /// A sheet that is a short list of things to pick from.
 ///
@@ -42,23 +55,32 @@ class SheetChoiceTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.icon,
+    this.onFocusChange,
+    this.autofocus = false,
   });
 
   final String title;
   final bool selected;
   final VoidCallback onTap;
   final IconData? icon;
+  final ValueChanged<bool>? onFocusChange;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return ListTile(
-      selected: selected,
-      leading: icon == null ? null : Icon(icon),
-      title: Text(title),
-      trailing: selected ? Icon(Icons.check, color: scheme.primary) : null,
-      onTap: onTap,
+    return Focus(
+      canRequestFocus: false,
+      onFocusChange: onFocusChange,
+      child: ListTile(
+        autofocus: autofocus,
+        selected: selected,
+        leading: icon == null ? null : Icon(icon),
+        title: Text(title),
+        trailing: selected ? Icon(Icons.check, color: scheme.primary) : null,
+        onTap: onTap,
+      ),
     );
   }
 }
@@ -77,37 +99,54 @@ class RowsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return SafeArea(
-      // The sheet's own top is against the barrier, not against a status bar.
-      top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 10),
-            width: _handleSize.width,
-            height: _handleSize.height,
-            decoration: BoxDecoration(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(_handleSize.height / 2),
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        _RowTraversalActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
+        _RowTraversalActivator(LogicalKeyboardKey.arrowUp):
+            PreviousFocusIntent(),
+      },
+      child: FocusTraversalGroup(
+        policy: WidgetOrderTraversalPolicy(),
+        child: FocusScope(
+          autofocus: true,
+          child: SafeArea(
+            // The sheet's own top is against the barrier, not against a status bar.
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 10),
+                  width: _handleSize.width,
+                  height: _handleSize.height,
+                  decoration: BoxDecoration(
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(_handleSize.height / 2),
+                  ),
+                ),
+                Flexible(
+                  // Compact rather than dense: `dense` shrinks the text as well, and
+                  // these rows are read, not scanned. What is being taken out is the
+                  // room around a row, which is what there is too much of when the
+                  // whole sheet is four of them.
+                  child: ListTileTheme.merge(
+                    visualDensity: VisualDensity.compact,
+                    minVerticalPadding: 4,
+                    // Build all rows so focus traversal can reach offscreen choices.
+                    // The traversal policy scrolls the newly focused row into view.
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: children,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Flexible(
-            // Compact rather than dense: `dense` shrinks the text as well, and
-            // these rows are read, not scanned. What is being taken out is the
-            // room around a row, which is what there is too much of when the
-            // whole sheet is four of them.
-            child: ListTileTheme.merge(
-              visualDensity: VisualDensity.compact,
-              minVerticalPadding: 4,
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 8),
-                children: children,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
