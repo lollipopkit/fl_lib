@@ -226,7 +226,7 @@ final class SideBarTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tileShape = Theme.of(context).listTileTheme.shape;
+    final tileShape = ListTileTheme.of(context).shape;
     final tileRadius =
         tileShape is RoundedRectangleBorder &&
             tileShape.borderRadius is BorderRadius

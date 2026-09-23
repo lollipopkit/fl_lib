@@ -290,11 +290,14 @@ final class Btn extends StatelessWidget {
     );
   }
 
-  BorderRadius _resolvedRadius(BuildContext context) {
+  BorderRadius _resolvedRadius(
+    BuildContext context, [
+    Set<WidgetState> states = const {},
+  ]) {
     if (borderRadius case final radius?) return radius;
     final themedShape = type == BtnType.tile
-        ? Theme.of(context).cardTheme.shape
-        : Theme.of(context).elevatedButtonTheme.style?.shape?.resolve({});
+        ? CardTheme.of(context).shape
+        : ElevatedButtonTheme.of(context).style?.shape?.resolve(states);
     if (themedShape is RoundedRectangleBorder &&
         themedShape.borderRadius is BorderRadius) {
       return themedShape.borderRadius as BorderRadius;
@@ -390,8 +393,10 @@ final class Btn extends StatelessWidget {
     final isRTL = Directionality.of(context) == TextDirection.rtl;
     final btnStyle = ButtonStyle(
       padding: WidgetStateProperty.all(padding),
-      shape: WidgetStateProperty.all(
-        RoundedRectangleBorder(borderRadius: _resolvedRadius(context)),
+      shape: WidgetStateProperty.resolveWith(
+        (states) => RoundedRectangleBorder(
+          borderRadius: _resolvedRadius(context, states),
+        ),
       ),
     );
     final text_ = Text(text, style: textStyle);

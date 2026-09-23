@@ -53,7 +53,7 @@ class CardX extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themedShape = Theme.of(context).cardTheme.shape;
+    final themedShape = CardTheme.of(context).shape;
     return Card(
       key: key,
       clipBehavior: clipBehavior,
