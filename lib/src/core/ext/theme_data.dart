@@ -6,9 +6,9 @@ extension ThemeDataX on ThemeData {
 
   ThemeData get toAmoled => copyWith(
         scaffoldBackgroundColor: Colors.black,
-        drawerTheme: const DrawerThemeData(backgroundColor: Colors.black),
-        appBarTheme: const AppBarTheme(backgroundColor: Colors.black, scrolledUnderElevation: 0),
-        dialogTheme: const DialogThemeData(backgroundColor: Colors.black),
+        drawerTheme: drawerTheme.copyWith(backgroundColor: Colors.black),
+        appBarTheme: appBarTheme.copyWith(backgroundColor: Colors.black, scrolledUnderElevation: 0),
+        dialogTheme: dialogTheme.copyWith(backgroundColor: Colors.black),
         // Opaque, where a card and a tile are not: those sit on the black
         // scaffold, so [bgInDark] composites to black. A sheet sits over the
         // page it was raised from, and at a quarter alpha that page read
@@ -24,12 +24,12 @@ extension ThemeDataX on ThemeData {
         listTileTheme: listTileTheme.copyWith(tileColor: bgInDark),
         cardTheme: cardTheme.copyWith(color: bgInDark),
         navigationBarTheme:
-            const NavigationBarThemeData(backgroundColor: Colors.black),
-        popupMenuTheme: const PopupMenuThemeData(color: Colors.black),
-        navigationRailTheme: const NavigationRailThemeData(
+            navigationBarTheme.copyWith(backgroundColor: Colors.black),
+        popupMenuTheme: popupMenuTheme.copyWith(color: Colors.black),
+        navigationRailTheme: navigationRailTheme.copyWith(
           backgroundColor: Colors.black,
-          selectedIconTheme: IconThemeData(color: Colors.white),
-          unselectedIconTheme: IconThemeData(color: Colors.white70),
+          selectedIconTheme: const IconThemeData(color: Colors.white),
+          unselectedIconTheme: const IconThemeData(color: Colors.white70),
         ),
       );
 }

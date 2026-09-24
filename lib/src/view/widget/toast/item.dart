@@ -365,10 +365,14 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     if (available <= 0) return false;
 
     final painter = TextPainter(
-      text: TextSpan(text: data.title, style: _titleStyle),
+      text: TextSpan(
+        text: data.title,
+        style: Theme.of(context).textTheme.bodyMedium!.merge(_titleStyle),
+      ),
       maxLines: 1,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
     )..layout(maxWidth: available);
     final exceeded = painter.didExceedMaxLines;
     painter.dispose();
