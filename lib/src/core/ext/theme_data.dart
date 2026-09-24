@@ -28,8 +28,15 @@ extension ThemeDataX on ThemeData {
         popupMenuTheme: popupMenuTheme.copyWith(color: Colors.black),
         navigationRailTheme: navigationRailTheme.copyWith(
           backgroundColor: Colors.black,
-          selectedIconTheme: const IconThemeData(color: Colors.white),
-          unselectedIconTheme: const IconThemeData(color: Colors.white70),
+          // The icons are copied onto as well, for the reason `listTileTheme`
+          // and `cardTheme` are above: a fresh `IconThemeData` holding one
+          // colour drops the size the app set for the rail.
+          selectedIconTheme:
+              (navigationRailTheme.selectedIconTheme ?? const IconThemeData())
+                  .copyWith(color: Colors.white),
+          unselectedIconTheme:
+              (navigationRailTheme.unselectedIconTheme ?? const IconThemeData())
+                  .copyWith(color: Colors.white70),
         ),
       );
 }

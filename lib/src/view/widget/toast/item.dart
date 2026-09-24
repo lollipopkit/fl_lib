@@ -348,6 +348,35 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   /// Whether a body can be opened at all right now.
   bool get _canOpenBody => _expandable && widget.bodyAllowed;
 
+  /// The style the title is both measured and painted with.
+  ///
+  /// Taken from `bodyMedium`, which is what the card's own [Material] hands
+  /// down to everything inside it. `Material` *replaces* the ambient default
+  /// text style rather than merging with it, so the style above the toast host
+  /// — the app's, if it set one — is not what the title is painted with, and
+  /// measuring it there is measuring a different string than the one on screen.
+  ///
+  /// The `MediaQuery` overrides are then applied by hand, because `Text` applies
+  /// them at paint time on top of the style it was given — bold text, letter
+  /// spacing, word spacing, line height. A painter that skips them measures a
+  /// title the platform then bolds or widens, and the arrow below appears or
+  /// stays away on the wrong side of the boundary. `Text` applies each of them
+  /// again; they are replacements rather than factors, so it lands on the same
+  /// value.
+  TextStyle _resolveTitleStyle(BuildContext context) {
+    final base = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+        .merge(_titleStyle);
+    return base.copyWith(
+      height:
+          MediaQuery.maybeLineHeightScaleFactorOverrideOf(context) ?? base.height,
+      letterSpacing:
+          MediaQuery.maybeLetterSpacingOverrideOf(context) ?? base.letterSpacing,
+      wordSpacing:
+          MediaQuery.maybeWordSpacingOverrideOf(context) ?? base.wordSpacing,
+      fontWeight: MediaQuery.boldTextOf(context) ? FontWeight.bold : base.fontWeight,
+    );
+  }
+
   /// Whether there is anything to reveal.
   ///
   /// A body, or a title too long for one line: `Toast.show('$e')` has nowhere
@@ -367,7 +396,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     final painter = TextPainter(
       text: TextSpan(
         text: data.title,
-        style: Theme.of(context).textTheme.bodyMedium!.merge(_titleStyle),
+        style: _resolveTitleStyle(context),
       ),
       maxLines: 1,
       textDirection: Directionality.of(context),
@@ -628,7 +657,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
                 children: [
                   Text(
                     data.title,
-                    style: _titleStyle,
+                    style: _resolveTitleStyle(context),
                     maxLines: _isExpanded ? null : 1,
                     overflow: _isExpanded ? TextOverflow.clip : TextOverflow.ellipsis,
                   ),
