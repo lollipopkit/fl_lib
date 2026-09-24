@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// A customizable card widget with rounded corners and no elevation.
+/// A customizable card widget with rounded corners and theme-controlled elevation.
 ///
 /// This widget wraps a [Card] with consistent styling including
 /// clipping and customizable border radius and color.
@@ -53,20 +53,23 @@ class CardX extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themedShape = CardTheme.of(context).shape;
+    final theme = CardTheme.of(context);
+    final themedShape = theme.shape;
     return Card(
       key: key,
       clipBehavior: clipBehavior,
       color: color,
       margin: margin,
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            radius ??
-            (themedShape is RoundedRectangleBorder
-                ? themedShape.borderRadius
-                : borderRadius),
-      ),
-      elevation: 0,
+      shape: radius == null
+          ? themedShape ??
+                const RoundedRectangleBorder(borderRadius: borderRadius)
+          : RoundedRectangleBorder(
+              borderRadius: radius!,
+              side: themedShape is OutlinedBorder
+                  ? themedShape.side
+                  : BorderSide.none,
+            ),
+      elevation: theme.elevation ?? 0,
       child: child,
     );
   }

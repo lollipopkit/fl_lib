@@ -226,7 +226,8 @@ final class SideBarTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tileShape = ListTileTheme.of(context).shape;
+    final tileTheme = ListTileTheme.of(context);
+    final tileShape = tileTheme.shape;
     final tileRadius =
         tileShape is RoundedRectangleBorder &&
             tileShape.borderRadius is BorderRadius
@@ -258,11 +259,17 @@ final class SideBarTile extends StatelessWidget {
             curve: Curves.easeOut,
             decoration: BoxDecoration(
               borderRadius: tileRadius,
+              border:
+                  tileShape is OutlinedBorder &&
+                      tileShape.side != BorderSide.none
+                  ? Border.fromBorderSide(tileShape.side)
+                  : null,
               color: selected
                   // Soft, because this marks where you are and not what you
                   // just picked out of a list.
-                  ? scheme.secondaryContainer.withValues(alpha: 0.55)
-                  : null,
+                  ? tileTheme.selectedTileColor ??
+                        scheme.secondaryContainer.withValues(alpha: 0.55)
+                  : tileTheme.tileColor,
             ),
             padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
             child: Row(
@@ -291,7 +298,9 @@ final class SideBarTile extends StatelessWidget {
                   Icon(
                     icon,
                     size: 17,
-                    color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                    color: selected
+                        ? tileTheme.selectedColor ?? scheme.primary
+                        : tileTheme.iconColor ?? scheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 9),
                 ] else if (leading != null) ...[
@@ -307,7 +316,11 @@ final class SideBarTile extends StatelessWidget {
                       fontSize: 14,
                       height: 1.2,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                      color: scheme.onSurface,
+                      color: selected
+                          ? tileTheme.selectedColor ??
+                                tileTheme.textColor ??
+                                scheme.onSurface
+                          : tileTheme.textColor ?? scheme.onSurface,
                     ),
                   ),
                 ),

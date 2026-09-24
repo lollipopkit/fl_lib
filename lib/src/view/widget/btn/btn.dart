@@ -205,7 +205,7 @@ final class Btn extends StatelessWidget {
     this.onTap = _defaultOnTap,
     this.gap = 20,
     this.textStyle,
-    this.padding = const EdgeInsets.symmetric(vertical: 13, horizontal: 20),
+    this.padding,
     this.mainAxisAlignment,
     this.mainAxisSize,
     this.borderRadius,
@@ -392,12 +392,22 @@ final class Btn extends StatelessWidget {
   Widget _elevated(BuildContext context) {
     final isRTL = Directionality.of(context) == TextDirection.rtl;
     final btnStyle = ButtonStyle(
-      padding: WidgetStateProperty.all(padding),
-      shape: WidgetStateProperty.resolveWith(
-        (states) => RoundedRectangleBorder(
-          borderRadius: _resolvedRadius(context, states),
-        ),
+      padding: WidgetStateProperty.resolveWith(
+        (states) =>
+            padding ??
+            ElevatedButtonTheme.of(context).style?.padding?.resolve(states) ??
+            const EdgeInsets.symmetric(vertical: 13, horizontal: 20),
       ),
+      shape: WidgetStateProperty.resolveWith((states) {
+        final themed = ElevatedButtonTheme.of(
+          context,
+        ).style?.shape?.resolve(states);
+        if (borderRadius == null && themed != null) return themed;
+        return RoundedRectangleBorder(
+          borderRadius: _resolvedRadius(context, states),
+          side: themed?.side ?? BorderSide.none,
+        );
+      }),
     );
     final text_ = Text(text, style: textStyle);
 

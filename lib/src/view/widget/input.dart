@@ -80,9 +80,9 @@ class Input extends StatefulWidget {
     this.maxLength,
     this.enabled,
   }) : assert(
-          !(obscureText && suffix != null),
-          'suffix != null && obscureText',
-        );
+         !(obscureText && suffix != null),
+         'suffix != null && obscureText',
+       );
 
   @override
   State<StatefulWidget> createState() => _InputState();
@@ -119,6 +119,7 @@ class _InputState extends State<Input> {
   }
 
   Widget _buildField() {
+    final decorationTheme = InputDecorationTheme.of(context);
     return _obscureText.listenVal((obscureText) {
       return TextField(
         controller: widget.controller,
@@ -133,7 +134,7 @@ class _InputState extends State<Input> {
           hintText: widget.hint,
           labelText: widget.label,
           errorText: widget.errorText,
-          border: InputBorder.none,
+          border: decorationTheme.border ?? InputBorder.none,
           suffixIcon: _buildSuffix(obscureText),
           // Material sizes a field to be picked out of a page of prose. These
           // are rows of a form, each already inside a card of its own and
@@ -141,7 +142,9 @@ class _InputState extends State<Input> {
           // label and the value sat in the middle of a box half again as tall
           // as either of its neighbours.
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 7),
+          contentPadding:
+              decorationTheme.contentPadding ??
+              const EdgeInsets.symmetric(vertical: 7),
           // Sitting in the field, the label is the value's size, because that
           // is the slot it is standing in for. Risen, it is a caption over the
           // value — set outright rather than left to the 0.75 the float

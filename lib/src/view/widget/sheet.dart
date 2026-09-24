@@ -120,7 +120,9 @@ class RowsSheet extends StatelessWidget {
                   width: _handleSize.width,
                   height: _handleSize.height,
                   decoration: BoxDecoration(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    color:
+                        Theme.of(context).bottomSheetTheme.dragHandleColor ??
+                        scheme.onSurfaceVariant.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(_handleSize.height / 2),
                   ),
                 ),
