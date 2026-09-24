@@ -79,15 +79,16 @@ class _ExpandableTileState extends State<ExpandableTile>
     with SingleTickerProviderStateMixin {
   static const _duration = Duration(milliseconds: 200);
 
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: _duration,
-    value: widget.initiallyExpanded ? 1 : 0,
-  )..addStatusListener((_) {
-    // The one thing a status change decides is [_closed], and that is read
-    // during build.
-    if (mounted) setState(() {});
-  });
+  late final AnimationController _ctrl =
+      AnimationController(
+        vsync: this,
+        duration: _duration,
+        value: widget.initiallyExpanded ? 1 : 0,
+      )..addStatusListener((_) {
+        // The one thing a status change decides is [_closed], and that is read
+        // during build.
+        if (mounted) setState(() {});
+      });
 
   late final CurvedAnimation _curve = CurvedAnimation(
     parent: _ctrl,
@@ -187,11 +188,7 @@ class _ExpandableTileState extends State<ExpandableTile>
                 ),
                 const SizedBox(width: 13),
               ],
-              // Flexible, because the summary beside it is `Expanded` and so
-              // gives up its own width first: a title longer than the row ran
-              // past the card and struck it with the overflow stripe, which is
-              // what a narrow window did to every one of these.
-              Flexible(
+              Expanded(
                 child: DefaultTextStyle.merge(
                   style: const TextStyle(
                     fontSize: 14,
@@ -203,9 +200,6 @@ class _ExpandableTileState extends State<ExpandableTile>
                 ),
               ),
               const SizedBox(width: 13),
-              // Takes the rest of the line so that the summaries of a stack of
-              // these line up in a column of their own, and ellipsises from
-              // the right when there is not enough of it.
               Expanded(
                 child: !_closed || summary == null
                     ? const SizedBox.shrink()
