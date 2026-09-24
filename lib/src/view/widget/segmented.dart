@@ -276,6 +276,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     final foreground = isSelected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
+    final font = Theme.of(context).textTheme.bodyMedium;
 
     return Semantics(
       button: true,
@@ -303,7 +304,12 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                   child: AnimatedDefaultTextStyle(
                     duration: SegmentedTabs.duration,
                     curve: SegmentedTabs.curve,
-                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                    // Only the family comes from the theme: a label is 12pt,
+                    // and the rest of `bodyMedium` is not — its line height
+                    // (1.43) and tracking (0.25) are a 14pt body's.
+                    style: TextStyle(
+                      fontFamily: font?.fontFamily,
+                      fontFamilyFallback: font?.fontFamilyFallback,
                       fontSize: 12,
                       color: foreground,
                       fontWeight: isSelected

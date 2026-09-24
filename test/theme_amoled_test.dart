@@ -18,6 +18,10 @@ void main() {
         navigationBarTheme: const NavigationBarThemeData(labelTextStyle: labels),
         navigationRailTheme: const NavigationRailThemeData(
           selectedLabelTextStyle: style, unselectedLabelTextStyle: style,
+          // The icons are the other half of the same slot, and an app sets a
+          // rail's icon size as readily as its label style.
+          selectedIconTheme: IconThemeData(size: 28),
+          unselectedIconTheme: IconThemeData(size: 26),
         ),
         popupMenuTheme: const PopupMenuThemeData(textStyle: style),
       ).toAmoled;
@@ -29,6 +33,10 @@ void main() {
       expect(theme.navigationBarTheme.labelTextStyle, labels);
       expect(theme.navigationRailTheme.selectedLabelTextStyle, style);
       expect(theme.navigationRailTheme.unselectedLabelTextStyle, style);
+      expect(theme.navigationRailTheme.selectedIconTheme?.size, 28);
+      expect(theme.navigationRailTheme.selectedIconTheme?.color, Colors.white);
+      expect(theme.navigationRailTheme.unselectedIconTheme?.size, 26);
+      expect(theme.navigationRailTheme.unselectedIconTheme?.color, Colors.white70);
       expect(theme.popupMenuTheme.textStyle, style);
       expect(theme.appBarTheme.backgroundColor, Colors.black);
     });
