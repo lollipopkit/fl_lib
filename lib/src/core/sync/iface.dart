@@ -3,11 +3,20 @@ part of 'base.dart';
 /// {@template remote_storage}
 /// Remote storage interface.
 ///
-/// All valid internal impls:
+/// Impls here:
 ///   - [Webdav]
 ///   - [ICloud]
+///   - [GistRs]
+///
+/// Deliberately **not** a `base` class, which it used to be. A backend whose
+/// transport belongs to the host app rather than to this package cannot live
+/// here — it would have to reach a client this package does not know about —
+/// and `base` forbids implementing it from another library. `ServerBox` has one
+/// of those: a backup destination that is one of the app's own monitor agents,
+/// dialed through the app's own HTTP client. Everything a backend is asked for
+/// is still this file's; the modifier only decided who was allowed to answer.
 /// {@endtemplate}
-abstract base class RemoteStorage<ListItemType> {
+abstract class RemoteStorage<ListItemType> {
   /// Upload file to remote storage
   ///
   /// {@template remote_storage_upload}
