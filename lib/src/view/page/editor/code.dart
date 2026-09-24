@@ -182,10 +182,14 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Widget _buildBody() {
+    // The family is named even when the user chose none: `re_editor` reads a
+    // null family as "start at the fallback list", so the first entry would
+    // become the editor's font instead of its last resort.
+    final bodyMedium = Theme.of(context).textTheme.bodyMedium;
     return CodeEditor(
       style: CodeEditorStyle(
-        fontFamily: widget.args?.fontFamily,
-        fontFamilyFallback: Theme.of(context).textTheme.bodyMedium?.fontFamilyFallback,
+        fontFamily: widget.args?.fontFamily ?? bodyMedium?.fontFamily,
+        fontFamilyFallback: bodyMedium?.fontFamilyFallback,
         codeTheme: CodeHighlightTheme(
           languages: _modesMap,
           theme: _codeTheme,
