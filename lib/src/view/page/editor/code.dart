@@ -185,6 +185,7 @@ class _EditorPageState extends State<EditorPage> {
     return CodeEditor(
       style: CodeEditorStyle(
         fontFamily: widget.args?.fontFamily,
+        fontFamilyFallback: Theme.of(context).textTheme.bodyMedium?.fontFamilyFallback,
         codeTheme: CodeHighlightTheme(
           languages: _modesMap,
           theme: _codeTheme,

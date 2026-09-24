@@ -303,7 +303,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                   child: AnimatedDefaultTextStyle(
                     duration: SegmentedTabs.duration,
                     curve: SegmentedTabs.curve,
-                    style: TextStyle(
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                       fontSize: 12,
                       color: foreground,
                       fontWeight: isSelected

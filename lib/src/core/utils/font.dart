@@ -39,7 +39,10 @@ extension ChineseThemeData on ThemeData {
 
     return switch (Platform.localeName) {
       final locale when locale.startsWith('zh') =>
-        copyWith(textTheme: textTheme._fixChinese(brightness)),
+        copyWith(
+          textTheme: textTheme._fixChinese(brightness),
+          primaryTextTheme: primaryTextTheme._fixChinese(brightness),
+        ),
       _ => this,
     };
   }
