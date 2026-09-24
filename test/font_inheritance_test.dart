@@ -65,6 +65,35 @@ void main() {
 
       expect(theme.bodyMedium!.fontFamilyFallback, ['Microsoft YaHei', 'system-font', 'sans-serif']);
     });
+
+    // A family from a package is written `packages/<package>/…`, and the getter
+    // that reports it prefixes again for whoever reads it next.
+    test('names a package-scoped family once, and the platform families plainly', () {
+      final theme = const TextTheme(
+        bodyMedium: TextStyle(
+          fontSize: 12,
+          color: Colors.red,
+          fontFamily: 'Foo',
+          package: 'pkg',
+          fontFamilyFallback: ['Bar'],
+        ),
+      ).withChineseFontFallback;
+
+      expect(theme.bodyMedium!.fontFamily, 'packages/pkg/Foo');
+      expect(theme.bodyMedium!.fontFamilyFallback, ['packages/pkg/Bar', ..._chinese]);
+      // Rebuilt field by field, so everything else survives the rebuild.
+      expect(theme.bodyMedium!.fontSize, 12);
+      expect(theme.bodyMedium!.color, Colors.red);
+    });
+
+    test('leaves a slot that names no package unprefixed', () {
+      final theme = const TextTheme(
+        bodyMedium: TextStyle(fontFamilyFallback: ['Bar']),
+      ).withChineseFontFallback;
+
+      expect(theme.bodyMedium!.fontFamily, isNull);
+      expect(theme.bodyMedium!.fontFamilyFallback, ['Bar', ..._chinese]);
+    });
   });
 
   testWidgets('segments keep theme fonts while selection changes', (tester) async {

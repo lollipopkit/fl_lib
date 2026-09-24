@@ -40,12 +40,55 @@ extension ChineseTextTheme on TextTheme {
 
 extension on TextStyle {
   TextStyle _withChineseFontFallback() {
-    final existing = fontFamilyFallback ?? const <String>[];
-    return copyWith(
+    final style = _packageFree;
+    final existing = style.fontFamilyFallback ?? const <String>[];
+    return style.copyWith(
       fontFamilyFallback: [
         ...existing,
         ..._fontFamilyFallback.where((f) => !existing.contains(f)),
       ],
+    );
+  }
+
+  /// This style with the package it names resolved into its families.
+  ///
+  /// A style that takes a family from a package reports every family it names —
+  /// that one and each fallback — as `packages/<package>/…`, and prefixes them
+  /// again for whoever reads the getter next. So a list read from such a style
+  /// and handed back would name `packages/<package>/packages/<package>/…` and
+  /// lose the family it was asked for, while a family of the platform's
+  /// appended beside them would be looked for inside the package, where it is
+  /// not. Rebuilt carrying the families it resolves to and no package to prefix
+  /// them with, so that neither happens. What reaches the engine is these same
+  /// names either way.
+  TextStyle get _packageFree {
+    if (!(fontFamily?.startsWith('packages/') ?? false)) return this;
+    return TextStyle(
+      inherit: inherit,
+      color: color,
+      backgroundColor: backgroundColor,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      fontStyle: fontStyle,
+      letterSpacing: letterSpacing,
+      wordSpacing: wordSpacing,
+      textBaseline: textBaseline,
+      height: height,
+      leadingDistribution: leadingDistribution,
+      locale: locale,
+      foreground: foreground,
+      background: background,
+      shadows: shadows,
+      fontFeatures: fontFeatures,
+      fontVariations: fontVariations,
+      decoration: decoration,
+      decorationColor: decorationColor,
+      decorationStyle: decorationStyle,
+      decorationThickness: decorationThickness,
+      debugLabel: debugLabel,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
+      overflow: overflow,
     );
   }
 }
