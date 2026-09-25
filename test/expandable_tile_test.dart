@@ -39,4 +39,32 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+
+  testWidgets('a summary that is not text keeps its own width', (tester) async {
+    // `summary` is typed `Widget?`, and the slot sits in an `Expanded` so the
+    // arrow lands at the trailing edge whatever the title is. A child that
+    // does not size itself — a pill, a badge — took the whole of that
+    // `Expanded` and was drawn as a bar across the row.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            child: ExpandableTile(
+              title: Text('BMC (Redfish)'),
+              summary: BetaTag(key: ValueKey('beta')),
+              children: [Text('Fields')],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final tag = tester.getRect(find.byKey(const ValueKey('beta')));
+    expect(tag.width, lessThan(60));
+    expect(tag.height, BetaTag.title);
+    // Still against the arrow, which is what the `Expanded` is there for.
+    final arrow = tester.getRect(find.byIcon(Icons.expand_more));
+    expect(arrow.left - tag.right, lessThan(30));
+  });
 }

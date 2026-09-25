@@ -203,12 +203,20 @@ class _ExpandableTileState extends State<ExpandableTile>
               Expanded(
                 child: !_closed || summary == null
                     ? const SizedBox.shrink()
-                    : DefaultTextStyle.merge(
-                        style: UIs.text12Grey,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.end,
-                        child: summary,
+                    // Right-aligned rather than filled: the slot is typed
+                    // `Widget?`, and `Expanded` hands a non-text child a tight
+                    // width — a pill or a badge would stretch the whole way to
+                    // the arrow. Text keeps the same look: it is laid out to
+                    // its own width and ellipsised against the space available.
+                    : Align(
+                        alignment: Alignment.centerRight,
+                        child: DefaultTextStyle.merge(
+                          style: UIs.text12Grey,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          child: summary,
+                        ),
                       ),
               ),
               const SizedBox(width: 13),
