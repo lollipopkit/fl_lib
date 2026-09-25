@@ -266,6 +266,10 @@
   "@disabled": {
     "description": "Label for disabled."
   },
+  "enabled": "Enabled",
+  "@enabled": {
+    "description": "Label for a setting that is on: the counterpart of disabled."
+  },
   "disconnected": "Disconnected",
   "@disconnected": {
     "description": "Label for disconnected."

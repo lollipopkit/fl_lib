@@ -60,6 +60,7 @@
   "description": "Beschrijving",
   "device": "Apparaat",
   "disabled": "Uitgeschakeld",
+  "enabled": "Ingeschakeld",
   "disconnected": "Verbroken",
   "disk": "Schijf",
   "doc": "Documentatie",

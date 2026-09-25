@@ -199,6 +199,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get disabled => 'Nonaktif';
 
   @override
+  String get enabled => 'Aktif';
+
+  @override
   String get disconnected => 'Terputus';
 
   @override

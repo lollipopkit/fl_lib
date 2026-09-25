@@ -198,6 +198,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get disabled => '비활성화';
 
   @override
+  String get enabled => '사용';
+
+  @override
   String get disconnected => '연결이 끊어졌습니다';
 
   @override

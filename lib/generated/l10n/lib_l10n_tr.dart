@@ -199,6 +199,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get disabled => 'Devre dışı';
 
   @override
+  String get enabled => 'Etkin';
+
+  @override
   String get disconnected => 'Bağlantı kesildi';
 
   @override

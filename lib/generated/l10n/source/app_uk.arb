@@ -60,6 +60,7 @@
   "description": "Опис",
   "device": "Пристрій",
   "disabled": "Вимкнений",
+  "enabled": "Увімкнено",
   "disconnected": "Відключено",
   "disk": "Диск",
   "doc": "Документація",

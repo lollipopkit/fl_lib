@@ -60,6 +60,7 @@
   "description": "설명",
   "device": "장치",
   "disabled": "비활성화",
+  "enabled": "사용",
   "disconnected": "연결이 끊어졌습니다",
   "disk": "디스크",
   "doc": "문서",

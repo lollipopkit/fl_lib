@@ -60,6 +60,7 @@
   "description": "Təsvir",
   "device": "Cihaz",
   "disabled": "Söndürülüb",
+  "enabled": "Aktivdir",
   "disconnected": "Bağlantı kəsildi",
   "disk": "Disk",
   "doc": "Sənədlər",

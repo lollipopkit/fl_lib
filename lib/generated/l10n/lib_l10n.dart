@@ -485,6 +485,12 @@ abstract class LibLocalizations {
   /// **'Disabled'**
   String get disabled;
 
+  /// Label for a setting that is on: the counterpart of disabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get enabled;
+
   /// Label for disconnected.
   ///
   /// In en, this message translates to:

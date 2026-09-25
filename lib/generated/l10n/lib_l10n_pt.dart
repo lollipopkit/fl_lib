@@ -199,6 +199,9 @@ class LibLocalizationsPt extends LibLocalizations {
   String get disabled => 'Desativado';
 
   @override
+  String get enabled => 'Ativado';
+
+  @override
   String get disconnected => 'Desconectado';
 
   @override

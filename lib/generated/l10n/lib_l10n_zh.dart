@@ -198,6 +198,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get disabled => '已禁用';
 
   @override
+  String get enabled => '已启用';
+
+  @override
   String get disconnected => '已断开连接';
 
   @override
@@ -1033,6 +1036,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get disabled => '已停用';
+
+  @override
+  String get enabled => '已啟用';
 
   @override
   String get disconnected => '已中斷連線';

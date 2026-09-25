@@ -198,6 +198,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get disabled => '無効化';
 
   @override
+  String get enabled => '有効';
+
+  @override
   String get disconnected => '接続が切断されました';
 
   @override

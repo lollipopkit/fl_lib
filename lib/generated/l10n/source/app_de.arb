@@ -60,6 +60,7 @@
   "description": "Beschreibung",
   "device": "Gerät",
   "disabled": "Deaktiviert",
+  "enabled": "Aktiviert",
   "disconnected": "Getrennt",
   "disk": "Festplatte",
   "doc": "Dokumentation",

@@ -60,6 +60,7 @@
   "description": "描述",
   "device": "裝置",
   "disabled": "已停用",
+  "enabled": "已啟用",
   "disconnected": "已中斷連線",
   "disk": "磁碟",
   "doc": "說明文件",

@@ -199,6 +199,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get disabled => 'Söndürülüb';
 
   @override
+  String get enabled => 'Aktivdir';
+
+  @override
   String get disconnected => 'Bağlantı kəsildi';
 
   @override

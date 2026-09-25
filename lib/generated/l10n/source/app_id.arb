@@ -60,6 +60,7 @@
   "description": "Deskripsi",
   "device": "Perangkat",
   "disabled": "Nonaktif",
+  "enabled": "Aktif",
   "disconnected": "Terputus",
   "disk": "Disk",
   "doc": "Dokumentasi",

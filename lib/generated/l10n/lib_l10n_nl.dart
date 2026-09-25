@@ -199,6 +199,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get disabled => 'Uitgeschakeld';
 
   @override
+  String get enabled => 'Ingeschakeld';
+
+  @override
   String get disconnected => 'Verbroken';
 
   @override

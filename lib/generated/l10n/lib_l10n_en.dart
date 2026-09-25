@@ -199,6 +199,9 @@ class LibLocalizationsEn extends LibLocalizations {
   String get disabled => 'Disabled';
 
   @override
+  String get enabled => 'Enabled';
+
+  @override
   String get disconnected => 'Disconnected';
 
   @override

@@ -60,6 +60,7 @@
   "description": "説明",
   "device": "デバイス",
   "disabled": "無効化",
+  "enabled": "有効",
   "disconnected": "接続が切断されました",
   "disk": "ディスク",
   "doc": "ドキュメント",

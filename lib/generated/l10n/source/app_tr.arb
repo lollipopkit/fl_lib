@@ -60,6 +60,7 @@
   "description": "Açıklama",
   "device": "Cihaz",
   "disabled": "Devre dışı",
+  "enabled": "Etkin",
   "disconnected": "Bağlantı kesildi",
   "disk": "Disk",
   "doc": "Dokümantasyon",

@@ -199,6 +199,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get disabled => 'отключено';
 
   @override
+  String get enabled => 'Включено';
+
+  @override
   String get disconnected => 'Отключено';
 
   @override

@@ -60,6 +60,7 @@
   "description": "Descripción",
   "device": "Dispositivo",
   "disabled": "Deshabilitado",
+  "enabled": "Activado",
   "disconnected": "Desconectado",
   "disk": "Disco",
   "doc": "Documentación",

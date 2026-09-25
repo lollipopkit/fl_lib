@@ -199,6 +199,9 @@ class LibLocalizationsEs extends LibLocalizations {
   String get disabled => 'Deshabilitado';
 
   @override
+  String get enabled => 'Activado';
+
+  @override
   String get disconnected => 'Desconectado';
 
   @override

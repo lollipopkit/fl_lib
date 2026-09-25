@@ -199,6 +199,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get disabled => 'Вимкнений';
 
   @override
+  String get enabled => 'Увімкнено';
+
+  @override
   String get disconnected => 'Відключено';
 
   @override
