@@ -195,6 +195,14 @@ abstract final class Toast {
 
   /// Dismisses every toast on screen.
   static void dismissAll() => _ToastCtrl.dismissAll();
+
+  /// Dismisses the toasts shown with [tag], if any are still on screen.
+  ///
+  /// For a toast whose reason to be there ended somewhere else — a state it
+  /// reported has changed, or a countdown it shows was cancelled. Paired with
+  /// a `duration` of `Duration.zero`, it leaves the caller as the only thing
+  /// deciding when the toast goes.
+  static void dismiss(String tag) => _ToastCtrl.dismissTag(tag);
 }
 
 /// What a toast means, when the call site does not spell out an icon and a
@@ -433,6 +441,19 @@ abstract final class _ToastCtrl {
       return;
     }
     remove(entry);
+  }
+
+  static void dismissTag(String tag) {
+    final list = [...entries.value];
+    var changed = false;
+    for (final entry in [...list]) {
+      if (entry.data.tag != tag || entry.dismissing.value) continue;
+      _dismiss(entry, list);
+      changed = true;
+    }
+    // Republished for the same reason as in [dismiss]: the stack recounts its
+    // depths once one of them is on its way out.
+    if (changed) entries.value = list;
   }
 
   static void dismissAll() {
