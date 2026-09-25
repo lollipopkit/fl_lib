@@ -482,6 +482,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get open => '열기';
 
   @override
+  String get optional => '선택 사항';
+
+  @override
   String get paste => '붙여넣기';
 
   @override

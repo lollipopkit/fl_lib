@@ -137,6 +137,7 @@ export 'src/view/widget/adaptive_list.dart';
 export 'src/view/widget/animated_children.dart';
 export 'src/view/widget/animated_masonry.dart';
 export 'src/view/widget/context_menu.dart';
+export 'src/view/widget/dashed_border.dart';
 export 'src/view/widget/appbar.dart';
 export 'src/view/widget/auto_hide.dart';
 export 'src/view/widget/avg.dart';

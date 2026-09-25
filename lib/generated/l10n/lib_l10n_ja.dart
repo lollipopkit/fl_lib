@@ -482,6 +482,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get open => '開く';
 
   @override
+  String get optional => '任意';
+
+  @override
   String get paste => '貼り付け';
 
   @override

@@ -484,6 +484,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get open => 'Openen';
 
   @override
+  String get optional => 'Optioneel';
+
+  @override
   String get paste => 'Plakken';
 
   @override

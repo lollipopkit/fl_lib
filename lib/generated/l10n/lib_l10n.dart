@@ -1049,6 +1049,12 @@ abstract class LibLocalizations {
   /// **'Open'**
   String get open;
 
+  /// Marks a field that may be left empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional'**
+  String get optional;
+
   /// Label for paste.
   ///
   /// In en, this message translates to:

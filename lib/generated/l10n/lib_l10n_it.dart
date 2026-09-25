@@ -484,6 +484,9 @@ class LibLocalizationsIt extends LibLocalizations {
   String get open => 'Apri';
 
   @override
+  String get optional => 'Facoltativo';
+
+  @override
   String get paste => 'Incolla';
 
   @override

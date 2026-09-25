@@ -647,6 +647,10 @@
   "@open": {
     "description": "Label for open."
   },
+  "optional": "Optional",
+  "@optional": {
+    "description": "Marks a field that may be left empty."
+  },
   "paste": "Paste",
   "@paste": {
     "description": "Label for paste."

@@ -484,6 +484,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get open => 'Buka';
 
   @override
+  String get optional => 'Opsional';
+
+  @override
   String get paste => 'Tempel';
 
   @override

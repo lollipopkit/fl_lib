@@ -483,6 +483,9 @@ class LibLocalizationsPt extends LibLocalizations {
   String get open => 'Abrir';
 
   @override
+  String get optional => 'Opcional';
+
+  @override
   String get paste => 'Colar';
 
   @override

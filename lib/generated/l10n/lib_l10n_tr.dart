@@ -483,6 +483,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get open => 'Aç';
 
   @override
+  String get optional => 'İsteğe bağlı';
+
+  @override
   String get paste => 'Yapıştır';
 
   @override

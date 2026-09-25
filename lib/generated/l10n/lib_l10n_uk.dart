@@ -483,6 +483,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get open => 'Відкрити';
 
   @override
+  String get optional => 'Необовʼязково';
+
+  @override
   String get paste => 'Вставити';
 
   @override

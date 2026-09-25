@@ -483,6 +483,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get open => 'Открыть';
 
   @override
+  String get optional => 'Необязательно';
+
+  @override
   String get paste => 'Вставить';
 
   @override

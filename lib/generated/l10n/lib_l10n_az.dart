@@ -484,6 +484,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get open => 'Aç';
 
   @override
+  String get optional => 'İstəyə bağlı';
+
+  @override
   String get paste => 'Yerləşdir';
 
   @override

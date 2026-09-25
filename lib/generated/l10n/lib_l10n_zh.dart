@@ -482,6 +482,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get open => '打开';
 
   @override
+  String get optional => '可选';
+
+  @override
   String get paste => '粘贴';
 
   @override
@@ -1320,6 +1323,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get open => '開啟';
+
+  @override
+  String get optional => '選填';
 
   @override
   String get paste => '貼上';
