@@ -5,11 +5,41 @@ import 'package:flutter/rendering.dart';
 
 /// One position in a [SegmentedTabs].
 final class SegmentedTab<T> {
-  const SegmentedTab({required this.value, required this.label, this.icon});
+  const SegmentedTab({
+    required this.value,
+    required this.label,
+    this.icon,
+    this.sub,
+  });
 
   final T value;
   final String label;
   final IconData? icon;
+
+  /// A second level, for a position that is itself a choice between a few
+  /// things — a console that is a terminal or a screen. Shown inside the
+  /// track, to the right of this segment's label and under the same marker,
+  /// while this segment is the selected one; not at all otherwise. A
+  /// [SegmentedTab.sub] of one of its own segments is ignored.
+  final SegmentedSub<Object?>? sub;
+}
+
+/// The second level of a [SegmentedTab]: its positions and which is chosen.
+final class SegmentedSub<S> {
+  const SegmentedSub({
+    required this.segments,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<SegmentedTab<S>> segments;
+  final S selected;
+  final ValueChanged<S> onSelected;
+
+  /// [onSelected], reached through a [SegmentedSub] of any type argument: a
+  /// `SegmentedSub<Mode>` held as `SegmentedSub<Object?>` may not have its
+  /// callback read as one taking `Object?`.
+  void _select(Object? value) => onSelected(value as S);
 }
 
 /// A selector for which of several things a page is showing.
@@ -83,6 +113,9 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   final _trackKey = GlobalKey();
   final _segmentKeys = <T, GlobalKey>{};
 
+  /// The second level's segments, by their parent's value and their own.
+  final _subKeys = <(T, Object?), GlobalKey>{};
+
   /// How far a [SegmentedTabs.collapse] control is open: 0 is the selected
   /// segment alone, 1 all of them.
   late final _openness = AnimationController(
@@ -130,8 +163,23 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   /// has one, and segments are sized by their labels.
   Rect? _marker;
 
+  /// Where the second level's marker is, like [_marker]. Null when the
+  /// selected segment has no second level, or it has not been laid out.
+  Rect? _subMarker;
+
+  /// The selected segment, when it has a second level.
+  SegmentedTab<T>? get _selectedWithSub {
+    for (final segment in widget.segments) {
+      if (segment.value == widget.selected) {
+        return segment.sub == null ? null : segment;
+      }
+    }
+    return null;
+  }
+
   void _measure() {
     if (!mounted) return;
+    _measureSub();
 
     // A selection that names no segment leaves nothing to mark. Returning
     // early instead would keep the last rect, and the marker would go on
@@ -153,6 +201,28 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
         segment.localToGlobal(Offset.zero, ancestor: track) & segment.size;
     if (rect == _marker) return;
     setState(() => _marker = rect);
+  }
+
+  void _measureSub() {
+    final parent = _selectedWithSub;
+    final sub = parent?.sub;
+    Rect? rect;
+    if (parent != null && sub != null) {
+      final track = _trackKey.currentContext?.findRenderObject();
+      final box = _subKeys[(parent.value, sub.selected)]?.currentContext
+          ?.findRenderObject();
+      if (track is RenderBox &&
+          box is RenderBox &&
+          track.hasSize &&
+          box.hasSize) {
+        rect = box.localToGlobal(Offset.zero, ancestor: track) & box.size;
+      } else {
+        // Not laid out yet: the next frame measures it.
+        return;
+      }
+    }
+    if (rect == _subMarker) return;
+    setState(() => _subMarker = rect);
   }
 
   @override
@@ -201,6 +271,29 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                       ),
                     ),
                   ),
+                if ((_subMarker, _selectedWithSub) case (
+                  final rect?,
+                  final parent?,
+                ))
+                  // Keyed by its parent: moving to another parent's second
+                  // level is a new marker, not this one sliding over.
+                  AnimatedPositioned(
+                    key: ValueKey(('segmented-sub-marker', parent.value)),
+                    duration: SegmentedTabs.duration,
+                    curve: SegmentedTabs.curve,
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.onPrimaryContainer.withValues(
+                          alpha: 0.12,
+                        ),
+                        borderRadius: SegmentedTabs.radius,
+                      ),
+                    ),
+                  ),
                 Row(
                   mainAxisSize: widget.expand
                       ? MainAxisSize.max
@@ -213,8 +306,17 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                           Expanded(
                             child: _buildSegment(scheme, widget.segments[index]),
                           )
+                        else if (widget.collapse)
+                          // Laid out in full behind its window, never
+                          // narrower: see [_SegmentWindow].
+                          _buildSegment(scheme, widget.segments[index])
                         else
-                          _buildSegment(scheme, widget.segments[index]),
+                          // Each at its own width while they fit; given less
+                          // room than that, they share it and the labels
+                          // shorten, rather than the row running off the edge.
+                          Flexible(
+                            child: _buildSegment(scheme, widget.segments[index]),
+                          ),
                       ],
                   ],
                 ),
@@ -271,16 +373,81 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     widget.onSelected(value);
   }
 
+  /// [segment], and its second level to the right of it when it has one and
+  /// is selected — one box, which is what the marker is measured from.
   Widget _buildSegment(ColorScheme scheme, SegmentedTab<T> segment) {
-    final isSelected = segment.value == widget.selected;
-    final foreground = isSelected
-        ? scheme.onPrimaryContainer
-        : scheme.onSurfaceVariant;
-    final font = Theme.of(context).textTheme.bodyMedium;
+    final sub = segment.sub;
+    if (sub == null || segment.value != widget.selected) {
+      return _buildOwnSegment(scheme, segment);
+    }
+    return Row(
+      key: _segmentKeys.putIfAbsent(segment.value, GlobalKey.new),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: _buildOwnSegment(scheme, segment, keyed: false)),
+        for (final item in sub.segments)
+          Flexible(child: _buildSubSegment(scheme, segment.value, sub, item)),
+        const SizedBox(width: 3),
+      ],
+    );
+  }
 
+  Widget _buildSubSegment(
+    ColorScheme scheme,
+    T parent,
+    SegmentedSub<Object?> sub,
+    SegmentedTab<Object?> item,
+  ) {
+    final isSelected = item.value == sub.selected;
+    return _segmentInk(
+      scheme,
+      key: _subKeys.putIfAbsent((parent, item.value), GlobalKey.new),
+      label: item.label,
+      icon: item.icon,
+      foreground: scheme.onPrimaryContainer,
+      bold: isSelected,
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+      onTap: isSelected ? null : () => sub._select(item.value),
+    );
+  }
+
+  Widget _buildOwnSegment(
+    ColorScheme scheme,
+    SegmentedTab<T> segment, {
+    bool keyed = true,
+  }) {
+    final isSelected = segment.value == widget.selected;
+    return _segmentInk(
+      scheme,
+      key: keyed
+          ? _segmentKeys.putIfAbsent(segment.value, GlobalKey.new)
+          : null,
+      label: segment.label,
+      icon: segment.icon,
+      foreground: isSelected
+          ? scheme.onPrimaryContainer
+          : scheme.onSurfaceVariant,
+      bold: isSelected,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
+      onTap: isSelected ? null : () => _select(segment.value),
+    );
+  }
+
+  /// One tappable segment of either level. [key] is what a marker measures.
+  Widget _segmentInk(
+    ColorScheme scheme, {
+    required Key? key,
+    required String label,
+    required IconData? icon,
+    required Color foreground,
+    required bool bold,
+    required EdgeInsets padding,
+    required VoidCallback? onTap,
+  }) {
+    final font = Theme.of(context).textTheme.bodyMedium;
     return Semantics(
       button: true,
-      selected: isSelected,
+      selected: bold,
       child: Material(
         // Transparent: the marker behind is what fills a selected segment, so
         // that it can be one box that moves rather than one per segment.
@@ -288,15 +455,15 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
         borderRadius: SegmentedTabs.radius,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          key: _segmentKeys.putIfAbsent(segment.value, GlobalKey.new),
-          onTap: isSelected ? null : () => _select(segment.value),
+          key: key,
+          onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
+            padding: padding,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (segment.icon case final icon?) ...[
+                if (icon != null) ...[
                   Icon(icon, size: 15, color: foreground),
                   const SizedBox(width: 5),
                 ],
@@ -312,12 +479,10 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                       fontFamilyFallback: font?.fontFamilyFallback,
                       fontSize: 12,
                       color: foreground,
-                      fontWeight: isSelected
-                          ? FontWeight.w500
-                          : FontWeight.normal,
+                      fontWeight: bold ? FontWeight.w500 : FontWeight.normal,
                     ),
                     child: Text(
-                      segment.label,
+                      label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
@@ -331,6 +496,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
       ),
     );
   }
+
 }
 
 /// A window onto a row of segments, resting on the one that is selected.

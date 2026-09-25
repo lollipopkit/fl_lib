@@ -1,5 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -36,6 +37,40 @@ void main() {
       ),
     );
   }
+
+  // Sized to the labels, and given less room than they need: they share it
+  // and shorten, instead of the row running past the edge.
+  testWidgets('narrower than its labels, it shrinks rather than overflows', (
+    tester,
+  ) async {
+    final selected = ValueNotifier('a');
+    addTearDown(selected.dispose);
+
+    await pumpTabs(tester, selected: selected, width: 120);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(SegmentedTabs<String>)).width, 120);
+
+    // With room to spare, each is as wide as its label and no wider: the
+    // labels are whole, and the segments together far short of the track.
+    await pumpTabs(tester, selected: selected, width: 600);
+    await tester.pump();
+    final segments = tester
+        .widgetList<InkWell>(
+          find.descendant(
+            of: find.byType(SegmentedTabs<String>),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .map((w) => tester.getSize(find.byWidget(w)).width);
+    expect(segments.reduce((a, b) => a + b), lessThan(300));
+    for (final label in ['Alpha', 'Beta', 'Gamma']) {
+      expect(
+        tester.renderObject<RenderParagraph>(find.text(label)).didExceedMaxLines,
+        isFalse,
+      );
+    }
+  });
 
   // A segment's box is only known once it has been laid out, so the marker
   // cannot be placed on the frame that first builds the control.
