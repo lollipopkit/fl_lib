@@ -17,6 +17,9 @@ class LibLocalizationsJa extends LibLocalizations {
   }
 
   @override
+  String get active => 'アクティブ';
+
+  @override
   String get add => '追加';
 
   @override
@@ -99,6 +102,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get cancelled => 'キャンセル済み';
 
   @override
+  String get capacity => '容量';
+
+  @override
   String get checkUpdate => 'アップデートを確認する';
 
   @override
@@ -141,6 +147,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get copy => 'コピーする';
 
   @override
+  String get current => '現在';
+
+  @override
   String get custom => 'カスタム';
 
   @override
@@ -175,6 +184,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get descending => '降順';
+
+  @override
+  String get description => '説明';
 
   @override
   String get device => 'デバイス';
@@ -273,7 +285,13 @@ class LibLocalizationsJa extends LibLocalizations {
   String get foregroundService => 'フォアグラウンドサービス';
 
   @override
+  String get format => '形式';
+
+  @override
   String get found => '見つかりました';
+
+  @override
+  String get gateway => 'ゲートウェイ';
 
   @override
   String get general => '一般';
@@ -301,6 +319,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get import => 'インポート';
+
+  @override
+  String get inactive => '非アクティブ';
 
   @override
   String get init => '初期化';
@@ -400,6 +421,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get mission => 'ミッション';
+
+  @override
+  String get mode => 'モード';
 
   @override
   String get more => 'もっと';
@@ -610,6 +634,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get sortByName => '名前順';
 
   @override
+  String get source => 'ソース';
+
+  @override
   String get speed => '速度';
 
   @override
@@ -708,6 +735,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => '種類';
+
+  @override
   String get undo => '元に戻す';
 
   @override
@@ -763,4 +793,44 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get yesterday => '昨日';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 日',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 時間',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 分',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 秒',
+    );
+    return '$_temp0';
+  }
 }

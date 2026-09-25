@@ -17,6 +17,9 @@ class LibLocalizationsTr extends LibLocalizations {
   }
 
   @override
+  String get active => 'Etkin';
+
+  @override
   String get add => 'Ekle';
 
   @override
@@ -100,6 +103,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get cancelled => 'İptal edildi';
 
   @override
+  String get capacity => 'Kapasite';
+
+  @override
   String get checkUpdate => 'Güncellemeleri kontrol et';
 
   @override
@@ -142,6 +148,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get copy => 'Kopyala';
 
   @override
+  String get current => 'Geçerli';
+
+  @override
   String get custom => 'Özel';
 
   @override
@@ -176,6 +185,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get descending => 'Azalan';
+
+  @override
+  String get description => 'Açıklama';
 
   @override
   String get device => 'Cihaz';
@@ -274,7 +286,13 @@ class LibLocalizationsTr extends LibLocalizations {
   String get foregroundService => 'Önplan Hizmeti';
 
   @override
+  String get format => 'Biçim';
+
+  @override
   String get found => 'Bulundu';
+
+  @override
+  String get gateway => 'Ağ geçidi';
 
   @override
   String get general => 'Genel';
@@ -302,6 +320,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get import => 'İçe Aktar';
+
+  @override
+  String get inactive => 'Etkin değil';
 
   @override
   String get init => 'Başlat';
@@ -401,6 +422,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get mission => 'Görev';
+
+  @override
+  String get mode => 'Mod';
 
   @override
   String get more => 'Daha fazla';
@@ -612,6 +636,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get sortByName => 'Ada göre';
 
   @override
+  String get source => 'Kaynak';
+
+  @override
   String get speed => 'Hız';
 
   @override
@@ -710,6 +737,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => 'Tür';
+
+  @override
   String get undo => 'Geri Al';
 
   @override
@@ -765,4 +795,44 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get yesterday => 'Dün';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gün',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count saat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dakika',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count saniye',
+    );
+    return '$_temp0';
+  }
 }

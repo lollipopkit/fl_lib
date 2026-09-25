@@ -17,6 +17,9 @@ class LibLocalizationsEn extends LibLocalizations {
   }
 
   @override
+  String get active => 'Active';
+
+  @override
   String get add => 'Add';
 
   @override
@@ -100,6 +103,9 @@ class LibLocalizationsEn extends LibLocalizations {
   String get cancelled => 'Cancelled';
 
   @override
+  String get capacity => 'Capacity';
+
+  @override
   String get checkUpdate => 'Check for updates';
 
   @override
@@ -142,6 +148,9 @@ class LibLocalizationsEn extends LibLocalizations {
   String get copy => 'Copy';
 
   @override
+  String get current => 'Current';
+
+  @override
   String get custom => 'Custom';
 
   @override
@@ -176,6 +185,9 @@ class LibLocalizationsEn extends LibLocalizations {
 
   @override
   String get descending => 'Descending';
+
+  @override
+  String get description => 'Description';
 
   @override
   String get device => 'Device';
@@ -274,7 +286,13 @@ class LibLocalizationsEn extends LibLocalizations {
   String get foregroundService => 'Foreground Service';
 
   @override
+  String get format => 'Format';
+
+  @override
   String get found => 'Found';
+
+  @override
+  String get gateway => 'Gateway';
 
   @override
   String get general => 'General';
@@ -302,6 +320,9 @@ class LibLocalizationsEn extends LibLocalizations {
 
   @override
   String get import => 'Import';
+
+  @override
+  String get inactive => 'Inactive';
 
   @override
   String get init => 'Initialize';
@@ -401,6 +422,9 @@ class LibLocalizationsEn extends LibLocalizations {
 
   @override
   String get mission => 'Mission';
+
+  @override
+  String get mode => 'Mode';
 
   @override
   String get more => 'More';
@@ -612,6 +636,9 @@ class LibLocalizationsEn extends LibLocalizations {
   String get sortByName => 'By name';
 
   @override
+  String get source => 'Source';
+
+  @override
   String get speed => 'Speed';
 
   @override
@@ -710,6 +737,9 @@ class LibLocalizationsEn extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => 'Type';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -765,4 +795,48 @@ class LibLocalizationsEn extends LibLocalizations {
 
   @override
   String get yesterday => 'Yesterday';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count days',
+      one: '1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hours',
+      one: '1 hour',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count minutes',
+      one: '1 minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count seconds',
+      one: '1 second',
+    );
+    return '$_temp0';
+  }
 }

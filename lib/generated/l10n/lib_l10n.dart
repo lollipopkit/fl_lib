@@ -137,6 +137,12 @@ abstract class LibLocalizations {
   /// **'{action1} and then {action2}?'**
   String actionAndAction(Object action1, Object action2);
 
+  /// No description provided for @active.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get active;
+
   /// No description provided for @add.
   ///
   /// In en, this message translates to:
@@ -293,6 +299,12 @@ abstract class LibLocalizations {
   /// **'Cancelled'**
   String get cancelled;
 
+  /// No description provided for @capacity.
+  ///
+  /// In en, this message translates to:
+  /// **'Capacity'**
+  String get capacity;
+
   /// No description provided for @checkUpdate.
   ///
   /// In en, this message translates to:
@@ -377,6 +389,12 @@ abstract class LibLocalizations {
   /// **'Copy'**
   String get copy;
 
+  /// No description provided for @current.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get current;
+
   /// No description provided for @custom.
   ///
   /// In en, this message translates to:
@@ -442,6 +460,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Descending'**
   String get descending;
+
+  /// No description provided for @description.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get description;
 
   /// No description provided for @device.
   ///
@@ -635,11 +659,23 @@ abstract class LibLocalizations {
   /// **'Foreground Service'**
   String get foregroundService;
 
+  /// No description provided for @format.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get format;
+
   /// No description provided for @found.
   ///
   /// In en, this message translates to:
   /// **'Found'**
   String get found;
+
+  /// No description provided for @gateway.
+  ///
+  /// In en, this message translates to:
+  /// **'Gateway'**
+  String get gateway;
 
   /// No description provided for @general.
   ///
@@ -694,6 +730,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Import'**
   String get import;
+
+  /// No description provided for @inactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Inactive'**
+  String get inactive;
 
   /// No description provided for @init.
   ///
@@ -892,6 +934,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Mission'**
   String get mission;
+
+  /// No description provided for @mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get mode;
 
   /// No description provided for @more.
   ///
@@ -1301,6 +1349,12 @@ abstract class LibLocalizations {
   /// **'By name'**
   String get sortByName;
 
+  /// No description provided for @source.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get source;
+
   /// No description provided for @speed.
   ///
   /// In en, this message translates to:
@@ -1493,6 +1547,12 @@ abstract class LibLocalizations {
   /// **'TTL'**
   String get ttl;
 
+  /// No description provided for @type.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get type;
+
   /// No description provided for @undo.
   ///
   /// In en, this message translates to:
@@ -1594,6 +1654,30 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Yesterday'**
   String get yesterday;
+
+  /// A length of time in whole days.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{1 day} other{{count} days}}'**
+  String durationDays(int count);
+
+  /// A length of time in whole hours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{1 hour} other{{count} hours}}'**
+  String durationHours(int count);
+
+  /// A length of time in whole minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{1 minute} other{{count} minutes}}'**
+  String durationMinutes(int count);
+
+  /// A length of time in whole seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{1 second} other{{count} seconds}}'**
+  String durationSeconds(int count);
 }
 
 class _LibLocalizationsDelegate

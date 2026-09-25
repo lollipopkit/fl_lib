@@ -17,6 +17,9 @@ class LibLocalizationsRu extends LibLocalizations {
   }
 
   @override
+  String get active => 'Активен';
+
+  @override
   String get add => 'Добавить';
 
   @override
@@ -100,6 +103,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get cancelled => 'Отменено';
 
   @override
+  String get capacity => 'Ёмкость';
+
+  @override
   String get checkUpdate => 'Проверить обновления';
 
   @override
@@ -142,6 +148,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get copy => 'Копировать';
 
   @override
+  String get current => 'Текущий';
+
+  @override
   String get custom => 'Настроить';
 
   @override
@@ -176,6 +185,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get descending => 'По убыванию';
+
+  @override
+  String get description => 'Описание';
 
   @override
   String get device => 'Устройство';
@@ -274,7 +286,13 @@ class LibLocalizationsRu extends LibLocalizations {
   String get foregroundService => 'Фоновая служба';
 
   @override
+  String get format => 'Формат';
+
+  @override
   String get found => 'Найдено';
+
+  @override
+  String get gateway => 'Шлюз';
 
   @override
   String get general => 'Общие';
@@ -302,6 +320,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get import => 'Импортировать';
+
+  @override
+  String get inactive => 'Неактивен';
 
   @override
   String get init => 'Инициализировать';
@@ -401,6 +422,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get mission => 'Задача';
+
+  @override
+  String get mode => 'Режим';
 
   @override
   String get more => 'Больше';
@@ -612,6 +636,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get sortByName => 'По имени';
 
   @override
+  String get source => 'Источник';
+
+  @override
   String get speed => 'Скорость';
 
   @override
@@ -710,6 +737,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => 'Тип';
+
+  @override
   String get undo => 'Отменить';
 
   @override
@@ -765,4 +795,56 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get yesterday => 'Вчера';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count дня',
+      many: '$count дней',
+      few: '$count дня',
+      one: '$count день',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count часа',
+      many: '$count часов',
+      few: '$count часа',
+      one: '$count час',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count минуты',
+      many: '$count минут',
+      few: '$count минуты',
+      one: '$count минута',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count секунды',
+      many: '$count секунд',
+      few: '$count секунды',
+      one: '$count секунда',
+    );
+    return '$_temp0';
+  }
 }

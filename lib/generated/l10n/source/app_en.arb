@@ -1,255 +1,1115 @@
 {
   "@@locale": "en",
   "about": "About",
+  "@about": {
+    "description": "Label for about."
+  },
   "actionAndAction": "{action1} and then {action2}?",
+  "@actionAndAction": {
+    "description": "Message template for action and action.",
+    "placeholders": {
+      "action1": {
+        "type": "String"
+      },
+      "action2": {
+        "type": "String"
+      }
+    }
+  },
+  "active": "Active",
+  "@active": {
+    "description": "Label for active."
+  },
   "add": "Add",
+  "@add": {
+    "description": "Label for add."
+  },
   "addr": "Address",
+  "@addr": {
+    "description": "Label for addr."
+  },
   "agoFmt": "{time} ago",
   "@agoFmt": {
     "placeholders": {
       "time": {
         "type": "String"
       }
-    }
+    },
+    "description": "Message template for ago fmt."
   },
   "ai": "AI",
+  "@ai": {
+    "description": "Abbreviated text for ai."
+  },
   "all": "All",
+  "@all": {
+    "description": "Label for all."
+  },
   "anonLoseDataTip": "Currently logged in anonymously, continuing operations will result in data loss.",
+  "@anonLoseDataTip": {
+    "description": "Message shown for anon lose data tip."
+  },
   "apiEndpoint": "API Endpoint",
+  "@apiEndpoint": {
+    "description": "Label for api endpoint."
+  },
   "apiKey": "API Key",
+  "@apiKey": {
+    "description": "Label for api key."
+  },
   "apiProtocol": "API protocol",
+  "@apiProtocol": {
+    "description": "Label for api protocol."
+  },
   "app": "Application",
+  "@app": {
+    "description": "Label for app."
+  },
   "ascending": "Ascending",
+  "@ascending": {
+    "description": "Label for ascending."
+  },
   "askAiModel": "Model",
+  "@askAiModel": {
+    "description": "Label for ask ai model."
+  },
   "askContinue": "{msg}. Continue?",
+  "@askContinue": {
+    "description": "Message template for ask continue.",
+    "placeholders": {
+      "msg": {
+        "type": "String"
+      }
+    }
+  },
   "attention": "Attention",
+  "@attention": {
+    "description": "Label for attention."
+  },
   "authRequired": "Authentication required",
+  "@authRequired": {
+    "description": "Label for auth required."
+  },
   "auto": "Auto",
+  "@auto": {
+    "description": "Label for auto."
+  },
   "available": "Available",
+  "@available": {
+    "description": "Label for available."
+  },
   "background": "Background",
+  "@background": {
+    "description": "Label for background."
+  },
   "backup": "Backup",
+  "@backup": {
+    "description": "Label for backup."
+  },
   "battery": "Battery",
+  "@battery": {
+    "description": "Label for battery."
+  },
   "bioAuth": "Biometric authentication",
+  "@bioAuth": {
+    "description": "Label for bio auth."
+  },
   "blurRadius": "Blur Radius",
+  "@blurRadius": {
+    "description": "Label for blur radius."
+  },
   "bright": "Bright",
+  "@bright": {
+    "description": "Label for bright."
+  },
   "browsing": "Browsing",
+  "@browsing": {
+    "description": "Label for browsing."
+  },
   "cancel": "Cancel",
+  "@cancel": {
+    "description": "Label for cancel."
+  },
   "cancelled": "Cancelled",
+  "@cancelled": {
+    "description": "Label for cancelled."
+  },
+  "capacity": "Capacity",
+  "@capacity": {
+    "description": "Label for capacity."
+  },
   "checkUpdate": "Check for updates",
+  "@checkUpdate": {
+    "description": "Label for check update."
+  },
   "clear": "Clear",
+  "@clear": {
+    "description": "Label for clear."
+  },
   "clearHistory": "Clear history",
+  "@clearHistory": {
+    "description": "Label for clear history."
+  },
   "click": "Click",
+  "@click": {
+    "description": "Label for click."
+  },
   "clipboard": "Clipboard",
+  "@clipboard": {
+    "description": "Label for clipboard."
+  },
   "close": "Close",
+  "@close": {
+    "description": "Label for close."
+  },
   "cmd": "Command",
+  "@cmd": {
+    "description": "Label for cmd."
+  },
   "configured": "Configured",
+  "@configured": {
+    "description": "Label for configured."
+  },
   "confirm": "Confirm",
+  "@confirm": {
+    "description": "Label for confirm."
+  },
   "conn": "Connection",
+  "@conn": {
+    "description": "Label for conn."
+  },
   "container": "Container",
+  "@container": {
+    "description": "Label for container."
+  },
   "content": "Content",
+  "@content": {
+    "description": "Label for content."
+  },
   "convert": "Convert",
+  "@convert": {
+    "description": "Label for convert."
+  },
   "copy": "Copy",
+  "@copy": {
+    "description": "Label for copy."
+  },
+  "current": "Current",
+  "@current": {
+    "description": "Label for current."
+  },
   "custom": "Custom",
+  "@custom": {
+    "description": "Label for custom."
+  },
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
+  "@customCmdDocUrl": {
+    "description": "URL for custom cmd doc url."
+  },
   "cut": "Cut",
+  "@cut": {
+    "description": "Label for cut."
+  },
   "dark": "Dark",
+  "@dark": {
+    "description": "Label for dark."
+  },
   "day": "Days",
+  "@day": {
+    "description": "Label for day."
+  },
   "decode": "Decode",
+  "@decode": {
+    "description": "Label for decode."
+  },
   "decompress": "Decompress",
+  "@decompress": {
+    "description": "Label for decompress."
+  },
   "delFmt": "Delete {type}({id})?",
+  "@delFmt": {
+    "description": "Message template for del fmt.",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "delay": "Delay",
+  "@delay": {
+    "description": "Label for delay."
+  },
   "delete": "Delete",
+  "@delete": {
+    "description": "Label for delete."
+  },
   "descending": "Descending",
+  "@descending": {
+    "description": "Label for descending."
+  },
+  "description": "Description",
+  "@description": {
+    "description": "Label for description."
+  },
   "device": "Device",
+  "@device": {
+    "description": "Label for device."
+  },
   "disabled": "Disabled",
+  "@disabled": {
+    "description": "Label for disabled."
+  },
   "disconnected": "Disconnected",
+  "@disconnected": {
+    "description": "Label for disconnected."
+  },
   "disk": "Disk",
+  "@disk": {
+    "description": "Label for disk."
+  },
   "doc": "Documentation",
+  "@doc": {
+    "description": "Label for doc."
+  },
   "done": "Done",
+  "@done": {
+    "description": "Label for done."
+  },
   "dontShowAgain": "Don't show again",
+  "@dontShowAgain": {
+    "description": "Label for dont show again."
+  },
   "download": "Download",
+  "@download": {
+    "description": "Label for download."
+  },
   "duration": "Duration",
+  "@duration": {
+    "description": "Label for duration."
+  },
   "edit": "Edit",
+  "@edit": {
+    "description": "Label for edit."
+  },
   "editor": "Editor",
+  "@editor": {
+    "description": "Label for editor."
+  },
   "empty": "Empty",
+  "@empty": {
+    "description": "Label for empty."
+  },
   "emulator": "Emulator",
+  "@emulator": {
+    "description": "Label for emulator."
+  },
   "encode": "Encode",
+  "@encode": {
+    "description": "Label for encode."
+  },
   "error": "Error",
+  "@error": {
+    "description": "Label for error."
+  },
   "example": "Example",
+  "@example": {
+    "description": "Label for example."
+  },
   "execute": "Execute",
+  "@execute": {
+    "description": "Label for execute."
+  },
   "exit": "Exit",
+  "@exit": {
+    "description": "Label for exit."
+  },
   "exitConfirmTip": "Press back again to exit",
+  "@exitConfirmTip": {
+    "description": "Label for exit confirm tip."
+  },
   "exitDirectly": "Exit directly",
+  "@exitDirectly": {
+    "description": "Label for exit directly."
+  },
   "experimentalFeature": "Experimental Feature",
+  "@experimentalFeature": {
+    "description": "Label for experimental feature."
+  },
   "export": "Export",
+  "@export": {
+    "description": "Label for export."
+  },
   "fail": "Failure",
+  "@fail": {
+    "description": "Label for fail."
+  },
   "feedback": "Feedback",
+  "@feedback": {
+    "description": "Label for feedback."
+  },
   "file": "File",
+  "@file": {
+    "description": "Label for file."
+  },
   "fold": "Fold",
+  "@fold": {
+    "description": "Label for fold."
+  },
   "folder": "Folder",
+  "@folder": {
+    "description": "Label for folder."
+  },
   "followSystem": "Follow system",
+  "@followSystem": {
+    "description": "Label for follow system."
+  },
   "font": "Font",
+  "@font": {
+    "description": "Label for font."
+  },
   "fontSize": "Font size",
+  "@fontSize": {
+    "description": "Label for font size."
+  },
   "force": "Force",
+  "@force": {
+    "description": "Label for force."
+  },
   "foregroundService": "Foreground Service",
+  "@foregroundService": {
+    "description": "Label for foreground service."
+  },
+  "format": "Format",
+  "@format": {
+    "description": "Label for format."
+  },
   "found": "Found",
+  "@found": {
+    "description": "Label for found."
+  },
+  "gateway": "Gateway",
+  "@gateway": {
+    "description": "Label for gateway."
+  },
   "general": "General",
+  "@general": {
+    "description": "Label for general."
+  },
   "goBackQ": "Go back?",
+  "@goBackQ": {
+    "description": "Message shown for go back q."
+  },
   "goto": "Go to",
+  "@goto": {
+    "description": "Label for goto."
+  },
   "hideTitleBar": "Hide title bar",
+  "@hideTitleBar": {
+    "description": "Label for hide title bar."
+  },
   "highlight": "Code highlighting",
+  "@highlight": {
+    "description": "Label for highlight."
+  },
   "host": "Host",
+  "@host": {
+    "description": "Label for host."
+  },
   "hour": "Hours",
+  "@hour": {
+    "description": "Label for hour."
+  },
   "image": "Image",
+  "@image": {
+    "description": "Label for image."
+  },
   "import": "Import",
+  "@import": {
+    "description": "Label for import."
+  },
+  "inactive": "Inactive",
+  "@inactive": {
+    "description": "Label for inactive."
+  },
   "init": "Initialize",
+  "@init": {
+    "description": "Label for init."
+  },
   "inner": "Inner",
+  "@inner": {
+    "description": "Label for inner."
+  },
   "install": "install",
+  "@install": {
+    "description": "Label for install."
+  },
   "invalid": "Invalid",
+  "@invalid": {
+    "description": "Label for invalid."
+  },
   "invalidUrl": "Invalid URL",
+  "@invalidUrl": {
+    "description": "Label for invalid url."
+  },
   "justNow": "Just now",
+  "@justNow": {
+    "description": "Label for just now."
+  },
   "key": "Key",
+  "@key": {
+    "description": "Label for key."
+  },
   "language": "Language",
+  "@language": {
+    "description": "Label for language."
+  },
   "license": "License",
+  "@license": {
+    "description": "Label for license."
+  },
   "loadingEllipsis": "...",
+  "@loadingEllipsis": {
+    "description": "Abbreviated text for loading ellipsis."
+  },
   "local": "Local",
+  "@local": {
+    "description": "Label for local."
+  },
   "location": "Location",
+  "@location": {
+    "description": "Label for location."
+  },
   "log": "Log",
+  "@log": {
+    "description": "Label for log."
+  },
   "login": "Log in",
+  "@login": {
+    "description": "Label for login."
+  },
   "loginTip": "No registration required, free to use.",
+  "@loginTip": {
+    "description": "Message shown for login tip."
+  },
   "logout": "Logout",
+  "@logout": {
+    "description": "Label for logout."
+  },
   "logs": "Logs",
+  "@logs": {
+    "description": "Label for logs."
+  },
   "loss": "loss",
+  "@loss": {
+    "description": "Label for loss."
+  },
   "manual": "Manual",
+  "@manual": {
+    "description": "Label for manual."
+  },
   "max": "Maximum",
+  "@max": {
+    "description": "Label for max."
+  },
   "memory": "Memory",
+  "@memory": {
+    "description": "Label for memory."
+  },
   "menuHelp": "Help",
+  "@menuHelp": {
+    "description": "Label for menu help."
+  },
   "menuInfo": "Info",
+  "@menuInfo": {
+    "description": "Label for menu info."
+  },
   "menuNavigate": "Navigate",
+  "@menuNavigate": {
+    "description": "Label for menu navigate."
+  },
   "menuQuit": "Quit",
+  "@menuQuit": {
+    "description": "Label for menu quit."
+  },
   "menuSettings": "Setting",
+  "@menuSettings": {
+    "description": "Label for menu settings."
+  },
   "menuWiki": "Wiki",
+  "@menuWiki": {
+    "description": "Label for menu wiki."
+  },
   "migrateCfg": "Configuration migration",
+  "@migrateCfg": {
+    "description": "Label for migrate cfg."
+  },
   "migrateCfgTip": "To adapt to the required new configuration",
+  "@migrateCfgTip": {
+    "description": "Label for migrate cfg tip."
+  },
   "milliseconds": "Milliseconds",
+  "@milliseconds": {
+    "description": "Label for milliseconds."
+  },
   "min": "Minimum",
+  "@min": {
+    "description": "Label for min."
+  },
   "minute": "Minutes",
+  "@minute": {
+    "description": "Label for minute."
+  },
   "mission": "Mission",
+  "@mission": {
+    "description": "Label for mission."
+  },
+  "mode": "Mode",
+  "@mode": {
+    "description": "Label for mode."
+  },
   "more": "More",
+  "@more": {
+    "description": "Label for more."
+  },
   "moveDown": "Move Down",
+  "@moveDown": {
+    "description": "Label for move down."
+  },
   "moveUp": "Move Up",
+  "@moveUp": {
+    "description": "Label for move up."
+  },
   "ms": "ms",
+  "@ms": {
+    "description": "Abbreviated text for ms."
+  },
   "name": "Name",
+  "@name": {
+    "description": "Label for name."
+  },
   "net": "Network",
+  "@net": {
+    "description": "Label for net."
+  },
   "network": "Network",
+  "@network": {
+    "description": "Label for network."
+  },
   "next": "Next",
+  "@next": {
+    "description": "Label for next."
+  },
   "node": "Node",
+  "@node": {
+    "description": "Label for node."
+  },
   "notAvailable": "Unavailable",
+  "@notAvailable": {
+    "description": "Label for not available."
+  },
   "notExistFmt": "{file} not exist",
+  "@notExistFmt": {
+    "description": "Message template for not exist fmt.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
   "note": "Note",
+  "@note": {
+    "description": "Label for note."
+  },
   "ok": "Okay",
+  "@ok": {
+    "description": "Label for ok."
+  },
   "opacity": "Opacity",
+  "@opacity": {
+    "description": "Label for opacity."
+  },
   "open": "Open",
+  "@open": {
+    "description": "Label for open."
+  },
   "paste": "Paste",
+  "@paste": {
+    "description": "Label for paste."
+  },
   "path": "Path",
+  "@path": {
+    "description": "Label for path."
+  },
   "permission": "Permission",
+  "@permission": {
+    "description": "Label for permission."
+  },
   "permissionDenied": "Permission denied.",
+  "@permissionDenied": {
+    "description": "Message shown for permission denied."
+  },
   "pingAvg": "Avg:",
+  "@pingAvg": {
+    "description": "Label for ping avg."
+  },
   "pkg": "Pkg",
+  "@pkg": {
+    "description": "Abbreviated text for pkg."
+  },
   "port": "Port",
+  "@port": {
+    "description": "Label for port."
+  },
   "portForward": "Port Forward",
+  "@portForward": {
+    "description": "Label for port forward."
+  },
   "preview": "Preview",
+  "@preview": {
+    "description": "Label for preview."
+  },
   "previous": "Previous",
+  "@previous": {
+    "description": "Label for previous."
+  },
   "primaryColorSeed": "Primary color seed",
+  "@primaryColorSeed": {
+    "description": "Label for primary color seed."
+  },
   "process": "Process",
+  "@process": {
+    "description": "Label for process."
+  },
   "prune": "Prune",
+  "@prune": {
+    "description": "Label for prune."
+  },
   "pwd": "Password",
+  "@pwd": {
+    "description": "Label for pwd."
+  },
   "pwdTip": "Length 6-32, can be English letters, numbers, and punctuation",
+  "@pwdTip": {
+    "description": "Label for pwd tip."
+  },
   "read": "Read",
+  "@read": {
+    "description": "Label for read."
+  },
   "ready": "Ready",
+  "@ready": {
+    "description": "Label for ready."
+  },
   "reboot": "Reboot",
+  "@reboot": {
+    "description": "Label for reboot."
+  },
   "reconnecting": "Reconnecting...",
+  "@reconnecting": {
+    "description": "Message shown for reconnecting."
+  },
   "redo": "Redo",
+  "@redo": {
+    "description": "Label for redo."
+  },
   "refresh": "Refresh",
+  "@refresh": {
+    "description": "Label for refresh."
+  },
   "register": "Sign up",
+  "@register": {
+    "description": "Label for register."
+  },
   "remote": "Remote",
+  "@remote": {
+    "description": "Label for remote."
+  },
   "rename": "Rename",
+  "@rename": {
+    "description": "Label for rename."
+  },
   "replace": "Replace",
+  "@replace": {
+    "description": "Label for replace."
+  },
   "replaceAll": "Replace all",
+  "@replaceAll": {
+    "description": "Label for replace all."
+  },
   "reset": "Reset",
+  "@reset": {
+    "description": "Label for reset."
+  },
   "restart": "Restart",
+  "@restart": {
+    "description": "Label for restart."
+  },
   "restore": "Restore",
+  "@restore": {
+    "description": "Label for restore."
+  },
   "result": "Result",
+  "@result": {
+    "description": "Label for result."
+  },
   "retry": "Retry",
+  "@retry": {
+    "description": "Label for retry."
+  },
   "route": "Routing",
+  "@route": {
+    "description": "Label for route."
+  },
   "run": "Run",
+  "@run": {
+    "description": "Label for run."
+  },
   "running": "Running",
+  "@running": {
+    "description": "Label for running."
+  },
   "save": "Save",
+  "@save": {
+    "description": "Label for save."
+  },
   "saveFailed": "Save failed",
+  "@saveFailed": {
+    "description": "Label for save failed."
+  },
   "saved": "Saved",
+  "@saved": {
+    "description": "Label for saved."
+  },
   "search": "Search",
+  "@search": {
+    "description": "Label for search."
+  },
   "second": "Seconds",
+  "@second": {
+    "description": "Label for second."
+  },
   "select": "Select",
+  "@select": {
+    "description": "Label for select."
+  },
   "sensors": "Sensor",
+  "@sensors": {
+    "description": "Label for sensors."
+  },
   "sequence": "Sequence",
+  "@sequence": {
+    "description": "Label for sequence."
+  },
   "server": "Server",
+  "@server": {
+    "description": "Label for server."
+  },
   "servers": "Servers",
+  "@servers": {
+    "description": "Label for servers."
+  },
   "setting": "Settings",
+  "@setting": {
+    "description": "Label for setting."
+  },
   "share": "Share",
+  "@share": {
+    "description": "Label for share."
+  },
   "shutdown": "Shutdown",
+  "@shutdown": {
+    "description": "Label for shutdown."
+  },
   "size": "Size",
+  "@size": {
+    "description": "Label for size."
+  },
   "sizeTooLargeOnlyPrefix": "Content too large, displaying only the first {bytes}",
+  "@sizeTooLargeOnlyPrefix": {
+    "description": "Message template for size too large only prefix.",
+    "placeholders": {
+      "bytes": {
+        "type": "String"
+      }
+    }
+  },
   "snippet": "Snippet",
+  "@snippet": {
+    "description": "Label for snippet."
+  },
   "softWrap": "Soft wrap",
+  "@softWrap": {
+    "description": "Label for soft wrap."
+  },
   "sort": "Sort",
+  "@sort": {
+    "description": "Label for sort."
+  },
   "sortByName": "By name",
+  "@sortByName": {
+    "description": "Label for sort by name."
+  },
+  "source": "Source",
+  "@source": {
+    "description": "Label for source."
+  },
   "speed": "Speed",
+  "@speed": {
+    "description": "Label for speed."
+  },
   "start": "Start",
+  "@start": {
+    "description": "Label for start."
+  },
   "stat": "Statistics",
+  "@stat": {
+    "description": "Label for stat."
+  },
   "stats": "Statistics",
+  "@stats": {
+    "description": "Label for stats."
+  },
   "stop": "Stop",
+  "@stop": {
+    "description": "Label for stop."
+  },
   "stopped": "Stopped",
+  "@stopped": {
+    "description": "Label for stopped."
+  },
   "storage": "Storage",
+  "@storage": {
+    "description": "Label for storage."
+  },
   "success": "Success",
+  "@success": {
+    "description": "Label for success."
+  },
   "sudoPassword": "sudo password",
+  "@sudoPassword": {
+    "description": "Label for sudo password."
+  },
   "sudoPwdTitle": "sudo {pwd}",
+  "@sudoPwdTitle": {
+    "description": "Message template for sudo pwd title.",
+    "placeholders": {
+      "pwd": {
+        "type": "String"
+      }
+    }
+  },
   "suspend": "Suspend",
+  "@suspend": {
+    "description": "Label for suspend."
+  },
   "switch_": "Switch",
+  "@switch_": {
+    "description": "Label for switch ."
+  },
   "switcher": "Switcher",
+  "@switcher": {
+    "description": "Label for switcher."
+  },
   "sync": "Synchronize",
+  "@sync": {
+    "description": "Label for sync."
+  },
   "system": "System",
+  "@system": {
+    "description": "Label for system."
+  },
   "tag": "Tag",
+  "@tag": {
+    "description": "Label for tag."
+  },
   "tapToAuth": "Click to verify",
+  "@tapToAuth": {
+    "description": "Label for tap to auth."
+  },
   "temperature": "Temperature",
+  "@temperature": {
+    "description": "Label for temperature."
+  },
   "terminal": "Terminal",
+  "@terminal": {
+    "description": "Label for terminal."
+  },
   "test": "Test",
+  "@test": {
+    "description": "Label for test."
+  },
   "textScaler": "Text scaler",
+  "@textScaler": {
+    "description": "Label for text scaler."
+  },
   "theme": "Theme",
+  "@theme": {
+    "description": "Label for theme."
+  },
   "themeMode": "Theme mode",
+  "@themeMode": {
+    "description": "Label for theme mode."
+  },
   "thinking": "Thinking",
+  "@thinking": {
+    "description": "Label for thinking."
+  },
   "time": "Time",
+  "@time": {
+    "description": "Label for time."
+  },
   "timedOut": "Timed out",
+  "@timedOut": {
+    "description": "Label for timed out."
+  },
   "timeout": "Timeout",
+  "@timeout": {
+    "description": "Label for timeout."
+  },
   "times": "Times",
+  "@times": {
+    "description": "Label for times."
+  },
   "total": "Total",
+  "@total": {
+    "description": "Label for total."
+  },
   "totalAttempts": "Total",
+  "@totalAttempts": {
+    "description": "Label for total attempts."
+  },
   "traffic": "Traffic",
+  "@traffic": {
+    "description": "Label for traffic."
+  },
   "ttl": "TTL",
+  "@ttl": {
+    "description": "Abbreviated text for ttl."
+  },
+  "type": "Type",
+  "@type": {
+    "description": "Label for type."
+  },
   "undo": "Undo",
+  "@undo": {
+    "description": "Label for undo."
+  },
   "unknown": "Unknown",
+  "@unknown": {
+    "description": "Label for unknown."
+  },
   "unsupported": "Not supported",
+  "@unsupported": {
+    "description": "Label for unsupported."
+  },
   "update": "Update",
+  "@update": {
+    "description": "Label for update."
+  },
   "upload": "Upload",
+  "@upload": {
+    "description": "Label for upload."
+  },
   "uptime": "Uptime",
+  "@uptime": {
+    "description": "Label for uptime."
+  },
   "used": "Used",
+  "@used": {
+    "description": "Label for used."
+  },
   "user": "User",
+  "@user": {
+    "description": "Label for user."
+  },
   "valid": "Valid",
+  "@valid": {
+    "description": "Label for valid."
+  },
   "value": "Value",
+  "@value": {
+    "description": "Label for value."
+  },
   "versionHasUpdate": "Found: v1.0.{build}, click to update",
+  "@versionHasUpdate": {
+    "description": "Message template for version has update.",
+    "placeholders": {
+      "build": {
+        "type": "String"
+      }
+    }
+  },
   "versionUnknownUpdate": "Current: v1.0.{build}, click to check updates",
+  "@versionUnknownUpdate": {
+    "description": "Message template for version unknown update.",
+    "placeholders": {
+      "build": {
+        "type": "String"
+      }
+    }
+  },
   "versionUpdated": "Current: v1.0.{build}, is up to date",
+  "@versionUpdated": {
+    "description": "Message template for version updated.",
+    "placeholders": {
+      "build": {
+        "type": "String"
+      }
+    }
+  },
   "view": "View",
+  "@view": {
+    "description": "Label for view."
+  },
   "viewErr": "See error",
+  "@viewErr": {
+    "description": "Label for view err."
+  },
   "write": "Write",
-  "yesterday": "Yesterday"
+  "@write": {
+    "description": "Label for write."
+  },
+  "yesterday": "Yesterday",
+  "@yesterday": {
+    "description": "Label for yesterday."
+  },
+  "durationDays": "{count, plural, one{1 day} other{{count} days}}",
+  "@durationDays": {
+    "description": "A length of time in whole days.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "durationHours": "{count, plural, one{1 hour} other{{count} hours}}",
+  "@durationHours": {
+    "description": "A length of time in whole hours.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "durationMinutes": "{count, plural, one{1 minute} other{{count} minutes}}",
+  "@durationMinutes": {
+    "description": "A length of time in whole minutes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "durationSeconds": "{count, plural, one{1 second} other{{count} seconds}}",
+  "@durationSeconds": {
+    "description": "A length of time in whole seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

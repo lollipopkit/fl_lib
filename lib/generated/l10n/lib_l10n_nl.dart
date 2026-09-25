@@ -17,6 +17,9 @@ class LibLocalizationsNl extends LibLocalizations {
   }
 
   @override
+  String get active => 'Actief';
+
+  @override
   String get add => 'Toevoegen';
 
   @override
@@ -100,6 +103,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get cancelled => 'Geannuleerd';
 
   @override
+  String get capacity => 'Capaciteit';
+
+  @override
   String get checkUpdate => 'Controleren op updates';
 
   @override
@@ -142,6 +148,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get copy => 'Kopiëren';
 
   @override
+  String get current => 'Huidig';
+
+  @override
   String get custom => 'Aangepast';
 
   @override
@@ -176,6 +185,9 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get descending => 'Aflopend';
+
+  @override
+  String get description => 'Beschrijving';
 
   @override
   String get device => 'Apparaat';
@@ -274,7 +286,13 @@ class LibLocalizationsNl extends LibLocalizations {
   String get foregroundService => 'Voorgrondservice';
 
   @override
+  String get format => 'Formaat';
+
+  @override
   String get found => 'Gevonden';
+
+  @override
+  String get gateway => 'Gateway';
 
   @override
   String get general => 'Algemeen';
@@ -302,6 +320,9 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get import => 'Importeren';
+
+  @override
+  String get inactive => 'Inactief';
 
   @override
   String get init => 'Initialiseren';
@@ -402,6 +423,9 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get mission => 'Missie';
+
+  @override
+  String get mode => 'Modus';
 
   @override
   String get more => 'Meer';
@@ -613,6 +637,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get sortByName => 'Op naam';
 
   @override
+  String get source => 'Bron';
+
+  @override
   String get speed => 'Snelheid';
 
   @override
@@ -711,6 +738,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => 'Type';
+
+  @override
   String get undo => 'Ongedaan maken';
 
   @override
@@ -766,4 +796,48 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get yesterday => 'Gisteren';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dagen',
+      one: '1 dag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count uur',
+      one: '1 uur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count minuten',
+      one: '1 minuut',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count seconden',
+      one: '1 seconde',
+    );
+    return '$_temp0';
+  }
 }

@@ -17,6 +17,9 @@ class LibLocalizationsKo extends LibLocalizations {
   }
 
   @override
+  String get active => '활성';
+
+  @override
   String get add => '추가';
 
   @override
@@ -99,6 +102,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get cancelled => '취소됨';
 
   @override
+  String get capacity => '용량';
+
+  @override
   String get checkUpdate => '업데이트 확인';
 
   @override
@@ -141,6 +147,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get copy => '복사';
 
   @override
+  String get current => '현재';
+
+  @override
   String get custom => '사용자 정의';
 
   @override
@@ -175,6 +184,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get descending => '내림차순';
+
+  @override
+  String get description => '설명';
 
   @override
   String get device => '장치';
@@ -273,7 +285,13 @@ class LibLocalizationsKo extends LibLocalizations {
   String get foregroundService => '포그라운드 서비스';
 
   @override
+  String get format => '형식';
+
+  @override
   String get found => '찾음';
+
+  @override
+  String get gateway => '게이트웨이';
 
   @override
   String get general => '일반';
@@ -301,6 +319,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get import => '가져오기';
+
+  @override
+  String get inactive => '비활성';
 
   @override
   String get init => '초기화';
@@ -400,6 +421,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get mission => '작업';
+
+  @override
+  String get mode => '모드';
 
   @override
   String get more => '더보기';
@@ -610,6 +634,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get sortByName => '이름순';
 
   @override
+  String get source => '소스';
+
+  @override
   String get speed => '속도';
 
   @override
@@ -708,6 +735,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => '유형';
+
+  @override
   String get undo => '실행 취소';
 
   @override
@@ -763,4 +793,44 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get yesterday => '어제';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count일',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count시간',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count분',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count초',
+    );
+    return '$_temp0';
+  }
 }

@@ -5,23 +5,23 @@ import 'package:fl_lib/src/res/l10n.dart';
 extension DurationX on Duration {
   /// Returns a concise localized string for this duration's absolute value.
   ///
-  /// Example outputs: `2 day`, `3 hour`, `15 minute`, `42 second`.
+  /// Example outputs (en): `2 days`, `1 hour`, `15 minutes`, `42 seconds`.
   String get toAgoStr {
     final abs_ = abs();
     final days = abs_.inDays;
     if (days > 0) {
-      return '$days ${l10n.day}';
+      return l10n.durationDays(days);
     }
     final hours = abs_.inHours;
     if (hours > 0) {
-      return '$hours ${l10n.hour}';
+      return l10n.durationHours(hours);
     }
     final minutes = abs_.inMinutes;
     if (minutes > 0) {
-      return '$minutes ${l10n.minute}';
+      return l10n.durationMinutes(minutes);
     }
     final seconds = abs_.inSeconds;
-    return '$seconds ${l10n.second}';
+    return l10n.durationSeconds(seconds);
   }
 }
 

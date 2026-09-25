@@ -17,6 +17,9 @@ class LibLocalizationsZh extends LibLocalizations {
   }
 
   @override
+  String get active => '活动';
+
+  @override
   String get add => '添加';
 
   @override
@@ -99,6 +102,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get cancelled => '已取消';
 
   @override
+  String get capacity => '容量';
+
+  @override
   String get checkUpdate => '检查更新';
 
   @override
@@ -141,6 +147,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get copy => '复制';
 
   @override
+  String get current => '当前';
+
+  @override
   String get custom => '自定义';
 
   @override
@@ -175,6 +184,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get descending => '降序';
+
+  @override
+  String get description => '描述';
 
   @override
   String get device => '设备';
@@ -273,7 +285,13 @@ class LibLocalizationsZh extends LibLocalizations {
   String get foregroundService => '前台服务';
 
   @override
+  String get format => '格式';
+
+  @override
   String get found => '已找到';
+
+  @override
+  String get gateway => '网关';
 
   @override
   String get general => '通用';
@@ -301,6 +319,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get import => '导入';
+
+  @override
+  String get inactive => '未激活';
 
   @override
   String get init => '初始化';
@@ -400,6 +421,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get mission => '任务';
+
+  @override
+  String get mode => '模式';
 
   @override
   String get more => '更多';
@@ -610,6 +634,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get sortByName => '按名称';
 
   @override
+  String get source => '来源';
+
+  @override
   String get speed => '速度';
 
   @override
@@ -708,6 +735,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => '类型';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -763,6 +793,46 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get yesterday => '昨天';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 天',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 小时',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 分钟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 秒',
+    );
+    return '$_temp0';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -776,6 +846,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String actionAndAction(Object action1, Object action2) {
     return '$action1 然後 $action2？';
   }
+
+  @override
+  String get active => '使用中';
 
   @override
   String get add => '添加';
@@ -860,6 +933,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get cancelled => '已取消';
 
   @override
+  String get capacity => '容量';
+
+  @override
   String get checkUpdate => '檢查更新';
 
   @override
@@ -902,6 +978,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get copy => '複製';
 
   @override
+  String get current => '目前';
+
+  @override
   String get custom => '自訂';
 
   @override
@@ -936,6 +1015,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get descending => '遞減';
+
+  @override
+  String get description => '描述';
 
   @override
   String get device => '裝置';
@@ -1034,7 +1116,13 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get foregroundService => '前景服務';
 
   @override
+  String get format => '格式';
+
+  @override
   String get found => '找到';
+
+  @override
+  String get gateway => '閘道';
 
   @override
   String get general => '通用';
@@ -1062,6 +1150,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get import => '匯入';
+
+  @override
+  String get inactive => '未啟用';
 
   @override
   String get init => '初始化';
@@ -1161,6 +1252,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get mission => '任務';
+
+  @override
+  String get mode => '模式';
 
   @override
   String get more => '更多';
@@ -1371,6 +1465,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get sortByName => '依名稱';
 
   @override
+  String get source => '來源';
+
+  @override
   String get speed => '速度';
 
   @override
@@ -1469,6 +1566,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get ttl => 'TTL';
 
   @override
+  String get type => '類型';
+
+  @override
   String get undo => '復原';
 
   @override
@@ -1524,4 +1624,44 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get yesterday => '昨天';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 天',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 小時',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 分鐘',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 秒',
+    );
+    return '$_temp0';
+  }
 }

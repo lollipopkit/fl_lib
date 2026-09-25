@@ -17,6 +17,9 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
+  String get active => 'Aktif';
+
+  @override
   String get add => 'Tambah';
 
   @override
@@ -100,6 +103,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get cancelled => 'Dibatalkan';
 
   @override
+  String get capacity => 'Kapasitas';
+
+  @override
   String get checkUpdate => 'Periksa pembaruan';
 
   @override
@@ -142,6 +148,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get copy => 'Salin';
 
   @override
+  String get current => 'Saat ini';
+
+  @override
   String get custom => 'Kustom';
 
   @override
@@ -176,6 +185,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get descending => 'Turun';
+
+  @override
+  String get description => 'Deskripsi';
 
   @override
   String get device => 'Perangkat';
@@ -274,7 +286,13 @@ class LibLocalizationsId extends LibLocalizations {
   String get foregroundService => 'Layanan Latar Depan';
 
   @override
+  String get format => 'Format';
+
+  @override
   String get found => 'Ditemukan';
+
+  @override
+  String get gateway => 'Gateway';
 
   @override
   String get general => 'Umum';
@@ -302,6 +320,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get import => 'Impor';
+
+  @override
+  String get inactive => 'Tidak aktif';
 
   @override
   String get init => 'Inisialisasi';
@@ -402,6 +423,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get mission => 'Misi';
+
+  @override
+  String get mode => 'Mode';
 
   @override
   String get more => 'Lebih banyak';
@@ -613,6 +637,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get sortByName => 'Menurut nama';
 
   @override
+  String get source => 'Sumber';
+
+  @override
   String get speed => 'Kecepatan';
 
   @override
@@ -711,6 +738,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => 'Tipe';
+
+  @override
   String get undo => 'Batalkan';
 
   @override
@@ -766,4 +796,44 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get yesterday => 'Kemarin';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hari',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count jam',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count menit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count detik',
+    );
+    return '$_temp0';
+  }
 }

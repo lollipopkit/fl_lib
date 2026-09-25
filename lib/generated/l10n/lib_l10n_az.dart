@@ -17,6 +17,9 @@ class LibLocalizationsAz extends LibLocalizations {
   }
 
   @override
+  String get active => 'Aktiv';
+
+  @override
   String get add => 'Əlavə et';
 
   @override
@@ -100,6 +103,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get cancelled => 'Ləğv edildi';
 
   @override
+  String get capacity => 'Tutum';
+
+  @override
   String get checkUpdate => 'Yeniləmələri yoxla';
 
   @override
@@ -142,6 +148,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get copy => 'Kopyala';
 
   @override
+  String get current => 'Cari';
+
+  @override
   String get custom => 'Fərdi';
 
   @override
@@ -176,6 +185,9 @@ class LibLocalizationsAz extends LibLocalizations {
 
   @override
   String get descending => 'Azalan';
+
+  @override
+  String get description => 'Təsvir';
 
   @override
   String get device => 'Cihaz';
@@ -274,7 +286,13 @@ class LibLocalizationsAz extends LibLocalizations {
   String get foregroundService => 'Ön plan xidməti';
 
   @override
+  String get format => 'Format';
+
+  @override
   String get found => 'Tapıldı';
+
+  @override
+  String get gateway => 'Şlüz';
 
   @override
   String get general => 'Ümumi';
@@ -302,6 +320,9 @@ class LibLocalizationsAz extends LibLocalizations {
 
   @override
   String get import => 'İdxal et';
+
+  @override
+  String get inactive => 'Qeyri-aktiv';
 
   @override
   String get init => 'İlkinləşdir';
@@ -402,6 +423,9 @@ class LibLocalizationsAz extends LibLocalizations {
 
   @override
   String get mission => 'Tapşırıq';
+
+  @override
+  String get mode => 'Rejim';
 
   @override
   String get more => 'Daha çox';
@@ -613,6 +637,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get sortByName => 'Ada görə';
 
   @override
+  String get source => 'Mənbə';
+
+  @override
   String get speed => 'Sürət';
 
   @override
@@ -711,6 +738,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get ttl => 'TTL';
 
   @override
+  String get type => 'Növ';
+
+  @override
   String get undo => 'Geri al';
 
   @override
@@ -766,4 +796,44 @@ class LibLocalizationsAz extends LibLocalizations {
 
   @override
   String get yesterday => 'Dünən';
+
+  @override
+  String durationDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gün',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count saat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dəqiqə',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String durationSeconds(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count saniyə',
+    );
+    return '$_temp0';
+  }
 }
