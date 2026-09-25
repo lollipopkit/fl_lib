@@ -37,18 +37,35 @@ final class IntroPage extends StatefulWidget {
     path: '/intro',
   );
 
-  static Widget title({IconData? icon, String? text, bool big = false}) {
+  static Widget title({
+    IconData? icon,
+    String? text,
+    bool big = false,
+    Widget? mark,
+  }) {
     assert(icon != null || text != null);
 
     Widget child;
     if (icon != null) {
       child = Icon(icon, size: big ? 41 : null);
     } else if (text != null) {
-      child = Text(
-        text,
-        style: big
-            ? const TextStyle(fontSize: 41, fontWeight: FontWeight.w500)
-            : UIs.textGrey,
+      // The mark rides the last line of the title rather than sitting after
+      // the block: a heading is one or two lines depending on the width it is
+      // given, and beside the block it would sit against the shorter of them.
+      child = Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Flexible(
+            child: Text(
+              text,
+              style: big
+                  ? const TextStyle(fontSize: 41, fontWeight: FontWeight.w500)
+                  : UIs.textGrey,
+            ),
+          ),
+          if (mark case final mark?) ...[const SizedBox(width: 9), mark],
+        ],
       );
     } else {
       child = const SizedBox();

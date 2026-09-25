@@ -95,9 +95,22 @@ final class CenterGreyTitle extends StatelessWidget {
 }
 
 class TwoLineText extends StatelessWidget {
-  const TwoLineText({super.key, required this.up, required this.down});
+  const TwoLineText({
+    super.key,
+    required this.up,
+    required this.down,
+    this.mark,
+  });
   final String up;
   final String down;
+
+  /// Drawn after [up], on its line — a [BetaTag], or whatever else says
+  /// something about the name rather than about what it belongs to.
+  ///
+  /// On the up line and not beside the column, which is where a caller would
+  /// have to put it: a block of two lines centres what is beside it, and the
+  /// mark would sit between the name and the subtitle belonging to neither.
+  final Widget? mark;
 
   @override
   Widget build(BuildContext context) {
@@ -110,10 +123,20 @@ class TwoLineText extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          up,
-          style: UIs.text15,
-          overflow: TextOverflow.ellipsis,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Flexible, so a long name ellipsises against the mark rather than
+            // pushing it off the bar.
+            Flexible(
+              child: Text(
+                up,
+                style: UIs.text15,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (mark case final mark?) ...[const SizedBox(width: 7), mark],
+          ],
         ),
         Text(
           down,

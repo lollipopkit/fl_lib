@@ -140,6 +140,7 @@ export 'src/view/widget/context_menu.dart';
 export 'src/view/widget/appbar.dart';
 export 'src/view/widget/auto_hide.dart';
 export 'src/view/widget/avg.dart';
+export 'src/view/widget/beta_tag.dart';
 export 'src/view/widget/btn/btn.dart';
 export 'src/view/widget/btn/count_down_btn.dart';
 export 'src/view/widget/card.dart';
