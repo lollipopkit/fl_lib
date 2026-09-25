@@ -335,6 +335,12 @@ abstract class LibLocalizations {
   /// **'Clipboard'**
   String get clipboard;
 
+  /// Label for clone: make a copy (of a virtual machine, a volume).
+  ///
+  /// In en, this message translates to:
+  /// **'Clone'**
+  String get clone;
+
   /// Label for close.
   ///
   /// In en, this message translates to:

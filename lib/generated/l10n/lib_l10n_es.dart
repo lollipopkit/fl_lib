@@ -121,6 +121,9 @@ class LibLocalizationsEs extends LibLocalizations {
   String get clipboard => 'Portapapeles';
 
   @override
+  String get clone => 'Clonar';
+
+  @override
   String get close => 'Cerrar';
 
   @override

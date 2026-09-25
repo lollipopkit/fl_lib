@@ -121,6 +121,9 @@ class LibLocalizationsDe extends LibLocalizations {
   String get clipboard => 'Zwischenablage';
 
   @override
+  String get clone => 'Klonen';
+
+  @override
   String get close => 'Schließen';
 
   @override

@@ -121,6 +121,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get clipboard => 'Pano';
 
   @override
+  String get clone => 'Klonla';
+
+  @override
   String get close => 'Kapat';
 
   @override

@@ -121,6 +121,9 @@ class LibLocalizationsIt extends LibLocalizations {
   String get clipboard => 'Appunti';
 
   @override
+  String get clone => 'Clona';
+
+  @override
   String get close => 'Chiudi';
 
   @override

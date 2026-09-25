@@ -158,6 +158,10 @@
   "@clipboard": {
     "description": "Label for clipboard."
   },
+  "clone": "Clone",
+  "@clone": {
+    "description": "Label for clone: make a copy (of a virtual machine, a volume)."
+  },
   "close": "Close",
   "@close": {
     "description": "Label for close."

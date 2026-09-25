@@ -121,6 +121,9 @@ class LibLocalizationsFr extends LibLocalizations {
   String get clipboard => 'Presse-papiers';
 
   @override
+  String get clone => 'Cloner';
+
+  @override
   String get close => 'Fermer';
 
   @override

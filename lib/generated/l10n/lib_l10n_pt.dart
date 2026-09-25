@@ -121,6 +121,9 @@ class LibLocalizationsPt extends LibLocalizations {
   String get clipboard => 'Área de transferência';
 
   @override
+  String get clone => 'Clonar';
+
+  @override
   String get close => 'Fechar';
 
   @override

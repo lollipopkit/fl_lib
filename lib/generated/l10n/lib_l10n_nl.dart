@@ -121,6 +121,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get clipboard => 'Klembord';
 
   @override
+  String get clone => 'Klonen';
+
+  @override
   String get close => 'Sluiten';
 
   @override

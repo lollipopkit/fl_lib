@@ -120,6 +120,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get clipboard => '클립보드';
 
   @override
+  String get clone => '복제';
+
+  @override
   String get close => '닫기';
 
   @override

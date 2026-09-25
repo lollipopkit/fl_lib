@@ -121,6 +121,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get clipboard => 'Буфер обмена';
 
   @override
+  String get clone => 'Клонировать';
+
+  @override
   String get close => 'Закрыть';
 
   @override

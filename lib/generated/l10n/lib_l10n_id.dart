@@ -121,6 +121,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get clipboard => 'Papan klip';
 
   @override
+  String get clone => 'Kloning';
+
+  @override
   String get close => 'Menutup';
 
   @override

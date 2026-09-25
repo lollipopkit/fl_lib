@@ -120,6 +120,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get clipboard => '剪切板';
 
   @override
+  String get clone => '克隆';
+
+  @override
   String get close => '关闭';
 
   @override
@@ -961,6 +964,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get clipboard => '剪貼簿';
+
+  @override
+  String get clone => '複製';
 
   @override
   String get close => '關閉';

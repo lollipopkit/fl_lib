@@ -120,6 +120,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get clipboard => 'クリップボード';
 
   @override
+  String get clone => 'クローン';
+
+  @override
   String get close => '閉じる';
 
   @override

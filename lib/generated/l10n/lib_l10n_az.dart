@@ -121,6 +121,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get clipboard => 'Mübadilə buferi';
 
   @override
+  String get clone => 'Klonla';
+
+  @override
   String get close => 'Bağla';
 
   @override

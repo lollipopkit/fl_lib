@@ -121,6 +121,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get clipboard => 'Буфер обміну';
 
   @override
+  String get clone => 'Клонувати';
+
+  @override
   String get close => 'Закрити';
 
   @override
