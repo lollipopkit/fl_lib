@@ -148,6 +148,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get copy => 'Kopyala';
 
   @override
+  String get create => 'Yarat';
+
+  @override
   String get current => 'Cari';
 
   @override
@@ -453,6 +456,9 @@ class LibLocalizationsAz extends LibLocalizations {
 
   @override
   String get node => 'Düyün';
+
+  @override
+  String get none => 'Yoxdur';
 
   @override
   String get notAvailable => 'Əlçatan deyil';

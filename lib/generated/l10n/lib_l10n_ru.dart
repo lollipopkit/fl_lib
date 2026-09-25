@@ -148,6 +148,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get copy => 'Копировать';
 
   @override
+  String get create => 'Создать';
+
+  @override
   String get current => 'Текущий';
 
   @override
@@ -452,6 +455,9 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get node => 'Узел';
+
+  @override
+  String get none => 'Нет';
 
   @override
   String get notAvailable => 'Недоступно';

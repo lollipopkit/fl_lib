@@ -147,6 +147,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get copy => '복사';
 
   @override
+  String get create => '만들기';
+
+  @override
   String get current => '현재';
 
   @override
@@ -451,6 +454,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get node => '노드';
+
+  @override
+  String get none => '없음';
 
   @override
   String get notAvailable => '사용 불가';

@@ -147,6 +147,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get copy => 'コピーする';
 
   @override
+  String get create => '作成';
+
+  @override
   String get current => '現在';
 
   @override
@@ -451,6 +454,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get node => 'ノード';
+
+  @override
+  String get none => 'なし';
 
   @override
   String get notAvailable => '利用不可';

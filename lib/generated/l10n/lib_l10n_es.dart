@@ -148,6 +148,9 @@ class LibLocalizationsEs extends LibLocalizations {
   String get copy => 'Copiar';
 
   @override
+  String get create => 'Crear';
+
+  @override
   String get current => 'Actual';
 
   @override
@@ -453,6 +456,9 @@ class LibLocalizationsEs extends LibLocalizations {
 
   @override
   String get node => 'Nodo';
+
+  @override
+  String get none => 'Ninguno';
 
   @override
   String get notAvailable => 'No disponible';

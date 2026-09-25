@@ -148,6 +148,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get copy => 'Salin';
 
   @override
+  String get create => 'Buat';
+
+  @override
   String get current => 'Saat ini';
 
   @override
@@ -453,6 +456,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get node => 'Node';
+
+  @override
+  String get none => 'Tidak ada';
 
   @override
   String get notAvailable => 'Tidak tersedia';

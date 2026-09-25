@@ -147,6 +147,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get copy => '复制';
 
   @override
+  String get create => '创建';
+
+  @override
   String get current => '当前';
 
   @override
@@ -451,6 +454,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get node => '节点';
+
+  @override
+  String get none => '无';
 
   @override
   String get notAvailable => '不可用';
@@ -978,6 +984,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get copy => '複製';
 
   @override
+  String get create => '建立';
+
+  @override
   String get current => '目前';
 
   @override
@@ -1282,6 +1291,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get node => '節點';
+
+  @override
+  String get none => '無';
 
   @override
   String get notAvailable => '不可用';

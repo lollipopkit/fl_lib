@@ -148,6 +148,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get copy => 'Kopyala';
 
   @override
+  String get create => 'Oluştur';
+
+  @override
   String get current => 'Geçerli';
 
   @override
@@ -452,6 +455,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get node => 'Düğüm';
+
+  @override
+  String get none => 'Yok';
 
   @override
   String get notAvailable => 'Kullanılamaz';

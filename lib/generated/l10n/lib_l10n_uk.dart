@@ -148,6 +148,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get copy => 'Скопіювати';
 
   @override
+  String get create => 'Створити';
+
+  @override
   String get current => 'Поточний';
 
   @override
@@ -452,6 +455,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get node => 'Вузол';
+
+  @override
+  String get none => 'Немає';
 
   @override
   String get notAvailable => 'Недоступний';

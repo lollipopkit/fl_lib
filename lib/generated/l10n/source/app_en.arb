@@ -9,10 +9,10 @@
     "description": "Message template for action and action.",
     "placeholders": {
       "action1": {
-        "type": "String"
+        "type": "Object"
       },
       "action2": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -78,7 +78,7 @@
     "description": "Message template for ask continue.",
     "placeholders": {
       "msg": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -194,6 +194,10 @@
   "@copy": {
     "description": "Label for copy."
   },
+  "create": "Create",
+  "@create": {
+    "description": "Action: create something new."
+  },
   "current": "Current",
   "@current": {
     "description": "Label for current."
@@ -230,11 +234,11 @@
   "@delFmt": {
     "description": "Message template for del fmt.",
     "placeholders": {
-      "type": {
-        "type": "String"
-      },
       "id": {
-        "type": "String"
+        "type": "Object"
+      },
+      "type": {
+        "type": "Object"
       }
     }
   },
@@ -606,6 +610,10 @@
   "@node": {
     "description": "Label for node."
   },
+  "none": "None",
+  "@none": {
+    "description": "Choice meaning nothing of the kind."
+  },
   "notAvailable": "Unavailable",
   "@notAvailable": {
     "description": "Label for not available."
@@ -615,7 +623,7 @@
     "description": "Message template for not exist fmt.",
     "placeholders": {
       "file": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -832,7 +840,7 @@
     "description": "Message template for size too large only prefix.",
     "placeholders": {
       "bytes": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -897,7 +905,7 @@
     "description": "Message template for sudo pwd title.",
     "placeholders": {
       "pwd": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -1038,7 +1046,7 @@
     "description": "Message template for version has update.",
     "placeholders": {
       "build": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -1047,7 +1055,7 @@
     "description": "Message template for version unknown update.",
     "placeholders": {
       "build": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
@@ -1056,7 +1064,7 @@
     "description": "Message template for version updated.",
     "placeholders": {
       "build": {
-        "type": "String"
+        "type": "Object"
       }
     }
   },
