@@ -1,5 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 enum _View { overview, console, snapshots }
@@ -103,5 +104,86 @@ void main() {
       subMarker().center.dx,
       closeTo(tester.getCenter(find.text('Screen')).dx, 1),
     );
+  });
+
+  /// Eight segments with icons, the console one open, in [width].
+  Future<void> pumpWide(WidgetTester tester, double width) async {
+    // A window wider than any row here: the width under test is [width].
+    tester.view.physicalSize = const Size(1600, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: SegmentedTabs<int>(
+                selected: 1,
+                onSelected: (_) {},
+                segments: [
+                  const SegmentedTab(value: 0, label: 'Overview', icon: Icons.show_chart),
+                  SegmentedTab(
+                    value: 1,
+                    label: 'Console',
+                    icon: Icons.monitor,
+                    sub: SegmentedSub<int>(
+                      selected: 0,
+                      onSelected: (_) {},
+                      segments: const [
+                        SegmentedTab(value: 0, label: 'Terminal', icon: Icons.terminal),
+                        SegmentedTab(value: 1, label: 'Graphical', icon: Icons.monitor),
+                      ],
+                    ),
+                  ),
+                  for (var i = 2; i < 8; i++)
+                    SegmentedTab(value: i, label: 'Tab $i', icon: Icons.circle),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    // Measured in one frame, switched in the next.
+    for (var i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+  }
+
+  testWidgets('with room, every label shows — the open segment\'s three too', (
+    tester,
+  ) async {
+    await pumpWide(tester, 1400);
+    for (final label in ['Console', 'Terminal', 'Graphical', 'Tab 7']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+      final p = tester.renderObject<RenderParagraph>(find.text(label));
+      expect(p.didExceedMaxLines, isFalse, reason: label);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('without room, icons only, labels as tooltips; back with room', (
+    tester,
+  ) async {
+    await pumpWide(tester, 360);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Console'), findsNothing);
+    expect(find.text('Terminal'), findsNothing);
+    expect(find.byTooltip('Terminal'), findsOneWidget);
+    expect(find.byTooltip('Tab 7'), findsOneWidget);
+
+    await pumpWide(tester, 1400);
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.byTooltip('Terminal'), findsNothing);
+  });
+
+  testWidgets('switching width and segment back and forth measures nothing '
+      'that has left the tree', (tester) async {
+    for (final width in [360.0, 1400.0, 360.0, 1400.0]) {
+      await pumpWide(tester, width);
+      expect(tester.takeException(), isNull, reason: '$width');
+    }
   });
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind, lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -116,6 +117,33 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   /// The second level's segments, by their parent's value and their own.
   final _subKeys = <(T, Object?), GlobalKey>{};
 
+  /// Labels hidden, icons only: the row does not fit with them. Only for a
+  /// row that sizes to its labels (neither [SegmentedTabs.expand] nor
+  /// [SegmentedTabs.collapse]), and only segments with an icon lose theirs.
+  bool _compact = false;
+
+  /// The width the row needed with its labels, when it went [_compact]: it
+  /// shows them again once it has that much, and not before — so it does not
+  /// flip between the two on every layout.
+  double? _fullWidth;
+
+  void _onMeasured(double needed, double room) {
+    final bool next;
+    if (!_compact) {
+      if (needed <= room || !widget.segments.any((s) => s.icon != null)) return;
+      _fullWidth = needed;
+      next = true;
+    } else {
+      final full = _fullWidth;
+      if (full != null && full > room) return;
+      next = false;
+    }
+    // Reported from layout, where state may not change.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _compact != next) setState(() => _compact = next);
+    });
+  }
+
   /// How far a [SegmentedTabs.collapse] control is open: 0 is the selected
   /// segment alone, 1 all of them.
   late final _openness = AnimationController(
@@ -149,6 +177,26 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   void didUpdateWidget(SegmentedTabs<T> old) {
     super.didUpdateWidget(old);
     if (old.collapse != widget.collapse) _setOpen();
+    // Other labels need another width: measured again, with them shown.
+    if (_compact && !_sameLabels(old.segments, widget.segments)) {
+      _compact = false;
+      _fullWidth = null;
+    }
+  }
+
+  static bool _sameLabels(
+    List<SegmentedTab<Object?>> a,
+    List<SegmentedTab<Object?>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].label != b[i].label ||
+          a[i].value != b[i].value ||
+          a[i].sub?.segments.length != b[i].sub?.segments.length) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @override
@@ -195,6 +243,9 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     final segment = _segmentKeys[widget.selected]?.currentContext
         ?.findRenderObject();
     if (track is! RenderBox || segment is! RenderBox) return;
+    // A key can still name a box a rebuild has just taken out of the tree
+    // (a segment that changed shape): sized, but nothing to measure against.
+    if (!track.attached || !segment.attached) return;
     if (!track.hasSize || !segment.hasSize) return;
 
     final rect =
@@ -213,6 +264,8 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
           ?.findRenderObject();
       if (track is RenderBox &&
           box is RenderBox &&
+          track.attached &&
+          box.attached &&
           track.hasSize &&
           box.hasSize) {
         rect = box.localToGlobal(Offset.zero, ancestor: track) & box.size;
@@ -294,32 +347,40 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                       ),
                     ),
                   ),
-                Row(
-                  mainAxisSize: widget.expand
-                      ? MainAxisSize.max
-                      : MainAxisSize.min,
-                  children: [
-                    for (var index = 0; index < widget.segments.length; index++)
-                      ...[
-                        if (index != 0) const SizedBox(width: 3),
-                        if (widget.expand)
-                          Expanded(
-                            child: _buildSegment(scheme, widget.segments[index]),
-                          )
-                        else if (widget.collapse)
-                          // Laid out in full behind its window, never
-                          // narrower: see [_SegmentWindow].
-                          _buildSegment(scheme, widget.segments[index])
-                        else
-                          // Each at its own width while they fit; given less
-                          // room than that, they share it and the labels
-                          // shorten, rather than the row running off the edge.
-                          Flexible(
-                            child: _buildSegment(scheme, widget.segments[index]),
-                          ),
-                      ],
-                  ],
-                ),
+                if (widget.expand || widget.collapse)
+                  Row(
+                    mainAxisSize: widget.expand
+                        ? MainAxisSize.max
+                        : MainAxisSize.min,
+                    children: [
+                      for (var index = 0; index < widget.segments.length; index++)
+                        ...[
+                          if (index != 0) const SizedBox(width: 3),
+                          if (widget.expand)
+                            Expanded(
+                              child: _buildSegment(scheme, widget.segments[index]),
+                            )
+                          else
+                            // Laid out in full behind its window, never
+                            // narrower: see [_SegmentWindow].
+                            _buildSegment(scheme, widget.segments[index]),
+                        ],
+                    ],
+                  )
+                else
+                  _ShrinkRow(
+                    gap: 3,
+                    textDirection: Directionality.of(context),
+                    onMeasured: _onMeasured,
+                    // Short of room with labels that can go: they go next
+                    // frame, so this one is not squeezed in the meantime.
+                    deferShrink:
+                        !_compact && widget.segments.any((s) => s.icon != null),
+                    children: [
+                      for (final segment in widget.segments)
+                        _buildSegment(scheme, segment),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -445,6 +506,30 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     required VoidCallback? onTap,
   }) {
     final font = Theme.of(context).textTheme.bodyMedium;
+    final iconOnly = _compact && icon != null && !widget.expand && !widget.collapse;
+    if (iconOnly) {
+      return Tooltip(
+        message: label,
+        child: Semantics(
+          button: true,
+          selected: bold,
+          label: label,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: SegmentedTabs.radius,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: key,
+              onTap: onTap,
+              child: Padding(
+                padding: padding,
+                child: Icon(icon, size: 15, color: foreground),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Semantics(
       button: true,
       selected: bold,
@@ -626,4 +711,204 @@ class _RenderSegmentWindow extends RenderShiftedBox {
       oldLayer: layer as ClipRectLayer?,
     );
   }
+}
+
+/// A row of segments, each as wide as it asks to be while they all fit.
+///
+/// Given less room than that, every one gives up the same share of its own
+/// width, so a wide segment — one showing its second level — stays wide next
+/// to narrow ones. `Flexible` would split the room evenly by count instead,
+/// and cut that segment's labels to nothing long before the row was full.
+class _ShrinkRow extends MultiChildRenderObjectWidget {
+  const _ShrinkRow({
+    required this.gap,
+    required this.textDirection,
+    required this.onMeasured,
+    required this.deferShrink,
+    required super.children,
+  });
+
+  /// Lays the children out at their own width and clips them, rather than
+  /// narrowing them, when they do not fit — for the one frame before the
+  /// row changes to icons only.
+  final bool deferShrink;
+
+  final double gap;
+  final TextDirection textDirection;
+
+  /// After each layout: the width the children asked for, and what there was.
+  final void Function(double needed, double room) onMeasured;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderShrinkRow(
+    gap: gap,
+    textDirection: textDirection,
+    onMeasured: onMeasured,
+    deferShrink: deferShrink,
+  );
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderShrinkRow renderObject) {
+    renderObject
+      ..gap = gap
+      ..textDirection = textDirection
+      ..onMeasured = onMeasured
+      ..deferShrink = deferShrink;
+  }
+}
+
+class _ShrinkRowParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderShrinkRow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _ShrinkRowParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _ShrinkRowParentData> {
+  _RenderShrinkRow({
+    required double gap,
+    required TextDirection textDirection,
+    required this.onMeasured,
+    required bool deferShrink,
+  }) : _gap = gap,
+       _textDirection = textDirection,
+       _deferShrink = deferShrink;
+
+  void Function(double needed, double room) onMeasured;
+
+  bool _deferShrink;
+  set deferShrink(bool value) {
+    if (value == _deferShrink) return;
+    _deferShrink = value;
+    markNeedsLayout();
+  }
+
+  /// Laid out wider than it is: painted clipped.
+  bool _overflows = false;
+
+  double _gap;
+  set gap(double value) {
+    if (value == _gap) return;
+    _gap = value;
+    markNeedsLayout();
+  }
+
+  TextDirection _textDirection;
+  set textDirection(TextDirection value) {
+    if (value == _textDirection) return;
+    _textDirection = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _ShrinkRowParentData) {
+      child.parentData = _ShrinkRowParentData();
+    }
+  }
+
+  double get _gaps => childCount < 2 ? 0 : _gap * (childCount - 1);
+
+  @override
+  double computeMinIntrinsicWidth(double height) => _gaps;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) {
+    var sum = _gaps;
+    for (final child in getChildrenAsList()) {
+      sum += child.getMaxIntrinsicWidth(height);
+    }
+    return sum;
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) => getChildrenAsList().fold(
+    0,
+    (h, c) => math.max(h, c.getMinIntrinsicHeight(double.infinity)),
+  );
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => getChildrenAsList().fold(
+    0,
+    (h, c) => math.max(h, c.getMaxIntrinsicHeight(double.infinity)),
+  );
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      _layout(constraints, dry: true);
+
+  @override
+  void performLayout() => size = _layout(constraints, dry: false);
+
+  Size _layout(BoxConstraints constraints, {required bool dry}) {
+    final children = getChildrenAsList();
+    final natural = [
+      for (final c in children) c.getMaxIntrinsicWidth(double.infinity),
+    ];
+    final sum = natural.fold<double>(0, (a, b) => a + b);
+    final room = constraints.maxWidth - _gaps;
+    if (!dry) onMeasured(sum + _gaps, constraints.maxWidth);
+    final fits = sum <= room || sum == 0;
+    final scale = fits || _deferShrink ? 1.0 : math.max(0.0, room / sum);
+    if (!dry) _overflows = !fits && _deferShrink;
+    final sizes = <Size>[];
+    for (var i = 0; i < children.length; i++) {
+      final inner = BoxConstraints(
+        maxWidth: natural[i] * scale,
+        maxHeight: constraints.maxHeight,
+      );
+      sizes.add(
+        dry
+            ? children[i].getDryLayout(inner)
+            : (children[i]..layout(inner, parentUsesSize: true)).size,
+      );
+    }
+    final height = sizes.fold<double>(0, (h, s) => math.max(h, s.height));
+    final width =
+        sizes.fold<double>(0, (w, s) => w + s.width) + _gaps;
+    final size = constraints.constrain(Size(width, height));
+    if (dry) return size;
+    final rtl = _textDirection == TextDirection.rtl;
+    var x = rtl ? size.width : 0.0;
+    for (var i = 0; i < children.length; i++) {
+      final s = sizes[i];
+      final dy = (height - s.height) / 2;
+      final pd = children[i].parentData! as _ShrinkRowParentData;
+      if (rtl) {
+        x -= s.width;
+        pd.offset = Offset(x, dy);
+        x -= _gap;
+      } else {
+        pd.offset = Offset(x, dy);
+        x += s.width + _gap;
+      }
+    }
+    return size;
+  }
+
+  final _clip = LayerHandle<ClipRectLayer>();
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (!_overflows) {
+      _clip.layer = null;
+      defaultPaint(context, offset);
+      return;
+    }
+    _clip.layer = context.pushClipRect(
+      needsCompositing,
+      offset,
+      Offset.zero & size,
+      defaultPaint,
+      oldLayer: _clip.layer,
+    );
+  }
+
+  @override
+  void dispose() {
+    _clip.layer = null;
+    super.dispose();
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
 }
