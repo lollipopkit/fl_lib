@@ -16,11 +16,7 @@ final class ICloud implements RemoteStorage<ICloudFile> {
       localPath: localPath ?? Paths.doc.joinPath(relativePath),
       relativePath: relativePath,
       onProgress: (stream) {
-        stream.listen(
-          null,
-          onDone: () => completer.complete(null),
-          onError: (Object e) => completer.completeError(e),
-        );
+        settleOnProgress(stream, completer);
       },
     );
     return completer.future;
@@ -51,11 +47,7 @@ final class ICloud implements RemoteStorage<ICloudFile> {
       relativePath: relativePath,
       localPath: localPath ?? Paths.doc.joinPath(relativePath),
       onProgress: (stream) {
-        stream.listen(
-          null,
-          onDone: () => completer.complete(null),
-          onError: (Object e) => completer.completeError(e),
-        );
+        settleOnProgress(stream, completer);
       },
     );
     return completer.future;
@@ -114,5 +106,24 @@ final class ICloud implements RemoteStorage<ICloudFile> {
       Loggers.app.warning('iCloud version tag', e);
       return null;
     }
+  }
+
+  /// Settles [completer] once, when the progress stream ends or fails.
+  ///
+  /// `cancelOnError`, because a stream that errors still delivers `onDone`
+  /// afterwards when it is left subscribed, and completing an already failed
+  /// completer throws `Bad state: Future already completed` from a callback
+  /// no caller can catch.
+  @visibleForTesting
+  static void settleOnProgress(
+    Stream<Object?> stream,
+    Completer<void> completer,
+  ) {
+    stream.listen(
+      null,
+      onDone: completer.complete,
+      onError: completer.completeError,
+      cancelOnError: true,
+    );
   }
 }

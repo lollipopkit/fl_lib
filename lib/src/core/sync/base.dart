@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
