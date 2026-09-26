@@ -29,8 +29,13 @@ extension ContextX on BuildContext {
     Navigator.of(this).pop<T>(result);
   }
 
-  /// Whether the navigator can pop the current route
-  bool get canPop => Navigator.of(this).canPop();
+  /// Whether the navigator can pop the current route.
+  ///
+  /// False once this context is unmounted. A pop is often the last step of
+  /// an `await`, by when the widget that asked can be gone, and
+  /// `Navigator.of` on an unmounted element fails a null check inside the
+  /// framework rather than saying so.
+  bool get canPop => mounted && Navigator.of(this).canPop();
 
   /// Current theme data from the closest Theme widget ancestor
   ThemeData get theme => Theme.of(this);

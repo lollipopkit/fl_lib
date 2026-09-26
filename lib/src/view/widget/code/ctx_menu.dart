@@ -128,9 +128,14 @@ class _AnimatedCodeLineSelectionToolbarState extends State<_AnimatedCodeLineSele
     super.dispose();
   }
 
+  // `mounted` after each wait: the toolbar is often gone by the time the delay
+  // ends — the editor closed, or a tap elsewhere already removed it — and
+  // `reverse` on a disposed controller fails a null check on its ticker.
   void _hideWithAnimation() async {
     await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
     await _animationController.reverse();
+    if (!mounted) return;
     widget.onHide();
   }
 
