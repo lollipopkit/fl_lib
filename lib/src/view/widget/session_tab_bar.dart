@@ -170,6 +170,7 @@ final class SessionSwitcherLabel extends StatelessWidget {
     this.icon,
     this.leading,
     this.onTap,
+    this.open = false,
   });
 
   final String name;
@@ -189,6 +190,15 @@ final class SessionSwitcherLabel extends StatelessWidget {
 
   /// Null makes this a label rather than a way anywhere: no chevron, no ink.
   final VoidCallback? onTap;
+
+  /// Whether what [onTap] opens is open *here* rather than over the page.
+  ///
+  /// A sheet covers the bar it was opened from, so its chevron has nothing
+  /// left to say. A list that opens in place — the two-column Virtualization
+  /// tab's host picker, under this bar in its own column — leaves the label on
+  /// screen as the only thing that can say it is open, and a chevron still
+  /// pointing down says the opposite. Turned to point up for as long as it is.
+  final bool open;
 
   @override
   Widget build(BuildContext context) {
@@ -219,7 +229,21 @@ final class SessionSwitcherLabel extends StatelessWidget {
           ),
         ),
         if (onTap != null)
-          Icon(Icons.expand_more, size: 18, color: scheme.onSurfaceVariant),
+          // Turned rather than swapped, so the label says which way it is
+          // about to move as well as that it moves. Zero under reduced motion:
+          // the switch asks for nothing that travels, and a rotation is not a
+          // fade — the state is still legible from which way it points.
+          AnimatedRotation(
+            turns: open ? 0.5 : 0,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : Durations.short3,
+            child: Icon(
+              Icons.expand_more,
+              size: 18,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
       ],
     );
 

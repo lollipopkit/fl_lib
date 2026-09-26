@@ -175,6 +175,7 @@ export 'src/view/widget/nested_navigator.dart';
 export 'src/view/widget/overlay.dart';
 export 'src/view/widget/overlay_flight.dart';
 export 'src/view/widget/popup_menu.dart';
+export 'src/view/widget/reveal.dart';
 export 'src/view/widget/qr/qr.dart';
 export 'src/view/widget/qr/share_btn.dart';
 export 'src/view/widget/row.dart';
