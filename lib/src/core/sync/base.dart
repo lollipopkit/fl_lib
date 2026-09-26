@@ -3,11 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/foundation.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
 import 'package:icloud_storage_plus/icloud_storage.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 
@@ -31,6 +29,13 @@ abstract class SyncIface<T extends Mergeable, I> {
   FutureOr<void> init() {}
 
   /// Load backup from file
+  ///
+  /// Called on the isolate running the sync, so it may read stores, prefs and
+  /// its own fields. It used to run inside `compute`, where each of those is a
+  /// fresh copy: `PrefStore` there is uninitialized and answers every prop's
+  /// default, and a field written there never reaches this isolate. An
+  /// implementer that wants its parsing off this isolate moves only the pure
+  /// part, passing it plain values read here.
   FutureOr<T> fromFile(String path);
 
   /// Save backup to file
@@ -229,15 +234,7 @@ abstract class SyncIface<T extends Mergeable, I> {
       }
 
       try {
-        final isoToken = RootIsolateToken.instance;
-        final dlBak = await compute((args) {
-          final isoToken = args.$2;
-          if (isoToken == null) {
-            throw Exception('Isolate token is null');
-          }
-          BackgroundIsolateBinaryMessenger.ensureInitialized(isoToken);
-          return fromFile(args.$1);
-        }, (Paths.bak, isoToken));
+        final dlBak = await fromFile(Paths.bak);
         await dlBak.merge();
       } catch (e, s) {
         Loggers.app.warning('Merge backup', e, s);

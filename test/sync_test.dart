@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -97,6 +98,23 @@ void main() {
     expect(sync.saveCount, 0);
   });
 
+  // #1562 in server_box: `fromFile` ran inside `compute`, where `PrefStore`
+  // is uninitialized and answers the default, so a pref deciding what to
+  // merge was read as its default on every sync, with no error anywhere.
+  test('fromFile reads prefs set on the syncing isolate', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PrefStore.shared.init();
+    const prop = PrefPropDefault<bool>('sync_test_flag', false);
+    await prop.set(true);
+    final remote = _TestRemoteStorage(remoteExists: true);
+    final sync = _TestSync(remote, reader: prop.get);
+
+    await sync.sync(throttleMilli: 0);
+
+    expect(sync.readValue, isTrue);
+    expect(remote.uploadCount, 1);
+  });
+
   test('sync uploads to the explicitly selected storage', () async {
     final defaultStorage = _TestRemoteStorage();
     final selectedStorage = _TestRemoteStorage();
@@ -123,15 +141,22 @@ void main() {
 }
 
 final class _TestSync extends SyncIface<_TestMergeable, String> {
-  _TestSync(this.storage, {this.failToReadRemote = false});
+  _TestSync(this.storage, {this.failToReadRemote = false, this.reader});
 
   final _TestRemoteStorage storage;
   final bool failToReadRemote;
+  final bool Function()? reader;
   int saveCount = 0;
+
+  /// What [reader] answered inside [fromFile], on the isolate that
+  /// ran the sync. A copy of this object in another isolate would leave it
+  /// unset here.
+  bool? readValue;
 
   @override
   Future<_TestMergeable> fromFile(String path) async {
     if (failToReadRemote) throw const FormatException('broken remote backup');
+    readValue = reader?.call();
     return const _TestMergeable();
   }
 
