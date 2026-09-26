@@ -181,13 +181,19 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
     }
   }
 
-  Future<void> _openEditDialog({required String initial}) async {
-    final ctrl = TextEditingController(text: initial);
-    String? result;
-    try {
-      result = await context.showRoundDialog<String>(
+  void _openEditDialog({required String initial}) {
+    // `withTextFieldController` keeps the controller alive a while after the
+    // dialog answers: disposing it on return, as this did, pulled it out from
+    // under the dialog's exit animation, which still builds the field.
+    withTextFieldController((ctrl) async {
+      ctrl.text = initial;
+      // Closed through the dialog's own context. This field's can be gone by
+      // the time a button is pressed — the settings page closed under the
+      // dialog — and `context` then fails a null check. `pop` from the
+      // field's context was also the page's navigator, not the dialog's.
+      final result = await context.showRoundDialog<String>(
         title: widget.label,
-        child: Input(
+        childBuilder: (dialog) => Input(
           controller: ctrl,
           hint: widget.hint,
           maxLength: widget.maxLength,
@@ -196,19 +202,16 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
           action: TextInputAction.done,
           autoFocus: true,
           noWrap: true,
-          onSubmitted: (text) => context.popDialog(text),
+          onSubmitted: dialog.pop,
         ),
-        actions: [
-          TextButton(onPressed: context.pop, child: Text(libL10n.cancel)),
-          TextButton(onPressed: () => context.popDialog(ctrl.text), child: Text(libL10n.ok)),
+        actionsBuilder: (dialog) => [
+          TextButton(onPressed: dialog.pop, child: Text(libL10n.cancel)),
+          TextButton(onPressed: () => dialog.pop(ctrl.text), child: Text(libL10n.ok)),
         ],
       );
-    } finally {
-      ctrl.dispose();
-    }
-
-    if (result == null) return;
-    await _handleSubmit(result);
+      if (result == null) return;
+      await _handleSubmit(result);
+    });
   }
 
   Widget _buildDisplayText(String strVal) {
