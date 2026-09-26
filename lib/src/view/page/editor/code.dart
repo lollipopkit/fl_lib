@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:computer/computer.dart';
@@ -218,17 +219,39 @@ class _EditorPageState extends State<EditorPage> {
 }
 
 extension on _EditorPageState {
+  /// Loads the file, or says why it cannot and closes the editor.
+  ///
+  /// Started from `initState` with nobody awaiting it, so a failure here had
+  /// no handler at all: opening a PDF or an image decoded it as UTF-8 in the
+  /// worker, and the `FileSystemException` came back as an uncaught error
+  /// while the page sat empty.
   Future<void> _setupCtrl() async {
     final path = widget.args?.path;
     final text = widget.args?.text;
     if (path != null) {
-      final code = await Computer.shared.startNoParam(
-        () => File(path).readAsString(),
-      );
+      final String? code;
+      try {
+        code = await Computer.shared.startNoParam(() => editorReadUtf8(path));
+      } catch (e, s) {
+        Loggers.app.warning('Editor: read $path', e, s);
+        _closeWith(libL10n.fail);
+        return;
+      }
+      if (code == null) {
+        _closeWith(libL10n.unsupported);
+        return;
+      }
+      if (!mounted) return;
       _controller.text = code;
     } else if (text != null) {
       _controller.text = text;
     }
+  }
+
+  void _closeWith(String message) {
+    if (!mounted) return;
+    Toast.show(message);
+    context.pop();
   }
 
   Map<String, CodeHighlightThemeMode> get _parseModesMap {
@@ -310,5 +333,20 @@ extension on _EditorPageState {
       _onSave();
     }
     if (shouldSave != null) contextSafe?.pop();
+  }
+}
+
+@visibleForTesting
+/// The file as UTF-8 text, or null when it is not text.
+///
+/// Top-level so it can run in a worker. Bytes and an explicit decode rather
+/// than `readAsString`, so "not text" is an answer instead of the same
+/// `FileSystemException` a missing file throws.
+String? editorReadUtf8(String path) {
+  final bytes = File(path).readAsBytesSync();
+  try {
+    return utf8.decode(bytes);
+  } on FormatException {
+    return null;
   }
 }
