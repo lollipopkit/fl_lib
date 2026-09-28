@@ -160,6 +160,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get custom => 'Özel';
 
   @override
+  String get defaultLabel => 'Varsayılan';
+
+  @override
   String get customCmdDocUrl =>
       'https://github.com/lollipopkit/flutter_server_box/wiki#özel-komutlar';
 

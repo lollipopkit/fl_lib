@@ -48,6 +48,7 @@
   "create": "Crear",
   "current": "Actual",
   "custom": "Personalizado",
+  "defaultLabel": "Predeterminado",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "cut": "Cortar",
   "dark": "Oscuro",

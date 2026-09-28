@@ -160,6 +160,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get custom => 'Fərdi';
 
   @override
+  String get defaultLabel => 'Standart';
+
+  @override
   String get customCmdDocUrl =>
       'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
 

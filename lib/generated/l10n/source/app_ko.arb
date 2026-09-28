@@ -48,6 +48,7 @@
   "create": "만들기",
   "current": "현재",
   "custom": "사용자 정의",
+  "defaultLabel": "기본",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "cut": "잘라내기",
   "dark": "어둡게",

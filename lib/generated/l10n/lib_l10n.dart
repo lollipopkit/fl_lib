@@ -413,6 +413,12 @@ abstract class LibLocalizations {
   /// **'Custom'**
   String get custom;
 
+  /// The choice left as it came, such as the default theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get defaultLabel;
+
   /// URL for custom cmd doc url.
   ///
   /// In en, this message translates to:

@@ -160,6 +160,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get custom => 'Користувацьке';
 
   @override
+  String get defaultLabel => 'За замовчуванням';
+
+  @override
   String get customCmdDocUrl =>
       'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
 

@@ -210,6 +210,10 @@
   "@custom": {
     "description": "Label for custom."
   },
+  "defaultLabel": "Default",
+  "@defaultLabel": {
+    "description": "The choice left as it came, such as the default theme."
+  },
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "@customCmdDocUrl": {
     "description": "URL for custom cmd doc url."

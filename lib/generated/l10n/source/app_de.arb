@@ -48,6 +48,7 @@
   "create": "Erstellen",
   "current": "Aktuell",
   "custom": "Benutzerdefiniert",
+  "defaultLabel": "Standard",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "cut": "Ausschneiden",
   "dark": "Dunkel",

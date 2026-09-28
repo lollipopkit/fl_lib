@@ -159,6 +159,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get custom => '自定义';
 
   @override
+  String get defaultLabel => '默认';
+
+  @override
   String get customCmdDocUrl =>
       'https://github.com/lollipopkit/flutter_server_box/wiki/主页#自定义命令';
 
@@ -1003,6 +1006,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get custom => '自訂';
+
+  @override
+  String get defaultLabel => '預設';
 
   @override
   String get customCmdDocUrl =>

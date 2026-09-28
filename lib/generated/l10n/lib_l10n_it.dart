@@ -160,6 +160,9 @@ class LibLocalizationsIt extends LibLocalizations {
   String get custom => 'Personalizzato';
 
   @override
+  String get defaultLabel => 'Predefinito';
+
+  @override
   String get customCmdDocUrl =>
       'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
 

@@ -48,6 +48,7 @@
   "create": "Aanmaken",
   "current": "Huidig",
   "custom": "Aangepast",
+  "defaultLabel": "Standaard",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "cut": "Knippen",
   "dark": "Donker",

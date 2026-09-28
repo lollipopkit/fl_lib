@@ -48,6 +48,7 @@
   "create": "作成",
   "current": "現在",
   "custom": "カスタム",
+  "defaultLabel": "デフォルト",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "cut": "切り取り",
   "dark": "暗い",

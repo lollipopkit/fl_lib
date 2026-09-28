@@ -159,6 +159,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get custom => 'カスタム';
 
   @override
+  String get defaultLabel => 'デフォルト';
+
+  @override
   String get customCmdDocUrl =>
       'https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands';
 

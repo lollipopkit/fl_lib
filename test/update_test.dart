@@ -223,6 +223,30 @@ void main() {
     expect(AppUpdate.url, 'https://download/ServerBox_v1.0.3_arm64.apk');
   });
 
+  test('github release without a build number is not an app release', () {
+    // flutter_server_box keeps its theme packages as assets of one release
+    // tagged `themes`: newer than any app release, and no build to offer.
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'themes',
+          name: 'Themes',
+          assets: [_asset('serverbox.ember-1.0.1.fsbt')],
+        ),
+        _release(
+          tag: 'v1.0.3',
+          assets: [_asset('ServerBox_v1.0.3_arm64.apk')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.version, (3, AppUpdateLevel.normal));
+    expect(AppUpdate.url, 'https://download/ServerBox_v1.0.3_arm64.apk');
+  });
+
   test('github beta channel uses newer prerelease', () {
     AppUpdate.chan = AppUpdateChan.beta;
     AppUpdate.fromGitHubReleasesStr(

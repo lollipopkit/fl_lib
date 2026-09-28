@@ -48,6 +48,7 @@
   "create": "Buat",
   "current": "Saat ini",
   "custom": "Kustom",
+  "defaultLabel": "Bawaan",
   "customCmdDocUrl": "https://github.com/lollipopkit/flutter_server_box/wiki#custom-commands",
   "cut": "Potong",
   "dark": "Gelap",
