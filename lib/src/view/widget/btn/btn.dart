@@ -381,9 +381,16 @@ final class Btn extends StatelessWidget {
     if (padding != null) {
       child = Padding(padding: padding!, child: child);
     }
+    final onTap_ = _resolveOnTap(context);
+    // Disabled, it looks it: faded whole, since a caller's own colour — a
+    // red delete — is on the icon and the text themselves, where a disabled
+    // theme colour would not reach. Material's buttons fade to 38%.
+    if (onTap_ == null && onLongTap == null) {
+      child = Opacity(opacity: 0.38, child: child);
+    }
     return InkWell(
       borderRadius: _resolvedRadius(context),
-      onTap: _resolveOnTap(context),
+      onTap: onTap_,
       onLongPress: onLongTap,
       child: child,
     );
