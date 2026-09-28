@@ -31,6 +31,12 @@ class PopupMenu<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<T>(
+      // On the root navigator, outside every scrollable of the page. With an
+      // [initialValue] the menu scrolls that item into view with
+      // `Scrollable.ensureVisible`, which moves every scrollable above the
+      // menu's route: opened on a tab's own navigator, inside the home's page
+      // view, it scrolled the tabs themselves and left them on another one.
+      useRootNavigator: true,
       itemBuilder: (_) => items,
       onSelected: onSelected,
       initialValue: initialValue,
