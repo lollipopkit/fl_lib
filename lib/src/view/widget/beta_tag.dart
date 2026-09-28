@@ -15,7 +15,13 @@ import 'package:flutter/material.dart';
 /// cannot carry it. Beside the title it survives a clipped name and can be
 /// read as what it is — a statement about the thing next to it.
 final class BetaTag extends StatelessWidget {
-  const BetaTag({super.key, this.text = 'Beta', this.tip, this.height = title});
+  const BetaTag({
+    super.key,
+    this.text = 'Beta',
+    this.tip,
+    this.height = title,
+    this.opacity = 1,
+  });
 
   /// What the mark reads. `Beta` unless a caller has a reason.
   final String text;
@@ -35,6 +41,11 @@ final class BetaTag extends StatelessWidget {
   /// tall as the name it stands next to and the row around them does not grow.
   final double height;
 
+  /// Faded by its own colours rather than by an `Opacity` around it, for a
+  /// mark redrawn on every frame of an animation: an `Opacity` between 0 and
+  /// 1 is a `saveLayer`.
+  final double opacity;
+
   /// How tall the mark is beside a title.
   static const title = 15.0;
 
@@ -53,7 +64,9 @@ final class BetaTag extends StatelessWidget {
       child: DecoratedBox(
         decoration: ShapeDecoration(
           shape: const StadiumBorder(),
-          color: scheme.tertiaryContainer,
+          color: scheme.tertiaryContainer.withValues(
+            alpha: scheme.tertiaryContainer.a * opacity,
+          ),
         ),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: height / 3),
@@ -70,7 +83,9 @@ final class BetaTag extends StatelessWidget {
                 height: 1,
                 fontWeight: FontWeight.w600,
                 letterSpacing: height * 0.02,
-                color: scheme.onTertiaryContainer,
+                color: scheme.onTertiaryContainer.withValues(
+                  alpha: scheme.onTertiaryContainer.a * opacity,
+                ),
               ),
             ),
           ),
