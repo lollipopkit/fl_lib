@@ -122,6 +122,12 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   /// [SegmentedTabs.collapse]), and only segments with an icon lose theirs.
   bool _compact = false;
 
+  /// Labels hidden, icons only, for a row given the width
+  /// ([SegmentedTabs.expand]): some segment's label does not fit its equal
+  /// share. Decided from the width on every layout, for every segment at
+  /// once, so the row does not mix the two.
+  bool _squeezed = false;
+
   /// The width the row needed with its labels, when it went [_compact]: it
   /// shows them again once it has that much, and not before — so it does not
   /// flip between the two on every layout.
@@ -293,7 +299,8 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     // of segments and a label whose text grew. LayoutBuilder adds the case
     // none of those cover: the track itself being given a different width.
     return LayoutBuilder(
-      builder: (_, _) {
+      builder: (context, constraints) {
+        _squeezed = widget.expand && _labelsOverflow(context, constraints.maxWidth);
         WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
         return Container(
           padding: const EdgeInsets.all(3),
@@ -428,6 +435,45 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     );
   }
 
+  /// Whether a segment's label, with its icon, is wider than the equal share
+  /// of [width] an expanded row gives it. Measured bold, as the selected one
+  /// is drawn, so selecting a segment does not tip the row over.
+  bool _labelsOverflow(BuildContext context, double width) {
+    if (!width.isFinite || !widget.segments.any((s) => s.icon != null)) {
+      return false;
+    }
+    final n = widget.segments.length;
+    // The track's padding (3 each side) and the gaps between segments (3).
+    final share = (width - 6 - 3 * (n - 1)) / n;
+    final font = Theme.of(context).textTheme.bodyMedium;
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    );
+    try {
+      for (final segment in widget.segments) {
+        if (segment.icon == null) continue;
+        painter
+          ..text = TextSpan(
+            text: segment.label,
+            style: TextStyle(
+              fontFamily: font?.fontFamily,
+              fontFamilyFallback: font?.fontFamilyFallback,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          )
+          ..layout();
+        // [_buildOwnSegment]'s padding, the icon and its gap.
+        if (13 * 2 + 15 + 5 + painter.width > share) return true;
+      }
+      return false;
+    } finally {
+      painter.dispose();
+    }
+  }
+
   void _select(T value) {
     // A touch that chose is done choosing. A pointer is still over it.
     if (widget.collapse) _setOpen(held: false);
@@ -506,7 +552,9 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     required VoidCallback? onTap,
   }) {
     final font = Theme.of(context).textTheme.bodyMedium;
-    final iconOnly = _compact && icon != null && !widget.expand && !widget.collapse;
+    final iconOnly =
+        icon != null &&
+        ((_compact && !widget.expand && !widget.collapse) || _squeezed);
     if (iconOnly) {
       return Tooltip(
         message: label,
@@ -523,7 +571,13 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
               onTap: onTap,
               child: Padding(
                 padding: padding,
-                child: Icon(icon, size: 15, color: foreground),
+                // Centred in the share an expanded row gives it; its own
+                // width in a row sized to its segments.
+                child: Center(
+                  widthFactor: widget.expand ? null : 1,
+                  heightFactor: 1,
+                  child: Icon(icon, size: 15, color: foreground),
+                ),
               ),
             ),
           ),

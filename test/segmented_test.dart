@@ -163,6 +163,55 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // Four equal shares too narrow for icon and label: icons alone, each in the
+  // middle of its share, rather than an icon pushed aside by a label cut to
+  // an ellipsis. Wide again, the labels are back.
+  testWidgets('expand, too narrow for its labels, shows its icons centred', (
+    tester,
+  ) async {
+    const icons = [Icons.dns, Icons.storage, Icons.hub, Icons.cloud];
+    Future<void> pump(double width) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: width,
+              child: SegmentedTabs<int>(
+                expand: true,
+                segments: [
+                  for (var i = 0; i < icons.length; i++)
+                    SegmentedTab(value: i, label: 'Section $i', icon: icons[i]),
+                ],
+                selected: 0,
+                onSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await pump(240);
+    await tester.pump();
+    expect(find.textContaining('Section'), findsNothing);
+    final inks = find.descendant(
+      of: find.byType(SegmentedTabs<int>),
+      matching: find.byType(InkWell),
+    );
+    expect(inks, findsNWidgets(icons.length));
+    for (var i = 0; i < icons.length; i++) {
+      expect(
+        tester.getCenter(find.byIcon(icons[i])).dx,
+        closeTo(tester.getCenter(inks.at(i)).dx, 0.5),
+      );
+    }
+    expect(tester.takeException(), isNull);
+
+    await pump(800);
+    await tester.pump();
+    expect(find.textContaining('Section'), findsNWidgets(icons.length));
+  });
+
   // Keeping the last rect would leave the marker insisting on a segment the
   // caller has moved off, which is the one thing it exists to not do.
   testWidgets('a selection that names no segment clears the marker', (
