@@ -14,7 +14,10 @@ abstract final class Hairline {
 
   /// Translucent: a hairline separates two parts of one surface, and at full
   /// strength it reads as a border around each of them.
-  static Color color(BuildContext context) => of(Theme.of(context).colorScheme);
+  static Color color(BuildContext context) =>
+      // A theme that names a divider colour names this one too: the two are
+      // the same line wherever it is drawn.
+      DividerTheme.of(context).color ?? of(Theme.of(context).colorScheme);
 
   /// [color] from [scheme] itself, for where there is no context to read the
   /// theme from yet — the theme being built, whose `dividerTheme` makes every

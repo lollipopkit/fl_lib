@@ -168,6 +168,7 @@ export 'src/view/widget/list.dart';
 export 'src/view/widget/loading.dart';
 export 'src/view/widget/markdown.dart';
 export 'src/view/widget/adaptive_panes.dart';
+export 'src/view/component_styles.dart';
 export 'src/view/widget/hairline.dart';
 export 'src/view/widget/pane_collapse_handle.dart';
 export 'src/view/widget/pane.dart';

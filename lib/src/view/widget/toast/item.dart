@@ -365,7 +365,8 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   /// value.
   TextStyle _resolveTitleStyle(BuildContext context) {
     final base = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
-        .merge(_titleStyle);
+        .merge(_titleStyle)
+        .copyWith(color: ComponentStyles.of(context).toast.textColor);
     return base.copyWith(
       height:
           MediaQuery.maybeLineHeightScaleFactorOverrideOf(context) ?? base.height,
@@ -568,7 +569,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
   Widget _buildCard(ThemeData theme, Color accent) {
     final scheme = theme.colorScheme;
-    final surface = scheme.surfaceContainerHigh;
+    // The theme's toast style ([ComponentStyles]) over this card's own look.
+    final style = theme.extension<ComponentStyles>()?.toast ?? const ToastStyle();
+    final surface = style.backgroundColor ?? scheme.surfaceContainerHigh;
     final tinted = _data.color == null && _data.level == ToastLevel.none
         ? surface
         : Color.alphaBlend(accent.withValues(alpha: 0.08), surface);
@@ -578,10 +581,20 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
     return Material(
       color: color,
-      elevation: 4,
+      elevation: style.elevation ?? 4,
       shadowColor: Colors.black.withValues(alpha: 0.3),
       clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(borderRadius: _radius),
+      shape: RoundedRectangleBorder(
+        borderRadius: style.radius == null
+            ? _radius
+            : BorderRadius.circular(style.radius!),
+        side: style.borderColor == null && style.borderWidth == null
+            ? BorderSide.none
+            : BorderSide(
+                color: style.borderColor ?? scheme.outlineVariant,
+                width: style.borderWidth ?? 1,
+              ),
+      ),
       child: InkWell(
         onTap: _data.onTap != null || widget.onPileToggle != null ? _onTap : null,
         onLongPress: _onLongPress,

@@ -360,16 +360,20 @@ class _ContextMenuRoute extends PopupRoute<ContextMenuAction> {
     Animation<double> secondaryAnimation,
   ) {
     final scheme = Theme.of(context).colorScheme;
+    // A theme's popup menu style is this menu's too: both are "a menu".
+    final menuTheme = PopupMenuTheme.of(context);
+    final menuShape = menuTheme.shape;
     return CustomSingleChildLayout(
       delegate: _ContextMenuLayout(at: at, padding: MediaQuery.paddingOf(context)),
       child: Material(
-        color: scheme.surfaceContainerHigh,
+        color: menuTheme.color ?? scheme.surfaceContainerHigh,
         // The tint is off: the colour above is the one the design names, and
         // Material would mix elevation's own into it. What elevation is for
         // here is the shadow that lifts the menu off the row it is about.
         surfaceTintColor: Colors.transparent,
-        elevation: 3,
-        borderRadius: CardX.borderRadius,
+        elevation: menuTheme.elevation ?? 3,
+        shape: menuShape ??
+            const RoundedRectangleBorder(borderRadius: CardX.borderRadius),
         clipBehavior: Clip.antiAlias,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(ContextMenuUi.pad),

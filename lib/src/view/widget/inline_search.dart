@@ -31,6 +31,9 @@ class InlineSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The bar is the field's box; a theme's form-input border would be a
+    // second one inside it. Colours come from the theme's search style.
+    final style = ComponentStyles.of(context).search;
     return Row(
       children: [
         const SizedBox(width: 13),
@@ -44,16 +47,21 @@ class InlineSearchField extends StatelessWidget {
             // narrowing the list, and dismissing the keyboard to look at it is
             // the reason to submit.
             onSubmitted: (_) => FocusScope.of(context).unfocus(),
-            decoration: InputDecoration(
+            style: style.textColor == null
+                ? null
+                : TextStyle(color: style.textColor),
+            decoration: bareInputDecoration(
               isDense: true,
-              border: InputBorder.none,
               hintText: hint ?? libL10n.search,
+              hintStyle: style.hintColor == null
+                  ? null
+                  : TextStyle(color: style.hintColor),
             ),
           ),
         ),
         Btn.icon(
           text: libL10n.close,
-          icon: const Icon(Icons.close, size: 18),
+          icon: Icon(Icons.close, size: 18, color: style.iconColor),
           onTap: onClose,
         ),
         const SizedBox(width: 7),

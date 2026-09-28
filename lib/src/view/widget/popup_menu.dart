@@ -41,7 +41,9 @@ class PopupMenu<T> extends StatelessWidget {
       onSelected: onSelected,
       initialValue: initialValue,
       padding: padding,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape:
+          PopupMenuTheme.of(context).shape ??
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       tooltip: tooltip,
       borderRadius: borderRadius,
       enabled: enabled,

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind, lerpDouble;
 
+import 'package:fl_lib/src/view/component_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -112,6 +113,14 @@ final class SegmentedTabs<T> extends StatefulWidget {
 class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     with SingleTickerProviderStateMixin {
   final _trackKey = GlobalKey();
+
+  /// The theme's segmented style ([ComponentStyles]); nulls keep this
+  /// widget's own look.
+  SegmentedStyle get _style => ComponentStyles.of(context).segmented;
+
+  BorderRadius get _radius => _style.radius == null
+      ? SegmentedTabs.radius
+      : BorderRadius.circular(_style.radius!);
   final _segmentKeys = <T, GlobalKey>{};
 
   /// The second level's segments, by their parent's value and their own.
@@ -305,8 +314,14 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
         return Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: widget.trackColor ?? scheme.surfaceContainer,
-            borderRadius: SegmentedTabs.radius,
+            color: widget.trackColor ?? _style.trackColor ?? scheme.surfaceContainer,
+            borderRadius: _radius,
+            border: _style.borderColor == null && _style.borderWidth == null
+                ? null
+                : Border.all(
+                    color: _style.borderColor ?? scheme.outlineVariant,
+                    width: _style.borderWidth ?? 1,
+                  ),
           ),
           child: _collapsing(
             Stack(
@@ -326,8 +341,8 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                     height: rect.height,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: SegmentedTabs.radius,
+                        color: _style.selectedColor ?? scheme.primaryContainer,
+                        borderRadius: _radius,
                       ),
                     ),
                   ),
@@ -347,10 +362,10 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                     height: rect.height,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: scheme.onPrimaryContainer.withValues(
-                          alpha: 0.12,
-                        ),
-                        borderRadius: SegmentedTabs.radius,
+                        color: (_style.selectedTextColor ??
+                                scheme.onPrimaryContainer)
+                            .withValues(alpha: 0.12),
+                        borderRadius: _radius,
                       ),
                     ),
                   ),
@@ -511,7 +526,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
       key: _subKeys.putIfAbsent((parent, item.value), GlobalKey.new),
       label: item.label,
       icon: item.icon,
-      foreground: scheme.onPrimaryContainer,
+      foreground: _style.selectedTextColor ?? scheme.onPrimaryContainer,
       bold: isSelected,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
       onTap: isSelected ? null : () => sub._select(item.value),
@@ -532,8 +547,8 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
       label: segment.label,
       icon: segment.icon,
       foreground: isSelected
-          ? scheme.onPrimaryContainer
-          : scheme.onSurfaceVariant,
+          ? _style.selectedTextColor ?? scheme.onPrimaryContainer
+          : _style.textColor ?? scheme.onSurfaceVariant,
       bold: isSelected,
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
       onTap: isSelected ? null : () => _select(segment.value),
@@ -564,7 +579,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
           label: label,
           child: Material(
             color: Colors.transparent,
-            borderRadius: SegmentedTabs.radius,
+            borderRadius: _radius,
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               key: key,
@@ -591,7 +606,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
         // Transparent: the marker behind is what fills a selected segment, so
         // that it can be one box that moves rather than one per segment.
         color: Colors.transparent,
-        borderRadius: SegmentedTabs.radius,
+        borderRadius: _radius,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           key: key,

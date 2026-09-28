@@ -227,10 +227,14 @@ final class SideBarTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final tileTheme = ListTileTheme.of(context);
+    // The theme's side bar style first, then the list tile theme, then this
+    // row's own look.
+    final bar = ComponentStyles.of(context).sidebar;
     final tileShape = tileTheme.shape;
-    final tileRadius =
-        tileShape is RoundedRectangleBorder &&
-            tileShape.borderRadius is BorderRadius
+    final tileRadius = bar.radius != null
+        ? BorderRadius.circular(bar.radius!)
+        : tileShape is RoundedRectangleBorder &&
+              tileShape.borderRadius is BorderRadius
         ? tileShape.borderRadius as BorderRadius
         : _kTileRadius;
     // Right-click reaches whatever the long press does — see
@@ -267,11 +271,12 @@ final class SideBarTile extends StatelessWidget {
               color: selected
                   // Soft, because this marks where you are and not what you
                   // just picked out of a list.
-                  ? tileTheme.selectedTileColor ??
+                  ? bar.selectedColor ??
+                        tileTheme.selectedTileColor ??
                         scheme.secondaryContainer.withValues(alpha: 0.55)
-                  : tileTheme.tileColor,
+                  : bar.backgroundColor ?? tileTheme.tileColor,
             ),
-            padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+            padding: bar.padding ?? const EdgeInsets.fromLTRB(6, 8, 6, 8),
             child: Row(
               children: [
                 // Kept whether or not there is a bar in it, so a name means the
@@ -299,8 +304,12 @@ final class SideBarTile extends StatelessWidget {
                     icon,
                     size: 17,
                     color: selected
-                        ? tileTheme.selectedColor ?? scheme.primary
-                        : tileTheme.iconColor ?? scheme.onSurfaceVariant,
+                        ? bar.selectedIconColor ??
+                              tileTheme.selectedColor ??
+                              scheme.primary
+                        : bar.iconColor ??
+                              tileTheme.iconColor ??
+                              scheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 9),
                 ] else if (leading != null) ...[
@@ -317,10 +326,13 @@ final class SideBarTile extends StatelessWidget {
                       height: 1.2,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                       color: selected
-                          ? tileTheme.selectedColor ??
+                          ? bar.selectedTextColor ??
+                                tileTheme.selectedColor ??
                                 tileTheme.textColor ??
                                 scheme.onSurface
-                          : tileTheme.textColor ?? scheme.onSurface,
+                          : bar.textColor ??
+                                tileTheme.textColor ??
+                                scheme.onSurface,
                     ),
                   ),
                 ),
