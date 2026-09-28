@@ -318,9 +318,11 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
             borderRadius: _radius,
             border: _style.borderColor == null && _style.borderWidth == null
                 ? null
-                : Border.all(
-                    color: _style.borderColor ?? scheme.outlineVariant,
-                    width: _style.borderWidth ?? 1,
+                : Border.fromBorderSide(
+                    themeBorderSide(
+                      _style.borderColor ?? scheme.outlineVariant,
+                      _style.borderWidth ?? 1,
+                    ),
                   ),
           ),
           child: _collapsing(

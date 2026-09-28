@@ -80,9 +80,9 @@ class SearchFieldStyle {
     }
     final side = borderColor == null && borderWidth == null
         ? BorderSide.none
-        : BorderSide(
-            color: borderColor ?? const Color(0x33888888),
-            width: borderWidth ?? 1,
+        : themeBorderSide(
+            borderColor ?? const Color(0x33888888),
+            borderWidth ?? 1,
           );
     return radius == null
         ? StadiumBorder(side: side)
@@ -158,6 +158,15 @@ class ToastStyle {
   final double? borderWidth;
   final double? elevation;
 }
+
+/// A border line from a theme's color and width, where a width of 0 means no
+/// line at all.
+///
+/// Not the same as `BorderSide(width: 0)`: Flutter draws a solid side of width
+/// 0 as a hairline, one physical pixel wide, so a theme that says "no border"
+/// got a thin one around every tile it rounded.
+BorderSide themeBorderSide(Color color, double width) =>
+    width <= 0 ? BorderSide.none : BorderSide(color: color, width: width);
 
 /// The decoration of a text field that is part of something else — a search
 /// pill, a bar, a composer — rather than a form's input.

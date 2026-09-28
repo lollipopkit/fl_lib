@@ -590,9 +590,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
             : BorderRadius.circular(style.radius!),
         side: style.borderColor == null && style.borderWidth == null
             ? BorderSide.none
-            : BorderSide(
-                color: style.borderColor ?? scheme.outlineVariant,
-                width: style.borderWidth ?? 1,
+            : themeBorderSide(
+                style.borderColor ?? scheme.outlineVariant,
+                style.borderWidth ?? 1,
               ),
       ),
       child: InkWell(
