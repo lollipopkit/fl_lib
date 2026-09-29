@@ -1,6 +1,6 @@
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/widget/card.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A header tile that reveals a group of tiles *below* it.
 ///

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template StoreSwitch}
 /// A switch widget that integrates with a [StorePropDefault].

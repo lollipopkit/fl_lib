@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A text field widget that integrates with a [StorePropDefault].
 ///

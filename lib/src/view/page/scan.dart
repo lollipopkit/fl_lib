@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:qr_code_dart_scan/qr_code_dart_scan.dart';
 
 final class BarcodeScannerPageArgs {

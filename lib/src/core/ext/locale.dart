@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:locale_names/locale_names.dart';
 
 /// Extensions on [Locale] and related helpers.

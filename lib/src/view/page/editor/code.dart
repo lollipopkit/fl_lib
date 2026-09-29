@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:computer/computer.dart';
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_highlight/themes/a11y-light.dart';
 import 'package:flutter_highlight/themes/monokai.dart';
 import 'package:re_editor/re_editor.dart';

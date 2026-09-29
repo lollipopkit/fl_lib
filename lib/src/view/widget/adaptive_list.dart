@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 
 /// Signature for building each item in [AdaptiveReorderableList].
@@ -1146,14 +1146,11 @@ class _ChildMetrics {
 class RenderSliverWaterfall extends RenderSliverMultiBoxAdaptor {
   RenderSliverWaterfall({
     required super.childManager,
-    required int columnCount,
-    required double tileExtent,
-    required double mainAxisSpacing,
-    required double crossAxisSpacing,
-  }) : _columnCount = columnCount,
-       _tileExtent = tileExtent,
-       _mainAxisSpacing = mainAxisSpacing,
-       _crossAxisSpacing = crossAxisSpacing;
+    required this._columnCount,
+    required this._tileExtent,
+    required this._mainAxisSpacing,
+    required this._crossAxisSpacing,
+  });
 
   int get columnCount => _columnCount;
   int _columnCount;

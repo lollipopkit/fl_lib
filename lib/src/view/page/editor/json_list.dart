@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 final class JsonListEditorArgs {
   final List<dynamic> data;

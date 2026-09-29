@@ -295,9 +295,7 @@ class _RenderToastPile extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _PileParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _PileParentData> {
-  _RenderToastPile({required Animation<double> open, required bool fromTop})
-      : _open = open,
-        _fromTop = fromTop;
+  _RenderToastPile({required this._open, required this._fromTop});
 
   Animation<double> _open;
   set open(Animation<double> value) {
