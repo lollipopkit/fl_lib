@@ -458,7 +458,7 @@
   "@inner": {
     "description": "Label for inner."
   },
-  "install": "install",
+  "install": "Install",
   "@install": {
     "description": "Label for install."
   },

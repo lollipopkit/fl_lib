@@ -776,7 +776,7 @@ abstract class LibLocalizations {
   /// Label for install.
   ///
   /// In en, this message translates to:
-  /// **'install'**
+  /// **'Install'**
   String get install;
 
   /// Label for invalid.

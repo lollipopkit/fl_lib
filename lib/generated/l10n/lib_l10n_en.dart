@@ -343,7 +343,7 @@ class LibLocalizationsEn extends LibLocalizations {
   String get inner => 'Inner';
 
   @override
-  String get install => 'install';
+  String get install => 'Install';
 
   @override
   String get invalid => 'Invalid';
