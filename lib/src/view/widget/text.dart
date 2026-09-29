@@ -3,7 +3,7 @@ import 'package:fl_lib/src/res/l10n.dart';
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/widget/btn/btn.dart';
 import 'package:fl_lib/src/view/widget/markdown.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 final class TipText extends StatelessWidget {
   final String text;

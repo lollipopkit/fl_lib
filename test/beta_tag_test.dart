@@ -1,5 +1,5 @@
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The mark's two contracts, both of which are only visible in a row: it must
@@ -10,12 +10,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
+      const MaterialApp(
         home: Scaffold(
           body: Row(
             children: [
-              BetaTag(key: const ValueKey('beta')),
-              const Expanded(child: SizedBox()),
+              BetaTag(key: ValueKey('beta')),
+              Expanded(child: SizedBox()),
             ],
           ),
         ),
@@ -35,10 +35,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           appBar: AppBar(
-            title: TwoLineText(
+            title: const TwoLineText(
               up: 'A remote desktop session with a name far too long for a bar',
               down: 'web',
-              mark: const BetaTag(),
+              mark: BetaTag(),
             ),
           ),
         ),

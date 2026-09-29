@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show PointerDeviceKind, lerpDouble;
 
 import 'package:fl_lib/src/view/component_styles.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 
 /// One position in a [SegmentedTabs].
@@ -723,13 +723,10 @@ class _SegmentWindow extends SingleChildRenderObjectWidget {
 
 class _RenderSegmentWindow extends RenderShiftedBox {
   _RenderSegmentWindow({
-    required double openness,
-    required Rect? selected,
-    required bool waiting,
-  }) : _openness = openness,
-       _selected = selected,
-       _waiting = waiting,
-       super(null);
+    required this._openness,
+    required this._selected,
+    required this._waiting,
+  }) : super(null);
 
   double _openness;
   set openness(double v) {
@@ -847,13 +844,11 @@ class _RenderShrinkRow extends RenderBox
         ContainerRenderObjectMixin<RenderBox, _ShrinkRowParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _ShrinkRowParentData> {
   _RenderShrinkRow({
-    required double gap,
-    required TextDirection textDirection,
+    required this._gap,
+    required this._textDirection,
     required this.onMeasured,
-    required bool deferShrink,
-  }) : _gap = gap,
-       _textDirection = textDirection,
-       _deferShrink = deferShrink;
+    required this._deferShrink,
+  });
 
   void Function(double needed, double room) onMeasured;
 

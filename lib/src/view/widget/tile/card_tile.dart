@@ -1,7 +1,7 @@
 import 'package:fl_lib/src/core/ext/secondary_tap.dart';
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/widget/card.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// One thing in a full-width list: what it is, what it says about itself, and
 /// that opening it goes somewhere.

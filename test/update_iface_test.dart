@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:fl_lib/src/core/dio.dart';
 import 'package:fl_lib/src/core/update.dart';
 import 'package:fl_lib/src/model/update.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -283,11 +283,11 @@ final class PrefProp<T extends Object> extends StoreProp<T> {
 
   const PrefProp(
     super.key, {
-    PrefStore? store,
+    this._store,
     super.fromObj,
     super.toObj,
     super.updateLastUpdateTsOnSetProp,
-  }) : _store = store;
+  });
 
   @override
   PrefStore get store => _store ?? PrefStore.shared;
@@ -314,11 +314,11 @@ final class PrefPropDefault<T extends Object> extends StorePropDefault<T> {
   const PrefPropDefault(
     super.key,
     super.defaultValue, {
-    PrefStore? store,
+    this._store,
     super.fromObj,
     super.toObj,
     super.updateLastUpdateTsOnSetProp,
-  }) : _store = store;
+  });
 
   @override
   PrefStore get store => _store ?? PrefStore.shared;

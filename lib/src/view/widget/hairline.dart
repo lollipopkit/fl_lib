@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The colour and weight of every hairline the app draws on a surface: the seam
 /// between two panes, the rules that bracket a panel's header and its composer,

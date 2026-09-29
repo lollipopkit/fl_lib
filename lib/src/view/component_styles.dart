@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Styles for the widgets of this library that no Material theme covers: the
 /// search field embedded in a bar, [SegmentedTabs], the side bar's rows, and
