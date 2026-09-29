@@ -48,13 +48,16 @@ final class SizedLoading extends StatelessWidget {
     );
   }
 
+  /// [size] across, [padding] of it around the indicator.
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size - 2 * padding,
-      height: size - 2 * padding,
-      child: Center(child: builder(context, valueColor)).paddingAll(padding),
-    ).paddingAll(3);
+    return SizedBox.square(
+      dimension: size,
+      child: Padding(
+        padding: EdgeInsets.all(padding),
+        child: Center(child: builder(context, valueColor)),
+      ),
+    );
   }
 
   /// Small sized loading indicator (25x25).
