@@ -119,7 +119,6 @@ class _InputState extends State<Input> {
   }
 
   Widget _buildField() {
-    final decorationTheme = InputDecorationTheme.of(context);
     return _obscureText.listenVal((obscureText) {
       return TextField(
         controller: widget.controller,
@@ -134,7 +133,20 @@ class _InputState extends State<Input> {
           hintText: widget.hint,
           labelText: widget.label,
           errorText: widget.errorText,
-          border: decorationTheme.border ?? InputBorder.none,
+          // No frame of its own, in any state, whatever the theme says. The
+          // row this sits in — its own card, or the tile or card a `noWrap`
+          // field is placed in — is the frame; a theme's field border drew a
+          // second one inside it. Every state is named: a null one is filled
+          // in from `InputDecorationTheme`, which is where that border comes
+          // from. The fill goes for the same reason. A theme's field style is
+          // for a bare `TextField`.
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          filled: false,
           suffixIcon: _buildSuffix(obscureText),
           // Material sizes a field to be picked out of a page of prose. These
           // are rows of a form, each already inside a card of its own and
@@ -142,9 +154,9 @@ class _InputState extends State<Input> {
           // label and the value sat in the middle of a box half again as tall
           // as either of its neighbours.
           isDense: true,
-          contentPadding:
-              decorationTheme.contentPadding ??
-              const EdgeInsets.symmetric(vertical: 7),
+          // Not the theme's either: that padding is room inside a border this
+          // field no longer draws.
+          contentPadding: const EdgeInsets.symmetric(vertical: 7),
           // Sitting in the field, the label is the value's size, because that
           // is the slot it is standing in for. Risen, it is a caption over the
           // value — set outright rather than left to the 0.75 the float
