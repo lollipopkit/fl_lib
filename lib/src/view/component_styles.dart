@@ -127,6 +127,11 @@ class SidebarStyle {
     this.selectedIconColor,
     this.radius,
     this.padding,
+    this.fontSize,
+    this.fontWeight,
+    this.selectedFontWeight,
+    this.iconSize,
+    this.iconGap,
   });
 
   final Color? backgroundColor;
@@ -137,6 +142,15 @@ class SidebarStyle {
   final Color? selectedIconColor;
   final double? radius;
   final EdgeInsets? padding;
+
+  /// A row's title: 14, w500, and w600 selected unless given.
+  final double? fontSize;
+  final FontWeight? fontWeight;
+  final FontWeight? selectedFontWeight;
+
+  /// A row's icon: 17, then 9 before the title, unless given.
+  final double? iconSize;
+  final double? iconGap;
 }
 
 /// A toast's card.

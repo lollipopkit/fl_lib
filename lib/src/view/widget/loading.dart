@@ -32,9 +32,19 @@ final class SizedLoading extends StatelessWidget {
     );
   }
 
+  /// A ring on a faint track, its stroke a ninth of its size and never under
+  /// 2: Material's default 4 makes a small ring a blot.
   static Widget circularBuilder(BuildContext context, Animation<Color>? valueColor) {
-    return CircularProgressIndicator(
-      valueColor: valueColor ?? AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+    final primary = Theme.of(context).colorScheme.primary;
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final side = cons.biggest.shortestSide;
+        return CircularProgressIndicator(
+          strokeWidth: side.isFinite && side / 9 > 2 ? side / 9 : 2,
+          backgroundColor: primary.withValues(alpha: 0.24),
+          valueColor: valueColor ?? AlwaysStoppedAnimation(primary),
+        );
+      },
     );
   }
 

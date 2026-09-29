@@ -370,7 +370,17 @@ final class Btn extends StatelessWidget {
     final isRTL = Directionality.of(context) == TextDirection.rtl;
     final icon_ = icon ?? _kPlaceholderIcon;
     final gap_ = SizedBox(width: gap ?? _kGap);
-    final text_ = Text(text, style: textStyle);
+    // Flexible, so a label longer than the room it is given ends in an
+    // ellipsis (a row button's) or wraps (a tile's) instead of overflowing.
+    final single = type == BtnType.row;
+    final text_ = Flexible(
+      child: Text(
+        text,
+        style: textStyle,
+        maxLines: single ? 1 : null,
+        overflow: single ? TextOverflow.ellipsis : null,
+      ),
+    );
     final children = isRTL ? [text_, gap_, icon_] : [icon_, gap_, text_];
 
     Widget child = Row(

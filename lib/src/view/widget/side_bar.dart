@@ -302,7 +302,7 @@ final class SideBarTile extends StatelessWidget {
                 if (icon != null) ...[
                   Icon(
                     icon,
-                    size: 17,
+                    size: bar.iconSize ?? 17,
                     color: selected
                         ? bar.selectedIconColor ??
                               tileTheme.selectedColor ??
@@ -311,10 +311,10 @@ final class SideBarTile extends StatelessWidget {
                               tileTheme.iconColor ??
                               scheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 9),
+                  SizedBox(width: bar.iconGap ?? 9),
                 ] else if (leading != null) ...[
-                  SizedBox(width: 17, height: 17, child: leading),
-                  const SizedBox(width: 9),
+                  SizedBox(width: bar.iconSize ?? 17, height: bar.iconSize ?? 17, child: leading),
+                  SizedBox(width: bar.iconGap ?? 9),
                 ],
                 Expanded(
                   child: Text(
@@ -322,9 +322,11 @@ final class SideBarTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: bar.fontSize ?? 14,
                       height: 1.2,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: selected
+                          ? bar.selectedFontWeight ?? FontWeight.w600
+                          : bar.fontWeight ?? FontWeight.w500,
                       color: selected
                           ? bar.selectedTextColor ??
                                 tileTheme.selectedColor ??
