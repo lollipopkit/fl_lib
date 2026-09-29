@@ -858,4 +858,81 @@ class LibLocalizationsEn extends LibLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get appearanceSettings => 'Appearance';
+
+  @override
+  String get appearancePreset => 'Theme preset';
+
+  @override
+  String get appearanceThemeSchemaRange => 'Supported theme schema';
+
+  @override
+  String get appearanceThemeInstall => 'Install theme';
+
+  @override
+  String get appearanceThemeStore => 'Theme store';
+
+  @override
+  String get appearanceInvalidTheme => 'Invalid theme package or catalog';
+
+  @override
+  String get themeStoreRefreshFailed => 'Could not read the theme catalog.';
+
+  @override
+  String themeStoreDeleteTheme(String name) {
+    return 'Delete “$name”? Its files are removed from this device. If it is the theme in use, the app returns to the default theme.';
+  }
+
+  @override
+  String themeStoreUpdatedFmt(String ago) {
+    return 'updated $ago';
+  }
+
+  @override
+  String get themeStoreUpdatedJustNow => 'updated just now';
+
+  @override
+  String get themeStoreSortInUse => 'In use first';
+
+  @override
+  String themeStoreMakeOwnFmt(String doc) {
+    return 'Want to make your own theme? [How to author one]($doc) — thank you for contributing!';
+  }
+
+  @override
+  String appearanceThemeNeedsNewerApp(String version) {
+    return 'Needs a newer app: $version';
+  }
+
+  @override
+  String get appearanceFontFamilies => 'UI font families';
+
+  @override
+  String get appearanceFontFamiliesTip =>
+      'One name per line; fonts are tried in order.';
+
+  @override
+  String get appearanceFontImport => 'Import UI font file';
+
+  @override
+  String get appearanceIcons => 'In-app icons';
+
+  @override
+  String get appearanceCorners => 'Corners';
+
+  @override
+  String get appearanceCardCorners => 'Card corners';
+
+  @override
+  String get appearanceTileCorners => 'Tile corners';
+
+  @override
+  String get appearanceButtonCorners => 'Button corners';
+
+  @override
+  String appearanceThemeModeLocked(String mode) {
+    return 'This theme only supports $mode. Select another theme to change the mode.';
+  }
 }

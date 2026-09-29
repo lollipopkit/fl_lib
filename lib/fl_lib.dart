@@ -29,6 +29,7 @@ export 'src/core/ext/ctx/color.dart';
 export 'src/core/ext/ctx/common.dart';
 export 'src/core/ext/ctx/dialog.dart';
 export 'src/core/ext/ctx/l10n.dart';
+export 'src/core/ext/ctx/motion.dart';
 export 'src/core/ext/ctx/snackbar.dart';
 export 'src/core/ext/datetime.dart';
 export 'src/core/ext/duration.dart';
@@ -53,6 +54,7 @@ export 'src/core/mixin/global_ref.dart';
 
 // --- Utilities ---
 // Platform abstractions, UI helpers, crypto, localization, and common functions
+export 'src/core/utils/bounded_output_stream.dart';
 export 'src/core/utils/crypto.dart';
 export 'src/core/utils/font.dart';
 export 'src/core/utils/func.dart';

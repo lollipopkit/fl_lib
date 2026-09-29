@@ -1,4 +1,3 @@
-import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A circular progress indicator with customizable size and padding.
