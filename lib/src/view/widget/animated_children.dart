@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// One child of an animated collection, for as long as it is on screen —
 /// which outlasts its removal from the list by however long it takes to

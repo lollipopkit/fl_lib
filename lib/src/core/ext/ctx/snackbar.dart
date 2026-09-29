@@ -1,5 +1,5 @@
 import 'package:fl_lib/src/view/widget/toast/toast.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Kept only so that apps still on `showSnackBar` keep compiling. Every method
 /// forwards to [Toast], which needs no [BuildContext].

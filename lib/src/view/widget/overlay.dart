@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:fl_lib/src/core/ext/obj.dart';
 import 'package:fl_lib/src/view/widget/val_builder.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class OverlayWidget extends StatefulWidget {
   final Widget child;

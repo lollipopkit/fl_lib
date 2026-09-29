@@ -1,7 +1,7 @@
 import 'package:choice/choice.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:icons_plus/icons_plus.dart';
 
 /// A wrapped switcher for multiple tags.

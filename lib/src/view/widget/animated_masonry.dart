@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -360,22 +360,16 @@ final class _RenderMasonryFlow extends RenderBox
         ContainerRenderObjectMixin<RenderBox, _MasonryParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _MasonryParentData> {
   _RenderMasonryFlow({
-    required double columnWidth,
-    required int maxColumns,
-    required double spacing,
-    required Duration moveDuration,
-    required TickerProvider vsync,
-    required int expandedAt,
-    required double expansion,
+    required this._columnWidth,
+    required this._maxColumns,
+    required this._spacing,
+    required this._moveDuration,
+    required this._vsync,
+    required this._expandedAt,
+    required this._expansion,
     required this.memory,
     required this.keys,
-  }) : _columnWidth = columnWidth,
-       _maxColumns = maxColumns,
-       _spacing = spacing,
-       _moveDuration = moveDuration,
-       _vsync = vsync,
-       _expandedAt = expandedAt,
-       _expansion = expansion;
+  });
 
   /// Read and written during layout, so neither needs a layout of its own: a
   /// change of cards is a change of children, which is one already.

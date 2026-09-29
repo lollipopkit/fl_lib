@@ -1,5 +1,5 @@
 import 'package:fl_lib/src/res/l10n.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 extension ThemeDataX on ThemeData {
   static const bgInDark = Color.fromARGB(64, 15, 15, 15);

@@ -1,5 +1,5 @@
 import 'package:fl_lib/src/res/ui.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class PopupMenu<T> extends StatelessWidget {
   final List<PopupMenuEntry<T>> items;

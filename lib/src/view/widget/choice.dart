@@ -1,6 +1,6 @@
 import 'package:choice/choice.dart';
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 final class ChoiceWidget<T> extends StatelessWidget {
   const ChoiceWidget({

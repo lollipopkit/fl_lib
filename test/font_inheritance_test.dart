@@ -1,6 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:re_editor/re_editor.dart';
@@ -28,7 +28,12 @@ Widget _app(
   double? wordSpacingOverride,
 }) => MaterialApp(
   theme: _theme(letterSpacing: letterSpacing),
-  localizationsDelegates: LibLocalizations.localizationsDelegates,
+  // TODO: back to `LibLocalizations.localizationsDelegates` once gen-l10n
+  // emits material_ui's delegates; it still lists flutter_localizations'.
+  localizationsDelegates: const [
+    LibLocalizations.delegate,
+    ...GlobalMaterialLocalizations.delegates,
+  ],
   supportedLocales: LibLocalizations.supportedLocales,
   builder: (context, child) => MediaQuery(
     // The platform's text overrides, which only `Text` reads, and only when it

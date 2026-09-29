@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Copy from:
 /// https://book.flutterchina.club/chapter9/animated_switcher.html#_9-6-3-slidetransitionx
