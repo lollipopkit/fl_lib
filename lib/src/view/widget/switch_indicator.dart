@@ -71,10 +71,17 @@ class _SwitchState extends State<SwitchIndicator> with TickerProviderStateMixin 
             alignment: AlignmentDirectional.center,
             children: [
               child ?? UIs.placeholder,
-              ScaleTransition(
-                scale: _showIndicatorAnim,
-                child: _buildIndicator(context),
-              ),
+              // Faded rather than grown under reduced motion.
+              if (MediaQuery.disableAnimationsOf(context))
+                FadeTransition(
+                  opacity: _showIndicatorAnim,
+                  child: _buildIndicator(context),
+                )
+              else
+                ScaleTransition(
+                  scale: _showIndicatorAnim,
+                  child: _buildIndicator(context),
+                ),
             ],
           );
         },

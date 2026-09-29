@@ -93,6 +93,10 @@ class _KvEditorState extends State<KvEditor> {
       ),
     ).cardx;
 
+    // Under reduced motion the row only fades (see the list's builders) and
+    // takes or gives up its height at once.
+    if (MediaQuery.disableAnimationsOf(context)) return tile;
+
     return SizeTransition(
       sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic),
       alignment: const AlignmentDirectional(0.0, 0.0),
@@ -102,7 +106,7 @@ class _KvEditorState extends State<KvEditor> {
 
   void _onTapDelete(String k, int idx) {
     final v = _map.remove(k);
-    _listKey.currentState?.removeItem(idx, (context, animation) => _buildItem(k, v ?? '', idx, animation));
+    _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(k, v ?? '', idx, animation)));
   }
 
   void _onTapEdit(String k, int idx) async {
@@ -139,7 +143,7 @@ class _KvEditorState extends State<KvEditor> {
     );
     if (result == true) {
       await Future.delayed(Durations.short3);
-      _listKey.currentState?.removeItem(idx, (context, animation) => _buildItem(k, oldV, idx, animation));
+      _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(k, oldV, idx, animation)));
       final newIdx = _map.keys.toList().indexOf(ctrlK.text);
       _listKey.currentState?.insertItem(newIdx, duration: Durations.medium1);
     }

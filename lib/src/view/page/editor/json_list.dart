@@ -85,6 +85,10 @@ class _JsonListEditorState extends State<JsonListEditor> {
       ),
     ).cardx;
 
+    // Under reduced motion the row only fades (see the list's builders) and
+    // takes or gives up its height at once.
+    if (MediaQuery.disableAnimationsOf(context)) return tile;
+
     return SizeTransition(
       sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic),
       alignment: const AlignmentDirectional(0.0, 0.0),
@@ -113,7 +117,7 @@ class _JsonListEditorState extends State<JsonListEditor> {
 
   void _onTapDelete(int idx) {
     final item = _list.removeAt(idx);
-    _listKey.currentState?.removeItem(idx, (context, animation) => _buildItem(item, idx, animation));
+    _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(item, idx, animation)));
   }
 
   void _onTapEdit(dynamic item, int idx) async {
@@ -151,7 +155,7 @@ class _JsonListEditorState extends State<JsonListEditor> {
     );
     if (result == true) {
       await Future.delayed(Durations.short3);
-      _listKey.currentState?.removeItem(idx, (context, animation) => _buildItem(item, idx, animation));
+      _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(item, idx, animation)));
       _listKey.currentState?.insertItem(idx, duration: Durations.medium1);
     }
   }

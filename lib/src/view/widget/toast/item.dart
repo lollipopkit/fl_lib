@@ -450,6 +450,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final accent = _data.accentColor(context);
     final fromTop = ToastConfig.align.isTop;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
     // Everything above this is a transform, a clip or a size factor — the
     // content itself does not change while any of them play, so it is worth a
@@ -466,7 +467,11 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
       );
     }
 
-    if (!_settled) {
+    // Under reduced motion it only fades: no slide, and no growing out of the
+    // edge, which would push the rest of the stack along.
+    if (!_settled && reduceMotion) {
+      card = FadeTransition(opacity: _curve, child: card);
+    } else if (!_settled) {
       final fade = FadeTransition(opacity: _curve, child: card);
       card = SlideTransition(
         position: _slide,
@@ -504,7 +509,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     // The pile is told the value in between, so its layout travels too.
     return TweenAnimationBuilder<double>(
       tween: Tween(end: widget.depth.toDouble()),
-      duration: Durations.medium2,
+      duration: reduceMotion ? Duration.zero : Durations.medium2,
       curve: _kSpring,
       child: card,
       builder: (_, depth, child) {
@@ -610,7 +615,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
             // shadow instead. No overshoot either: past the full height there is
             // nothing left to reveal but blank space.
             AnimatedSize(
-              duration: Durations.medium2,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : Durations.medium2,
               curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
               clipBehavior: Clip.none,
@@ -706,7 +713,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
               radius: 16,
               child: AnimatedRotation(
                 turns: _isExpanded ? 0.5 : 0,
-                duration: Durations.short3,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : Durations.short3,
                 child: Icon(
                   Icons.keyboard_arrow_down,
                   size: _iconSize,

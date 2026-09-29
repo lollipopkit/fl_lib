@@ -110,7 +110,9 @@ final class AutoHideState extends State<AutoHide> {
           tween: Tween<Offset>(
             end: _controller.visible ? Offset.zero : hiddenOffset,
           ),
-          duration: Durations.medium1,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.medium1,
           curve: Curves.easeInOutCubic,
           builder: (context, offset, animatedChild) {
             return Transform.translate(

@@ -236,6 +236,15 @@ class _AdaptivePanesState extends State<AdaptivePanes>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Folding slides the column away; under reduced motion it just goes.
+    _fold.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Durations.medium2;
+  }
+
+  @override
   void dispose() {
     _openness.dispose();
     _fold.dispose();

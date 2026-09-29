@@ -178,7 +178,10 @@ final class _AnimatedMasonryState extends State<AnimatedMasonry>
       columnWidth: widget.columnWidth,
       maxColumns: widget.maxColumns,
       spacing: widget.spacing,
-      moveDuration: widget.moveDuration,
+      // Zero lands every card in its place on the next frame.
+      moveDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : widget.moveDuration,
       vsync: this,
       expandedAt: widget.expandedKey == null
           ? -1
@@ -238,6 +241,11 @@ final class _MasonryEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Under reduced motion only the fade is kept: the space opens and closes
+    // at once, and nothing grows.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return FadeTransition(opacity: anim, child: child);
+    }
     // The height as well as the opacity, and the height is the important one:
     // it is what makes the cards below flow into the space rather than close
     // it in a single frame. Aligned to the top so a card grows downward from

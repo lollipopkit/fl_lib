@@ -116,6 +116,16 @@ class _ExpandableTileState extends State<ExpandableTile>
   bool get _closed => !_expanded && _ctrl.isDismissed;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Unrolling moves everything below the tile; under reduced motion the rows
+    // are there or not, as in `Reveal`.
+    _ctrl.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : _duration;
+  }
+
+  @override
   void dispose() {
     _curve.dispose();
     _ctrl.dispose();

@@ -44,7 +44,13 @@ class OverlayFlight {
     Curve curve = Curves.fastOutSlowIn,
     VoidCallback? onEnd,
   }) {
-    final controller = AnimationController(vsync: vsync, duration: duration);
+    // Under reduced motion the copy lands at once, and [onEnd] still runs.
+    final controller = AnimationController(
+      vsync: vsync,
+      duration: MediaQuery.disableAnimationsOf(overlay.context)
+          ? Duration.zero
+          : duration,
+    );
     final animation = CurvedAnimation(parent: controller, curve: curve);
     // The old form goes first and the new arrives after, overlapping in the
     // middle. Fading them in step would show both at half strength through

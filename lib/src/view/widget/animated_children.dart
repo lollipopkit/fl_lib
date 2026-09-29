@@ -261,6 +261,19 @@ final class _AnimatedColumnEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final faded = FadeTransition(
+      opacity: anim,
+      child: separator == null
+          ? child
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [separator!, child],
+            ),
+    );
+    // Under reduced motion only the fade is kept: the space opens and closes
+    // at once, and nothing grows.
+    if (MediaQuery.disableAnimationsOf(context)) return faded;
     // The height as well as the opacity, and the height is the important one:
     // it is what makes the rows below flow into the space rather than close it
     // in a single frame. Anchored at the top so a row grows downward from
@@ -268,16 +281,7 @@ final class _AnimatedColumnEntry extends StatelessWidget {
     return SizeTransition(
       alignment: Alignment.topCenter,
       sizeFactor: anim,
-      child: FadeTransition(
-        opacity: anim,
-        child: separator == null
-            ? child
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [separator!, child],
-              ),
-      ),
+      child: faded,
     );
   }
 }

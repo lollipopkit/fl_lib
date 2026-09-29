@@ -56,7 +56,8 @@ final class ImagePage extends StatelessWidget {
     //   child: child,
     // );
 
-    if (args.heroTag != null) {
+    // No flight from the thumbnail under reduced motion.
+    if (args.heroTag != null && !MediaQuery.disableAnimationsOf(context)) {
       child = Hero(
         tag: args.heroTag!,
         transitionOnUserGestures: true,

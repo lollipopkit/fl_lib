@@ -178,7 +178,10 @@ class _HideOnScrollState extends State<HideOnScroll> {
 
     return AnimatedSlide(
       // Its own height, so it ends up entirely past whichever edge it sits on.
-      offset: shown ? Offset.zero : const Offset(0, 1),
+      // Under reduced motion it stays put and only fades.
+      offset: shown || MediaQuery.disableAnimationsOf(context)
+          ? Offset.zero
+          : const Offset(0, 1),
       duration: duration,
       curve: _entering ? widget.enterCurve : widget.curve,
       child: AnimatedOpacity(

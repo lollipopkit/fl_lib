@@ -33,7 +33,8 @@ class _ImageCardState extends State<ImageCard> {
   @override
   Widget build(BuildContext context) {
     Widget child = CardX(radius: widget.radius, child: _buildImage());
-    if (widget.heroTag != null) {
+    // No flight to the full-screen page under reduced motion.
+    if (widget.heroTag != null && !MediaQuery.disableAnimationsOf(context)) {
       child = Hero(tag: widget.heroTag!, child: child);
     }
     return SizedBox(

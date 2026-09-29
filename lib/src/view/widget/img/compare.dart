@@ -288,6 +288,9 @@ final class _ImgSlideAnimCompareState extends State<ImgSlideAnimCompare> with Si
   void didChangeDependencies() {
     super.didChangeDependencies();
     _windowSize = context.windowSize;
+    // The wipe travels across the image; under reduced motion it has already
+    // happened.
+    if (MediaQuery.disableAnimationsOf(context)) _originImgSlideLeftAnim.value = 1;
   }
 
   @override

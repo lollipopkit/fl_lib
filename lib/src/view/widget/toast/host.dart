@@ -95,6 +95,15 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The pile spreads by moving cards; under reduced motion it just opens.
+    _openCtrl.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Durations.medium4;
+  }
+
+  @override
   void dispose() {
     _openCurve.dispose();
     _openCtrl.dispose();

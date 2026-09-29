@@ -188,6 +188,18 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     }
   }
 
+  /// Zero under reduced motion: the markers jump and the collapsed control
+  /// opens at once, with nothing sliding.
+  Duration get _duration => MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : SegmentedTabs.duration;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _openness.duration = _duration;
+  }
+
   @override
   void didUpdateWidget(SegmentedTabs<T> old) {
     super.didUpdateWidget(old);
@@ -335,7 +347,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                   // only slides once a later build moves it.
                   AnimatedPositioned(
                     key: const ValueKey('segmented-marker'),
-                    duration: SegmentedTabs.duration,
+                    duration: _duration,
                     curve: SegmentedTabs.curve,
                     left: rect.left,
                     top: rect.top,
@@ -356,7 +368,7 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
                   // level is a new marker, not this one sliding over.
                   AnimatedPositioned(
                     key: ValueKey(('segmented-sub-marker', parent.value)),
-                    duration: SegmentedTabs.duration,
+                    duration: _duration,
                     curve: SegmentedTabs.curve,
                     left: rect.left,
                     top: rect.top,

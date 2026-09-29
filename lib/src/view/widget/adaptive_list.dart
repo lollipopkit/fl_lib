@@ -763,7 +763,8 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
     Map<Object, Rect> previousRects,
     Object draggedKey,
   ) {
-    if (previousRects.isEmpty) {
+    // Under reduced motion the neighbours take their new places at once.
+    if (previousRects.isEmpty || MediaQuery.disableAnimationsOf(context)) {
       return;
     }
 
@@ -857,7 +858,7 @@ class _AdaptiveReorderableListState<T> extends State<AdaptiveReorderableList<T>>
 
   void _startDropAnimation(_AdaptiveEntry<T> entry, _ActiveDrag dragInfo) {
     final Rect? startRect = dragInfo.startRect ?? _rectForEntry(entry);
-    if (startRect == null) {
+    if (startRect == null || MediaQuery.disableAnimationsOf(context)) {
       if (entry.dropAnimating.value && mounted) {
         _completeDropWithoutOverlay(entry);
       }
@@ -1062,7 +1063,9 @@ class _AnimatedEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: animation,
-      child: ScaleTransition(scale: animation.drive(_scaleTween), child: child),
+      child: MediaQuery.disableAnimationsOf(context)
+          ? child
+          : ScaleTransition(scale: animation.drive(_scaleTween), child: child),
     );
   }
 }

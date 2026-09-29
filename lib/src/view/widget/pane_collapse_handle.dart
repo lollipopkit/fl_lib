@@ -101,7 +101,9 @@ class _PaneCollapseHandleState extends State<PaneCollapseHandle> {
     // having been dragged.
     Widget handle = AnimatedScale(
       scale: _pressed ? 1.2 : 1,
-      duration: Durations.short3,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : Durations.short3,
       curve: Curves.easeOut,
       child: AnimatedContainer(
         duration: Durations.short3,
