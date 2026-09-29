@@ -175,6 +175,9 @@ BorderSide themeBorderSide(Color color, double width) =>
 /// enough: an [InputDecorationTheme] that defines `enabledBorder` and
 /// `focusedBorder` wins over it, and a theme's form fields then draw a box
 /// inside the pill the field already sits in.
+///
+/// [isCollapsed] is [InputDecoration.collapsed]: no padding unless
+/// [contentPadding] says otherwise, rather than the theme's.
 InputDecoration bareInputDecoration({
   String? hintText,
   TextStyle? hintStyle,
@@ -186,7 +189,7 @@ InputDecoration bareInputDecoration({
 }) => InputDecoration(
   hintText: hintText,
   hintStyle: hintStyle,
-  contentPadding: contentPadding,
+  contentPadding: contentPadding ?? (isCollapsed ? EdgeInsets.zero : null),
   isDense: isDense,
   isCollapsed: isCollapsed,
   prefixIcon: prefixIcon,
