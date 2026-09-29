@@ -32,19 +32,32 @@ final class SizedLoading extends StatelessWidget {
     );
   }
 
+  /// A ring on a faint track, its stroke a ninth of its size and never under
+  /// 2: Material's default 4 makes a small ring a blot.
   static Widget circularBuilder(BuildContext context, Animation<Color>? valueColor) {
-    return CircularProgressIndicator(
-      valueColor: valueColor ?? AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+    final primary = Theme.of(context).colorScheme.primary;
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final side = cons.biggest.shortestSide;
+        return CircularProgressIndicator(
+          strokeWidth: side.isFinite && side / 9 > 2 ? side / 9 : 2,
+          backgroundColor: primary.withValues(alpha: 0.24),
+          valueColor: valueColor ?? AlwaysStoppedAnimation(primary),
+        );
+      },
     );
   }
 
+  /// [size] across, [padding] of it around the indicator.
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size - 2 * padding,
-      height: size - 2 * padding,
-      child: Center(child: builder(context, valueColor)).paddingAll(padding),
-    ).paddingAll(3);
+    return SizedBox.square(
+      dimension: size,
+      child: Padding(
+        padding: EdgeInsets.all(padding),
+        child: Center(child: builder(context, valueColor)),
+      ),
+    );
   }
 
   /// Small sized loading indicator (25x25).
