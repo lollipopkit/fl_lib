@@ -214,11 +214,22 @@ final class ThemePackage {
 
 /// Loads one bundled folder on demand and shares concurrent requests.
 final class BuiltinThemeLoader {
-  BuiltinThemeLoader({AssetBundle? bundle, this.rootDirectory})
-    : _bundle = bundle ?? rootBundle;
+  BuiltinThemeLoader({
+    AssetBundle? bundle,
+    this.rootDirectory,
+    this.assetRoot = defaultAssetRoot,
+  }) : _bundle = bundle ?? rootBundle;
+
+  /// Where the built-in folders are in an app depending on fl_lib: a
+  /// package's assets are keyed under `packages/<name>/`.
+  static const defaultAssetRoot = 'packages/fl_lib/assets/themes/';
 
   final AssetBundle _bundle;
   final String? rootDirectory;
+
+  /// The asset directory holding one folder per built-in theme. fl_lib's own
+  /// tests are the root package, where the same files are `assets/themes/`.
+  final String assetRoot;
   final _loaded = <BuiltinTheme, ThemePackage>{};
   final _pending = <BuiltinTheme, Future<ThemePackage>>{};
 
@@ -244,7 +255,7 @@ final class BuiltinThemeLoader {
 
   Future<ThemePackage> _loadFolder(BuiltinTheme builtin) async {
     final manifest = await AssetManifest.loadFromAssetBundle(_bundle);
-    final prefix = 'packages/fl_lib/assets/themes/${builtin.id}/';
+    final prefix = '$assetRoot${builtin.id}/';
     final assets = <String, Uint8List>{};
     for (final asset in manifest.listAssets().where(
       (path) => path.startsWith(prefix),
@@ -515,14 +526,14 @@ abstract final class ThemePackages {
   /// `tab.server.selected` or `nav.settings`.
   ///
   /// A package is checked against this rather than against the keys this app
-  /// draws ([ThemeHost.iconKeys]): the format is shared by more than one app,
+  /// draws ([ThemeIcons.keys]): the format is shared by more than one app,
   /// and a package made for another carries keys this one has never heard of.
   /// Those are kept and never drawn. The pattern is what stops a key from
   /// naming a file outside the package, since the key becomes a file name.
   static final iconKeyPattern = RegExp(r'^[a-z][a-z0-9]*(\.[a-z][a-zA-Z0-9]*)+$');
 
-  /// The keys this app draws; see [ThemeHost.iconKeys].
-  static Set<String> get iconKeys => ThemeHost.current.iconKeys;
+  /// The keys this app draws; see [ThemeIcons.keys].
+  static Set<String> get iconKeys => ThemeHost.current.icons.keys;
 
   static bool _isIconKey(String key) => iconKeyPattern.hasMatch(key);
 

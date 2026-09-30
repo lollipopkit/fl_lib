@@ -9,7 +9,7 @@ import 'package:material_ui/material_ui.dart';
 /// The swipe is turned into the events Android sends on
 /// [SystemChannels.backGesture], so the gesture, the route and the
 /// transition are [PredictiveBackPageTransitionsBuilder]'s own, not a copy of
-/// them. For iOS, in place of [CupertinoPageTransitionsBuilder]; Android has
+/// them. For iOS and macOS, in place of Cupertino's transition; Android has
 /// the real one.
 class SwipeBackPageTransitionsBuilder extends PageTransitionsBuilder {
   const SwipeBackPageTransitionsBuilder({this.fallbackColor});

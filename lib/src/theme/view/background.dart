@@ -2,6 +2,7 @@ import 'package:fl_lib/fl_lib.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fl_lib/src/theme/package.dart';
@@ -20,11 +21,15 @@ class AppBackground extends StatelessWidget {
 
   /// Whether the background is to be drawn here.
   ///
-  /// Always for the copy behind the app. Inside a page, only while the page is
-  /// moving: at rest the page is transparent and the copy behind the app is
-  /// already what is being looked at, and a second one drawn in the page's own
-  /// box is not the same picture — the background is `cover`-fitted, so a page
-  /// covering a pane gets the pane's crop of it rather than the window's.
+  /// Always for the one behind the app. Inside a page, only while the page is
+  /// moving: at rest the page is transparent and the one behind the app is
+  /// already what is being looked at.
+  ///
+  /// A page's copy is the window's background, not one fitted to the page: laid
+  /// out at the window's size and placed where the window's is, cut to the
+  /// page. A page in a pane covers part of the window, and a background fitted
+  /// to that part is another picture — cropped elsewhere, its tiles starting
+  /// elsewhere — which would jump into view as the page starts to move.
   final bool visible;
 
   @override
@@ -39,21 +44,36 @@ class AppBackground extends StatelessWidget {
         (style == BackgroundStyle.image && path.isEmpty)) {
       return child;
     }
+    // The one behind the app has no other above it.
+    final root = context.dependOnInheritedWidgetOfExactType<_BackgroundRoot>();
+    final layer = _layer(context, style, path);
     // A `Stack` either way, and the background switched through an `Opacity`
     // rather than taken out of it: the child is a whole page, and a page
     // rebuilt from a different parent loses what it was holding — a scroll
     // position, a field being typed in — every time a transition starts.
-    return Stack(
+    final stack = Stack(
       fit: StackFit.passthrough,
       children: [
         Positioned.fill(
           child: Opacity(
             opacity: visible ? 1 : 0,
-            child: _layer(context, style, path),
+            child: root == null
+                ? layer
+                : _WindowAligned(
+                    root: root,
+                    navigator: Navigator.maybeOf(context),
+                    child: layer,
+                  ),
           ),
         ),
         child,
       ],
+    );
+    if (root != null) return stack;
+    return _BackgroundRoot(
+      root: context,
+      window: MediaQuery.sizeOf(context),
+      child: stack,
     );
   }
 
@@ -69,6 +89,136 @@ class AppBackground extends StatelessWidget {
       blur: settings.appBackgroundBlur.fetch(),
       tile: settings.appBackgroundTile.fetch(),
     );
+  }
+}
+
+/// The background behind the app, for the copies inside pages to line up with.
+class _BackgroundRoot extends InheritedWidget {
+  const _BackgroundRoot({
+    required this.root,
+    required this.window,
+    required super.child,
+  });
+
+  /// The [AppBackground] behind the app; its box is the window's.
+  final BuildContext root;
+  final Size window;
+
+  @override
+  bool updateShouldNotify(_BackgroundRoot old) =>
+      root != old.root || window != old.window;
+}
+
+/// A page's copy of the background, laid out at the window's size and painted
+/// where the window's is, cut to the page.
+///
+/// Where the window's is: offset by where the page is at rest, which is where
+/// its navigator is — a route's page fills its navigator, and the navigator is
+/// not moved by its own routes' transitions. So at rest the copy is the same
+/// pixels as the background behind the app, and moves with the page from
+/// there.
+class _WindowAligned extends SingleChildRenderObjectWidget {
+  const _WindowAligned({
+    required this.root,
+    required this.navigator,
+    required super.child,
+  });
+
+  final _BackgroundRoot root;
+  final NavigatorState? navigator;
+
+  @override
+  _RenderWindowAligned createRenderObject(BuildContext context) =>
+      _RenderWindowAligned(root.window, root.root, navigator);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderWindowAligned renderObject,
+  ) {
+    renderObject
+      ..window = root.window
+      ..root = root.root
+      ..navigator = navigator;
+  }
+}
+
+class _RenderWindowAligned extends RenderProxyBox {
+  _RenderWindowAligned(this._window, this._root, this._navigator);
+
+  Size _window;
+  set window(Size value) {
+    if (value == _window) return;
+    _window = value;
+    markNeedsLayout();
+  }
+
+  BuildContext _root;
+  set root(BuildContext value) {
+    if (value == _root) return;
+    _root = value;
+    markNeedsPaint();
+  }
+
+  NavigatorState? _navigator;
+  set navigator(NavigatorState? value) {
+    if (value == _navigator) return;
+    _navigator = value;
+    markNeedsPaint();
+  }
+
+  final _clip = LayerHandle<ClipRectLayer>();
+
+  /// Where the page's box is at rest, from the window's top left.
+  Offset get _origin {
+    final root = _root.mounted ? _root.findRenderObject() : null;
+    final navigator = (_navigator?.mounted ?? false)
+        ? _navigator!.context.findRenderObject()
+        : null;
+    if (root is! RenderBox || navigator is! RenderBox) return Offset.zero;
+    if (!root.attached || !navigator.attached) return Offset.zero;
+    return MatrixUtils.transformPoint(
+      navigator.getTransformTo(root),
+      Offset.zero,
+    );
+  }
+
+  @override
+  void performLayout() {
+    child?.layout(BoxConstraints.tight(_window));
+    size = constraints.biggest;
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) => false;
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) {
+    final origin = _origin;
+    transform.translateByDouble(-origin.dx, -origin.dy, 0, 1);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) return;
+    final origin = _origin;
+    _clip.layer = context.pushClipRect(
+      needsCompositing,
+      offset,
+      Offset.zero & size,
+      (context, offset) => context.paintChild(child, offset - origin),
+      oldLayer: _clip.layer,
+    );
+  }
+
+  @override
+  void dispose() {
+    _clip.layer = null;
+    super.dispose();
   }
 }
 
@@ -210,12 +360,20 @@ abstract final class AppPageTransitions {
     const _Backgrounded(_MotionAware(_PaneSlide())),
   );
 
+  /// Flutter's defaults, with Android's predictive back, driven by an edge
+  /// swipe, where those are Cupertino's (iOS, macOS): a page moves and is left
+  /// the same way on every platform a finger or pointer can drag it.
+  static final _platform = {
+    ...const PageTransitionsTheme().builders,
+    TargetPlatform.iOS: const SwipeBackPageTransitionsBuilder(),
+    TargetPlatform.macOS: const SwipeBackPageTransitionsBuilder(),
+  };
+
   static PageTransitionsTheme _wrap(
     PageTransitionsBuilder Function(PageTransitionsBuilder) wrap,
   ) => PageTransitionsTheme(
     builders: {
-      for (final MapEntry(key: platform, value: builder)
-          in const PageTransitionsTheme().builders.entries)
+      for (final MapEntry(key: platform, value: builder) in _platform.entries)
         platform: wrap(builder),
     },
   );
@@ -349,6 +507,12 @@ final class _Backgrounded extends PageTransitionsBuilder {
   DelegatedTransitionBuilder? get delegatedTransition =>
       _inner.delegatedTransition;
 
+  /// One per route, so the page's copy of the background moves with it when
+  /// the platform's transition swaps the widgets around it — Android's
+  /// predictive back does as a gesture starts and ends — instead of being
+  /// built again, image and all.
+  static final _keys = Expando<GlobalKey>();
+
   @override
   Widget buildTransitions<T>(
     PageRoute<T> route,
@@ -363,6 +527,7 @@ final class _Backgrounded extends PageTransitionsBuilder {
       animation,
       secondaryAnimation,
       AnimatedBuilder(
+        key: _keys[route] ??= GlobalKey(),
         // This route's own animation, not the one above it: a page is given
         // the background while *it* is moving. A page under an arriving one
         // gives it back, and is meant to be seen there — it is what the
@@ -372,16 +537,12 @@ final class _Backgrounded extends PageTransitionsBuilder {
         // transition and the page under it is not.
         child: child,
         builder: (context, child) => AppBackground(
-          // Below 1 rather than "animating": a back gesture drives the route
-          // by hand, and a controller being dragged keeps whatever status it
-          // had, so the truth is where the value is, not what the status says.
-          //
-          // TODO(flicker): dropping the copy on the last frame of the
-          // transition is visible on a device. The copy is fitted to the page's
-          // own box, which is still moving when it is dropped, so it does not
-          // land on the same pixels as the background behind the app that takes
-          // over from it.
-          visible: animation.value < 1,
+          // Anything but at rest, rather than below 1: a back gesture that
+          // commits restarts the pop from fully shown
+          // ([TransitionRoute.handleCommitBackGesture]), and for that frame
+          // the value is 1 on a page that is leaving. A controller dragged by
+          // hand is not completed short of 1 either.
+          visible: !animation.isCompleted,
           child: child!,
         ),
       ),

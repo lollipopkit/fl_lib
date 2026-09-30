@@ -63,7 +63,7 @@ class ThemedIcon extends StatelessWidget {
         ThemePackages.preview,
       ]),
       builder: (context, _) {
-        final symbol = ThemeHost.current.symbols[icon];
+        final symbol = ThemeHost.current.icons.symbols[icon];
         final selected =
             (ThemePackages.preview.value?.iconStyle ??
                     ThemeHost.settings.appIconStyle.fetch()) ==

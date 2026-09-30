@@ -13,8 +13,7 @@ final class ThemeHost {
   const ThemeHost({
     required this.store,
     required this.appName,
-    required this.iconKeys,
-    this.symbols = const {},
+    required this.icons,
     this.bundledThemesDir,
     this.catalogUrl,
     this.catalogAsset,
@@ -24,27 +23,17 @@ final class ThemeHost {
 
   /// Where the theme is stored: the app's settings store with
   /// [ThemeSettings] mixed in.
-  final ThemeSettings store;
+  ///
+  /// Asked each time rather than held, so an app whose store is replaced —
+  /// tests open a fresh one per case — is always read where it is now.
+  final ThemeSettings Function() store;
 
   /// The app's name as the user sees it: the title of a store preview, and
   /// part of the temporary directory a previewed theme is unpacked into.
   final String appName;
 
-  /// The icons this app draws that a package may replace: every key
-  /// [ThemedIcon] is asked for.
-  ///
-  /// A package may carry keys outside this set — it may have been made for
-  /// another app sharing the format — and those are kept but never drawn. A
-  /// key must still be well formed (see `ThemePackages.iconKeyPattern`), so a
-  /// package cannot name an arbitrary file through one.
-  final Set<String> iconKeys;
-
-  /// The app's own glyphs that [ThemedIcon] can swap: the key a package
-  /// replaces each with, and its counterpart in the MingCute family.
-  ///
-  /// Keyed by the glyph the app draws, so a call site keeps passing the icon it
-  /// always did and the theme decides what is drawn.
-  final Map<IconData, ThemeSymbol> symbols;
+  /// The icons this app draws that a theme package may replace.
+  final ThemeIcons icons;
 
   /// The asset directory holding the store themes this app ships, one
   /// `<id>.fsbt` each, installed once on first launch; null when it ships
@@ -73,7 +62,7 @@ final class ThemeHost {
       _current ??
       (throw StateError('ThemeHost.init was not called before a theme was read'));
 
-  static ThemeSettings get settings => current.store;
+  static ThemeSettings get settings => current.store();
 
   static void init(ThemeHost host) => _current = host;
 
@@ -113,12 +102,45 @@ final class ThemePreviewContent {
   final List<(String tab, IconData fallback)> tabs;
 }
 
-/// One of the app's glyphs, as a theme sees it: see [ThemeHost.symbols].
+/// The icons of one app that a theme package may replace: the part of the
+/// shared format that differs between apps.
+///
+/// Every app on fl_lib draws different tabs and glyphs, so none of this is
+/// fixed here. A package may carry icons for any of them — a key only has to
+/// be well formed (`ThemePackages.iconKeyPattern`) — and an app draws the ones
+/// it declares here and ignores the rest. So one package can theme two apps.
+final class ThemeIcons {
+  ThemeIcons({this.tabs = const [], this.symbols = const {}});
+
+  /// The app's navigation tabs, by name. Each has two keys: [tabKey] with
+  /// `selected` false and true.
+  final List<String> tabs;
+
+  /// The app's own glyphs that [ThemedIcon] swaps, keyed by the glyph the app
+  /// draws, so a call site keeps passing the icon it always did and the theme
+  /// decides what is drawn.
+  final Map<IconData, ThemeSymbol> symbols;
+
+  /// The key a tab's icon is stored under.
+  static String tabKey(String tab, {required bool selected}) =>
+      'tab.$tab${selected ? '.selected' : ''}';
+
+  /// Every key this app draws: what a package's `icons.images` and
+  /// `icons.colors` may name to change something here.
+  late final Set<String> keys = {
+    for (final tab in tabs) ...[
+      tabKey(tab, selected: false),
+      tabKey(tab, selected: true),
+    ],
+    for (final symbol in symbols.values) symbol.iconKey,
+  };
+}
+
+/// One of the app's glyphs, as a theme sees it: see [ThemeIcons.symbols].
 final class ThemeSymbol {
   const ThemeSymbol(this.iconKey, {this.mingcute});
 
   /// What a package's `icons.images` and `icons.colors` name this glyph by.
-  /// Must be one of [ThemeHost.iconKeys].
   final String iconKey;
 
   /// Drawn instead under [IconStyle.mingcute]; null keeps the glyph.

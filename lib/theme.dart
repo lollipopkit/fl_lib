@@ -18,6 +18,7 @@ export 'src/theme/sort.dart';
 export 'src/theme/stored_path.dart';
 export 'src/theme/style.dart';
 export 'src/theme/view/app_theme.dart';
+export 'src/theme/view/appearance.dart';
 export 'src/theme/view/background.dart';
 export 'src/theme/view/package_image.dart';
 export 'src/theme/view/splash.dart';
