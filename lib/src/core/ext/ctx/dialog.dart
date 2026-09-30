@@ -114,7 +114,9 @@ extension DialogX on BuildContext {
             _recoredPwd[id] = val;
           }
         },
-        label: label ?? l10n.pwd,
+        // Empty is no label: an empty one would still take the room a label
+        // floats into, and push the text below the middle of the field.
+        label: label == null || label.isEmpty ? l10n.pwd : label,
       ),
     );
   }

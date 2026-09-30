@@ -135,7 +135,9 @@ class _InputState extends State<Input> {
         style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(
           hintText: widget.hint,
-          labelText: widget.label,
+          // An empty label still takes the room it would float into, and
+          // leaves the text below the middle of the field under nothing.
+          labelText: widget.label?.isEmpty ?? true ? null : widget.label,
           errorText: widget.errorText,
           // No frame of its own, in any state, whatever the theme says. The
           // row this sits in — its own card, or the tile or card a `noWrap`
