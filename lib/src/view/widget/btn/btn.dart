@@ -1,5 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
+import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:icons_plus/icons_plus.dart';
 
@@ -383,7 +384,7 @@ final class Btn extends StatelessWidget {
     );
     final children = isRTL ? [text_, gap_, icon_] : [icon_, gap_, text_];
 
-    Widget child = Row(
+    Widget child = _BoundedFlexRow(
       mainAxisAlignment: mainAxisAlignment ?? MainAxisAlignment.start,
       mainAxisSize: mainAxisSize ?? MainAxisSize.max,
       children: children,
@@ -493,4 +494,81 @@ extension Btnx on Btn {
   ///
   /// {@macro btnx_ok_non_final}
   static List<Widget> get cancelRedOk => [Btn.cancel(), Btnx.okRed];
+}
+
+/// A [Row] whose [Flexible] children flex only when there is a width to share.
+///
+/// A row button's label is [Flexible] so that, given less room than it wants,
+/// it ends in an ellipsis instead of overflowing. But a button is as often put
+/// where its width is unbounded — beside an [Expanded] in another row, which
+/// is how a line of text and its action are written — and a flexible child
+/// there fails the flex assertion, which took every such row down. Laid out
+/// in an unbounded width, the label is sized as a plain child instead: what a
+/// button did before its label could shrink.
+///
+/// Not a [LayoutBuilder] choosing between two rows: that cannot answer
+/// intrinsic sizes, and a button is also put in dialogs, which ask for them.
+final class _BoundedFlexRow extends Flex {
+  const _BoundedFlexRow({
+    super.mainAxisAlignment,
+    super.mainAxisSize,
+    super.children,
+  }) : super(direction: Axis.horizontal);
+
+  @override
+  RenderFlex createRenderObject(BuildContext context) => _RenderBoundedFlexRow(
+    direction: direction,
+    mainAxisAlignment: mainAxisAlignment,
+    mainAxisSize: mainAxisSize,
+    crossAxisAlignment: crossAxisAlignment,
+    textDirection: getEffectiveTextDirection(context),
+    verticalDirection: verticalDirection,
+    textBaseline: textBaseline,
+    clipBehavior: clipBehavior,
+    spacing: spacing,
+  );
+}
+
+final class _RenderBoundedFlexRow extends RenderFlex {
+  _RenderBoundedFlexRow({
+    super.direction,
+    super.mainAxisAlignment,
+    super.mainAxisSize,
+    super.crossAxisAlignment,
+    super.textDirection,
+    super.verticalDirection,
+    super.textBaseline,
+    super.clipBehavior,
+    super.spacing,
+  });
+
+  @override
+  void performLayout() {
+    if (constraints.hasBoundedWidth) return super.performLayout();
+    _withoutFlex(super.performLayout);
+  }
+
+  @override
+  Size computeDryLayout(covariant BoxConstraints constraints) {
+    if (constraints.hasBoundedWidth) return super.computeDryLayout(constraints);
+    return _withoutFlex(() => super.computeDryLayout(constraints));
+  }
+
+  /// Runs [body] with every child's flex cleared, and puts it back after —
+  /// within the one layout, so nothing outside ever sees it changed.
+  T _withoutFlex<T>(T Function() body) {
+    final saved = <FlexParentData, int?>{};
+    var child = firstChild;
+    while (child != null) {
+      final data = child.parentData! as FlexParentData;
+      saved[data] = data.flex;
+      data.flex = null;
+      child = data.nextSibling;
+    }
+    try {
+      return body();
+    } finally {
+      saved.forEach((data, flex) => data.flex = flex);
+    }
+  }
 }
