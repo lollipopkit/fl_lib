@@ -124,6 +124,10 @@ class _InputState extends State<Input> {
         controller: widget.controller,
         maxLines: widget.maxLines,
         minLines: widget.minLines,
+        // A suffix taller than the text makes the field taller, and a field
+        // puts its text at the top: one line sat above the middle of the
+        // button beside it. More lines start at the top, as text does.
+        textAlignVertical: widget.maxLines == 1 ? TextAlignVertical.center : null,
         obscureText: obscureText,
         // What is typed here is a value of a form row, the same thing a tile's
         // title is, and Material's 16 made every field outweigh the tiles
