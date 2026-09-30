@@ -21,6 +21,9 @@ class ContextMenuAction {
     this.icon,
     this.note,
     this.destructive = false,
+    this.checked,
+    this.enabled = true,
+    this.trailing,
   });
 
   final String text;
@@ -40,6 +43,38 @@ class ContextMenuAction {
 
   /// Drawn in the warning colour. For the entries that take something away.
   final bool destructive;
+
+  /// Whether this is the one in effect, of a menu that is a choice — a sort
+  /// order, a mode. Null for an entry that only does something. A choice's
+  /// rows all keep the check's room, so they line up whichever is ticked.
+  final bool? checked;
+
+  /// Off greys the row and refuses it, for an entry that is there but not
+  /// now — one busy, or waiting on something else.
+  final bool enabled;
+
+  /// A second thing to do with what the row is about, at its end — closing
+  /// the pane a row switches to.
+  final ContextMenuTrailing? trailing;
+}
+
+/// A button at the end of a [ContextMenuAction]'s row. Like the row, it
+/// closes the menu and then runs [onTap].
+@immutable
+class ContextMenuTrailing {
+  const ContextMenuTrailing({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.key,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  /// For a test to find it by.
+  final Key? key;
 }
 
 /// Opens a menu for something, at [at] or — for a long press, which has a
@@ -108,17 +143,18 @@ class ContextMenuRow extends StatelessWidget {
 
   final ContextMenuAction action;
 
-  /// Answering the menu, not running [ContextMenuAction.onTap].
+  /// Answering the menu with what to run: [ContextMenuAction.onTap], or its
+  /// [ContextMenuAction.trailing]'s.
   ///
   /// The menu has to be gone before an action that opens a dialog of its own
   /// runs, so what a row does is say which one was chosen.
-  final VoidCallback onTap;
+  final ValueChanged<VoidCallback> onTap;
 
   @override
   Widget build(BuildContext context) {
     final color = action.destructive ? UIs.textRed.color : null;
-    return InkWell(
-      onTap: onTap,
+    final row = InkWell(
+      onTap: action.enabled ? () => onTap(action.onTap) : null,
       borderRadius: BorderRadius.circular(ContextMenuUi.rowRadius),
       child: ConstrainedBox(
         // A minimum rather than a height: a row is text, and the text is as
@@ -147,6 +183,31 @@ class ContextMenuRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (action.trailing case final t?) ...[
+                const SizedBox(width: 5),
+                IconButton(
+                  key: t.key,
+                  tooltip: t.tooltip,
+                  onPressed: action.enabled ? () => onTap(t.onTap) : null,
+                  icon: Icon(t.icon, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+              if (action.checked case final checked?) ...[
+                const SizedBox(width: 9),
+                SizedBox.square(
+                  dimension: ContextMenuUi.iconSize,
+                  child: checked
+                      ? Icon(
+                          Icons.check,
+                          size: ContextMenuUi.iconSize,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                ),
+              ],
               if (action.note case final note?) ...[
                 const SizedBox(width: 9),
                 // Capped rather than flexible: the entry is what has to
@@ -169,6 +230,7 @@ class ContextMenuRow extends StatelessWidget {
         ),
       ),
     );
+    return action.enabled ? row : Opacity(opacity: 0.38, child: row);
   }
 }
 
@@ -204,7 +266,7 @@ Future<void> showContextMenu(
   // Branches rather than a switch expression over [at]: every arm of one is
   // written after the first arm's `await`, so the analyzer reads the later
   // ones as using a context across an async gap.
-  final ContextMenuAction? chosen;
+  final VoidCallback? chosen;
   if (at != null) {
     chosen = await _showAt(context, actions, at, header);
   } else if (sheet) {
@@ -213,19 +275,19 @@ Future<void> showContextMenu(
     chosen = await _showDialog(context, actions, title);
   }
 
-  chosen?.onTap();
+  chosen?.call();
 }
 
 /// The menu as a sheet, for a phone.
 ///
 /// The rows carry the menu's own inset on top of the sheet's, so an entry
 /// starts where a `ListTile` in any other sheet in the app starts.
-Future<ContextMenuAction?> _showSheet(
+Future<VoidCallback?> _showSheet(
   BuildContext context,
   List<ContextMenuAction> actions,
   Widget? header,
 ) {
-  return showRowsSheet<ContextMenuAction>(
+  return showRowsSheet<VoidCallback>(
     context,
     rows: (ctx) => [
       // A sheet is at the bottom of the window rather than beside what it is
@@ -246,7 +308,7 @@ Future<ContextMenuAction?> _showSheet(
             // Answered rather than run here: the sheet has to be gone before
             // an action that opens a dialog of its own runs, or the dialog
             // opens underneath it.
-            onTap: () => Navigator.of(ctx).pop(action),
+            onTap: (run) => Navigator.of(ctx).pop(run),
           ),
         ),
     ],
@@ -254,12 +316,12 @@ Future<ContextMenuAction?> _showSheet(
 }
 
 /// The menu in the middle, for a long press with nothing to hang it off.
-Future<ContextMenuAction?> _showDialog(
+Future<VoidCallback?> _showDialog(
   BuildContext context,
   List<ContextMenuAction> actions,
   String? title,
 ) {
-  return context.showRoundDialog<ContextMenuAction>(
+  return context.showRoundDialog<VoidCallback>(
     title: title,
     // Scrolls, because how many entries there are is the caller's to decide
     // and a dialog's height is the window's: a menu of everything that can
@@ -276,7 +338,7 @@ Future<ContextMenuAction?> _showDialog(
               // Popped as a value rather than run here, and through
               // `popDialog` — the root navigator, which is where a dialog is.
               // `context.pop()` here closes the page under it.
-              onTap: () => context.popDialog(action),
+              onTap: (run) => context.popDialog(run),
             ),
         ],
       ),
@@ -284,7 +346,7 @@ Future<ContextMenuAction?> _showDialog(
   );
 }
 
-Future<ContextMenuAction?> _showAt(
+Future<VoidCallback?> _showAt(
   BuildContext context,
   List<ContextMenuAction> actions,
   Offset at,
@@ -318,7 +380,7 @@ Future<ContextMenuAction?> _showAt(
 /// one surface that did not look like the card. What is kept from it is the
 /// behaviour, which is a route: a barrier that dismisses, `Escape`, arrow keys
 /// through the entries, and a result answered to whoever opened it.
-class _ContextMenuRoute extends PopupRoute<ContextMenuAction> {
+class _ContextMenuRoute extends PopupRoute<VoidCallback> {
   _ContextMenuRoute({
     required this.actions,
     required this.header,
@@ -387,7 +449,7 @@ class _ContextMenuRoute extends PopupRoute<ContextMenuAction> {
                   action: action,
                   // This context is inside the menu's own route, so this is
                   // the menu closing and not the page under it.
-                  onTap: () => Navigator.of(context).pop(action),
+                  onTap: (run) => Navigator.of(context).pop(run),
                 ),
             ],
           ),
@@ -463,4 +525,83 @@ class _ContextMenuLayout extends SingleChildLayoutDelegate {
   @override
   bool shouldRelayout(_ContextMenuLayout old) =>
       old.at != at || old.padding != padding;
+}
+
+/// A button that opens [actions] under itself, as [showContextMenu] does at
+/// a pointer: the same rows, so a menu is one thing whether it was asked for
+/// by a right click or by a button.
+class ContextMenuButton extends StatelessWidget {
+  const ContextMenuButton({
+    super.key,
+    required this.actions,
+    this.child = UIs.popMenuChild,
+    this.tooltip,
+    this.enabled = true,
+    this.header,
+  });
+
+  /// Built as the menu opens, so each entry says what is true then.
+  final List<ContextMenuAction> Function() actions;
+
+  /// A [child] for a menu that is a choice: what is chosen, and the mark that
+  /// says it can be changed.
+  static Widget value(Widget label) => Padding(
+    padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        label,
+        const SizedBox(width: 3),
+        const Icon(Icons.unfold_more, size: 16),
+      ],
+    ),
+  );
+
+  final Widget child;
+  final String? tooltip;
+
+  /// Off refuses the tap and greys [child].
+  final bool enabled;
+
+  /// See [showContextMenu].
+  final Widget? header;
+
+  void _open(BuildContext context) {
+    final box = context.findRenderObject();
+    showContextMenu(
+      context,
+      actions(),
+      header: header,
+      // Its lower left: the menu drops from the button, pushed back inside
+      // the window when the button is near its edge.
+      at: box is RenderBox && box.hasSize
+          ? box.localToGlobal(box.size.bottomLeft(Offset.zero))
+          : null,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final btn = Builder(
+      builder: (ctx) => InkWell(
+        borderRadius: BorderRadius.circular(ContextMenuUi.rowRadius),
+        onTap: enabled ? () => _open(ctx) : null,
+        // An `Icon` with no colour of its own would take `onSurface`, louder
+        // than the row it sits in; merged, so a caller's own colour wins.
+        child: IconTheme.merge(
+          data: IconThemeData(
+            color: enabled
+                ? scheme.onSurfaceVariant
+                : scheme.onSurface.withValues(alpha: 0.38),
+          ),
+          child: child,
+        ),
+      ),
+    );
+    return switch (tooltip) {
+      final t? => Tooltip(message: t, child: btn),
+      null => btn,
+    };
+  }
 }
