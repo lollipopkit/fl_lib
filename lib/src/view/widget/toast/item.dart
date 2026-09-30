@@ -371,6 +371,12 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     final base = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
         .merge(_titleStyle)
         .copyWith(color: ComponentStyles.of(context).toast.textColor);
+    return _withTextOverrides(context, base);
+  }
+
+  /// [base] with what `Text` applies on top of any style at paint time: the
+  /// `MediaQuery` line height, letter and word spacing, and bold text.
+  static TextStyle _withTextOverrides(BuildContext context, TextStyle base) {
     return base.copyWith(
       height:
           MediaQuery.maybeLineHeightScaleFactorOverrideOf(context) ?? base.height,
@@ -409,9 +415,13 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   }
 
   /// Width the action button takes, gap included: its label as [TextButton]
-  /// paints it, which merges [UIs.text12] into the theme's `labelLarge`.
+  /// paints it — the button theme's text style, else the default
+  /// `labelLarge`, with [UIs.text12] merged in and the `MediaQuery` overrides
+  /// applied, as for the title.
   double _actionWidth(String label) {
-    final style = (Theme.of(context).textTheme.labelLarge ?? const TextStyle()).merge(UIs.text12);
+    final button = TextButtonTheme.of(context).style?.textStyle?.resolve(const <WidgetState>{});
+    final base = (button ?? Theme.of(context).textTheme.labelLarge ?? const TextStyle()).merge(UIs.text12);
+    final style = _withTextOverrides(context, base);
     final painter = _painter(label, style)..layout();
     final width = painter.width;
     painter.dispose();
