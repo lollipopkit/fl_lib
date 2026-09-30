@@ -57,7 +57,7 @@ abstract final class ThemePalette {
   /// this is the second reading of the same rules rather than the only one.
   static Color? spec(Object? value, ColorScheme scheme) => switch (value) {
     final int value => Color(value),
-    final String role => resolve(scheme, role),
+    final String role when roles.contains(role) => resolve(scheme, role),
     _ => null,
   };
 

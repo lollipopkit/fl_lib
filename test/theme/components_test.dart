@@ -17,6 +17,14 @@ void main() {
     expect(ThemeComponents.parse(<String, dynamic>{}).apply(base), same(base));
   });
 
+  test('a color that is neither an ARGB value nor a role is not configured', () {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
+    expect(ThemePalette.spec('primary', scheme), scheme.primary);
+    expect(ThemePalette.spec(0xFF112233, scheme), const Color(0xFF112233));
+    expect(ThemePalette.spec('notARole', scheme), isNull);
+    expect(ThemePalette.spec(1.5, scheme), isNull);
+  });
+
   test('common and dark styles merge, references use the active palette', () {
     final config = ThemeComponents.parse(<String, dynamic>{
       'card': {

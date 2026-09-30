@@ -858,6 +858,9 @@ abstract final class ThemeRepos {
     return ThemeRepoIndex.fromFiles(readArchive(bytes));
   }
 
+  /// How many repositories [store] reads at once.
+  static const _indexConcurrency = 4;
+
   /// Reads the catalog and every repository it lists.
   ///
   /// A repository that does not answer costs its own themes and nothing else,
@@ -879,16 +882,29 @@ abstract final class ThemeRepos {
       catalog = await ThemeRepoCatalog.bundled(bundle: bundle);
     }
 
-    final answered = await Future.wait(
-      catalog.repos.map((repo) async {
+    // A few at a time: a catalog may list up to [ThemeRepoCatalog.maxRepos],
+    // and each is a download of its own.
+    final refs = catalog.repos;
+    final answered = List<(ThemeRepoRef, ThemeRepoIndex)?>.filled(
+      refs.length,
+      null,
+    );
+    var next = 0;
+    Future<void> worker() async {
+      while (next < refs.length) {
+        final i = next++;
+        final repo = refs[i];
         try {
-          return (repo, await index(repo.url.toString()));
+          answered[i] = (repo, await index(repo.url.toString()));
         } catch (e) {
           Loggers.app.warning('Reading the theme repository ${repo.label}', e);
-          return null;
         }
-      }),
-    );
+      }
+    }
+
+    await Future.wait([
+      for (var i = 0; i < refs.length && i < _indexConcurrency; i++) worker(),
+    ]);
 
     final items = <ThemeStoreItem>[];
     final repos = <String>[];

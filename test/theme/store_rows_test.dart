@@ -189,14 +189,22 @@ void main() {
     });
 
     test('a row is keyed by what an action on it takes', () {
-      final catalogOnly = _rows(items: [_item(id: 'aurora')]).single;
+      final catalogOnly = _rows(
+        items: [
+          _item(id: 'aurora'),
+          _item(id: 'aurora', repo: 'someone/themes'),
+        ],
+      );
       final installed = _rows(
         installed: [_package(installationId: 'aaa')],
       ).single;
 
-      // The install lands under the manifest id, and a removal takes the
-      // installation id.
-      expect(catalogOnly.key, 'aurora');
+      // A theme only the store has is its repository's: two can list one id.
+      // A removal takes the installation id.
+      expect(catalogOnly.map((r) => r.key), {
+        'https://example.org/lollipopkit/themes aurora',
+        'https://example.org/someone/themes aurora',
+      });
       expect(installed.key, 'aaa');
     });
 

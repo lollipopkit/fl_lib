@@ -1,4 +1,5 @@
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -31,6 +32,35 @@ void main() {
   ) async {
     await pump(tester, IntrinsicWidth(child: button()));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('its dry baseline is the one it lays out with, unbounded', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      Row(children: [const Expanded(child: Text('What this is')), button()]),
+    );
+    final row = tester.renderObject<RenderFlex>(
+      find
+          .descendant(
+            of: find.byType(Btn),
+            matching: find.byWidgetPredicate((w) => w is Flex),
+          )
+          .first,
+    );
+    expect(row.constraints.hasBoundedWidth, isFalse);
+    // Read outside a layout, which only an intrinsics check may.
+    RenderObject.debugCheckingIntrinsics = true;
+    final double? laidOut;
+    try {
+      laidOut = row.getDistanceToBaseline(TextBaseline.alphabetic);
+    } finally {
+      RenderObject.debugCheckingIntrinsics = false;
+    }
+    expect(laidOut, isNotNull);
+    expect(row.getDryBaseline(row.constraints, TextBaseline.alphabetic), laidOut);
+    expect(row.getDryLayout(row.constraints), row.size);
   });
 
   testWidgets('in a narrow box, ends in an ellipsis', (tester) async {

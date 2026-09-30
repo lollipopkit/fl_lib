@@ -817,7 +817,7 @@ final class ThemeAppearance {
                   builder: (light, dark) {
                     final supported = light != null || dark != null;
                     if (!supported) {
-                      if (!_setting.useSystemPrimaryColor.fetch()) {
+                      if (_setting.useSystemPrimaryColor.fetch()) {
                         _setting.useSystemPrimaryColor.put(false);
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           setState(() {});

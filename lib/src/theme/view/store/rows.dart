@@ -56,9 +56,11 @@ final class ThemeRow {
   String get id => installed?.id ?? item!.listing.id;
 
   /// What the page tracks a row's work by: the installation id a removal takes,
-  /// or — for a theme the store has and this device does not — the manifest id
-  /// the install will land under.
-  String get key => installed?.installationId ?? item!.listing.id;
+  /// or — for a theme the store has and this device does not — the repository
+  /// and the manifest id, since two repositories can list the same id.
+  String get key =>
+      installed?.installationId ??
+      '${item!.repoUrl ?? item!.repo} ${item!.listing.id}';
 
   /// What a query is matched against: every name the row is known by, so a
   /// search for the manifest id or the repository finds it as well.
