@@ -85,6 +85,10 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   static const _dismissSpeed = 620.0;
   static const _titleStyle = TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3);
 
+  /// Space before the action button, and the button's own padding on each side.
+  static const _actionGap = 4.0;
+  static const _actionPadding = 8.0;
+
   late final AnimationController _anime;
 
   /// Height and opacity, which cannot overshoot.
@@ -382,32 +386,45 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
   ///
   /// A body, or a title too long for one line: `Toast.show('$e')` has nowhere
   /// else to put the rest of the exception, and it is the shape most call sites
-  /// have. Not measured when there is an action button, whose width is not
-  /// known before layout.
+  /// have. The title's room is what the icon, the chevron and the action
+  /// button leave of the width.
   bool _computeExpandable() {
     final data = _data;
     if (data.content != null) return false;
     if (data.body != null) return true;
-    if (data.action != null) return false;
 
     final hasLeading = data.leading != null || data.iconData != null;
-    final available = widget.width - _padding.horizontal - (hasLeading ? _iconSize + _gap : 0) - _chevronSlot;
+    final action = data.action;
+    final available = widget.width -
+        _padding.horizontal -
+        (hasLeading ? _iconSize + _gap : 0) -
+        _chevronSlot -
+        (action == null ? 0 : _actionWidth(action.label));
     if (available <= 0) return false;
 
-    final painter = TextPainter(
-      text: TextSpan(
-        text: data.title,
-        style: _resolveTitleStyle(context),
-      ),
-      maxLines: 1,
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      locale: Localizations.maybeLocaleOf(context),
-    )..layout(maxWidth: available);
+    final painter = _painter(data.title, _resolveTitleStyle(context))..layout(maxWidth: available);
     final exceeded = painter.didExceedMaxLines;
     painter.dispose();
     return exceeded;
   }
+
+  /// Width the action button takes, gap included: its label as [TextButton]
+  /// paints it, which merges [UIs.text12] into the theme's `labelLarge`.
+  double _actionWidth(String label) {
+    final style = (Theme.of(context).textTheme.labelLarge ?? const TextStyle()).merge(UIs.text12);
+    final painter = _painter(label, style)..layout();
+    final width = painter.width;
+    painter.dispose();
+    return _actionGap + _actionPadding * 2 + width;
+  }
+
+  TextPainter _painter(String text, TextStyle style) => TextPainter(
+        text: TextSpan(text: text, style: style),
+        maxLines: 1,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+      );
 
   /// Whether the toast is dragged left and right rather than up and down. One
   /// pinned to no side edge has no edge that way, so it goes up or down instead.
@@ -690,12 +707,12 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
         ),
         if (action != null)
           Padding(
-            padding: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsetsDirectional.only(start: _actionGap),
             child: TextButton(
               onPressed: _onAction,
               style: TextButton.styleFrom(
                 foregroundColor: accent,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: _actionPadding),
                 minimumSize: const Size(0, 28),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
