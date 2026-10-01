@@ -208,6 +208,7 @@ class SessionTabsView<T> extends StatefulWidget {
     this.leading,
     this.duration = Durations.short3,
     this.curve = Curves.fastEaseInToSlowEaseOut,
+    this.mayFocus,
   });
 
   final SessionTabsController<T> controller;
@@ -219,6 +220,16 @@ class SessionTabsView<T> extends StatefulWidget {
 
   final Duration duration;
   final Curve curve;
+
+  /// Whether the session just switched to may take the focus now. Null: it
+  /// always may.
+  ///
+  /// A view kept alive on a page that is not on screen — a tab of the app the
+  /// user is not looking at — still switches sessions as they are restored or
+  /// opened, and took the focus from the page they were on. A terminal's
+  /// focus opens its input connection, so on a phone that raised a keyboard
+  /// for a terminal nobody could see, with nothing on screen to dismiss it.
+  final bool Function()? mayFocus;
 
   @override
   State<SessionTabsView<T>> createState() => _SessionTabsViewState<T>();
@@ -262,7 +273,8 @@ class _SessionTabsViewState<T> extends State<SessionTabsView<T>> {
       if (!mounted) return;
       widget.controller.syncVisibility();
       final focus = widget.controller.current?.focus;
-      if (focus != null) FocusScope.of(context).requestFocus(focus);
+      if (focus == null || !(widget.mayFocus?.call() ?? true)) return;
+      FocusScope.of(context).requestFocus(focus);
     });
   }
 
