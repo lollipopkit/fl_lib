@@ -70,6 +70,8 @@ void main() {
     double minWidthForSplit = 800,
     double listWidth = 320,
     ValueChanged<double>? onListWidthChanged,
+    ValueChanged<bool>? onCollapsedChanged,
+    Animation<double>? presence,
   }) async {
     await tester.binding.setSurfaceSize(Size(width, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -81,6 +83,8 @@ void main() {
             minWidthForSplit: minWidthForSplit,
             listWidth: listWidth,
             onListWidthChanged: onListWidthChanged,
+            onCollapsedChanged: onCollapsedChanged,
+            presence: presence,
             listBuilder: (_, _) => const ColoredBox(
               key: _listKey,
               color: Colors.transparent,
@@ -214,4 +218,68 @@ void main() {
       reason: 'maxListWidth still applies when half the window is more',
     );
   });
+
+  testWidgets('the column arriving does not rebuild the surface', (
+    tester,
+  ) async {
+    // With a grip on offer the row is drawn in a `Stack`; without one it was
+    // handed back bare, so the column becoming available changed the row's
+    // parent and took the surface down with it.
+    await pumpAt(tester, width: 1000, enabled: false, onCollapsedChanged: (_) {});
+    expect(_Session.inits, 1);
+
+    await pumpAt(tester, width: 1000, onCollapsedChanged: (_) {});
+    expect(find.text('list'), findsOneWidget);
+    await pumpAt(tester, width: 1000, enabled: false, onCollapsedChanged: (_) {});
+
+    expect(_Session.inits, 1);
+    expect(_Session.disposals, 0);
+  });
+
+  testWidgets('presence scales the column, and the seam with it', (
+    tester,
+  ) async {
+    final presence = ValueNotifier(0.0);
+    final anim = _NotifierAnimation(presence);
+    await pumpAt(tester, width: 1000, presence: anim);
+    expect(tester.getSize(find.byKey(_mainKey)).width, 1000);
+
+    presence.value = 0.5;
+    await tester.pump();
+    expect(
+      tester.getSize(find.byKey(_mainKey)).width,
+      moreOrLessEquals(1000 - (320 + PaneDivider.hitWidth) * 0.5),
+    );
+
+    presence.value = 1;
+    await tester.pump();
+    expect(tester.getSize(find.byKey(_listKey)).width, 320);
+    expect(_Session.inits, 1);
+  });
+}
+
+/// A value driven by hand, for a test that steps through an animation.
+class _NotifierAnimation extends Animation<double> {
+  _NotifierAnimation(this._notifier);
+
+  final ValueNotifier<double> _notifier;
+
+  @override
+  double get value => _notifier.value;
+
+  @override
+  AnimationStatus get status => AnimationStatus.forward;
+
+  @override
+  void addListener(VoidCallback listener) => _notifier.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _notifier.removeListener(listener);
+
+  @override
+  void addStatusListener(AnimationStatusListener listener) {}
+
+  @override
+  void removeStatusListener(AnimationStatusListener listener) {}
 }

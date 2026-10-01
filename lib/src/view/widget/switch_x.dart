@@ -17,6 +17,11 @@ import 'package:material_ui/material_ui.dart';
 /// follows, because [FittedBox] is given a height and an unbounded width and
 /// answers with the child's own ratio, rather than two constants that would
 /// distort the day Material's metrics move.
+///
+/// Across, the box is the track: M3 lays the switch out 60 wide around its 52
+/// of track, and those 4 either side left a trailing switch short of the edge
+/// every other row's content ends at. The height keeps its margin, which is
+/// what [height] is measured by.
 class SwitchX extends StatelessWidget {
   const SwitchX({
     super.key,
@@ -31,20 +36,32 @@ class SwitchX extends StatelessWidget {
   /// The height of the laid-out box. The drawn track is ~0.8 of it.
   final double height;
 
+  // M3's switch, shrink-wrapped: a 52 track in a 60x40 box.
+  static const _m3Track = 52.0;
+  static const _m3Width = 60.0;
+  static const _m3Box = 40.0;
+
   @override
   Widget build(BuildContext context) {
+    final Widget toggle = Switch(
+      value: value,
+      onChanged: onChanged,
+      // The 8 of padding `padded` adds is a tap target, and a scaled one
+      // is not a tap target — the row is what has to be tappable. Taking
+      // it off first also means [height] is the switch and nothing else.
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
     return SizedBox(
       height: height,
       child: FittedBox(
         fit: BoxFit.contain,
-        child: Switch(
-          value: value,
-          onChanged: onChanged,
-          // The 8 of padding `padded` adds is a tap target, and a scaled one
-          // is not a tap target — the row is what has to be tappable. Taking
-          // it off first also means [height] is the switch and nothing else.
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
+        child: Theme.of(context).useMaterial3
+            ? SizedBox(
+                width: _m3Track,
+                height: _m3Box,
+                child: OverflowBox(maxWidth: _m3Width, child: toggle),
+              )
+            : toggle,
       ),
     );
   }

@@ -64,6 +64,7 @@ final class AnimatedMasonry extends StatefulWidget {
     this.footer,
     this.expandedKey,
     this.expansion = 0,
+    this.expandedInset = EdgeInsets.zero,
     this.memory,
     this.scrollable = true,
   });
@@ -124,6 +125,13 @@ final class AnimatedMasonry extends StatefulWidget {
 
   /// {@macro masonry_expansion}
   final double expansion;
+
+  /// What the expanded card leaves clear of the grid's box once it has grown.
+  ///
+  /// For a caller that puts something beside the page the card becomes — a
+  /// column sliding in over the grid's left edge — so the card lands where the
+  /// page will be rather than under it. Applied in step with [expansion].
+  final EdgeInsets expandedInset;
 
   /// Whether this brings its own scrolling.
   ///
@@ -187,6 +195,7 @@ final class _AnimatedMasonryState extends State<AnimatedMasonry>
           ? -1
           : entries.indexWhere((e) => e.key == widget.expandedKey),
       expansion: widget.expansion,
+      expandedInset: widget.expandedInset,
       memory: widget.memory,
       keys: [for (final entry in entries) entry.key],
       children: [
@@ -281,6 +290,7 @@ final class _MasonryFlow extends MultiChildRenderObjectWidget {
     required this.vsync,
     required this.expandedAt,
     required this.expansion,
+    required this.expandedInset,
     required this.memory,
     required this.keys,
   });
@@ -292,6 +302,7 @@ final class _MasonryFlow extends MultiChildRenderObjectWidget {
   final TickerProvider vsync;
   final int expandedAt;
   final double expansion;
+  final EdgeInsets expandedInset;
   final MasonryMemory? memory;
 
   /// Each child's own key, in order: what [memory] knows a card by.
@@ -307,6 +318,7 @@ final class _MasonryFlow extends MultiChildRenderObjectWidget {
       vsync: vsync,
       expandedAt: expandedAt,
       expansion: expansion,
+      expandedInset: expandedInset,
       memory: memory,
       keys: keys,
     );
@@ -322,6 +334,7 @@ final class _MasonryFlow extends MultiChildRenderObjectWidget {
       ..vsync = vsync
       ..expandedAt = expandedAt
       ..expansion = expansion
+      ..expandedInset = expandedInset
       ..memory = memory
       ..keys = keys;
   }
@@ -367,6 +380,7 @@ final class _RenderMasonryFlow extends RenderBox
     required this._vsync,
     required this._expandedAt,
     required this._expansion,
+    required this._expandedInset,
     required this.memory,
     required this.keys,
   });
@@ -418,6 +432,13 @@ final class _RenderMasonryFlow extends RenderBox
     markNeedsLayout();
   }
 
+  EdgeInsets _expandedInset;
+  set expandedInset(EdgeInsets v) {
+    if (_expandedInset == v) return;
+    _expandedInset = v;
+    markNeedsLayout();
+  }
+
   /// Whether the card at [at] is the one growing out of the grid.
   ///
   /// Only once it has started: at rest the expanded card is an ordinary card
@@ -437,7 +458,8 @@ final class _RenderMasonryFlow extends RenderBox
   /// every card but the one growing out of the grid.
   double _widthOf(int at, double colWidth, double full) {
     if (at != _expandedAt || _expansion <= 0) return colWidth;
-    return colWidth + (full - colWidth) * _expansion;
+    final to = math.max(colWidth, full - _expandedInset.horizontal);
+    return colWidth + (to - colWidth) * _expansion;
   }
 
   TickerProvider _vsync;
@@ -593,7 +615,11 @@ final class _RenderMasonryFlow extends RenderBox
         // known — see [MasonryMemory]. This layout's own height is the card
         // already expanded whenever the grid was mounted that way.
         pd.expandHeight ??= _remembered(at) ?? child.size.height;
-        pd.target = Offset.lerp(pd.expandFrom!, Offset.zero, _expansion)!;
+        pd.target = Offset.lerp(
+          pd.expandFrom!,
+          _expandedInset.topLeft,
+          _expansion,
+        )!;
         pd.current = pd.target;
         // Its column is told it is still the size it was, so the cards after
         // it stay where they are.

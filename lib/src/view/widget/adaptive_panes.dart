@@ -50,6 +50,7 @@ class AdaptivePanes extends StatefulWidget {
     this.onCollapsedChanged,
     this.collapseTooltip,
     this.expandTooltip,
+    this.presence,
   }) : surfaceBuilder = null,
        enabled = true;
 
@@ -73,6 +74,7 @@ class AdaptivePanes extends StatefulWidget {
     this.onCollapsedChanged,
     this.collapseTooltip,
     this.expandTooltip,
+    this.presence,
   }) : detailBuilder = null,
        detailId = null,
        onCloseDetail = null;
@@ -158,6 +160,17 @@ class AdaptivePanes extends StatefulWidget {
 
   final String? collapseTooltip;
   final String? expandTooltip;
+
+  /// How far the column has arrived, 0 to 1, driven by the caller.
+  ///
+  /// For a column whose arrival is one half of a movement the caller is
+  /// already running — a card growing into the surface while the list it came
+  /// from becomes the column beside it. Given its own clock, the column would
+  /// arrive on a different curve from everything it is part of.
+  ///
+  /// Scales the column on top of [collapsed], which stays the user's: a folded
+  /// column stays folded however present it is. Null is always present.
+  final Animation<double>? presence;
 
   /// Whether the pane holds a route rather than a surface that stays put.
   bool get _isDetail => surfaceBuilder == null;
@@ -319,10 +332,15 @@ class _AdaptivePanesState extends State<AdaptivePanes>
         final width = _width.clamp(widget.minListWidth, _maxWidth);
         final onCollapsed = widget.onCollapsedChanged;
 
+        final presence = widget.presence;
         final body = AnimatedBuilder(
-          animation: _openness,
+          animation: presence == null
+              ? _openness
+              : Listenable.merge([_openness, presence]),
           builder: (context, _) {
-            final open = roomForTwo ? _openness.value : 0.0;
+            final open = roomForTwo
+                ? _openness.value * (presence?.value ?? 1)
+                : 0.0;
             // The column shrinks and the seam rides in with it. Both scale by
             // the same factor, so the row's total width reaches zero smoothly
             // — dropping a full-width divider on the last frame instead would
@@ -431,41 +449,47 @@ class _AdaptivePanesState extends State<AdaptivePanes>
             // No grip where a second column was never on offer: at this width
             // the list and the surface share one, and folding away something
             // that is not a column means nothing.
-            if (!roomForTwo || onCollapsed == null) return row;
+            final grip = roomForTwo ? onCollapsed : null;
 
+            // A `Stack` with or without the grip, never the row on its own:
+            // the row's parent would otherwise change as the column becomes
+            // available, and a surface — which is here so that it is never
+            // rebuilt — was unmounted and built again from nothing with it.
             return Stack(
+              fit: StackFit.expand,
               children: [
                 row,
-                // Rides the fold, so it arrives at the edge exactly as the
-                // column finishes leaving. Placed from the animated width
-                // rather than animated itself — its own curve would run beside
-                // this one, and trail the divider while that is dragged.
-                Positioned(
-                  // Centred on the seam while there is one, and against the
-                  // edge once there is not, which is all the clamp does: the
-                  // line is gone by the time it bites.
-                  left:
-                      (columnWidth +
-                              seamWidth / 2 -
-                              PaneCollapseHandle.width / 2)
-                          .clamp(0.0, double.infinity),
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: PaneCollapseHandle(
-                      collapsed: widget.collapsed,
-                      tooltip: widget.collapsed
-                          ? widget.expandTooltip
-                          : widget.collapseTooltip,
-                      onTap: () => onCollapsed(!widget.collapsed),
-                      // The same handlers the line itself is given. The grip
-                      // sits on top of it, so without these a drag aimed at
-                      // the middle of the seam hit a button and stopped.
-                      onDrag: _onSeamDrag,
-                      onDragEnd: _onSeamDragEnd,
+                if (grip != null)
+                  // Rides the fold, so it arrives at the edge exactly as the
+                  // column finishes leaving. Placed from the animated width
+                  // rather than animated itself — its own curve would run beside
+                  // this one, and trail the divider while that is dragged.
+                  Positioned(
+                    // Centred on the seam while there is one, and against the
+                    // edge once there is not, which is all the clamp does: the
+                    // line is gone by the time it bites.
+                    left:
+                        (columnWidth +
+                                seamWidth / 2 -
+                                PaneCollapseHandle.width / 2)
+                            .clamp(0.0, double.infinity),
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: PaneCollapseHandle(
+                        collapsed: widget.collapsed,
+                        tooltip: widget.collapsed
+                            ? widget.expandTooltip
+                            : widget.collapseTooltip,
+                        onTap: () => grip(!widget.collapsed),
+                        // The same handlers the line itself is given. The grip
+                        // sits on top of it, so without these a drag aimed at
+                        // the middle of the seam hit a button and stopped.
+                        onDrag: _onSeamDrag,
+                        onDragEnd: _onSeamDragEnd,
+                      ),
                     ),
                   ),
-                ),
               ],
             );
           },

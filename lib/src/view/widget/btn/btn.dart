@@ -7,7 +7,7 @@ import 'package:icons_plus/icons_plus.dart';
 /// {@template btntype}
 /// The type of the button.
 /// - [BtnType.text] => [TextButton]
-/// - [BtnType.icon] => [Icon] wrapped by [InkWell]
+/// - [BtnType.icon] => [icon] wrapped by [InkWell]
 /// - [BtnType.column] => [Column] wrapped by [InkWell]
 /// - [BtnType.row] => [Row] wrapped by [InkWell]
 /// {@endtemplate}
@@ -75,7 +75,11 @@ final class Btn extends StatelessWidget {
 
   /// {@macro btn_text_icon}
   /// The icon of the button.
-  final Icon? icon;
+  ///
+  /// A widget rather than an [Icon], so what is drawn in the icon's place can
+  /// carry more than a glyph — a [Badge] counting something, say — and still
+  /// be the button's own child, inside its ink and its tooltip.
+  final Widget? icon;
 
   /// The gap between the [icon] and the [text].
   ///
