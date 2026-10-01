@@ -126,7 +126,13 @@ class SessionTabsController<T> extends ChangeNotifier {
       focus: FocusNode(debugLabel: name),
       visible: ValueNotifier(false),
     );
-    tab.data = build(name, tab.focus, tab.visible);
+    try {
+      tab.data = build(name, tab.focus, tab.visible);
+    } catch (_) {
+      // Never listed, so nothing else would dispose what it was given.
+      tab.dispose();
+      rethrow;
+    }
     _tabs.add(tab);
     notifyListeners();
     return tab;
@@ -172,7 +178,8 @@ class SessionTabsController<T> extends ChangeNotifier {
 
   /// Selects by page index, leading tab included.
   void select(int index) {
-    final next = index.clamp(0, length - 1);
+    // An empty controller has only page 0 to be on — see [remove].
+    final next = length == 0 ? 0 : index.clamp(0, length - 1);
     if (next == _index) return;
     _index = next;
     notifyListeners();
@@ -243,6 +250,14 @@ class _SessionTabsViewState<T> extends State<SessionTabsView<T>> {
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(SessionTabsView<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_onControllerChanged);
     widget.controller.addListener(_onControllerChanged);
   }
 
