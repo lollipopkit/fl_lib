@@ -91,4 +91,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('x'), findsNothing);
   });
+
+  testWidgets('the menu grows out of its button, not its own corner', (
+    tester,
+  ) async {
+    // A button at the right edge: the menu is pushed back left of it, so its
+    // own top left is a menu's width away from what was pressed.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topRight,
+            child: ContextMenuButton(
+              actions: () => [
+                ContextMenuAction(text: 'entry', onTap: () {}),
+              ],
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final button = tester.getRect(find.text('open'));
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+
+    Rect menu() => tester.getRect(
+      find.ancestor(of: find.text('entry'), matching: find.byType(Material)).first,
+    );
+    final opening = menu();
+    await tester.pumpAndSettle();
+    final open = menu();
+
+    expect(open.right, lessThanOrEqualTo(800));
+    expect(open.left, lessThan(button.left));
+    // On the way, nearer the button than where it ends: drawn from the button
+    // rather than from its own left edge, which is the only point a scale
+    // about that edge leaves where it is.
+    expect(opening.left, greaterThan(open.left));
+  });
 }

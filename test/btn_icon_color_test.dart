@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// control's resting labels — asks the scheme for `onSurfaceVariant`, so a row
 /// of these was the brightest thing in a bar that is not about them.
 void main() {
-  Future<void> pump(WidgetTester tester, Icon icon, ThemeData theme) =>
+  Future<void> pump(WidgetTester tester, Widget icon, ThemeData theme) =>
       tester.pumpWidget(
         MaterialApp(
           theme: theme,
@@ -63,5 +63,22 @@ void main() {
     );
 
     expect(painted(tester, Icons.public), theme.colorScheme.primary);
+  });
+
+  testWidgets('an icon under a badge is drawn as a bare one is', (
+    tester,
+  ) async {
+    // What the icon slot is for besides a glyph: a count on its corner.
+    final theme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
+    );
+    await pump(
+      tester,
+      Badge.count(count: 2, child: const Icon(Icons.cable)),
+      theme,
+    );
+
+    expect(find.text('2'), findsOneWidget);
+    expect(painted(tester, Icons.cable), theme.colorScheme.onSurfaceVariant);
   });
 }

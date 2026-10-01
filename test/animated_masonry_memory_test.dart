@@ -86,4 +86,33 @@ void main() {
 
     expect(topOfC(tester), atRest);
   });
+
+  testWidgets('an expanded card grows into what the inset leaves', (
+    tester,
+  ) async {
+    // What a column beside the page takes from the grid's left: the card
+    // lands where the page is, not under the column.
+    Widget at(double expansion) => MaterialApp(
+      home: Scaffold(
+        body: AnimatedMasonry(
+          columnWidth: 200,
+          padding: EdgeInsets.zero,
+          spacing: 0,
+          expandedKey: const ValueKey('b'),
+          expansion: expansion,
+          expandedInset: const EdgeInsets.only(left: 100),
+          children: const [
+            SizedBox(key: ValueKey('a'), height: rest),
+            SizedBox(key: ValueKey('b'), height: rest),
+          ],
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(at(0));
+    await tester.pumpWidget(at(1));
+    final rect = tester.getRect(find.byKey(const ValueKey('b')));
+    expect(rect.left, 100);
+    expect(rect.width, 800 - 100);
+  });
 }

@@ -253,6 +253,18 @@ class ContextMenuRow extends StatelessWidget {
 /// shape is too small to have said so. Not an entry: nothing happens when it
 /// is pressed, and the keyboard steps past it. The dialog has [title] instead
 /// and ignores it.
+/// Where a menu dropped from [context]'s box starts: its lower left, in the
+/// window's coordinates. [showContextMenu] pushes it back inside the window
+/// when the box is near an edge.
+///
+/// Null when the box has not been laid out, which [showContextMenu] reads as
+/// nothing to hang the menu from.
+Offset? contextMenuAnchorBelow(BuildContext context) {
+  final box = context.findRenderObject();
+  if (box is! RenderBox || !box.hasSize) return null;
+  return box.localToGlobal(box.size.bottomLeft(Offset.zero));
+}
+
 Future<void> showContextMenu(
   BuildContext context,
   List<ContextMenuAction> actions, {
@@ -467,18 +479,26 @@ class _ContextMenuRoute extends PopupRoute<VoidCallback> {
   ) {
     // `drive` rather than a `CurvedAnimation`, which owns resources and would
     // be built and dropped on every frame of the transition.
+    final scale = animation.drive(
+      Tween(begin: 0.92, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)),
+    );
     return FadeTransition(
       opacity: animation.drive(CurveTween(curve: Curves.easeOutCubic)),
-      child: ScaleTransition(
-        // Barely a movement: enough that the menu reads as having come out of
-        // the corner it is anchored at, and not so much that it travels.
-        scale: animation.drive(
-          Tween(begin: 0.96, end: 1.0).chain(
-            CurveTween(curve: Curves.easeOutCubic),
-          ),
-        ),
-        alignment: Alignment.topLeft,
+      // About [at], and around the whole page rather than the menu: the page
+      // is the window, so [at] is a point in it as it stands, and the menu
+      // comes out of what was pressed wherever the layout put it. Its own
+      // corner was the origin before, which is the button only until the menu
+      // is pushed back from an edge — a `+` at the right of a bar had its menu
+      // grow from a point a menu's width away from it.
+      child: AnimatedBuilder(
+        animation: scale,
         child: child,
+        builder: (_, child) => Transform.scale(
+          scale: scale.value,
+          origin: at,
+          alignment: Alignment.topLeft,
+          child: child,
+        ),
       ),
     );
   }
@@ -567,16 +587,11 @@ class ContextMenuButton extends StatelessWidget {
   final Widget? header;
 
   void _open(BuildContext context) {
-    final box = context.findRenderObject();
     showContextMenu(
       context,
       actions(),
       header: header,
-      // Its lower left: the menu drops from the button, pushed back inside
-      // the window when the button is near its edge.
-      at: box is RenderBox && box.hasSize
-          ? box.localToGlobal(box.size.bottomLeft(Offset.zero))
-          : null,
+      at: contextMenuAnchorBelow(context),
     );
   }
 
