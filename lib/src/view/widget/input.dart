@@ -92,31 +92,8 @@ class _InputState extends State<Input> {
   late final _obscureText = widget.obscureText.vn;
 
   @override
-  Widget build(BuildContext context) {
-    final icon = widget.icon;
-    // Laid out here rather than handed to `InputDecoration.icon`, which puts a
-    // hard-coded 16 between the icon and the field and takes no say in it. A
-    // `ListTile` leaves `horizontalTitleGap` — 13 — so the two stacked in one
-    // form had their icons on one line and their text on another.
-    final child = icon == null
-        ? _buildField()
-        : Row(
-            children: [
-              Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(width: 13),
-              Expanded(child: _buildField()),
-            ],
-          );
-
-    if (widget.noWrap) return child;
-
-    return CardX(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
-        child: child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      _FormRow(icon: widget.icon, noWrap: widget.noWrap, child: _buildField());
 
   Widget _buildField() {
     return _obscureText.listenVal((obscureText) {
@@ -133,42 +110,11 @@ class _InputState extends State<Input> {
         // title is, and Material's 16 made every field outweigh the tiles
         // stacked against it.
         style: const TextStyle(fontSize: 14),
-        decoration: InputDecoration(
-          hintText: widget.hint,
-          // An empty label still takes the room it would float into, and
-          // leaves the text below the middle of the field under nothing.
-          labelText: widget.label?.isEmpty ?? true ? null : widget.label,
+        decoration: _formFieldDecoration(
+          label: widget.label,
+          hint: widget.hint,
           errorText: widget.errorText,
-          // No frame of its own, in any state, whatever the theme says. The
-          // row this sits in — its own card, or the tile or card a `noWrap`
-          // field is placed in — is the frame; a theme's field border drew a
-          // second one inside it. Every state is named: a null one is filled
-          // in from `InputDecorationTheme`, which is where that border comes
-          // from. The fill goes for the same reason. A theme's field style is
-          // for a bare `TextField`.
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          errorBorder: InputBorder.none,
-          focusedErrorBorder: InputBorder.none,
-          disabledBorder: InputBorder.none,
-          filled: false,
           suffixIcon: _buildSuffix(obscureText),
-          // Material sizes a field to be picked out of a page of prose. These
-          // are rows of a form, each already inside a card of its own and
-          // stacked against tiles that are 44 high, and at the default the
-          // label and the value sat in the middle of a box half again as tall
-          // as either of its neighbours.
-          isDense: true,
-          // Not the theme's either: that padding is room inside a border this
-          // field no longer draws.
-          contentPadding: const EdgeInsets.symmetric(vertical: 7),
-          // Sitting in the field, the label is the value's size, because that
-          // is the slot it is standing in for. Risen, it is a caption over the
-          // value — set outright rather than left to the 0.75 the float
-          // applies, which off 13 would land at 9.75.
-          labelStyle: const TextStyle(fontSize: 14),
-          floatingLabelStyle: const TextStyle(fontSize: 12),
         ),
         keyboardType: widget.type,
         textInputAction: widget.action,
@@ -210,3 +156,192 @@ class _InputState extends State<Input> {
   Widget _ctxMenuBuilder(BuildContext context, EditableTextState state) =>
       AdaptiveTextSelectionToolbar.editableText(editableTextState: state);
 }
+
+/// A choice among [items] in a form, drawn as an [Input] is — the same card,
+/// label and text — and chosen from the app's own menu rather than Material's
+/// dropdown, so the list that opens is the one every other menu is.
+class InputDropdown<T> extends StatelessWidget {
+  final T value;
+  final List<T> items;
+
+  /// What [value] and each of [items] is called.
+  final String Function(T) itemText;
+
+  /// Null greys the row and refuses the tap.
+  final ValueChanged<T>? onChanged;
+  final String? label;
+
+  /// The leading icon, laid out as [Input.icon] is.
+  final IconData? icon;
+
+  /// See [Input.noWrap].
+  final bool noWrap;
+
+  const InputDropdown({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.itemText,
+    this.onChanged,
+    this.label,
+    this.icon,
+    this.noWrap = false,
+  });
+
+  void _open(BuildContext context, ValueChanged<T> onChanged) {
+    showContextMenu(
+      context,
+      [
+        for (final item in items)
+          ContextMenuAction(
+            text: itemText(item),
+            checked: item == value,
+            onTap: () => onChanged(item),
+          ),
+      ],
+      at: contextMenuAnchorBelow(context),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = onChanged != null;
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.38);
+    return _FormRow(
+      icon: icon,
+      noWrap: noWrap,
+      onTap: switch (onChanged) {
+        final f? => (ctx) => _open(ctx, f),
+        null => null,
+      },
+      child: Row(
+        children: [
+          Expanded(
+            child: InputDecorator(
+              decoration: _formFieldDecoration(label: label),
+              isEmpty: false,
+              child: Text(
+                itemText(value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                // What a [TextField] draws its text in, at [Input]'s size.
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontSize: 14,
+                  color: enabled ? null : muted,
+                ),
+              ),
+            ),
+          ),
+          // The mark [ContextMenuButton.value] puts beside a choice.
+          Icon(
+            Icons.unfold_more,
+            size: 16,
+            color: enabled ? theme.colorScheme.onSurfaceVariant : muted,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The frame of one form row: a card of its own unless [noWrap], with [icon]
+/// beside the field.
+///
+/// [onTap] makes the whole row the target, with the context of the area it
+/// covers — the card, or the row when unwrapped — for a menu to hang below.
+class _FormRow extends StatelessWidget {
+  final IconData? icon;
+  final bool noWrap;
+  final void Function(BuildContext)? onTap;
+  final Widget child;
+
+  const _FormRow({
+    required this.icon,
+    required this.noWrap,
+    required this.child,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = this.icon;
+    // Laid out here rather than handed to `InputDecoration.icon`, which puts a
+    // hard-coded 16 between the icon and the field and takes no say in it. A
+    // `ListTile` leaves `horizontalTitleGap` — 13 — so the two stacked in one
+    // form had their icons on one line and their text on another.
+    Widget row = icon == null
+        ? child
+        : Row(
+            children: [
+              Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 13),
+              Expanded(child: child),
+            ],
+          );
+    if (!noWrap) {
+      row = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 3),
+        child: row,
+      );
+    }
+    if (onTap case final onTap?) {
+      final target = row;
+      row = Builder(
+        builder: (ctx) => InkWell(
+          borderRadius: noWrap
+              ? BorderRadius.circular(ContextMenuUi.rowRadius)
+              : null,
+          onTap: () => onTap(ctx),
+          child: target,
+        ),
+      );
+    }
+    if (noWrap) return row;
+    // Clipped, so a tap's ink takes the card's corner rather than a box's.
+    return CardX(clipBehavior: Clip.antiAlias, child: row);
+  }
+}
+
+InputDecoration _formFieldDecoration({
+  String? label,
+  String? hint,
+  String? errorText,
+  Widget? suffixIcon,
+}) => InputDecoration(
+  hintText: hint,
+  // An empty label still takes the room it would float into, and
+  // leaves the text below the middle of the field under nothing.
+  labelText: label?.isEmpty ?? true ? null : label,
+  errorText: errorText,
+  // No frame of its own, in any state, whatever the theme says. The
+  // row this sits in — its own card, or the tile or card a `noWrap`
+  // field is placed in — is the frame; a theme's field border drew a
+  // second one inside it. Every state is named: a null one is filled
+  // in from `InputDecorationTheme`, which is where that border comes
+  // from. The fill goes for the same reason. A theme's field style is
+  // for a bare `TextField`.
+  border: InputBorder.none,
+  enabledBorder: InputBorder.none,
+  focusedBorder: InputBorder.none,
+  errorBorder: InputBorder.none,
+  focusedErrorBorder: InputBorder.none,
+  disabledBorder: InputBorder.none,
+  filled: false,
+  suffixIcon: suffixIcon,
+  // Material sizes a field to be picked out of a page of prose. These
+  // are rows of a form, each already inside a card of its own and
+  // stacked against tiles that are 44 high, and at the default the
+  // label and the value sat in the middle of a box half again as tall
+  // as either of its neighbours.
+  isDense: true,
+  // Not the theme's either: that padding is room inside a border this
+  // field no longer draws.
+  contentPadding: const EdgeInsets.symmetric(vertical: 7),
+  // Sitting in the field, the label is the value's size, because that
+  // is the slot it is standing in for. Risen, it is a caption over the
+  // value — set outright rather than left to the 0.75 the float
+  // applies, which off 13 would land at 9.75.
+  labelStyle: const TextStyle(fontSize: 14),
+  floatingLabelStyle: const TextStyle(fontSize: 12),
+);
