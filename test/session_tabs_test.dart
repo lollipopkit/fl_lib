@@ -148,4 +148,84 @@ void main() {
       reason: 'a background terminal should stop repainting',
     );
   });
+
+  // A view on a page that is not on screen switched sessions as they were
+  // restored, and took the focus — on a phone, a terminal's keyboard — from
+  // the page the user was on.
+  group('focus after a switch', () {
+    Future<SessionTabsController<String>> pump(WidgetTester tester, bool Function()? mayFocus) async {
+      final c = SessionTabsController<String>(leadingName: '+');
+      addTearDown(c.dispose);
+      c.add(preferred: 'a', build: (_, _, _) => 'a');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SessionTabsView<String>(
+            controller: c,
+            leading: const Text('add'),
+            mayFocus: mayFocus,
+            builder: (_, tab) => Focus(focusNode: tab.focus, child: Text('page ${tab.name}')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      c.select(1);
+      await tester.pumpAndSettle();
+      return c;
+    }
+
+    testWidgets('the session switched to takes it', (tester) async {
+      final c = await pump(tester, null);
+      expect(c.tabs[0].focus.hasPrimaryFocus, isTrue);
+    });
+
+    testWidgets('not while mayFocus says no', (tester) async {
+      final c = await pump(tester, () => false);
+      expect(c.tabs[0].focus.hasFocus, isFalse);
+      expect(c.tabs[0].visible.value, isTrue, reason: 'it is still the selected session');
+    });
+  });
+
+  test('a build that throws leaves no tab and nothing undisposed', () {
+    final c = SessionTabsController<String>();
+    addTearDown(c.dispose);
+    late FocusNode given;
+    expect(
+      () => c.add(preferred: 'a', build: (_, focus, _) {
+        given = focus;
+        throw StateError('no');
+      }),
+      throwsStateError,
+    );
+    expect(c.length, 0);
+    // A disposed notifier refuses listeners.
+    expect(() => given.addListener(() {}), throwsFlutterError);
+  });
+
+  test('selecting on an empty controller stays on page 0', () {
+    final c = SessionTabsController<String>();
+    addTearDown(c.dispose);
+    expect(() => c.select(3), returnsNormally);
+    expect(c.index, 0);
+  });
+
+  testWidgets('a new controller is the one followed', (tester) async {
+    final first = SessionTabsController<String>(leadingName: '+');
+    final second = SessionTabsController<String>(leadingName: '+');
+    addTearDown(first.dispose);
+    addTearDown(second.dispose);
+    Widget view(SessionTabsController<String> c) => MaterialApp(
+      home: SessionTabsView<String>(
+        controller: c,
+        leading: const Text('add'),
+        builder: (_, tab) => Text('page ${tab.name}'),
+      ),
+    );
+    await tester.pumpWidget(view(first));
+    await tester.pumpWidget(view(second));
+    second.add(preferred: 'b', build: (_, _, _) => 'b');
+    second.select(1);
+    await tester.pumpAndSettle();
+    expect(find.text('page b'), findsOneWidget);
+    expect(second.tabs[0].visible.value, isTrue);
+  });
 }
