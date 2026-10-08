@@ -111,6 +111,8 @@ void main() {
     WidgetTester tester,
     double width, {
     int selected = 1,
+    int subSelected = 0,
+    (String, String) subLabels = ('Terminal', 'Graphical'),
   }) async {
     // A window wider than any row here: the width under test is [width].
     tester.view.physicalSize = const Size(1600, 600);
@@ -133,11 +135,11 @@ void main() {
                     label: 'Console',
                     icon: Icons.monitor,
                     sub: SegmentedSub<int>(
-                      selected: 0,
+                      selected: subSelected,
                       onSelected: (_) {},
-                      segments: const [
-                        SegmentedTab(value: 0, label: 'Terminal', icon: Icons.terminal),
-                        SegmentedTab(value: 1, label: 'Graphical', icon: Icons.monitor),
+                      segments: [
+                        SegmentedTab(value: 0, label: subLabels.$1, icon: Icons.terminal),
+                        SegmentedTab(value: 1, label: subLabels.$2, icon: Icons.monitor),
                       ],
                     ),
                   ),
@@ -204,6 +206,47 @@ void main() {
 
     await pumpWide(tester, width, selected: 0);
     expect(find.text('Overview'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shorter second-level labels are measured again', (
+    tester,
+  ) async {
+    const long = ('Terminal session', 'Graphical session');
+    // The widest row the short labels fit and the long ones do not, each
+    // measured from a fresh state.
+    double? width;
+    for (var w = 400.0; w <= 1600; w += 20) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpWide(tester, w);
+      final shortFits = find.text('Console').evaluate().isNotEmpty;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpWide(tester, w, subLabels: long);
+      final longFits = find.text('Console').evaluate().isNotEmpty;
+      if (shortFits && !longFits) {
+        width = w;
+        break;
+      }
+    }
+    expect(width, isNotNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    await pumpWide(tester, width!, subLabels: long);
+    expect(find.text('Console'), findsNothing);
+    // Same count, other labels: the row fits them now.
+    await pumpWide(tester, width);
+    expect(find.text('Console'), findsOneWidget);
+  });
+
+  testWidgets('a second-level choice that names none of it has no marker', (
+    tester,
+  ) async {
+    const subMarker = ValueKey(('segmented-sub-marker', 1));
+    await pumpWide(tester, 1400);
+    expect(find.byKey(subMarker), findsOneWidget);
+
+    await pumpWide(tester, 1400, subSelected: 9);
+    expect(find.byKey(subMarker), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

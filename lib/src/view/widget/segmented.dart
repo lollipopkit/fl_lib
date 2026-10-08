@@ -230,10 +230,15 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   ) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
-      if (a[i].label != b[i].label ||
-          a[i].value != b[i].value ||
-          a[i].sub?.segments.length != b[i].sub?.segments.length) {
-        return false;
+      if (a[i].label != b[i].label || a[i].value != b[i].value) return false;
+      // The second level is part of the row's width too.
+      final subA = a[i].sub?.segments ?? const [];
+      final subB = b[i].sub?.segments ?? const [];
+      if (subA.length != subB.length) return false;
+      for (var j = 0; j < subA.length; j++) {
+        if (subA[j].label != subB[j].label || subA[j].value != subB[j].value) {
+          return false;
+        }
       }
     }
     return true;
@@ -298,7 +303,11 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     final parent = _selectedWithSub;
     final sub = parent?.sub;
     Rect? rect;
-    if (parent != null && sub != null) {
+    // A choice that names none of the second level's segments has no marker:
+    // waiting for it to be laid out kept the old one painted over the new.
+    if (parent != null &&
+        sub != null &&
+        sub.segments.any((s) => s.value == sub.selected)) {
       final track = _trackKey.currentContext?.findRenderObject();
       final box = _subKeys[(parent.value, sub.selected)]?.currentContext
           ?.findRenderObject();

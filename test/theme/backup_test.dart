@@ -160,6 +160,14 @@ void main() {
     );
   });
 
+  test('an entry this build cannot read is reported, not skipped', () async {
+    final report = await ThemeBackup.restore(
+      {'a' * 64: 'not an entry'},
+      rootDirectory: other.path,
+    );
+    expect(report.failed, ['a' * 64]);
+  });
+
   test('a damaged kept package is replaced, not kept', () async {
     final bytes = _fsbt();
     final theme = await ThemePackages.install(bytes, rootDirectory: device.path);

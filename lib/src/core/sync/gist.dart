@@ -68,7 +68,7 @@ final class GistRs implements RemoteStorage<String> {
 
   // Hex since 2013 (20 or 32 characters), digits before that. A word such as
   // `backup` is neither.
-  static final _id = RegExp(r'^(?:[0-9a-fA-F]{20,32}|[0-9]+)$');
+  static final _id = RegExp(r'^(?:[0-9a-fA-F]{20}|[0-9a-fA-F]{32}|[0-9]+)$');
 
   /// Checks [token], and with a [gistId] that the token can read that gist.
   ///

@@ -81,7 +81,11 @@ abstract final class ThemeBackup {
     final installedAs = <String, String>{};
     final failed = <String>[];
     for (final MapEntry(key: id, value: raw) in entries.entries) {
-      if (raw is! Map) continue;
+      if (raw is! Map) {
+        // Not something this or any build wrote: said, as one that failed.
+        failed.add(id);
+        continue;
+      }
       final name = raw['name'] is String ? raw['name'] as String : id;
       if (ThemePackages.installed(id, rootDirectory: rootDirectory) != null) {
         installedAs[id] = id;
