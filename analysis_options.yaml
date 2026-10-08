@@ -13,6 +13,9 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # The Rust crates; `rust/theme/tests/fixtures/from_seed.dart` is a
+    # generator run by hand (`tests/scheme.rs`), not part of this package.
+    - rust/**
   language:
     strict-raw-types: true
 

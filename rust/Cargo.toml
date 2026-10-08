@@ -1,0 +1,13 @@
+# fl_lib's Rust: `theme` (what a theme package is and how the theme store is
+# read, pure) and `ffi` (its bridge to Dart, built by `hook/build.dart`).
+#
+# Its own workspace root: an app that carries fl_lib inside a Cargo workspace
+# of its own (Server Box does) would otherwise have cargo take these crates for
+# unlisted members of that one and refuse to build them.
+[workspace]
+members = ["theme", "ffi"]
+resolver = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1

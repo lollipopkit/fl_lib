@@ -1,0 +1,21 @@
+[package]
+name = "fl_lib_ffi"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "fl_lib's Rust (`fl_theme`) bridged to Dart"
+
+[lib]
+name = "fl_lib_ffi"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+fl_theme = { path = "../theme" }
+indexmap = "2"
+serde = "1.0"
+serde_json = { version = "1.0", features = ["preserve_order"] }
+url = "2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

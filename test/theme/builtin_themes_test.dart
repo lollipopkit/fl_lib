@@ -106,6 +106,31 @@ void main() {
     expect((await lazy.load(BuiltinTheme.amoled)).id, 'amoled');
   });
 
+  test('an installation the built-in directory cannot read is removed', () async {
+    final dir = Directory('${root.path}/stale');
+    // As a build before `modes` wrote it.
+    final stale = Directory('${dir.path}/${'e' * 64}')..createSync(recursive: true);
+    File('${stale.path}/manifest.toml').writeAsStringSync(
+      "format = 1\nid = 'midnight'\nname = 'Midnight'\n\n[schema]\nmin = 1\nmax = 1\n\n"
+      '[colors]\nmode = 2\nseed = 4287544296\nsystemColor = false\n',
+    );
+    final staging = Directory('${dir.path}/.staging-1')..createSync();
+    final lazy = BuiltinThemeLoader(assetRoot: _assetRoot, rootDirectory: dir.path);
+    final theme = await lazy.load(BuiltinTheme.amoled);
+    expect(stale.existsSync(), isFalse);
+    expect(staging.existsSync(), isTrue);
+    expect(Directory('${dir.path}/${theme.installationId}').existsSync(), isTrue);
+  });
+
+  test('an unreadable installation of the user is kept', () async {
+    final dir = Directory('${root.path}/user');
+    final stale = Directory('${dir.path}/${'d' * 64}')..createSync(recursive: true);
+    File('${stale.path}/manifest.toml').writeAsStringSync('format = 1\n');
+    final lazy = BuiltinThemeLoader(assetRoot: _assetRoot, rootDirectory: '${dir.path}/builtin');
+    await lazy.load(BuiltinTheme.amoled);
+    expect(stale.existsSync(), isTrue);
+  });
+
   for (final folder in Directory(
     'assets/themes',
   ).listSync().whereType<Directory>()) {

@@ -59,25 +59,28 @@ dependencies:
   # Package.swift. Which SQLite variant is compiled in is chosen by the root
   # app's `hooks.user_defines.sqlite3` — a dependency cannot set its own.
   sqlite3: ^3.5.1
-  toml: ^0.18.0
   url_launcher: ^6.2.6
   flutter_riverpod: ^3.3.1
   responsive_framework: ^1.5.1
   riverpod_annotation: ^4.0.2
   webdav_client_plus: ^2.0.0
   window_manager: ^0.5.0
-  xml: ^7.0.1
   computer:
     git:
       url: https://github.com/lollipopkit/dart_computer
       ref: v1.0.88
   flutter_staggered_grid_view: ^0.7.0
   material_ui: ^1.5.0
+  # Theme packages and the store are read in Rust (`rust/`, `hook/build.dart`).
+  flutter_rust_bridge: 2.13.0
+  flutter_rust_bridge_hooks: 2.13.0
+  hooks: ^2.0.2
 
 dependency_overrides:
   flutter_math_fork: ^0.7.4
 
 dev_dependencies:
+  toml: ^0.18.0
   build_runner: ^2.4.13
   flutter_test:
     sdk: flutter

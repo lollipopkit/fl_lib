@@ -1,0 +1,21 @@
+# `native_toolchain_rust` wants an exact channel, so a release is built by a
+# toolchain version control names. Same as Server Box's sbm_ffi and
+# fl_pi_llm, so an app builds all its Rust with one toolchain. Every target
+# shipped is listed: a missing one silently builds for the host.
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt"]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-apple-ios",
+  "aarch64-apple-ios-sim",
+  "x86_64-apple-ios",
+  "aarch64-linux-android",
+  "armv7-linux-androideabi",
+  "x86_64-linux-android",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-pc-windows-msvc",
+  "x86_64-pc-windows-msvc",
+]
