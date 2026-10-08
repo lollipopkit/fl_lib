@@ -204,11 +204,24 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   void didUpdateWidget(SegmentedTabs<T> old) {
     super.didUpdateWidget(old);
     if (old.collapse != widget.collapse) _setOpen();
-    // Other labels need another width: measured again, with them shown.
-    if (_compact && !_sameLabels(old.segments, widget.segments)) {
+    // Other labels need another width: measured again, with them shown. So
+    // does another second level: it is shown in the selected segment, and the
+    // width the row went compact at was the width with it. Left as it was, a
+    // console's Terminal/Graphical kept the row compact on every other page.
+    if (_compact &&
+        (!_sameLabels(old.segments, widget.segments) ||
+            _shownSub(old) != _shownSub(widget))) {
       _compact = false;
       _fullWidth = null;
     }
+  }
+
+  /// How many second-level segments the row shows: the selected segment's.
+  static int _shownSub<T>(SegmentedTabs<T> tabs) {
+    for (final segment in tabs.segments) {
+      if (segment.value == tabs.selected) return segment.sub?.segments.length ?? 0;
+    }
+    return 0;
   }
 
   static bool _sameLabels(
@@ -217,10 +230,15 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   ) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
-      if (a[i].label != b[i].label ||
-          a[i].value != b[i].value ||
-          a[i].sub?.segments.length != b[i].sub?.segments.length) {
-        return false;
+      if (a[i].label != b[i].label || a[i].value != b[i].value) return false;
+      // The second level is part of the row's width too.
+      final subA = a[i].sub?.segments ?? const [];
+      final subB = b[i].sub?.segments ?? const [];
+      if (subA.length != subB.length) return false;
+      for (var j = 0; j < subA.length; j++) {
+        if (subA[j].label != subB[j].label || subA[j].value != subB[j].value) {
+          return false;
+        }
       }
     }
     return true;
@@ -285,7 +303,11 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
     final parent = _selectedWithSub;
     final sub = parent?.sub;
     Rect? rect;
-    if (parent != null && sub != null) {
+    // A choice that names none of the second level's segments has no marker:
+    // waiting for it to be laid out kept the old one painted over the new.
+    if (parent != null &&
+        sub != null &&
+        sub.segments.any((s) => s.value == sub.selected)) {
       final track = _trackKey.currentContext?.findRenderObject();
       final box = _subKeys[(parent.value, sub.selected)]?.currentContext
           ?.findRenderObject();
