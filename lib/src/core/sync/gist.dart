@@ -41,24 +41,79 @@ final class GistRs implements RemoteStorage<String> {
     shared.token = token ?? PrefProps.githubToken.get();
   }
 
-  static Future<void> test({required String token, String? gistId}) async {
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: 'https://api.github.com',
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'Authorization': 'token $token',
-        },
-      ),
-    );
+  /// The id in [input]: an id as is, or the one at the end of a gist's link
+  /// (`https://gist.github.com/<user>/<id>`, `https://api.github.com/gists/<id>`)
+  /// — what a browser's address bar gives. Null when it is neither.
+  static String? idOf(String input) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return null;
+    if (_id.hasMatch(trimmed)) return trimmed;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) return null;
+    final host = uri.host.toLowerCase();
+    final segments = uri.pathSegments.where((e) => e.isNotEmpty).toList();
+    // Where the id is, and nowhere else: `/<id>` or `/<user>/<id>`, and the
+    // API's `/gists/<id>`. A deeper link — a revision — ends in something else.
+    final String? id = switch (host) {
+      'gist.github.com' when segments.length == 1 || segments.length == 2 =>
+        segments.last,
+      'api.github.com' when segments.length == 2 && segments.first == 'gists' =>
+        segments.last,
+      _ => null,
+    };
+    if (id == null) return null;
+    final bare = id.endsWith('.git') ? id.substring(0, id.length - 4) : id;
+    return _id.hasMatch(bare) ? bare : null;
+  }
 
-    if (gistId == null || gistId.isEmpty) {
-      // List the user's gists to validate token
-      await dio.get('/gists');
-    } else {
-      // Get a specific gist to validate both
-      await dio.get('/gists/$gistId');
+  // Hex since 2013 (20 or 32 characters), digits before that. A word such as
+  // `backup` is neither.
+  static final _id = RegExp(r'^(?:[0-9a-fA-F]{20}|[0-9a-fA-F]{32}|[0-9]+)$');
+
+  /// Checks [token], and with a [gistId] that the token can read that gist.
+  ///
+  /// Throws [GistTestException] for what the user can fix in the dialog; a
+  /// network error is thrown as it is.
+  static Future<void> test({
+    required String token,
+    String? gistId,
+    Dio? client,
+  }) async {
+    final dio = client ??
+        Dio(BaseOptions(baseUrl: 'https://api.github.com'));
+    final options = Options(headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'token $token',
+    });
+    try {
+      if (gistId == null || gistId.isEmpty) {
+        // List the user's gists to validate token
+        await dio.get('/gists', options: options);
+      } else {
+        // Get a specific gist to validate both
+        await dio.get('/gists/$gistId', options: options);
+      }
+    } on DioException catch (e) {
+      final reason = switch (e.response?.statusCode) {
+        // GitHub answers a rate limit with 403 as well, and that is no fault
+        // of the token: thrown as it is, a failure to try again later.
+        403 when _rateLimited(e.response!) => null,
+        401 || 403 => GistTestFailure.badToken,
+        // GitHub answers a secret gist the token cannot read the same as one
+        // that does not exist, so the two cannot be told apart.
+        404 when gistId != null && gistId.isNotEmpty => GistTestFailure.notFound,
+        _ => null,
+      };
+      if (reason == null) rethrow;
+      throw GistTestException(reason, e);
     }
+  }
+
+  static bool _rateLimited(Response<dynamic> response) {
+    if (response.headers.value('x-ratelimit-remaining') == '0') return true;
+    final data = response.data;
+    final message = data is Map ? data['message'] : null;
+    return message is String && message.toLowerCase().contains('rate limit');
   }
 
   Map<String, dynamic> _authHeaders() {
@@ -242,3 +297,26 @@ final class GistRs implements RemoteStorage<String> {
   }
 }
 
+/// Why [GistRs.test] refused a token or a gist id.
+enum GistTestFailure {
+  /// 401, or a 403 that is not a rate limit: the token is wrong, expired or
+  /// revoked, or has no gist access.
+  badToken,
+
+  /// 404 for the gist id: there is no such gist, or it is someone else's
+  /// secret gist.
+  notFound,
+}
+
+/// What [GistRs.test] found wrong with what the user entered.
+final class GistTestException implements Exception {
+  final GistTestFailure reason;
+
+  /// The response it was read from.
+  final DioException cause;
+
+  const GistTestException(this.reason, this.cause);
+
+  @override
+  String toString() => 'GistTestException($reason, ${cause.response?.statusCode})';
+}

@@ -617,11 +617,79 @@ abstract final class ThemePackages {
       throw const FormatException('Invalid theme package size');
     }
     final assets = _readArchive(bytes);
-    return _installAssets(
+    final installationId = sha256.convert(bytes).toString();
+    final package = await _installAssets(
       assets,
-      installationId: sha256.convert(bytes).toString(),
+      installationId: installationId,
       rootDirectory: rootDirectory,
     );
+    await _keepSource(rootDirectory ?? root, installationId, bytes);
+    return package;
+  }
+
+  /// Where the `.fsbt` an installation came from is kept: what is installed
+  /// is rewritten from it, and cannot be packed back into the same bytes, so
+  /// a backup has nothing else to carry a theme the store does not hold
+  /// (#1637). Beside the installations, under a name [installed] never reads.
+  static String _sourcePath(String rootPath, String installationId) =>
+      rootPath.joinPath(_sourcesDir).joinPath('$installationId.fsbt');
+
+  static const _sourcesDir = '.sources';
+
+  static Future<void> _keepSource(
+    String rootPath,
+    String installationId,
+    List<int> bytes,
+  ) async {
+    try {
+      final file = File(_sourcePath(rootPath, installationId));
+      // One that is there already stays only when it is whole: a write cut
+      // short would otherwise be kept, and fail [sourceOf]'s check for good.
+      if (await _sourceIntact(file, installationId)) return;
+      await file.parent.create(recursive: true);
+      final part = File('${file.path}.part');
+      await part.writeAsBytes(bytes, flush: true);
+      await part.rename(file.path);
+    } catch (error, stack) {
+      // The theme is installed either way; only a backup of it is lost.
+      Loggers.app.warning('Keeping theme source $installationId', error, stack);
+    }
+  }
+
+  static Future<void> _dropSource(String rootPath, String installationId) async {
+    final file = File(_sourcePath(rootPath, installationId));
+    if (await file.exists()) await file.delete();
+  }
+
+  /// The `.fsbt` [installationId] was installed from, or null for one
+  /// installed from a folder, or before these were kept. Checked against the
+  /// id, which is its digest: a file changed on disk is no source of it.
+  static Future<Uint8List?> sourceOf(
+    String installationId, {
+    String? rootDirectory,
+  }) async {
+    if (!_digestPattern.hasMatch(installationId)) return null;
+    final file = File(_sourcePath(rootDirectory ?? root, installationId));
+    try {
+      if (!await file.exists()) return null;
+      final bytes = await file.readAsBytes();
+      if (sha256.convert(bytes).toString() != installationId) return null;
+      return bytes;
+    } on FileSystemException catch (error) {
+      // As a missing one: the theme is left out of a backup, not the backup.
+      Loggers.app.warning('Reading theme source $installationId', error);
+      return null;
+    }
+  }
+
+  static Future<bool> _sourceIntact(File file, String installationId) async {
+    if (!await file.exists()) return false;
+    try {
+      return sha256.convert(await file.readAsBytes()).toString() ==
+          installationId;
+    } on FileSystemException {
+      return false;
+    }
   }
 
   /// Imports a development directory without requiring a ZIP build step.
@@ -903,6 +971,7 @@ abstract final class ThemePackages {
       await Directory(
         rootPath.joinPath(old.installationId),
       ).delete(recursive: true);
+      await _dropSource(rootPath, old.installationId);
     }
     _activeId = null;
     _active = null;
@@ -1385,6 +1454,7 @@ abstract final class ThemePackages {
     );
     if (!await directory.exists()) return false;
     await directory.delete(recursive: true);
+    await _dropSource(rootDirectory ?? root, installationId);
 
     if (_activeId?.split('#').first == installationId) {
       _activeId = null;
@@ -1492,7 +1562,7 @@ abstract final class ThemePackages {
     final preset = ThemeHost.settings.appThemePreset.fetch();
     if (installationIdOf(preset) case final installationId?
         when installed(installationId) == null) {
-      // TODO(appearance): package assets can be restored with backups later.
+      // A backup reinstalls what it can first; see [ThemeBackup.restore].
       _selectDefaultFallback();
     } else if (installationIdOf(preset) == null &&
         preset != customPreset &&

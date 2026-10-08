@@ -6,6 +6,7 @@
 /// launch and mixes [ThemeSettings] into its settings store.
 library;
 
+export 'src/theme/backup.dart';
 export 'src/theme/builtin.dart';
 export 'src/theme/components.dart';
 export 'src/theme/font.dart';

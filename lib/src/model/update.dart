@@ -249,6 +249,9 @@ abstract final class AppUpdate {
     // settings page names the real version instead of "unknown". [url] stays
     // null and no update is offered, since there is nothing to offer.
     final target = installable ?? _getGitHubRelease();
+    // Only informational, so it decides nothing either: with no prerelease at
+    // all it would have moved a beta user to stable for good.
+    if (installable == null) _chan = chanBefore;
     if (target == null) return;
 
     final newest = _newestBuild(target);
@@ -665,18 +668,25 @@ final class _GitHubRelease {
     required this.assets,
   });
 
-  factory _GitHubRelease._fromJson(Map<String, dynamic> data) {
+  static final _versionTag = RegExp(r'^v?\d+(\.\d+)*$');
+
+  static _GitHubRelease? _fromJson(Map<String, dynamic> data) {
     // The tag names the version everywhere the user sees it, so the build has
     // to come from the same string that ends up on screen.
+    //
+    // A tag that is not a version belongs to something else the repository
+    // releases — flutter_server_box's `themes` and `monitor-v0.2.0` — and is
+    // no app release, even when it ends in digits: `monitor-v0.2.0` read as
+    // build 0, and a later monitor tag could have outnumbered the app.
     var tag = _nonEmptyStr(data['tag_name']);
-    var build = _parseBuild(tag);
-    if (build == null) {
+    int? build;
+    if (tag == null) {
       tag = _nonEmptyStr(data['name']);
       build = _parseBuild(tag);
+    } else if (_versionTag.hasMatch(tag)) {
+      build = _parseBuild(tag);
     }
-    if (build == null || tag == null) {
-      throw FormatException('GitHub release build not found: $data');
-    }
+    if (build == null || tag == null) return null;
 
     final assets = (data['assets'] as List? ?? [])
         .whereType<Map<String, dynamic>>()
@@ -706,7 +716,11 @@ final class _GitHubRelease {
     try {
       return _GitHubRelease._fromJson(data);
     } catch (e) {
-      AppUpdate._logger.warning('GitHub release parse failed', e);
+      // The tag only: the release itself is kilobytes of JSON.
+      AppUpdate._logger.warning(
+        'GitHub release ${data['tag_name']} parse failed',
+        e,
+      );
       return null;
     }
   }
