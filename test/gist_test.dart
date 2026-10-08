@@ -43,6 +43,10 @@ void main() {
         'https://gist.github.com/',
         'not an id',
         'gist.github.com/someone/$_id',
+        'backup',
+        'beef',
+        'https://gist.github.com/someone/$_id/revisions',
+        'https://gist.github.com/someone/$_id/${'a' * 40}',
       ]) {
         expect(GistRs.idOf(input), isNull, reason: input);
       }
@@ -50,9 +54,14 @@ void main() {
   });
 
   group('test', () {
-    Future<Object?> failureFor(int status, {String? gistId}) async {
+    Future<Object?> failureFor(
+      int status, {
+      String? gistId,
+      Map<String, List<String>> headers = const {},
+      String body = '{}',
+    }) async {
       final dio = Dio(BaseOptions(baseUrl: 'https://api.github.com'))
-        ..httpClientAdapter = _StatusAdapter(status);
+        ..httpClientAdapter = _StatusAdapter(status, headers: headers, body: body);
       try {
         await GistRs.test(token: 't', gistId: gistId, client: dio);
         return null;
@@ -74,6 +83,22 @@ void main() {
       }
     });
 
+    test('a rate limit is no fault of the token', () async {
+      expect(
+        await failureFor(403, headers: {
+          'x-ratelimit-remaining': ['0'],
+        }),
+        isA<DioException>(),
+      );
+      expect(
+        await failureFor(
+          403,
+          body: '{"message": "API rate limit exceeded for 1.2.3.4."}',
+        ),
+        isA<DioException>(),
+      );
+    });
+
     test('a gist the token cannot find', () async {
       final e = await failureFor(404, gistId: _id);
       expect(e, isA<GistTestException>());
@@ -89,8 +114,10 @@ void main() {
 
 final class _StatusAdapter implements HttpClientAdapter {
   final int status;
+  final Map<String, List<String>> headers;
+  final String body;
 
-  _StatusAdapter(this.status);
+  _StatusAdapter(this.status, {this.headers = const {}, this.body = '{}'});
 
   @override
   Future<ResponseBody> fetch(
@@ -98,8 +125,9 @@ final class _StatusAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    return ResponseBody.fromString('{}', status, headers: {
+    return ResponseBody.fromString(body, status, headers: {
       Headers.contentTypeHeader: [Headers.jsonContentType],
+      ...headers,
     });
   }
 

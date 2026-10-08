@@ -249,17 +249,20 @@ void main() {
 
   test('github release of another component is not an app release', () {
     // flutter_server_box also releases its monitor agent, tagged
-    // `monitor-v<version>`: its last number is no app build, however large.
+    // `monitor-v<version>`: its last number is no app build. Here it falls
+    // inside the range the notes cover, so only filtering keeps it out.
     AppUpdate.fromGitHubReleasesStr(
       raw: _githubRaw([
         _release(
-          tag: 'monitor-v0.2.9',
-          name: 'Monitor v0.2.9',
-          assets: [_asset('server_box_monitor_linux_arm64')],
+          tag: 'v1.0.3',
+          body: 'three',
+          assets: [_asset('ServerBox_v1.0.3_arm64.apk')],
         ),
         _release(
-          tag: 'v1.0.3',
-          assets: [_asset('ServerBox_v1.0.3_arm64.apk')],
+          tag: 'monitor-v0.2.2',
+          name: 'Monitor v0.2.2',
+          body: 'monitor',
+          assets: [_asset('server_box_monitor_linux_arm64')],
         ),
       ]),
       build: 1,
@@ -268,7 +271,7 @@ void main() {
     );
 
     expect(AppUpdate.version, (3, AppUpdateLevel.normal));
-    expect(AppUpdate.url, 'https://download/ServerBox_v1.0.3_arm64.apk');
+    expect(AppUpdate.releaseNotes.map((e) => e.title).toList(), ['v1.0.3']);
   });
 
   test('github beta channel uses newer prerelease', () {
@@ -863,6 +866,28 @@ void main() {
       AppUpdate.releaseNotes.map((e) => e.title).toList(),
       ['v1.0.5', 'v1.0.4'],
     );
+  });
+  test('github beta keeps its channel with no prerelease and nothing '
+      'installable', () {
+    // The fallback that names the newest release is only informational: with
+    // no prerelease at all it used to move a beta user to stable for good.
+    AppUpdate.chan = AppUpdateChan.beta;
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.4',
+          body: 'four',
+          assets: [_asset('ServerBox-1.0.4.dmg')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.chan, AppUpdateChan.beta);
+    expect(AppUpdate.version, (4, AppUpdateLevel.normal));
+    expect(AppUpdate.url, isNull);
   });
 }
 

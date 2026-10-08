@@ -249,6 +249,9 @@ abstract final class AppUpdate {
     // settings page names the real version instead of "unknown". [url] stays
     // null and no update is offered, since there is nothing to offer.
     final target = installable ?? _getGitHubRelease();
+    // Only informational, so it decides nothing either: with no prerelease at
+    // all it would have moved a beta user to stable for good.
+    if (installable == null) _chan = chanBefore;
     if (target == null) return;
 
     final newest = _newestBuild(target);

@@ -52,8 +52,11 @@ final class GistRs implements RemoteStorage<String> {
     if (uri == null || !uri.hasScheme) return null;
     final host = uri.host.toLowerCase();
     final segments = uri.pathSegments.where((e) => e.isNotEmpty).toList();
+    // Where the id is, and nowhere else: `/<id>` or `/<user>/<id>`, and the
+    // API's `/gists/<id>`. A deeper link — a revision — ends in something else.
     final String? id = switch (host) {
-      'gist.github.com' when segments.isNotEmpty => segments.last,
+      'gist.github.com' when segments.length == 1 || segments.length == 2 =>
+        segments.last,
       'api.github.com' when segments.length == 2 && segments.first == 'gists' =>
         segments.last,
       _ => null,
@@ -63,8 +66,9 @@ final class GistRs implements RemoteStorage<String> {
     return _id.hasMatch(bare) ? bare : null;
   }
 
-  // Hex since 2013, digits before that.
-  static final _id = RegExp(r'^[0-9A-Za-z]+$');
+  // Hex since 2013 (20 or 32 characters), digits before that. A word such as
+  // `backup` is neither.
+  static final _id = RegExp(r'^(?:[0-9a-fA-F]{20,32}|[0-9]+)$');
 
   /// Checks [token], and with a [gistId] that the token can read that gist.
   ///
@@ -91,6 +95,9 @@ final class GistRs implements RemoteStorage<String> {
       }
     } on DioException catch (e) {
       final reason = switch (e.response?.statusCode) {
+        // GitHub answers a rate limit with 403 as well, and that is no fault
+        // of the token: thrown as it is, a failure to try again later.
+        403 when _rateLimited(e.response!) => null,
         401 || 403 => GistTestFailure.badToken,
         // GitHub answers a secret gist the token cannot read the same as one
         // that does not exist, so the two cannot be told apart.
@@ -100,6 +107,13 @@ final class GistRs implements RemoteStorage<String> {
       if (reason == null) rethrow;
       throw GistTestException(reason, e);
     }
+  }
+
+  static bool _rateLimited(Response<dynamic> response) {
+    if (response.headers.value('x-ratelimit-remaining') == '0') return true;
+    final data = response.data;
+    final message = data is Map ? data['message'] : null;
+    return message is String && message.toLowerCase().contains('rate limit');
   }
 
   Map<String, dynamic> _authHeaders() {
@@ -285,7 +299,8 @@ final class GistRs implements RemoteStorage<String> {
 
 /// Why [GistRs.test] refused a token or a gist id.
 enum GistTestFailure {
-  /// 401/403: the token is wrong, expired or revoked, or has no gist access.
+  /// 401, or a 403 that is not a rate limit: the token is wrong, expired or
+  /// revoked, or has no gist access.
   badToken,
 
   /// 404 for the gist id: there is no such gist, or it is someone else's

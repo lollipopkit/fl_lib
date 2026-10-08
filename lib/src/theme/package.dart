@@ -643,9 +643,13 @@ abstract final class ThemePackages {
   ) async {
     try {
       final file = File(_sourcePath(rootPath, installationId));
-      if (await file.exists()) return;
+      // One that is there already stays only when it is whole: a write cut
+      // short would otherwise be kept, and fail [sourceOf]'s check for good.
+      if (await _sourceIntact(file, installationId)) return;
       await file.parent.create(recursive: true);
-      await file.writeAsBytes(bytes, flush: true);
+      final part = File('${file.path}.part');
+      await part.writeAsBytes(bytes, flush: true);
+      await part.rename(file.path);
     } catch (error, stack) {
       // The theme is installed either way; only a backup of it is lost.
       Loggers.app.warning('Keeping theme source $installationId', error, stack);
@@ -666,10 +670,26 @@ abstract final class ThemePackages {
   }) async {
     if (!_digestPattern.hasMatch(installationId)) return null;
     final file = File(_sourcePath(rootDirectory ?? root, installationId));
-    if (!await file.exists()) return null;
-    final bytes = await file.readAsBytes();
-    if (sha256.convert(bytes).toString() != installationId) return null;
-    return bytes;
+    try {
+      if (!await file.exists()) return null;
+      final bytes = await file.readAsBytes();
+      if (sha256.convert(bytes).toString() != installationId) return null;
+      return bytes;
+    } on FileSystemException catch (error) {
+      // As a missing one: the theme is left out of a backup, not the backup.
+      Loggers.app.warning('Reading theme source $installationId', error);
+      return null;
+    }
+  }
+
+  static Future<bool> _sourceIntact(File file, String installationId) async {
+    if (!await file.exists()) return false;
+    try {
+      return sha256.convert(await file.readAsBytes()).toString() ==
+          installationId;
+    } on FileSystemException {
+      return false;
+    }
   }
 
   /// Imports a development directory without requiring a ZIP build step.

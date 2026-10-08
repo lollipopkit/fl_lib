@@ -160,6 +160,30 @@ void main() {
     );
   });
 
+  test('a damaged kept package is replaced, not kept', () async {
+    final bytes = _fsbt();
+    final theme = await ThemePackages.install(bytes, rootDirectory: device.path);
+    final kept = File('${device.path}/.sources/${theme.installationId}.fsbt');
+    // As a write cut short.
+    await kept.writeAsBytes(bytes.sublist(0, 10));
+    expect(
+      await ThemePackages.sourceOf(
+        theme.installationId,
+        rootDirectory: device.path,
+      ),
+      isNull,
+    );
+
+    await ThemePackages.install(bytes, rootDirectory: device.path);
+    expect(
+      await ThemePackages.sourceOf(
+        theme.installationId,
+        rootDirectory: device.path,
+      ),
+      bytes,
+    );
+  });
+
   test('removing a theme drops the package kept for it', () async {
     final theme = await ThemePackages.install(
       _fsbt(),
