@@ -5,6 +5,12 @@ import 'package:icons_plus/icons_plus.dart';
 /// What a session's row says under its name, or null for a one-line row.
 typedef SessionDetailOf = String? Function(int index);
 
+/// A mark for a session's own state, drawn before its name, or null for none.
+///
+/// The bar and the sheet render a snapshot, so a mark whose state changes
+/// listens for that itself.
+typedef SessionLeadingOf = Widget? Function(int index);
+
 /// The line above a [SessionTabsView], naming the session on screen.
 ///
 /// Not a strip of tabs, which is what this was. A phone gave each tab a fixed
@@ -35,6 +41,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     required this.leadingActions,
     this.leadingIcon = MingCute.add_circle_fill,
     this.detailOf,
+    this.leadingOf,
   });
 
   /// Tab labels, the leading tab's included at index 0.
@@ -60,6 +67,10 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   /// name says which one it is and this says which thing it is on, which is
   /// the pair a strip of six-character tabs could never carry.
   final SessionDetailOf? detailOf;
+
+  /// A session's state — whether a program in it is waiting for the user, say
+  /// — on the line and on its row of the sheet.
+  final SessionLeadingOf? leadingOf;
 
   /// Tall enough for a 32pt icon button with room around it, and no taller.
   /// Every point here is a row of terminal output.
@@ -109,6 +120,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
       total: names.length - 1,
       position: _onLeading ? null : index,
       icon: leadingIcon,
+      leading: _onLeading ? null : leadingOf?.call(index),
       onTap: _anyTabs ? () => _showSheet(context) : null,
     );
   }
@@ -126,6 +138,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
               position: i,
               name: names[i],
               detail: detailOf?.call(i),
+              mark: leadingOf?.call(i),
               selected: i == index,
               onTap: () => pick(i),
               onClose: () => pick(i, close: true),
@@ -322,6 +335,7 @@ final class _SessionRow extends StatelessWidget {
     required this.position,
     required this.name,
     required this.detail,
+    required this.mark,
     required this.selected,
     required this.onTap,
     required this.onClose,
@@ -330,6 +344,7 @@ final class _SessionRow extends StatelessWidget {
   final int position;
   final String name;
   final String? detail;
+  final Widget? mark;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onClose;
@@ -338,6 +353,8 @@ final class _SessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final detail_ = detail;
+    final mark_ = mark;
+    final title = Text(name, maxLines: 1, overflow: TextOverflow.ellipsis);
     return ListTile(
       selected: selected,
       leading: SizedBox(
@@ -353,7 +370,15 @@ final class _SessionRow extends StatelessWidget {
           ),
         ),
       ),
-      title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: mark_ == null
+          ? title
+          : Row(
+              children: [
+                mark_,
+                const SizedBox(width: 7),
+                Flexible(child: title),
+              ],
+            ),
       subtitle: detail_ == null
           ? null
           : Text(

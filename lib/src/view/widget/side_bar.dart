@@ -27,6 +27,7 @@ final class SessionSideBar extends StatelessWidget {
     this.actions = const [],
     this.search,
     this.runningLabel,
+    this.leadingOf,
   });
 
   /// Tab labels, the leading page's included at index 0 and ignored here —
@@ -58,6 +59,9 @@ final class SessionSideBar extends StatelessWidget {
   /// Heading over the running sessions. Defaults to [LibLocalizations.running].
   final String? runningLabel;
 
+  /// A running session's state, before its name. See [SessionTabBar.leadingOf].
+  final SessionLeadingOf? leadingOf;
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -72,6 +76,7 @@ final class SessionSideBar extends StatelessWidget {
               title: names[i],
               selected: index == i,
               live: true,
+              leading: leadingOf?.call(i),
               onTap: () => onTap(i),
               trailing: _CloseButton(onTap: () => onClose(i)),
             ),
