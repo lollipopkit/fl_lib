@@ -107,7 +107,11 @@ void main() {
   });
 
   /// Eight segments with icons, the console one open, in [width].
-  Future<void> pumpWide(WidgetTester tester, double width) async {
+  Future<void> pumpWide(
+    WidgetTester tester,
+    double width, {
+    int selected = 1,
+  }) async {
     // A window wider than any row here: the width under test is [width].
     tester.view.physicalSize = const Size(1600, 600);
     tester.view.devicePixelRatio = 1;
@@ -120,7 +124,7 @@ void main() {
             child: SizedBox(
               width: width,
               child: SegmentedTabs<int>(
-                selected: 1,
+                selected: selected,
                 onSelected: (_) {},
                 segments: [
                   const SegmentedTab(value: 0, label: 'Overview', icon: Icons.show_chart),
@@ -177,6 +181,30 @@ void main() {
     await pumpWide(tester, 1400);
     expect(find.text('Terminal'), findsOneWidget);
     expect(find.byTooltip('Terminal'), findsNothing);
+  });
+
+  testWidgets('labels come back once the second level that crowded them out '
+      'is gone', (tester) async {
+    // lollipopkit/flutter_server_box#1638: a console's Terminal/Graphical made
+    // the row too wide, and the width it went compact at stayed the bar for
+    // every other page.
+    double? width;
+    for (var w = 400.0; w <= 1400; w += 20) {
+      await pumpWide(tester, w, selected: 0);
+      if (find.text('Overview').evaluate().isNotEmpty) {
+        width = w;
+        break;
+      }
+    }
+    expect(width, isNotNull);
+
+    await pumpWide(tester, width!, selected: 1);
+    expect(find.text('Console'), findsNothing,
+        reason: 'the second level should not fit at $width');
+
+    await pumpWide(tester, width, selected: 0);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('switching width and segment back and forth measures nothing '

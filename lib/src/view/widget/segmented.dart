@@ -204,11 +204,24 @@ class _SegmentedTabsState<T> extends State<SegmentedTabs<T>>
   void didUpdateWidget(SegmentedTabs<T> old) {
     super.didUpdateWidget(old);
     if (old.collapse != widget.collapse) _setOpen();
-    // Other labels need another width: measured again, with them shown.
-    if (_compact && !_sameLabels(old.segments, widget.segments)) {
+    // Other labels need another width: measured again, with them shown. So
+    // does another second level: it is shown in the selected segment, and the
+    // width the row went compact at was the width with it. Left as it was, a
+    // console's Terminal/Graphical kept the row compact on every other page.
+    if (_compact &&
+        (!_sameLabels(old.segments, widget.segments) ||
+            _shownSub(old) != _shownSub(widget))) {
       _compact = false;
       _fullWidth = null;
     }
+  }
+
+  /// How many second-level segments the row shows: the selected segment's.
+  static int _shownSub<T>(SegmentedTabs<T> tabs) {
+    for (final segment in tabs.segments) {
+      if (segment.value == tabs.selected) return segment.sub?.segments.length ?? 0;
+    }
+    return 0;
   }
 
   static bool _sameLabels(

@@ -247,6 +247,30 @@ void main() {
     expect(AppUpdate.url, 'https://download/ServerBox_v1.0.3_arm64.apk');
   });
 
+  test('github release of another component is not an app release', () {
+    // flutter_server_box also releases its monitor agent, tagged
+    // `monitor-v<version>`: its last number is no app build, however large.
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'monitor-v0.2.9',
+          name: 'Monitor v0.2.9',
+          assets: [_asset('server_box_monitor_linux_arm64')],
+        ),
+        _release(
+          tag: 'v1.0.3',
+          assets: [_asset('ServerBox_v1.0.3_arm64.apk')],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.android,
+      arch: CpuArch.arm64,
+    );
+
+    expect(AppUpdate.version, (3, AppUpdateLevel.normal));
+    expect(AppUpdate.url, 'https://download/ServerBox_v1.0.3_arm64.apk');
+  });
+
   test('github beta channel uses newer prerelease', () {
     AppUpdate.chan = AppUpdateChan.beta;
     AppUpdate.fromGitHubReleasesStr(
