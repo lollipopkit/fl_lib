@@ -120,7 +120,11 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
       total: names.length - 1,
       position: _onLeading ? null : index,
       icon: leadingIcon,
-      leading: _onLeading ? null : leadingOf?.call(index),
+      // Only for a session: the leading tab is none, and an index the names
+      // do not reach is no session to ask about.
+      leading: index > 0 && index < names.length
+          ? leadingOf?.call(index)
+          : null,
       onTap: _anyTabs ? () => _showSheet(context) : null,
     );
   }
