@@ -46,7 +46,7 @@ void main() {
         'backup',
         'beef',
         // Neither 20 nor 32 characters.
-        '${'a' * 25}',
+        'a' * 25,
         'https://gist.github.com/someone/$_id/revisions',
         'https://gist.github.com/someone/$_id/${'a' * 40}',
       ]) {
