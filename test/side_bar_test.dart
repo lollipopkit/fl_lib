@@ -8,7 +8,7 @@ void main() {
     int index = 0,
     void Function(int)? onTap,
     void Function(int)? onClose,
-    List<Widget> actions = const [],
+    List<BarAction> actions = const [],
     List<Widget>? targets,
   }) {
     return MaterialApp(
@@ -140,7 +140,7 @@ void main() {
     await tester.pumpWidget(
       harness(
         names: const ['add'],
-        actions: [IconButton(icon: const Icon(Icons.add), onPressed: () {})],
+        actions: [BarAction(icon: Icons.add, label: 'add', onTap: () {})],
       ),
     );
     expect(tester.getTopLeft(find.text('prod-1')).dy, greaterThan(without));
@@ -156,10 +156,11 @@ void main() {
           child: SideBarActions(
             actions: [
               for (var i = 0; i < count; i++)
-                IconButton(
+                BarAction(
                   key: ValueKey('action-$i'),
-                  icon: const Icon(Icons.add),
-                  onPressed: () {},
+                  icon: Icons.add,
+                  label: 'add',
+                  onTap: () {},
                 ),
             ],
           ),

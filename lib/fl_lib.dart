@@ -193,6 +193,7 @@ export 'src/view/widget/store/store_field.dart';
 export 'src/view/widget/store/store_switch.dart';
 export 'src/view/widget/switch_indicator.dart';
 export 'src/view/widget/switch_x.dart';
+export 'src/view/widget/switcher_bar.dart';
 export 'src/view/widget/tag.dart';
 export 'src/view/widget/tag_editor.dart';
 export 'src/view/widget/text.dart';
