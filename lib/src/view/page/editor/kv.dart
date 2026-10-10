@@ -54,7 +54,7 @@ class _KvEditorState extends State<KvEditor> {
     );
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: CustomAppBar(
         title: Text(l10n.edit),
         actions: [
           IconButton(onPressed: _onTapAdd, icon: const Icon(Icons.add)),
