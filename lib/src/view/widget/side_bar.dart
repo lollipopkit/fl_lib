@@ -46,8 +46,8 @@ final class SessionSideBar extends StatelessWidget {
   final List<Widget> targets;
 
   /// A row of buttons above everything, for what acts on the rail as a whole:
-  /// sorting it, searching it, adding to it.
-  final List<Widget> actions;
+  /// sorting it, searching it, adding to it. See [SideBarActions].
+  final List<BarAction> actions;
 
   /// Turns [actions] into a search field while a search is on.
   ///
@@ -429,13 +429,23 @@ class _CloseButton extends StatelessWidget {
 /// list builds its own, and a row of buttons that sat at a different inset or
 /// swapped without the crossing would read as a different rail.
 class SideBarActions extends StatelessWidget {
-  const SideBarActions({super.key, required this.actions, this.search});
+  const SideBarActions({
+    super.key,
+    required this.actions,
+    this.search,
+    this.searchHint,
+  });
 
-  final List<Widget> actions;
+  /// The same actions a one-column [SwitcherBar] carries, so a page lists
+  /// them once for both layouts.
+  final List<BarAction> actions;
 
   /// Turns the row into a search field while a search is on. Null in a rail
   /// that cannot be searched.
   final InlineSearchController? search;
+
+  /// What the field says before anything is typed — see [InlineSearchBar].
+  final String? searchHint;
 
   /// How tall the row is, whichever of the two it is showing.
   ///
@@ -458,7 +468,7 @@ class SideBarActions extends StatelessWidget {
             children: [
               for (var i = 0; i < actions.length; i++) ...[
                 if (i > 0) const SizedBox(width: 4),
-                actions[i],
+                actions[i].button(),
               ],
             ],
           ),
@@ -469,7 +479,11 @@ class SideBarActions extends StatelessWidget {
     return SizedBox(
       height: height,
       child: switch (search) {
-        final search? => InlineSearchBar(controller: search, child: row),
+        final search? => InlineSearchBar(
+          controller: search,
+          hint: searchHint,
+          child: row,
+        ),
         null => row,
       },
     );

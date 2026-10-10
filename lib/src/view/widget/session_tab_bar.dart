@@ -42,6 +42,8 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     this.leadingIcon = MingCute.add_circle_fill,
     this.detailOf,
     this.leadingOf,
+    this.search,
+    this.searchHint,
   });
 
   /// Tab labels, the leading tab's included at index 0.
@@ -55,10 +57,10 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   final void Function(int index) onClose;
 
   /// Shown while a session is open.
-  final List<Widget> sessionActions;
+  final List<BarAction> sessionActions;
 
   /// Shown while the leading tab is open.
-  final List<Widget> leadingActions;
+  final List<BarAction> leadingActions;
 
   /// What the leading tab shows instead of a label.
   final IconData leadingIcon;
@@ -72,14 +74,12 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   /// — on the line and on its row of the sheet.
   final SessionLeadingOf? leadingOf;
 
-  /// Tall enough for a 32pt icon button with room around it, and no taller.
-  /// Every point here is a row of terminal output.
-  ///
-  /// Public because this is usually wrapped in something that rebuilds it, and
-  /// the `Scaffold` measures the wrapper — which is built before this is and so
-  /// cannot ask it. A wrapper left on its own default gave the old strip 56pt
-  /// for its 48, and would give this one 56 for its 40.
-  static const height = 40.0;
+  /// See [SwitcherBar.search].
+  final InlineSearchController? search;
+  final String? searchHint;
+
+  /// The one every tab's bar has — see [SwitcherBar.height].
+  static const height = SwitcherBar.height;
 
   @override
   Size get preferredSize => Size.fromHeight(_bare ? 0 : height);
@@ -90,7 +90,8 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   /// to, so the name is a label rather than a way into the sheet.
   bool get _anyTabs => names.length > 1;
 
-  List<Widget> get _actions => _onLeading ? leadingActions : sessionActions;
+  List<BarAction> get _actions =>
+      _onLeading ? leadingActions : sessionActions;
 
   /// A line with nothing to switch between and no buttons on it is a row of
   /// height above a page for no reason.
@@ -100,17 +101,11 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   Widget build(BuildContext context) {
     if (_bare) return const SizedBox.shrink();
 
-    return WindowControlsInset(
-      safeArea: true,
-      child: SizedBox(
-        height: height,
-        child: Row(
-          children: [
-            Expanded(child: _buildSwitcher(context)),
-            for (final action in _actions) ...[action, const SizedBox(width: 7)],
-          ],
-        ),
-      ),
+    return SwitcherBar(
+      switcher: _buildSwitcher(context),
+      actions: _actions,
+      search: search,
+      searchHint: searchHint,
     );
   }
 
