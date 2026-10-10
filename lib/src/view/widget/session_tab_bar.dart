@@ -100,13 +100,16 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   Widget build(BuildContext context) {
     if (_bare) return const SizedBox.shrink();
 
-    return SizedBox(
-      height: height,
-      child: Row(
-        children: [
-          Expanded(child: _buildSwitcher(context)),
-          for (final action in _actions) ...[action, const SizedBox(width: 7)],
-        ],
+    return WindowControlsInset(
+      safeArea: true,
+      child: SizedBox(
+        height: height,
+        child: Row(
+          children: [
+            Expanded(child: _buildSwitcher(context)),
+            for (final action in _actions) ...[action, const SizedBox(width: 7)],
+          ],
+        ),
       ),
     );
   }

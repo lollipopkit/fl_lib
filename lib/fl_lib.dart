@@ -203,4 +203,5 @@ export 'src/view/widget/tile/tiles.dart';
 export 'src/view/widget/toast/toast.dart';
 export 'src/view/widget/val_builder.dart';
 export 'src/view/widget/virtual_window_frame.dart';
+export 'src/view/widget/window_controls.dart';
 
