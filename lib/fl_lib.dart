@@ -193,6 +193,7 @@ export 'src/view/widget/store/store_field.dart';
 export 'src/view/widget/store/store_switch.dart';
 export 'src/view/widget/switch_indicator.dart';
 export 'src/view/widget/switch_x.dart';
+export 'src/view/widget/switcher_bar.dart';
 export 'src/view/widget/tag.dart';
 export 'src/view/widget/tag_editor.dart';
 export 'src/view/widget/text.dart';
@@ -203,4 +204,5 @@ export 'src/view/widget/tile/tiles.dart';
 export 'src/view/widget/toast/toast.dart';
 export 'src/view/widget/val_builder.dart';
 export 'src/view/widget/virtual_window_frame.dart';
+export 'src/view/widget/window_controls.dart';
 

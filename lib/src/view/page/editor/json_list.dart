@@ -46,7 +46,7 @@ class _JsonListEditorState extends State<JsonListEditor> {
     );
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: CustomAppBar(
         title: Text(l10n.edit),
         actions: [
           IconButton(onPressed: _onTapAdd, icon: const Icon(Icons.add)),

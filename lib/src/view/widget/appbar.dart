@@ -55,7 +55,9 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       scrolledUnderElevation: scrolledUnderElevation,
       surfaceTintColor: surfaceTintColor,
     );
-    return bar;
+    // `AppBar` keeps its content inside `MediaQuery.padding`, and the window
+    // controls are not in it.
+    return WindowControlsInset(child: bar);
   }
 
   @override
