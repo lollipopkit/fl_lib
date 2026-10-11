@@ -28,6 +28,8 @@ final class SessionSideBar extends StatelessWidget {
     this.search,
     this.runningLabel,
     this.leadingOf,
+    this.liveOf,
+    this.liveColorOf,
   });
 
   /// Tab labels, the leading page's included at index 0 and ignored here —
@@ -62,6 +64,16 @@ final class SessionSideBar extends StatelessWidget {
   /// A running session's state, before its name. See [SessionTabBar.leadingOf].
   final SessionLeadingOf? leadingOf;
 
+  /// Whether a running session's row draws the live bar. Null draws it on
+  /// every one — off for a caller that says the same thing in [leadingOf]
+  /// instead, a badge on a mark, where one bar and one badge would be the
+  /// same fact twice.
+  final bool Function(int index)? liveOf;
+
+  /// The live bar's colour for a session, null for the usual one. See
+  /// [SideBarTile.liveColor].
+  final Color? Function(int index)? liveColorOf;
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -75,7 +87,8 @@ final class SessionSideBar extends StatelessWidget {
             SideBarTile(
               title: names[i],
               selected: index == i,
-              live: true,
+              live: liveOf?.call(i) ?? true,
+              liveColor: liveColorOf?.call(i),
               leading: leadingOf?.call(i),
               onTap: () => onTap(i),
               trailing: _CloseButton(onTap: () => onClose(i)),
@@ -165,6 +178,7 @@ final class SideBarTile extends StatelessWidget {
     required this.title,
     this.selected = false,
     this.live = false,
+    this.liveColor,
     this.icon,
     this.leading,
     this.trailing,
@@ -202,6 +216,11 @@ final class SideBarTile extends StatelessWidget {
   /// otherwise, so "which of these is running" and "which one am I looking at"
   /// are one glance rather than two.
   final bool live;
+
+  /// The bar's colour in place of the accent-or-neutral one, for a row whose
+  /// bar says something about its state as well — a server that does not
+  /// answer, a program that failed.
+  final Color? liveColor;
 
   final Widget? trailing;
   final VoidCallback? onTap;
@@ -295,9 +314,11 @@ final class SideBarTile extends StatelessWidget {
                             width: 3,
                             height: 16,
                             decoration: BoxDecoration(
-                              color: selected
-                                  ? scheme.primary
-                                  : scheme.outlineVariant,
+                              color:
+                                  liveColor ??
+                                  (selected
+                                      ? scheme.primary
+                                      : scheme.outlineVariant),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
