@@ -540,11 +540,16 @@ abstract final class ThemePackages {
     return uri;
   }
 
+  /// What [download] answers with instead of the network: a test's files.
+  @visibleForTesting
+  static Future<Uint8List> Function(Uri uri)? debugFetch;
+
   static Future<Uint8List> download(
     String url, {
     int maxBytes = maxPackageBytes,
   }) async {
     var uri = httpsUri(url);
+    if (debugFetch case final fetch?) return fetch(uri);
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 15);
     try {

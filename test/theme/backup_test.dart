@@ -7,7 +7,9 @@
 /// version of a theme is not replaced by an older one from the backup.
 library;
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
@@ -168,6 +170,35 @@ void main() {
     }, rootDirectory: other.path);
     expect(report.failed, ['Piggy']);
     expect(report.installedAs, isEmpty);
+  });
+
+  test('a theme the app no longer ships comes back from the store', () async {
+    // The release the app shipped, now only in the store: found by its digest.
+    final bytes = Uint8List.fromList(_fsbt(id: 'example.piggy', name: 'Piggy'));
+    final digest = sha256.convert(bytes).toString();
+    final listing = 'id = "example.piggy"\nname = "Piggy"\n[[version]]\nversion = "1.0.0"\n'
+        'schema_min = 1\nschema_max = 1\nurl = "https://example.org/piggy.fsbt"\n'
+        'sha256 = "$digest"\nsize = ${bytes.length}\n';
+    final tree = Archive()
+      ..add(ArchiveFile.string('repo.toml', 'schema = 1\nname = "Official"\n'))
+      ..add(ArchiveFile.string('themes/example.piggy.toml', listing));
+    final files = {
+      'https://catalog.example/repos.toml': utf8.encode('schema = 1\nname = "Test"\n[[repo]]\nurl = "https://example.org/store.tar.gz"\n'),
+      'https://example.org/store.tar.gz': const GZipEncoder().encode(TarEncoder().encode(tree)),
+      'https://example.org/piggy.fsbt': bytes,
+    };
+    ThemePackages.debugFetch = (uri) async => Uint8List.fromList(files[uri.toString()] ?? (throw HttpException('404', uri: uri)));
+    initTestThemeHost(catalogUrl: 'https://catalog.example/repos.toml');
+    addTearDown(() {
+      ThemePackages.debugFetch = null;
+      initTestThemeHost();
+    });
+
+    final report = await ThemeBackup.restore({
+      digest: {'id': 'example.piggy', 'name': 'Piggy', 'bundled': 'example.piggy'},
+    }, rootDirectory: other.path);
+    expect(report.failed, isEmpty);
+    expect(report.installedAs, {digest: digest});
   });
 
   test('an entry this build cannot read is reported, not skipped', () async {
