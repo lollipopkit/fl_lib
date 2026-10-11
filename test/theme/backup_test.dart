@@ -160,6 +160,16 @@ void main() {
     );
   });
 
+  test('a theme the app no longer ships is looked for in the store', () async {
+    // This host ships no themes and names no store: nothing to bring it from,
+    // so it is said rather than thrown.
+    final report = await ThemeBackup.restore({
+      'a' * 64: {'id': 'example.piggy', 'name': 'Piggy', 'bundled': 'example.piggy'},
+    }, rootDirectory: other.path);
+    expect(report.failed, ['Piggy']);
+    expect(report.installedAs, isEmpty);
+  });
+
   test('an entry this build cannot read is reported, not skipped', () async {
     final report = await ThemeBackup.restore(
       {'a' * 64: 'not an entry'},

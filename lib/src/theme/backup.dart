@@ -100,7 +100,7 @@ abstract final class ThemeBackup {
         continue;
       }
       try {
-        final theme = await _install(raw, rootDirectory, bundle ?? rootBundle);
+        final theme = await _install(id, raw, rootDirectory, bundle ?? rootBundle);
         installedAs[id] = theme.installationId;
       } catch (error, stack) {
         Loggers.app.warning('Restoring theme $name', error, stack);
@@ -111,6 +111,7 @@ abstract final class ThemeBackup {
   }
 
   static Future<ThemePackage> _install(
+    String id,
     Map<Object?, Object?> raw,
     String? rootDirectory,
     AssetBundle bundle,
@@ -123,9 +124,18 @@ abstract final class ThemeBackup {
     final Uint8List bytes;
     if (raw['bundled'] case final String manifestId) {
       final dir = ThemeHost.current.bundledThemesDir;
-      if (dir == null) throw const FormatException('No bundled themes');
-      final data = await bundle.load('$dir$manifestId.fsbt');
-      bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      final shipped = dir == null ? null : await _bundledBytes(bundle, '$dir$manifestId.fsbt');
+      if (shipped == null) {
+        // An app that stopped shipping it: the same bytes are a store
+        // release, found by their digest (the installation id).
+        // TODO: remove once no backup names a bundled theme.
+        final catalog = ThemeHost.current.catalogUrl;
+        if (catalog == null) throw const FormatException('No bundled themes');
+        final item = _storeItemFor(await ThemeRepos.store(catalog, bundle: bundle), id);
+        if (item == null) throw const FormatException('No longer bundled, and not in the store');
+        return ThemeRepos.install(item, rootDirectory: rootDirectory);
+      }
+      bytes = shipped;
     } else if (raw['fsbt'] case final String encoded) {
       bytes = base64Decode(encoded);
     } else {
@@ -174,6 +184,15 @@ abstract final class ThemeBackup {
       }
     }
     return null;
+  }
+
+  static Future<Uint8List?> _bundledBytes(AssetBundle bundle, String path) async {
+    try {
+      final data = await bundle.load(path);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// The installation id each bundled package installs as, to its manifest id.
