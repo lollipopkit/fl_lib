@@ -226,4 +226,26 @@ void main() {
     // the rail nothing.
     expect(running - target, lessThanOrEqualTo(2.0));
   });
+
+  testWidgets('the row of buttons stays at the top of a long rail', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        names: const ['add'],
+        actions: [BarAction(icon: Icons.add, label: 'New', onTap: () {})],
+        targets: [
+          for (var i = 0; i < 60; i++) SideBarTile(title: 'host-$i'),
+        ],
+      ),
+    );
+    final top = tester.getTopLeft(find.byIcon(Icons.add)).dy;
+
+    await tester.drag(find.text('host-3'), const Offset(0, -600));
+    await tester.pump();
+
+    expect(find.text('host-0'), findsNothing, reason: 'the entries scrolled');
+    expect(find.byIcon(Icons.add), findsOneWidget);
+    expect(tester.getTopLeft(find.byIcon(Icons.add)).dy, top);
+  });
 }

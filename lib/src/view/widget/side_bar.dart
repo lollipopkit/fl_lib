@@ -53,9 +53,8 @@ final class SessionSideBar extends StatelessWidget {
 
   /// Turns [actions] into a search field while a search is on.
   ///
-  /// Null in a rail that cannot be searched. The rail is a `ListView`, so the
-  /// row scrolls with it rather than sitting over it — and the swap is crossed
-  /// rather than cut, which is [InlineSearchBar]'s doing.
+  /// Null in a rail that cannot be searched. The swap is crossed rather than
+  /// cut, which is [InlineSearchBar]'s doing.
   final InlineSearchController? search;
 
   /// Heading over the running sessions. Defaults to [LibLocalizations.running].
@@ -76,11 +75,10 @@ final class SessionSideBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 12),
+    return SideBarList(
+      actions: actions,
+      search: search,
       children: [
-        if (actions.isNotEmpty)
-          SideBarActions(actions: actions, search: search),
         if (names.length > 1) ...[
           SideBarSection(runningLabel ?? libL10n.running),
           for (var i = 1; i < names.length; i++)
@@ -95,6 +93,69 @@ final class SessionSideBar extends StatelessWidget {
             ),
         ],
         ...targets,
+      ],
+    );
+  }
+}
+
+/// A rail's body: its [SideBarActions] row held at the top, and the entries
+/// scrolling under it.
+///
+/// The row is what acts on the rail — searching it, adding to it — and in a
+/// long list it was scrolled out of reach exactly when it was wanted.
+final class SideBarList extends StatelessWidget {
+  /// A rail of [children], built at once.
+  SideBarList({
+    super.key,
+    this.actions = const [],
+    this.search,
+    this.searchHint,
+    this.padding = _padding,
+    required List<Widget> children,
+  }) : itemCount = children.length,
+       itemBuilder = ((_, i) => children[i]);
+
+  /// A rail built as it scrolls, for one that may hold hundreds of entries.
+  const SideBarList.builder({
+    super.key,
+    this.actions = const [],
+    this.search,
+    this.searchHint,
+    this.padding = _padding,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  static const _padding = EdgeInsets.only(bottom: 12);
+
+  /// The row at the top; none when empty. See [SideBarActions.actions].
+  final List<BarAction> actions;
+
+  /// See [SideBarActions.search].
+  final InlineSearchController? search;
+
+  /// See [SideBarActions.searchHint].
+  final String? searchHint;
+
+  /// Around the entries, under the row.
+  final EdgeInsetsGeometry padding;
+
+  final int itemCount;
+  final NullableIndexedWidgetBuilder itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = ListView.builder(
+      padding: padding,
+      itemCount: itemCount,
+      itemBuilder: itemBuilder,
+    );
+    if (actions.isEmpty) return list;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SideBarActions(actions: actions, search: search, searchHint: searchHint),
+        Expanded(child: list),
       ],
     );
   }
