@@ -55,6 +55,8 @@ class SheetChoiceTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.icon,
+    this.subtitle,
+    this.action,
     this.onFocusChange,
     this.autofocus = false,
   });
@@ -63,6 +65,15 @@ class SheetChoiceTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final IconData? icon;
+
+  /// A second line under [title], for a row the title alone does not tell
+  /// apart — which servers a workspace holds, which key runs a command.
+  final String? subtitle;
+
+  /// A button of the row's own, before the tick: closing or deleting the
+  /// thing the row picks, without picking it.
+  final Widget? action;
+
   final ValueChanged<bool>? onFocusChange;
   final bool autofocus;
 
@@ -78,7 +89,23 @@ class SheetChoiceTile extends StatelessWidget {
         selected: selected,
         leading: icon == null ? null : Icon(icon),
         title: Text(title),
-        trailing: selected ? Icon(Icons.check, color: scheme.primary) : null,
+        subtitle: subtitle == null
+            ? null
+            : Text(
+                subtitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+        trailing: action == null
+            ? (selected ? Icon(Icons.check, color: scheme.primary) : null)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selected) Icon(Icons.check, color: scheme.primary),
+                  action!,
+                ],
+              ),
         onTap: onTap,
       ),
     );

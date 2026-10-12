@@ -40,9 +40,10 @@ sealed class BarAction {
   /// once for every layout.
   Widget button();
 
-  /// Its row in the bar's overflow menu, which [anchor] is the button of;
-  /// null for none.
-  ContextMenuAction? _item(BuildContext anchor);
+  /// Its row in an overflow menu — the bar's own, or a host's that folds a
+  /// page's buttons into a list of its own — which [anchor] is the button
+  /// of; null for none.
+  ContextMenuAction? menuItem(BuildContext anchor);
 }
 
 final class _TapAction implements BarAction {
@@ -112,7 +113,7 @@ final class _TapAction implements BarAction {
   }
 
   @override
-  ContextMenuAction _item(BuildContext anchor) => ContextMenuAction(
+  ContextMenuAction menuItem(BuildContext anchor) => ContextMenuAction(
     text: label,
     icon: icon,
     enabled: _enabled,
@@ -155,7 +156,7 @@ final class _MenuAction implements BarAction {
 
   /// Its own menu opens from where the overflow menu was.
   @override
-  ContextMenuAction _item(BuildContext anchor) =>
+  ContextMenuAction menuItem(BuildContext anchor) =>
       ContextMenuAction(text: label, icon: icon, onTap: () => _open(anchor));
 }
 
@@ -179,8 +180,8 @@ final class _ListenAction implements BarAction {
   );
 
   @override
-  ContextMenuAction? _item(BuildContext anchor) =>
-      build(anchor)?._item(anchor);
+  ContextMenuAction? menuItem(BuildContext anchor) =>
+      build(anchor)?.menuItem(anchor);
 }
 
 Widget _glyph(
@@ -325,7 +326,7 @@ final class SwitcherBar extends StatelessWidget implements PreferredSizeWidget {
               tooltip: menuLabel ?? libL10n.more,
               actions: () => [
                 ...?menu?.call(),
-                for (final a in folded) ?a._item(anchor),
+                for (final a in folded) ?a.menuItem(anchor),
               ],
               child: const Padding(
                 padding: EdgeInsets.all(7),
