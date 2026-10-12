@@ -18,7 +18,7 @@
     },
     "urls": {
         "base": {
-            "beta": "https://cdn.lolli.tech/gptbox/",
+            "beta": "https://cdn.lollipopkit.com/gptbox/",
             "stable": "https://github.com/lollipopkit/flutter_gpt_box/releases/download/"
         },
         "suffix": {
