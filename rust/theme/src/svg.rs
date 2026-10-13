@@ -77,7 +77,7 @@ fn element(e: &BytesStart<'_>, depth: usize, rooted: &mut bool) -> Result<()> {
         let Ok(attribute) = attribute else {
             return fail("Invalid SVG document");
         };
-        let Ok(value) = attribute.unescape_value() else {
+        let Ok(value) = attribute.normalized_value(quick_xml::XmlVersion::default()) else {
             return fail("Invalid SVG document");
         };
         if attribute.key.local_name().as_ref() == b"href" && !value.starts_with('#') {

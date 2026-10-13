@@ -97,6 +97,12 @@ fn a_read_back_refuses_what_an_install_would() {
     assert!(read_installed(&named, &[]).is_err());
     assert!(read_installed("format = 2", &[]).is_err());
     assert!(installed_variants("variants = [{ key = \"Bad Key\", name = \"x\" }]").is_err());
+    assert!(
+        installed_variants("variants = [{ key = \"trans\", name = \"a\" }, { key = \"trans\", name = \"b\" }]").is_err(),
+        "two entries for one directory"
+    );
+    let many: Vec<String> = (0..=fl_theme::package::MAX_VARIANTS).map(|i| format!("{{ key = \"v{i}\", name = \"v\" }}")).collect();
+    assert!(installed_variants(&format!("variants = [{}]", many.join(", "))).is_err(), "more than a package may carry");
 }
 
 #[test]

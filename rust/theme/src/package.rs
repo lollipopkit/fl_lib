@@ -916,7 +916,9 @@ pub fn installed_variants(manifest: &str) -> Result<Option<Vec<Variant>>> {
             _ => None,
         })
         .collect();
-    if variants.is_empty() || variants.len() != list.len() {
+    // Each key is a directory of its own, as `layout` writes them.
+    let keys: HashSet<&str> = variants.iter().map(|v| v.key.as_str()).collect();
+    if variants.is_empty() || variants.len() != list.len() || variants.len() > MAX_VARIANTS || keys.len() != variants.len() {
         return fail("Invalid theme variants");
     }
     Ok(Some(variants))
