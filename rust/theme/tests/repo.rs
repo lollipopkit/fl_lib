@@ -277,6 +277,8 @@ fn an_address_becomes_the_tarball_it_is_fetched_from() {
 fn unsafe_oversized_and_bogus_archives_are_refused() {
     assert!(read_archive(&tar_gz(&[("../evil.toml", b"x".to_vec())], None)).is_err());
     assert!(read_archive(b"not a tarball").is_err());
+    let twice = tar_gz(&[("repo.toml", b"schema = 1".to_vec()), ("repo.toml", b"schema = 9".to_vec())], Some("t"));
+    assert!(read_archive(&twice).is_err(), "one path twice leaves the tree to the order of the entries");
     assert!(read_archive(&tar_gz(&[("themes/big.toml", vec![b'x'; MAX_ENTRY_BYTES + 1])], Some("t"))).is_err());
     let bomb = read_archive(&tar_gz(&[("themes/big.toml", vec![0; MAX_TAR_BYTES + 1])], Some("t"))).unwrap_err();
     assert!(bomb.0.contains("unpacks to too much"), "{bomb}");

@@ -387,9 +387,10 @@ final class ThemeListing {
     if (raw is! Map) return null;
     final id = raw['id'];
     if (id is! String || id.isEmpty) return null;
+    final listed = raw['releases'];
+    if (listed is! List) return null;
     final releases = <ThemeRelease>[
-      for (final r in (raw['releases'] as List? ?? const []))
-        ?ThemeRelease.fromJson(r),
+      for (final r in listed) ?ThemeRelease.fromJson(r),
     ];
     // The same rule the file is held to: a listing with nothing installable is
     // not a listing.
@@ -607,8 +608,11 @@ final class ThemeStore {
       return null;
     }
 
+    final listed = raw['items'];
+    final labels = raw['repos'] ?? const [];
+    if (listed is! List || labels is! List) return null;
     final items = <ThemeStoreItem>[];
-    for (final item in (raw['items'] as List? ?? const [])) {
+    for (final item in listed) {
       final read = ThemeStoreItem.fromJson(item);
       if (read == null) return null;
       items.add(read);
@@ -617,7 +621,7 @@ final class ThemeStore {
     return ThemeStore(
       items: items,
       repos: [
-        for (final label in (raw['repos'] as List? ?? const []))
+        for (final label in labels)
           if (label is String) label,
       ],
       catalogUrl: catalogUrl,

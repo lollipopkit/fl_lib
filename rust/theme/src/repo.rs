@@ -390,7 +390,10 @@ pub fn read_archive(bytes: &[u8]) -> Result<IndexMap<String, Vec<u8>>> {
         entry
             .read_to_end(&mut content)
             .map_err(|e| ThemeError::new(format!("the repository is not a readable .tar.gz: {e}")))?;
-        files.insert(name, content);
+        // Two entries at one path would leave the tree to whichever came last.
+        if files.insert(name.clone(), content).is_some() {
+            return fail(format!("{name} is in the repository twice"));
+        }
     }
     Ok(strip_top_directory(files))
 }

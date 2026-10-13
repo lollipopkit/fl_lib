@@ -198,6 +198,19 @@ void main() {
       expect(ThemeStore.fromJson(raw), isNull);
     });
 
+    test('a list written as something else is not a cache, and no crash', () {
+      final store = _store(item: _item()).toJson()..['items'] = {};
+      expect(ThemeStore.fromJson(store), isNull);
+
+      final repos = _store(item: _item()).toJson()..['repos'] = 'x';
+      expect(ThemeStore.fromJson(repos), isNull);
+
+      final raw = _store(item: _item()).toJson();
+      ((raw['items'] as List).single['listing'] as Map)['releases'] = {};
+      expect(ThemeListing.fromJson((raw['items'] as List).single['listing']), isNull);
+      expect(ThemeStore.fromJson(raw), isNull);
+    });
+
     test('a store with no timestamp is not a cache', () {
       final raw = _store(item: _item()).toJson()..remove('fetchedAt');
 

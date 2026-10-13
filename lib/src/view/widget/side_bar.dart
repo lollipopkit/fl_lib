@@ -325,10 +325,16 @@ final class SideBarTile extends StatelessWidget {
     // Right-click reaches whatever the long press does — see
     // `WidgetSecondaryX`, which is where the reasoning lives. A menu is the
     // exception: it wants the pointer's position, which `asSecondary` drops.
+    // A row with a menu answers both gestures with it alone, nothing while
+    // it is unavailable — never [onLongPress] in its place.
+    final hasMenu = this.onMenu != null;
     final onMenu = menuEnabled ? this.onMenu : null;
-    final onHold = onMenu == null ? onLongPress : () => onMenu(null);
-    final void Function(Offset)? onSecondaryTap =
-        onMenu ?? asSecondary(onLongPress);
+    final VoidCallback? onHold = hasMenu
+        ? (onMenu == null ? null : () => onMenu(null))
+        : onLongPress;
+    final void Function(Offset)? onSecondaryTap = hasMenu
+        ? onMenu
+        : asSecondary(onLongPress);
     final trailing =
         this.trailing ??
         (this.onMenu == null ? null : _MenuButton(onMenu: onMenu));
