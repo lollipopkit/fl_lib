@@ -119,6 +119,12 @@ abstract final class ThemeBackup {
     if (raw['store'] case final store?) {
       final item = ThemeStoreItem.fromJson(store);
       if (item == null) throw const FormatException('Invalid store reference');
+      // The release this entry is: its digest is the installation id, and its
+      // listing the theme the entry names. Any other is a different theme
+      // that the restore would record as this one.
+      if (item.release?.sha256 != id || item.listing.id != raw['id']) {
+        throw const FormatException('The store reference is another theme');
+      }
       return ThemeRepos.install(item, rootDirectory: rootDirectory);
     }
     final Uint8List bytes;
@@ -137,7 +143,14 @@ abstract final class ThemeBackup {
       }
       bytes = shipped;
     } else if (raw['fsbt'] case final String encoded) {
+      // Bounded before decoding: an export carries at most [maxEmbeddedBytes].
+      if (encoded.length > (maxEmbeddedBytes + 2) ~/ 3 * 4) {
+        throw const FormatException('The embedded package is too large');
+      }
       bytes = base64Decode(encoded);
+      if (sha256.convert(bytes).toString() != id) {
+        throw const FormatException('The embedded package is another theme');
+      }
     } else {
       // Listed so the restore can say it is missing; see the class doc.
       throw const FormatException('The backup does not carry this theme');

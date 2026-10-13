@@ -113,6 +113,32 @@ void main() {
     expect(item.release?.sha256, digest);
   });
 
+  test('an entry carrying another theme than it names is refused', () async {
+    final bytes = _fsbt();
+    final digest = sha256.convert(bytes).toString();
+    final swapped = _fsbt(id: 'example.other', name: 'Other');
+    final otherDigest = sha256.convert(swapped).toString();
+    final listing = ThemeListing.parse(
+      'id = "example.other"\nname = "Other"\n'
+      '[[version]]\nversion = "1.0.0"\nschema_min = 1\nschema_max = 1\n'
+      'url = "https://example.org/other.fsbt"\nsha256 = "$otherDigest"\n',
+      'themes/example.other.toml',
+    );
+    final store = ThemeStoreItem(repo: 'example', listing: listing, release: listing.releases.single);
+
+    final report = await ThemeBackup.restore({
+      // A store release of another theme, under this one's id and digest.
+      digest: {'id': 'example.amethyst', 'name': 'Amethyst', 'store': store.toJson()},
+      // Another package's bytes under this one's digest.
+      '0' * 64: {'id': 'example.amethyst', 'name': 'Swapped', 'fsbt': base64Encode(swapped)},
+      // More than an export ever embeds, refused before it is decoded.
+      '1' * 64: {'id': 'example.amethyst', 'name': 'Huge', 'fsbt': 'A' * (ThemeBackup.maxEmbeddedBytes * 2)},
+    }, rootDirectory: other.path);
+    expect(report.failed, unorderedEquals(['Amethyst', 'Swapped', 'Huge']));
+    expect(report.installedAs, isEmpty);
+    expect(ThemePackages.listInstalled(rootDirectory: other.path), isEmpty);
+  });
+
   test('a theme with nothing to carry it is named as left out', () async {
     final theme = await ThemePackages.install(
       _fsbt(),
