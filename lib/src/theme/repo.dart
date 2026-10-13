@@ -24,7 +24,6 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart'
@@ -33,7 +32,8 @@ import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:fl_lib/src/theme/package.dart';
 
-import 'package:toml/toml.dart';
+import 'package:fl_lib/src/rust/api/theme.dart';
+import 'package:fl_lib/src/theme/rust.dart';
 import 'package:fl_lib/src/theme/host.dart';
 
 /// Where a theme's file lives, and which theme a path is for.
@@ -119,6 +119,7 @@ final class ThemeRepoCatalog {
   static Future<ThemeRepoCatalog> bundled({AssetBundle? bundle}) async {
     final asset = ThemeHost.current.catalogAsset;
     if (asset == null) return const ThemeRepoCatalog(repos: []);
+    await ThemeRust.ensureInitialized();
     final data = await (bundle ?? rootBundle).load(asset);
     return parse(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
@@ -130,55 +131,22 @@ final class ThemeRepoCatalog {
   /// [base] resolves a relative `url`, which is what a catalog listing a
   /// repository beside itself would write.
   static ThemeRepoCatalog parse(List<int> bytes, {Uri? base}) {
-    if (bytes.length > ThemeRepos.maxCatalogBytes) {
-      throw const ThemeRepoError('the catalog is larger than this app reads');
-    }
-    final Map<String, dynamic> raw;
-    try {
-      raw = TomlDocument.parse(utf8.decode(bytes)).toMap();
-    } catch (e) {
-      throw ThemeRepoError('the catalog is not readable TOML: $e');
-    }
-
-    final announced = raw['schema'];
-    if (announced is! int) {
-      throw const ThemeRepoError('the catalog names no schema version');
-    }
-    if (announced > schema) {
-      throw ThemeRepoError(
-        'this catalog is schema v$announced and this app reads v$schema',
-      );
-    }
-
-    final rows = raw['repo'];
-    if (rows is! List || rows.length > maxRepos) {
-      throw const ThemeRepoError('the catalog lists no readable repository');
-    }
-
-    final repos = <ThemeRepoRef>[];
-    for (final row in rows) {
-      if (row is! Map) throw const ThemeRepoError('Invalid catalog entry');
-      final url = row['url'];
-      if (url is! String || url.trim().isEmpty) {
-        throw const ThemeRepoError('a catalog entry names no url');
-      }
-      final Uri resolved;
-      try {
-        resolved = ThemePackages.httpsUri(
-          (base ?? Uri()).resolve(url.trim()).toString(),
-        );
-      } on FormatException catch (e) {
-        throw ThemeRepoError('${e.message}: $url');
-      }
-      final ref = ThemeRepoRef(resolved);
-      // Listed twice is harmless and reading it twice is not free.
-      if (!repos.contains(ref)) repos.add(ref);
-    }
-
-    return ThemeRepoCatalog(
-      name: raw['name'] is String ? raw['name'] as String : null,
-      repos: repos,
+    final catalog = _repoCall(
+      () => parseThemeCatalog(bytes: bytes, base: base?.toString()),
     );
+    return ThemeRepoCatalog(
+      name: catalog.name,
+      repos: [for (final url in catalog.repos) ThemeRepoRef(Uri.parse(url))],
+    );
+  }
+}
+
+/// A repository refused in `fl_theme`'s words, as this side has always thrown it.
+T _repoCall<T>(T Function() run) {
+  try {
+    return run();
+  } on ThemeFailure catch (e) {
+    throw ThemeRepoError(e.message);
   }
 }
 
@@ -225,46 +193,6 @@ final class ThemeRelease {
 
   /// Whether this app can read the manifest inside it.
   bool runsOn(int min, int max) => schemaMax >= min && schemaMin <= max;
-
-  /// Reads one `[[version]]` table, or null when it is not usable.
-  ///
-  /// Null rather than throwing: one unreadable version costs that version,
-  /// where a throw would cost the whole theme.
-  static ThemeRelease? fromToml(Object? raw) {
-    if (raw is! Map) return null;
-    final version = raw['version'];
-    if (version is! String || version.trim().isEmpty) return null;
-    final min = raw['schema_min'];
-    final max = raw['schema_max'];
-    if (min is! int || max is! int || min > max) return null;
-
-    final url = raw['url'];
-    final path = raw['path'];
-    final hasUrl = url is String && url.isNotEmpty;
-    final hasPath = path is String && path.isNotEmpty;
-    // Exactly one. Both would leave the reader choosing, and the two can
-    // disagree about which bytes this version is.
-    if (hasUrl == hasPath) return null;
-    // A path that climbs out of the repository, which is the archive attack in
-    // its other clothes: the entry it would name is not one the tree put there.
-    if (hasPath && (path.startsWith('/') || path.split('/').contains('..'))) {
-      return null;
-    }
-
-    final digest = raw['sha256'];
-    return ThemeRelease(
-      version: version.trim(),
-      schemaMin: min,
-      schemaMax: max,
-      url: hasUrl ? url : null,
-      path: hasPath ? path : null,
-      sha256: digest is String && digest.isNotEmpty
-          ? digest.toLowerCase()
-          : null,
-      size: raw['size'] is int ? raw['size'] as int : null,
-      notes: raw['notes'] is String ? raw['notes'] as String : null,
-    );
-  }
 
   /// This release as the store cache writes it.
   Map<String, dynamic> toJson() => {
@@ -436,39 +364,9 @@ final class ThemeListing {
   ///
   /// [path] is where it was found, and it is checked: a file declaring an id
   /// its path does not agree with is refused.
-  static ThemeListing parse(String text, String path) {
-    final Map<String, dynamic> raw;
-    try {
-      raw = TomlDocument.parse(text).toMap();
-    } catch (e) {
-      throw ThemeRepoError('$path is not readable TOML: $e');
-    }
-
-    final id = raw['id'];
-    if (id is! String || id.isEmpty) throw ThemeRepoError('$path names no id');
-    final expected = ThemeRepoLayout.idOf(path);
-    if (expected != null && expected != id) {
-      throw ThemeRepoError('$path says it is $id, and its path says $expected');
-    }
-
-    final releases = <ThemeRelease>[
-      for (final v in (raw['version'] as List? ?? const []))
-        ?ThemeRelease.fromToml(v),
-    ];
-    // A listing with nothing installable is not a listing.
-    if (releases.isEmpty) {
-      throw ThemeRepoError('$path offers no readable version');
-    }
-
-    return ThemeListing(
-      id: id,
-      name: raw['name'] is String ? raw['name'] as String : id,
-      description: ThemeText.parse(raw['description']),
-      homepage: raw['homepage'] is String ? raw['homepage'] as String : null,
-      license: raw['license'] is String ? raw['license'] as String : null,
-      releases: releases,
-    );
-  }
+  static ThemeListing parse(String text, String path) => ThemeListing.fromJson(
+    jsonDecode(_repoCall(() => parseThemeListing(text: text, path: path))),
+  )!;
 
   /// This listing as the store cache writes it.
   ///
@@ -489,9 +387,10 @@ final class ThemeListing {
     if (raw is! Map) return null;
     final id = raw['id'];
     if (id is! String || id.isEmpty) return null;
+    final listed = raw['releases'];
+    if (listed is! List) return null;
     final releases = <ThemeRelease>[
-      for (final r in (raw['releases'] as List? ?? const []))
-        ?ThemeRelease.fromJson(r),
+      for (final r in listed) ?ThemeRelease.fromJson(r),
     ];
     // The same rule the file is held to: a listing with nothing installable is
     // not a listing.
@@ -537,45 +436,21 @@ final class ThemeRepoIndex {
   /// A section that is not `themes/` is skipped, not refused: the same tree may
   /// carry a `plugins/` section this build has no business reading.
   static ThemeRepoIndex fromFiles(Map<String, Uint8List> files) {
-    final repo = files[repoFile];
-    if (repo == null) {
-      throw const ThemeRepoError('no repo.toml, so this is not a repository');
-    }
-
-    final Map<String, dynamic> raw;
-    try {
-      raw = TomlDocument.parse(utf8.decode(repo)).toMap();
-    } catch (e) {
-      throw ThemeRepoError('repo.toml is not readable TOML: $e');
-    }
-    final announced = raw['schema'];
-    if (announced is! int) {
-      throw const ThemeRepoError('repo.toml names no schema version');
-    }
-    if (announced > ThemeRepoCatalog.schema) {
-      throw ThemeRepoError(
-        'this repository is schema v$announced and this app reads '
-        'v${ThemeRepoCatalog.schema}',
-      );
-    }
-
-    final themes = <ThemeListing>[];
-    for (final path in files.keys.toList()..sort()) {
-      if (ThemeRepoLayout.idOf(path) == null) continue;
-      try {
-        themes.add(ThemeListing.parse(utf8.decode(files[path]!), path));
-      } catch (e) {
-        Loggers.app.warning('Reading the theme file $path', e);
-      }
-    }
-
+    final tree = _repoCall(
+      () => readThemeRepo(
+        files: [
+          for (final MapEntry(key: path, value: bytes) in files.entries)
+            ThemeFile(path: path, bytes: bytes),
+        ],
+      ),
+    );
     return ThemeRepoIndex(
-      themes: themes,
-      name: raw['name'] is String ? raw['name'] as String : null,
-      packages: {
-        for (final e in files.entries)
-          if (e.key.startsWith(ThemeRepoLayout.packagesDir)) e.key: e.value,
-      },
+      themes: [
+        for (final raw in jsonDecode(tree.listings) as List)
+          ?ThemeListing.fromJson(raw),
+      ],
+      name: tree.name,
+      packages: {for (final f in tree.packages) f.path: f.bytes},
     );
   }
 }
@@ -733,8 +608,11 @@ final class ThemeStore {
       return null;
     }
 
+    final listed = raw['items'];
+    final labels = raw['repos'] ?? const [];
+    if (listed is! List || labels is! List) return null;
     final items = <ThemeStoreItem>[];
-    for (final item in (raw['items'] as List? ?? const [])) {
+    for (final item in listed) {
       final read = ThemeStoreItem.fromJson(item);
       if (read == null) return null;
       items.add(read);
@@ -743,7 +621,7 @@ final class ThemeStore {
     return ThemeStore(
       items: items,
       repos: [
-        for (final label in (raw['repos'] as List? ?? const []))
+        for (final label in labels)
           if (label is String) label,
       ],
       catalogUrl: catalogUrl,
@@ -778,16 +656,8 @@ abstract final class ThemeRepos {
   /// default is not this app's to guess. An address that already names an
   /// archive is taken as it is, so a repository served from anywhere can be
   /// used by pointing straight at it.
-  static String archiveUrlOf(String address) {
-    final trimmed = address.trim();
-    if (RegExp(r'\.(tar\.gz|tgz)$', caseSensitive: false).hasMatch(trimmed)) {
-      return trimmed;
-    }
-    final base = trimmed
-        .replaceAll(RegExp(r'/+$'), '')
-        .replaceAll(RegExp(r'\.git$', caseSensitive: false), '');
-    return '$base/archive/HEAD.tar.gz';
-  }
+  static String archiveUrlOf(String address) =>
+      themeRepoArchiveUrl(address: address);
 
   /// Unpacks a repository's tree into its files, by path.
   ///
@@ -803,54 +673,17 @@ abstract final class ThemeRepos {
   /// Separate and static so a test can hand it bytes: everything interesting
   /// about this is what it refuses.
   @visibleForTesting
-  static Map<String, Uint8List> readArchive(List<int> bytes) {
-    final Archive archive;
-    try {
-      // The gunzip is bounded as it is written, not after: `maxUnpackedBytes`
-      // is about the files the tar holds and cannot be measured until all of it
-      // is in memory, which is the state a compressed input 16 MiB of which can
-      // be built to never leave.
-      final output = BoundedOutputStream(maxTarBytes);
-      const GZipDecoder().decodeStream(
-        InputMemoryStream(Uint8List.fromList(bytes)),
-        output,
-      );
-      archive = TarDecoder().decodeBytes(output.getBytes());
-    } on OutputLimitExceeded {
-      throw const ThemeRepoError('the repository unpacks to too much');
-    } catch (e) {
-      throw ThemeRepoError('the repository is not a readable .tar.gz: $e');
-    }
-
-    final files = <String, Uint8List>{};
-    var total = 0;
-    for (final file in archive) {
-      if (!file.isFile) continue;
-      final name = _safeName(file.name);
-      // A name that escapes the tree, the classic archive attack. It matters
-      // even though nothing here unpacks to disk: a path with `..` in it could
-      // name a theme file position it has no right to.
-      if (name == null) {
-        throw ThemeRepoError('unsafe path in the repository: ${file.name}');
-      }
-      if (file.size > maxEntryBytes) {
-        throw ThemeRepoError('$name is larger than $maxEntryBytes bytes');
-      }
-      total += file.size;
-      if (total > maxUnpackedBytes) {
-        throw const ThemeRepoError('the repository unpacks to too much');
-      }
-      files[name] = file.content;
-    }
-
-    return _stripTopDirectory(files);
-  }
+  static Map<String, Uint8List> readArchive(List<int> bytes) => {
+    for (final f in _repoCall(() => readThemeRepoArchive(bytes: bytes)))
+      f.path: f.bytes,
+  };
 
   /// Reads the repository at [address].
   ///
   /// Plain HTTP is refused: a repository decides which bytes get installed, so
   /// a plaintext one is a package chosen by whoever is on the path.
   static Future<ThemeRepoIndex> index(String address) async {
+    await ThemeRust.ensureInitialized();
     final bytes = await ThemePackages.download(
       archiveUrlOf(address),
       maxBytes: maxArchiveBytes,
@@ -868,6 +701,7 @@ abstract final class ThemeRepos {
   /// catalog is a list of other people's addresses, and the shakiest of them
   /// should not be what decides whether the rest are reachable.
   static Future<ThemeStore> store(String catalogUrl, {AssetBundle? bundle}) async {
+    await ThemeRust.ensureInitialized();
     ThemeRepoCatalog catalog;
     try {
       catalog = ThemeRepoCatalog.parse(
@@ -954,6 +788,7 @@ abstract final class ThemeRepos {
     ThemeStoreItem item, {
     String? rootDirectory,
   }) async {
+    await ThemeRust.ensureInitialized();
     final release = item.release;
     if (release == null) {
       throw const ThemeRepoError('that version needs a newer app');
@@ -1007,28 +842,6 @@ abstract final class ThemeRepos {
     throw missing;
   }
 
-  /// The path a name is read as, or null when it escapes the tree or is not a
-  /// path at all.
-  static String? _safeName(String name) {
-    final parts = [for (final p in name.split('/')) if (p.isNotEmpty) p];
-    if (parts.isEmpty) return null;
-    if (parts.any((p) => p == '.' || p == '..')) return null;
-    return parts.join('/');
-  }
-
-  /// Drops the one directory a source tarball wraps everything in
-  /// (`owner-repo-sha/`), which is the only thing a hosting service adds to a
-  /// tree. A single-file repository has no wrapper to drop.
-  static Map<String, Uint8List> _stripTopDirectory(Map<String, Uint8List> files) {
-    if (files.isEmpty) return files;
-    final first = files.keys.first.split('/').first;
-    if (!files.keys.every((k) => k.startsWith('$first/'))) return files;
-    return {
-      for (final e in files.entries)
-        if (e.key.length > first.length + 1)
-          e.key.substring(first.length + 1): e.value,
-    };
-  }
 }
 
 /// Comparing `1.10.0` against `1.9.0`.
@@ -1037,32 +850,7 @@ abstract final class ThemeRepos {
 /// before `1.9` — which would pin every install to whichever version happens to
 /// sort last.
 abstract final class ThemeVersion {
-  static int compare(String a, String b) {
-    final left = _parts(a);
-    final right = _parts(b);
-    for (var i = 0; i < 3; i++) {
-      final d =
-          (left.length > i ? left[i] : 0) - (right.length > i ? right[i] : 0);
-      if (d != 0) return d < 0 ? -1 : 1;
-    }
-    // Same numbers. A build with a suffix (`1.0.0-beta`) sorts *below* the one
-    // without, which is what a pre-release is.
-    final sa = _suffix(a);
-    final sb = _suffix(b);
-    if (sa.isEmpty && sb.isEmpty) return 0;
-    if (sa.isEmpty) return 1;
-    if (sb.isEmpty) return -1;
-    return sa.compareTo(sb);
-  }
-
-  static List<int> _parts(String v) => [
-    for (final p in v.split('-').first.split('.')) int.tryParse(p.trim()) ?? 0,
-  ];
-
-  static String _suffix(String v) {
-    final at = v.indexOf('-');
-    return at < 0 ? '' : v.substring(at + 1);
-  }
+  static int compare(String a, String b) => compareThemeVersions(a: a, b: b);
 }
 
 class ThemeRepoError implements Exception {

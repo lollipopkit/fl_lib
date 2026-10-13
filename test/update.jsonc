@@ -77,7 +77,7 @@
         // Its value won't be formatted with any params. Put the params in the `suffix`.
         // Its keys are RES.
         "base": {
-            "beta": "https://cdn.lolli.tech/gptbox/",
+            "beta": "https://cdn.lollipopkit.com/gptbox/",
             "macos": "https://apps.apple.com/app/id6476033062",
             "ios": "https://apps.apple.com/app/id6476033062",
             "stable": "https://github.com/lollipopkit/flutter_gpt_box/releases/download/"
@@ -98,7 +98,7 @@
         // Its keys are RES.
         "overrides": {
             // It's only used for testing! iOS doesn't support the `beta` channel.
-            "beta-ios": "https://cdn.lolli.tech/logo.png"
+            "beta-ios": "https://cdn.lollipopkit.com/logo.png"
         },
         // Hotfix
         // Reserved for future use

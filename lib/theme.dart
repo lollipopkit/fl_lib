@@ -14,6 +14,7 @@ export 'src/theme/host.dart';
 export 'src/theme/package.dart';
 export 'src/theme/palette.dart';
 export 'src/theme/repo.dart';
+export 'src/theme/rust.dart';
 export 'src/theme/settings.dart';
 export 'src/theme/sort.dart';
 export 'src/theme/stored_path.dart';

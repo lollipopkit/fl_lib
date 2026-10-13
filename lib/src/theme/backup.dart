@@ -100,7 +100,7 @@ abstract final class ThemeBackup {
         continue;
       }
       try {
-        final theme = await _install(raw, rootDirectory, bundle ?? rootBundle);
+        final theme = await _install(id, raw, rootDirectory, bundle ?? rootBundle);
         installedAs[id] = theme.installationId;
       } catch (error, stack) {
         Loggers.app.warning('Restoring theme $name', error, stack);
@@ -111,6 +111,7 @@ abstract final class ThemeBackup {
   }
 
   static Future<ThemePackage> _install(
+    String id,
     Map<Object?, Object?> raw,
     String? rootDirectory,
     AssetBundle bundle,
@@ -118,16 +119,38 @@ abstract final class ThemeBackup {
     if (raw['store'] case final store?) {
       final item = ThemeStoreItem.fromJson(store);
       if (item == null) throw const FormatException('Invalid store reference');
+      // The release this entry is: its digest is the installation id, and its
+      // listing the theme the entry names. Any other is a different theme
+      // that the restore would record as this one.
+      if (item.release?.sha256 != id || item.listing.id != raw['id']) {
+        throw const FormatException('The store reference is another theme');
+      }
       return ThemeRepos.install(item, rootDirectory: rootDirectory);
     }
     final Uint8List bytes;
     if (raw['bundled'] case final String manifestId) {
       final dir = ThemeHost.current.bundledThemesDir;
-      if (dir == null) throw const FormatException('No bundled themes');
-      final data = await bundle.load('$dir$manifestId.fsbt');
-      bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      final shipped = dir == null ? null : await _bundledBytes(bundle, '$dir$manifestId.fsbt');
+      if (shipped == null) {
+        // An app that stopped shipping it: the same bytes are a store
+        // release, found by their digest (the installation id).
+        // TODO: remove once no backup names a bundled theme.
+        final catalog = ThemeHost.current.catalogUrl;
+        if (catalog == null) throw const FormatException('No bundled themes');
+        final item = _storeItemFor(await ThemeRepos.store(catalog, bundle: bundle), id);
+        if (item == null) throw const FormatException('No longer bundled, and not in the store');
+        return ThemeRepos.install(item, rootDirectory: rootDirectory);
+      }
+      bytes = shipped;
     } else if (raw['fsbt'] case final String encoded) {
+      // Bounded before decoding: an export carries at most [maxEmbeddedBytes].
+      if (encoded.length > (maxEmbeddedBytes + 2) ~/ 3 * 4) {
+        throw const FormatException('The embedded package is too large');
+      }
       bytes = base64Decode(encoded);
+      if (sha256.convert(bytes).toString() != id) {
+        throw const FormatException('The embedded package is another theme');
+      }
     } else {
       // Listed so the restore can say it is missing; see the class doc.
       throw const FormatException('The backup does not carry this theme');
@@ -174,6 +197,15 @@ abstract final class ThemeBackup {
       }
     }
     return null;
+  }
+
+  static Future<Uint8List?> _bundledBytes(AssetBundle bundle, String path) async {
+    try {
+      final data = await bundle.load(path);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// The installation id each bundled package installs as, to its manifest id.

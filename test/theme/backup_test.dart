@@ -7,7 +7,9 @@
 /// version of a theme is not replaced by an older one from the backup.
 library;
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
@@ -111,6 +113,32 @@ void main() {
     expect(item.release?.sha256, digest);
   });
 
+  test('an entry carrying another theme than it names is refused', () async {
+    final bytes = _fsbt();
+    final digest = sha256.convert(bytes).toString();
+    final swapped = _fsbt(id: 'example.other', name: 'Other');
+    final otherDigest = sha256.convert(swapped).toString();
+    final listing = ThemeListing.parse(
+      'id = "example.other"\nname = "Other"\n'
+      '[[version]]\nversion = "1.0.0"\nschema_min = 1\nschema_max = 1\n'
+      'url = "https://example.org/other.fsbt"\nsha256 = "$otherDigest"\n',
+      'themes/example.other.toml',
+    );
+    final store = ThemeStoreItem(repo: 'example', listing: listing, release: listing.releases.single);
+
+    final report = await ThemeBackup.restore({
+      // A store release of another theme, under this one's id and digest.
+      digest: {'id': 'example.amethyst', 'name': 'Amethyst', 'store': store.toJson()},
+      // Another package's bytes under this one's digest.
+      '0' * 64: {'id': 'example.amethyst', 'name': 'Swapped', 'fsbt': base64Encode(swapped)},
+      // More than an export ever embeds, refused before it is decoded.
+      '1' * 64: {'id': 'example.amethyst', 'name': 'Huge', 'fsbt': 'A' * (ThemeBackup.maxEmbeddedBytes * 2)},
+    }, rootDirectory: other.path);
+    expect(report.failed, unorderedEquals(['Amethyst', 'Swapped', 'Huge']));
+    expect(report.installedAs, isEmpty);
+    expect(ThemePackages.listInstalled(rootDirectory: other.path), isEmpty);
+  });
+
   test('a theme with nothing to carry it is named as left out', () async {
     final theme = await ThemePackages.install(
       _fsbt(),
@@ -158,6 +186,45 @@ void main() {
       ThemePackages.installed(local.installationId, rootDirectory: other.path),
       isNotNull,
     );
+  });
+
+  test('a theme the app no longer ships is looked for in the store', () async {
+    // This host ships no themes and names no store: nothing to bring it from,
+    // so it is said rather than thrown.
+    final report = await ThemeBackup.restore({
+      'a' * 64: {'id': 'example.piggy', 'name': 'Piggy', 'bundled': 'example.piggy'},
+    }, rootDirectory: other.path);
+    expect(report.failed, ['Piggy']);
+    expect(report.installedAs, isEmpty);
+  });
+
+  test('a theme the app no longer ships comes back from the store', () async {
+    // The release the app shipped, now only in the store: found by its digest.
+    final bytes = Uint8List.fromList(_fsbt(id: 'example.piggy', name: 'Piggy'));
+    final digest = sha256.convert(bytes).toString();
+    final listing = 'id = "example.piggy"\nname = "Piggy"\n[[version]]\nversion = "1.0.0"\n'
+        'schema_min = 1\nschema_max = 1\nurl = "https://example.org/piggy.fsbt"\n'
+        'sha256 = "$digest"\nsize = ${bytes.length}\n';
+    final tree = Archive()
+      ..add(ArchiveFile.string('repo.toml', 'schema = 1\nname = "Official"\n'))
+      ..add(ArchiveFile.string('themes/example.piggy.toml', listing));
+    final files = {
+      'https://catalog.example/repos.toml': utf8.encode('schema = 1\nname = "Test"\n[[repo]]\nurl = "https://example.org/store.tar.gz"\n'),
+      'https://example.org/store.tar.gz': const GZipEncoder().encode(TarEncoder().encode(tree)),
+      'https://example.org/piggy.fsbt': bytes,
+    };
+    ThemePackages.debugFetch = (uri) async => Uint8List.fromList(files[uri.toString()] ?? (throw HttpException('404', uri: uri)));
+    initTestThemeHost(catalogUrl: 'https://catalog.example/repos.toml');
+    addTearDown(() {
+      ThemePackages.debugFetch = null;
+      initTestThemeHost();
+    });
+
+    final report = await ThemeBackup.restore({
+      digest: {'id': 'example.piggy', 'name': 'Piggy', 'bundled': 'example.piggy'},
+    }, rootDirectory: other.path);
+    expect(report.failed, isEmpty);
+    expect(report.installedAs, {digest: digest});
   });
 
   test('an entry this build cannot read is reported, not skipped', () async {

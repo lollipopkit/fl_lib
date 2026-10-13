@@ -39,11 +39,12 @@ final testIcons = ThemeIcons(
 );
 
 /// The host these tests run under: see `flutter_test_config.dart`.
-void initTestThemeHost({ThemePreviewContent? preview}) => ThemeHost.init(
+void initTestThemeHost({ThemePreviewContent? preview, String? catalogUrl}) => ThemeHost.init(
   ThemeHost(
     store: () => testThemeStore,
     appName: 'fl_lib',
     icons: testIcons,
     preview: preview,
+    catalogUrl: catalogUrl,
   ),
 );

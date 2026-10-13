@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:fl_lib/fl_lib.dart';
+import 'package:fl_lib/src/rust/api/theme.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fl_lib/src/theme/palette.dart';
-import 'package:fl_lib/src/theme/style.dart';
 
 /// `[layout] density`: how tightly the app's controls are packed.
 enum ThemeDensity {
@@ -51,13 +53,31 @@ enum ThemeFieldKind {
 /// Also carries the package's `[layout]`, which is read with the components and
 /// applied with them.
 final class ThemeComponents {
-  const ThemeComponents.empty() : _data = const {}, density = null;
-  const ThemeComponents._(this._data, this.density);
+  const ThemeComponents.empty()
+    : _data = const {},
+      density = null,
+      neededSchema = 1;
+  const ThemeComponents._(this._data, this.density, this.neededSchema);
+
+  /// Tables `fl_theme` already checked: an installed theme's, read back.
+  factory ThemeComponents.checked(
+    Map<String, dynamic> data, {
+    String? density,
+    required int neededSchema,
+  }) => ThemeComponents._(
+    data,
+    density == null ? null : ThemeDensity.values.byName(density),
+    neededSchema,
+  );
 
   final Map<String, dynamic> _data;
 
   /// `[layout] density`, or null for the platform's own.
   final ThemeDensity? density;
+
+  /// The schema version these tables need: 3 once anything beyond schema 2's
+  /// fields is used, or `[layout]` (`fl_theme` decides).
+  final int neededSchema;
 
   static const _c = ThemeFieldKind.color;
   static const _r = ThemeFieldKind.radius;
@@ -243,129 +263,29 @@ final class ThemeComponents {
   /// The top-level `[layout]` fields.
   static const layoutFields = {'density'};
 
-  /// The schema version the parsed tables need: 3 once anything beyond
-  /// [schema2] is used, or `[layout]`.
-  int get neededSchema {
-    if (density != null) return 3;
-    bool within(String name, Map<String, dynamic> table) {
-      final allowed = schema2[name];
-      if (allowed == null) return false;
-      return table.entries.every((e) {
-        if (name == 'button' && states.contains(e.key)) {
-          return (e.value as Map<String, dynamic>).keys.every(allowed.contains);
-        }
-        return allowed.contains(e.key);
-      });
-    }
 
-    for (final entry in _data.entries) {
-      final value = entry.value as Map<String, dynamic>;
-      if (brightnessByName(entry.key) != null) {
-        if (!value.entries.every((e) => within(e.key, e.value as Map<String, dynamic>))) {
-          return 3;
-        }
-      } else if (!within(entry.key, value)) {
-        return 3;
-      }
-    }
-    return 1;
-  }
-
+  /// Checks `[components]` and `[layout]` (`fl_theme`, in Rust), or throws a
+  /// [FormatException] in the installer's words.
   static ThemeComponents parse(Object? raw, {Object? layout}) {
-    final density = _density(layout);
-    if (raw == null) {
-      return density == null
-          ? const ThemeComponents.empty()
-          : ThemeComponents._(const {}, density);
+    if (raw == null && layout == null) return const ThemeComponents.empty();
+    final String answer;
+    try {
+      answer = checkThemeComponents(
+        components: raw == null ? null : jsonEncode(raw),
+        layout: layout == null ? null : jsonEncode(layout),
+      );
+    } on ThemeFailure catch (e) {
+      throw FormatException(e.message);
+    } on JsonUnsupportedObjectError {
+      throw const FormatException('Invalid component table');
     }
-    Map<String, dynamic> table(Object? value) {
-      if (value is! Map<String, dynamic>) {
-        throw const FormatException('Invalid component table');
-      }
-      return value;
-    }
-
-    Map<String, dynamic> component(
-      String name,
-      Object? raw, {
-      bool state = false,
-    }) {
-      final allowed = kinds[name];
-      if (allowed == null) throw FormatException('Unknown component: $name');
-      final result = <String, dynamic>{};
-      for (final entry in table(raw).entries) {
-        final key = entry.key;
-        final value = entry.value;
-        if (stateful.contains(name) && !state && states.contains(key)) {
-          result[key] = component(name, value, state: true);
-          continue;
-        }
-        final kind = allowed[key];
-        if (kind == null) throw FormatException('Unknown $name field: $key');
-        switch (kind) {
-          case ThemeFieldKind.color:
-            if (!(value is int && value >= 0 && value <= 0xffffffff) &&
-                !(value is String && ThemePalette.roles.contains(value))) {
-              throw FormatException('Invalid $name.$key color');
-            }
-          case ThemeFieldKind.flag:
-            if (value is! bool) throw FormatException('Invalid $name.$key flag');
-          case ThemeFieldKind.inset:
-            if (value is! List ||
-                value.length != 4 ||
-                value.any(
-                  (v) => v is! num || !v.isFinite || v < 0 || v > maxInset,
-                )) {
-              throw FormatException('Invalid $name.$key insets');
-            }
-            result[key] = List<num>.unmodifiable(value.cast<num>());
-            continue;
-          case ThemeFieldKind.radius ||
-              ThemeFieldKind.borderWidth ||
-              ThemeFieldKind.elevation ||
-              ThemeFieldKind.size ||
-              ThemeFieldKind.thickness:
-            final max = switch (kind) {
-              ThemeFieldKind.borderWidth => maxBorderWidth,
-              ThemeFieldKind.elevation => maxElevation,
-              ThemeFieldKind.size => maxSize,
-              ThemeFieldKind.thickness => maxThickness,
-              _ => maxRadius,
-            };
-            if (value is! num || !value.isFinite || value < 0 || value > max) {
-              throw FormatException('Invalid $name.$key number');
-            }
-        }
-        result[key] = value;
-      }
-      return Map.unmodifiable(result);
-    }
-
-    Map<String, dynamic> group(Object? raw) => Map.unmodifiable({
-      for (final entry in table(raw).entries)
-        entry.key: component(entry.key, entry.value),
-    });
-    final data = <String, dynamic>{};
-    for (final entry in table(raw).entries) {
-      // A key of one of the two brightnesses opens a table of components;
-      // anything else is a component itself.
-      data[entry.key] = brightnessByName(entry.key) != null
-          ? group(entry.value)
-          : component(entry.key, entry.value);
-    }
-    return ThemeComponents._(Map.unmodifiable(data), density);
-  }
-
-  static ThemeDensity? _density(Object? raw) {
-    if (raw == null) return null;
-    if (raw is! Map<String, dynamic> || !raw.keys.every(layoutFields.contains)) {
-      throw const FormatException('Invalid layout table');
-    }
-    final value = raw['density'];
-    if (value == null) return null;
-    final density = ThemeDensity.values.asNameMap()[value];
-    if (density == null) throw const FormatException('Invalid layout density');
-    return density;
+    final checked = jsonDecode(answer) as Map<String, dynamic>;
+    final density = checked['density'] as String?;
+    return ThemeComponents._(
+      checked['components'] as Map<String, dynamic>,
+      density == null ? null : ThemeDensity.values.byName(density),
+      checked['neededSchema'] as int,
+    );
   }
 
   /// `[layout]` as the installed manifest carries it; null when empty.

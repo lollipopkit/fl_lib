@@ -2,16 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
-import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart'
     show AssetBundle, AssetManifest, rootBundle;
 import 'package:material_ui/material_ui.dart'
-    show Brightness, Color, ColorScheme, ThemeMode;
+    show Color, ColorScheme, ThemeMode;
 import 'package:fl_lib/src/theme/components.dart';
 import 'package:fl_lib/src/theme/palette.dart';
 
@@ -19,9 +17,9 @@ import 'package:fl_lib/src/theme/builtin.dart';
 
 import 'package:fl_lib/src/theme/style.dart';
 
-import 'package:toml/toml.dart';
-import 'package:xml/xml.dart' as xml;
 import 'package:fl_lib/src/theme/host.dart';
+import 'package:fl_lib/src/theme/rust.dart';
+import 'package:fl_lib/src/rust/api/theme.dart';
 
 /// The splash a package asks for: a background color, an optional logo beside
 /// the manifest, and how long the app stays behind it before fading out.
@@ -60,17 +58,6 @@ const _iconsDir = 'icons';
 /// variant carries in place of the package's files, and once installed, each
 /// variant as a complete theme.
 const _variantsDir = 'variants';
-
-/// One theme checked and ready to write: its normalized manifest, the files it
-/// installs (by their path once installed), and which of the package's files
-/// it used.
-final class _Prepared {
-  const _Prepared(this.profile, this.files, this.used);
-
-  final Map<String, dynamic> profile;
-  final Map<String, Uint8List> files;
-  final Set<String> used;
-}
 
 /// One of the themes a package carries under `[variants]`: `Trans` of the
 /// `Pride` package. Schema 3.
@@ -266,16 +253,17 @@ final class BuiltinThemeLoader {
         bytes.lengthInBytes,
       );
     }
-    final data = ThemePackages._decodeManifest(
-      utf8.decode(assets['manifest.toml'] ?? Uint8List(0)),
-    );
-    if (data['id'] != builtin.id || data['name'] != builtin.label) {
+    final prepared = await ThemeRust.prepareFiles(assets);
+    if (prepared.id != builtin.id || prepared.name != builtin.label) {
       throw const FormatException('Built-in theme metadata mismatch');
     }
-    return ThemePackages.installAssets(
-      assets,
-      rootDirectory: rootDirectory ?? ThemePackages.root.joinPath('builtin'),
+    final directory = rootDirectory ?? ThemePackages.root.joinPath('builtin');
+    final package = await ThemePackages._installPrepared(
+      prepared,
+      rootDirectory: directory,
     );
+    ThemePackages._removeUnreadable(directory);
+    return package;
   }
 }
 
@@ -448,6 +436,8 @@ abstract final class ThemePackages {
 
   static Future<void> prepareSelectedTheme() async {
     try {
+      // Every theme is read in Rust; nothing installed shows until it loads.
+      await ThemeRust.ensureInitialized();
       // TODO: Remove migration after legacy AMOLED mode settings age out.
       final legacyMode = ThemeHost.settings.themeMode.fetch();
       if (legacyMode == 3 || legacyMode == 4) {
@@ -535,7 +525,6 @@ abstract final class ThemePackages {
   /// The keys this app draws; see [ThemeIcons.keys].
   static Set<String> get iconKeys => ThemeHost.current.icons.keys;
 
-  static bool _isIconKey(String key) => iconKeyPattern.hasMatch(key);
 
   static String get root => Paths.doc.joinPath('themes');
 
@@ -551,11 +540,16 @@ abstract final class ThemePackages {
     return uri;
   }
 
+  /// What [download] answers with instead of the network: a test's files.
+  @visibleForTesting
+  static Future<Uint8List> Function(Uri uri)? debugFetch;
+
   static Future<Uint8List> download(
     String url, {
     int maxBytes = maxPackageBytes,
   }) async {
     var uri = httpsUri(url);
+    if (debugFetch case final fetch?) return fetch(uri);
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 15);
     try {
@@ -616,14 +610,11 @@ abstract final class ThemePackages {
     if (bytes.isEmpty || bytes.length > maxPackageBytes) {
       throw const FormatException('Invalid theme package size');
     }
-    final assets = _readArchive(bytes);
-    final installationId = sha256.convert(bytes).toString();
-    final package = await _installAssets(
-      assets,
-      installationId: installationId,
+    final package = await _installPrepared(
+      await ThemeRust.preparePackage(bytes),
       rootDirectory: rootDirectory,
     );
-    await _keepSource(rootDirectory ?? root, installationId, bytes);
+    await _keepSource(rootDirectory ?? root, package.installationId, bytes);
     return package;
   }
 
@@ -796,99 +787,25 @@ abstract final class ThemePackages {
   }
 
   /// Installs uncompressed assets from a local folder or the Flutter bundle.
+  ///
+  /// The installation id is a digest of every path and its bytes, so the same
+  /// files are the same installation however they were read (`fl_theme`).
   static Future<ThemePackage> installAssets(
     Map<String, Uint8List> assets, {
     String? rootDirectory,
-  }) async {
-    final manifest = assets['manifest.toml'];
-    if (manifest == null ||
-        manifest.isEmpty ||
-        manifest.length > _maxManifestBytes ||
-        assets.length > _maxAssets ||
-        assets.values.fold<int>(0, (sum, bytes) => sum + bytes.length) >
-            maxPackageBytes) {
-      throw const FormatException('Invalid theme assets');
-    }
-    final digestInput = BytesBuilder(copy: false);
-    for (final path in assets.keys.toList()..sort()) {
-      final name = utf8.encode(path);
-      final content = assets[path]!;
-      final nameLength = ByteData(4)..setUint32(0, name.length);
-      final contentLength = ByteData(4)..setUint32(0, content.length);
-      digestInput
-        ..add(nameLength.buffer.asUint8List())
-        ..add(name)
-        ..add(contentLength.buffer.asUint8List())
-        ..add(content);
-    }
-    return _installAssets(
-      assets,
-      installationId: sha256.convert(digestInput.takeBytes()).toString(),
-      rootDirectory: rootDirectory,
-    );
-  }
+  }) async => _installPrepared(
+    await ThemeRust.prepareFiles(assets),
+    rootDirectory: rootDirectory,
+  );
 
-  static Future<ThemePackage> _installAssets(
-    Map<String, Uint8List> assets, {
-    required String installationId,
+  /// Writes a theme `fl_theme` checked: [prepared]'s files, as they are laid
+  /// out once installed, into its installation directory, staged and moved in
+  /// whole so a failed write leaves nothing half installed.
+  static Future<ThemePackage> _installPrepared(
+    PreparedTheme prepared, {
     String? rootDirectory,
   }) async {
-    final data = _decodeManifest(utf8.decode(assets['manifest.toml']!));
-    if (data['format'] != 1 ||
-        data.containsKey('appIcon') ||
-        data.containsKey('font')) {
-      throw const FormatException('Unsupported theme package');
-    }
-    if (!data.keys.every(sections.contains)) {
-      throw const FormatException('Unknown theme section');
-    }
-    final (schemaMin, schemaMax) = _schemaRange(data['schema']);
-
-    // What the package's files were used for, by their path in the package: a
-    // file no theme in it draws is refused, as it always was.
-    final used = <String>{'manifest.toml'};
-    _Prepared? single;
-    final variants = <ThemeVariant, _Prepared>{};
-    if (data['variants'] case final Object raw) {
-      if (schemaMin < componentSchema) {
-        throw const FormatException('This theme needs schema $componentSchema');
-      }
-      final table = _map(raw, 'variants');
-      if (table.isEmpty || table.length > maxVariants) {
-        throw const FormatException('Invalid theme variants');
-      }
-      final base = {...data}..remove('variants');
-      for (final MapEntry(:key, :value) in table.entries) {
-        if (!variantKeyPattern.hasMatch(key)) {
-          throw const FormatException('Invalid variant key');
-        }
-        final overrides = _map(value, 'variant');
-        if (!overrides.keys.every(variantFields.contains)) {
-          throw const FormatException('Unknown variant field');
-        }
-        // One set of icon files for the package: a variant may tint them and
-        // pick the style, and names no files of its own.
-        if (overrides['icons'] case final Map<String, dynamic> icons
-            when icons.containsKey('images')) {
-          throw const FormatException('A variant cannot carry icon images');
-        }
-        final name = _label(overrides['name'], 'variant name');
-        final (view, origin) = _variantAssets(assets, key);
-        final prepared = await _prepare(
-          _merge(base, {...overrides}..remove('name')),
-          view,
-        );
-        used.addAll(prepared.used.map((path) => origin[path] ?? path));
-        variants[ThemeVariant(key, name)] = prepared;
-      }
-    } else {
-      single = await _prepare(data, assets);
-      used.addAll(single.used);
-    }
-    if (assets.keys.any((path) => !_isDirectoryEntry(path) && !used.contains(path))) {
-      throw const FormatException('Unexpected theme asset');
-    }
-
+    final installationId = prepared.installationId;
     final rootPath = rootDirectory ?? root;
     final directory = rootPath.joinPath(installationId);
     final existing = installed(installationId, rootDirectory: rootPath);
@@ -899,36 +816,20 @@ abstract final class ThemePackages {
     );
     await staging.create();
     try {
-      if (single != null) {
-        await _write(staging.path, single.profile, single.files);
-      } else {
-        // The package's own manifest names its variants; each is a complete
-        // installed theme of its own under `variants/<key>/`, read the way a
-        // package without variants is.
-        await _write(staging.path, {
-          'format': 1,
-          'schema': {'min': schemaMin, 'max': schemaMax},
-          'id': data['id'],
-          'name': data['name'],
-          'variants': [
-            for (final variant in variants.keys)
-              {'key': variant.key, 'name': variant.name},
-          ],
-        }, const {});
-        for (final MapEntry(key: variant, value: prepared) in variants.entries) {
-          await _write(
-            staging.path.joinPath(_variantsDir).joinPath(variant.key),
-            prepared.profile,
-            prepared.files,
-          );
-        }
+      for (final file in prepared.files) {
+        final target = File(staging.path.joinPath(file.path));
+        await target.parent.create(recursive: true);
+        await target.writeAsBytes(file.bytes, flush: true);
       }
       if (await Directory(directory).exists()) {
         await Directory(directory).delete(recursive: true);
       }
       await staging.rename(directory);
       _activeId = null;
-      final package = installed(installationId, rootDirectory: rootPath)!;
+      final package = installed(installationId, rootDirectory: rootPath);
+      if (package == null) {
+        throw const FormatException('Theme installed but unreadable');
+      }
       await _replaceOlder(package, rootDirectory: rootDirectory);
       installedChanged.value++;
       return package;
@@ -976,238 +877,6 @@ abstract final class ThemePackages {
     _activeId = null;
     _active = null;
   }
-
-  /// Checks one theme — a package, or one variant of one drawn over its base —
-  /// and answers the manifest and files it installs as.
-  static Future<_Prepared> _prepare(
-    Map<String, dynamic> data,
-    Map<String, Uint8List> assets,
-  ) async {
-    final (schemaMin, schemaMax) = _schemaRange(data['schema']);
-    final id = data['id'];
-    if (id is! String || !idPattern.hasMatch(id)) {
-      throw const FormatException('Invalid theme id');
-    }
-    final name = _label(data['name'], 'name');
-    final colors = _map(data['colors'], 'colors');
-    final mode = _integer(colors['mode'], 0, 2);
-    final modes = _themeModes(data['modes']);
-    final seed = _integer(colors['seed'], 0, 0xffffffff);
-    final systemColor = colors['systemColor'];
-    if (systemColor is! bool) throw const FormatException('Invalid color mode');
-    final palette = colors['palette'] == null
-        ? <String, dynamic>{}
-        : _map(colors['palette'], 'palette');
-    if (palette.keys.any((key) => brightnessByName(key) == null)) {
-      throw const FormatException('Invalid palette brightness');
-    }
-    final paletteLight = _palette(palette[Brightness.light.name]);
-    final paletteDark = _palette(palette[Brightness.dark.name]);
-    final components = ThemeComponents.parse(
-      data['components'],
-      layout: data['layout'],
-    );
-    final icons = _map(data['icons'], 'icons');
-    if (!icons.keys.every(iconFields.contains)) {
-      throw const FormatException('Unknown icon field');
-    }
-    final style = IconStyle.parse(icons['style']);
-    if (style == null) throw const FormatException('Invalid icon style');
-    final imageMap = icons['images'] == null
-        ? <String, dynamic>{}
-        : _map(icons['images'], 'icon images');
-    if (imageMap.length > _maxIcons ||
-        !imageMap.keys.every(_isIconKey)) {
-      throw const FormatException('Invalid icon keys');
-    }
-    final iconColors = _iconColors(
-      icons['colors'] == null
-          ? <String, dynamic>{}
-          : _map(icons['colors'], 'icon colors'),
-      imageMap.keys,
-    );
-    final splash = _splash(data['splash']);
-    final background = _map(data['background'], 'background');
-    if (!background.keys.every(backgroundFields.contains)) {
-      throw const FormatException('Unknown background field');
-    }
-    final backgroundStyle = BackgroundStyle.parse(background['type']);
-    if (backgroundStyle == null) {
-      throw const FormatException('Invalid background type');
-    }
-    final opacity = _fraction(background['opacity'], maxBackgroundOpacity);
-    final blur = _fraction(background['blur'], maxBackgroundBlur);
-    final backgroundTile = _backgroundTile(background, backgroundStyle);
-    final shapes = _map(data['shapes'], 'shapes');
-    final card = _fraction(shapes['card'], ThemeComponents.maxRadius);
-    final tile = _fraction(shapes['tile'], ThemeComponents.maxRadius);
-    final button = _fraction(shapes['button'], ThemeComponents.maxRadius);
-
-    final usedAssets = <String>{};
-    Uint8List? backgroundBytes;
-    if (backgroundStyle == BackgroundStyle.image) {
-      final path = background['image'];
-      if (!backgroundImages.contains(path)) {
-        throw const FormatException('Invalid background path');
-      }
-      usedAssets.add(path as String);
-      backgroundBytes = _imageAsset(assets, path, _maxBackgroundBytes);
-      await _verifyImage(
-        backgroundBytes,
-        maxDimension: 8192,
-        maxPixels: 64 * 1024 * 1024,
-      );
-    } else if (background.containsKey('image')) {
-      throw const FormatException('Unexpected background image');
-    }
-    final iconFiles = <String, String>{};
-    final iconBytes = <String, Uint8List>{};
-    for (final entry in imageMap.entries) {
-      final path = _iconAssetPath(entry.key, entry.value);
-      final name = path.substring('$_iconsDir/'.length);
-      usedAssets.add(path);
-      iconBytes[name] = path.endsWith('.svg')
-          ? _svgAsset(assets, path, _maxIconBytes)
-          : await _iconPng(assets, path, _maxIconBytes);
-      iconFiles[entry.key] = name;
-    }
-    Uint8List? splashLogoBytes;
-    if (splash?.logo case final logo?) {
-      usedAssets.add(logo);
-      if (logo.endsWith('.svg')) {
-        splashLogoBytes = _svgAsset(assets, logo, _maxSplashLogoBytes);
-      } else {
-        splashLogoBytes = _imageAsset(assets, logo, _maxSplashLogoBytes);
-        await _verifyImage(
-          splashLogoBytes,
-          maxDimension: 2048,
-          maxPixels: 2048 * 2048,
-        );
-      }
-    }
-    _requireFeatureSchema(
-      min: schemaMin,
-      iconFiles: iconFiles.values,
-      iconColors: iconColors,
-      splash: splash,
-      components: components,
-      backgroundTile: backgroundTile,
-    );
-
-    final files = <String, Uint8List>{
-      'background.img': ?backgroundBytes,
-      for (final entry in iconBytes.entries)
-        '$_iconsDir/${entry.key}': entry.value,
-    };
-    if (splash?.logo case final logo?) files[logo] = splashLogoBytes!;
-    final profile = {
-      'format': 1,
-      'schema': {'min': schemaMin, 'max': schemaMax},
-      'id': id,
-      'name': name,
-      'modes': modes.map((mode) => mode.name).toList(),
-      'components': components.toMap(),
-      'layout': ?components.layoutMap(),
-      'colors': {
-        'mode': mode,
-        'seed': seed,
-        'systemColor': systemColor,
-        'palette': {
-          Brightness.light.name: paletteLight,
-          Brightness.dark.name: paletteDark,
-        },
-      },
-      'icons': {
-        'style': style.name,
-        'images': iconFiles.keys.toList(),
-        if (iconColors.isNotEmpty) 'colors': iconColors,
-      },
-      'background': {
-        'type': backgroundStyle.name,
-        'opacity': opacity,
-        'blur': blur,
-        if (backgroundTile > 0) 'tile': backgroundTile,
-      },
-      'shapes': {'card': card, 'tile': tile, 'button': button},
-      if (splash != null)
-        'splash': {
-          'color': splash.color,
-          'duration': splash.duration,
-          if (splash.logo != null) 'logo': splash.logo,
-        },
-    };
-    return _Prepared(profile, files, usedAssets);
-  }
-
-  static Future<void> _write(
-    String directory,
-    Map<String, dynamic> profile,
-    Map<String, Uint8List> files,
-  ) async {
-    final normalized = TomlDocument.fromMap(profile).toString();
-    if (utf8.encode(normalized).length > _maxManifestBytes) {
-      throw const FormatException('Normalized manifest exceeds size limit');
-    }
-    await Directory(directory).create(recursive: true);
-    for (final MapEntry(key: path, value: bytes) in files.entries) {
-      final file = File(directory.joinPath(path));
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(bytes, flush: true);
-    }
-    await File(
-      directory.joinPath('manifest.toml'),
-    ).writeAsString(normalized, flush: true);
-  }
-
-  /// The files one variant sees: the package's own, with any the variant's
-  /// directory carries in their place — `variants/trans/background.png` is
-  /// the Trans variant's `background.png`. The second map says where each
-  /// replacement came from, so what the variant used is known by its path in
-  /// the package.
-  static (Map<String, Uint8List>, Map<String, String>) _variantAssets(
-    Map<String, Uint8List> assets,
-    String key,
-  ) {
-    final prefix = '$_variantsDir/$key/';
-    final view = <String, Uint8List>{
-      for (final MapEntry(key: path, value: bytes) in assets.entries)
-        if (!path.startsWith('$_variantsDir/')) path: bytes,
-    };
-    final origin = <String, String>{};
-    for (final MapEntry(key: path, value: bytes) in assets.entries) {
-      if (!path.startsWith(prefix) || path == prefix) continue;
-      final name = path.substring(prefix.length);
-      view[name] = bytes;
-      origin[name] = path;
-    }
-    return (view, origin);
-  }
-
-  /// [base] with [overrides] drawn over it: a table merges key by key, and
-  /// anything else — a number, a string, a list — replaces what was there.
-  static Map<String, dynamic> _merge(
-    Map<String, dynamic> base,
-    Map<String, dynamic> overrides,
-  ) => {
-    ...base,
-    for (final MapEntry(:key, :value) in overrides.entries)
-      key: switch ((base[key], value)) {
-        (final Map<String, dynamic> a, final Map<String, dynamic> b) =>
-          _merge(a, b),
-        _ => value,
-      },
-  };
-
-  /// A directory entry an archive may carry: `icons/`, `variants/` and
-  /// `variants/<key>/`.
-  static bool _isDirectoryEntry(String path) =>
-      path == '$_iconsDir/' ||
-      path == '$_variantsDir/' ||
-      (path.startsWith('$_variantsDir/') &&
-          path.endsWith('/') &&
-          variantKeyPattern.hasMatch(
-            path.substring(_variantsDir.length + 1, path.length - 1),
-          ));
 
   /// The preset value that selects one installed theme, and one of its
   /// variants when it has them: `package:<installation id>#<variant>`.
@@ -1265,23 +934,14 @@ abstract final class ThemePackages {
     String? rootDirectory,
   }) {
     if (!_digestPattern.hasMatch(installationId)) return null;
+    if (!ThemeRust.ready) return null;
     final directory = (rootDirectory ?? root).joinPath(installationId);
     try {
-      final file = File(directory.joinPath('manifest.toml'));
-      if (!file.existsSync() || file.lengthSync() > _maxManifestBytes) {
-        return null;
-      }
-      final data = _decodeManifest(file.readAsStringSync());
-      if (data['variants'] case final List<Object?> list) {
-        final variants = [
-          for (final raw in list)
-            if (raw case {
-              'key': final String key,
-              'name': final String name,
-            } when variantKeyPattern.hasMatch(key))
-              ThemeVariant(key, name),
-        ];
-        if (variants.isEmpty || variants.length != list.length) return null;
+      final manifest = _manifestAt(directory);
+      if (manifest == null) return null;
+      final listed = installedThemeVariants(manifest: manifest);
+      if (listed != null) {
+        final variants = [for (final v in listed) ThemeVariant(v.key, v.name)];
         final chosen =
             variants.where((v) => v.key == variant).firstOrNull ??
             variants.first;
@@ -1298,6 +958,17 @@ abstract final class ThemePackages {
     }
   }
 
+  /// The manifest an installation wrote, or null when there is none to read.
+  static String? _manifestAt(String directory) {
+    final file = File(directory.joinPath('manifest.toml'));
+    if (!file.existsSync() || file.lengthSync() > _maxManifestBytes) {
+      return null;
+    }
+    return file.readAsStringSync();
+  }
+
+  /// One installed theme, read back by `fl_theme` from the manifest written at
+  /// install; the files it names are this side's to find.
   static ThemePackage? _readInstalled(
     String directory,
     String installationId, {
@@ -1305,91 +976,61 @@ abstract final class ThemePackages {
     List<ThemeVariant> variants = const [],
   }) {
     try {
-      final file = File(directory.joinPath('manifest.toml'));
-      if (!file.existsSync() || file.lengthSync() > _maxManifestBytes) {
-        return null;
-      }
-      final data = _decodeManifest(file.readAsStringSync());
-      if (data['format'] != 1) return null;
-      final (schemaMin, schemaMax) = _schemaRange(data['schema']);
-      final themeId = data['id'];
-      if (themeId is! String || !idPattern.hasMatch(themeId)) return null;
-      final colors = _map(data['colors'], 'colors');
-      final palette = colors['palette'] == null
-          ? <String, dynamic>{}
-          : _map(colors['palette'], 'palette');
-      final components = ThemeComponents.parse(
-        data['components'],
-        layout: data['layout'],
-      );
-      final icons = _map(data['icons'], 'icons');
-      final background = _map(data['background'], 'background');
-      final shapes = _map(data['shapes'], 'shapes');
-      final carried = (icons['images'] as List).cast<String>();
-      if (!carried.every(_isIconKey)) return null;
-      final style = IconStyle.parse(icons['style']);
-      final bgStyle = BackgroundStyle.parse(background['type']);
-      if (style == null || bgStyle == null) return null;
-      final backgroundTile = _backgroundTile(background, bgStyle);
-      // The manifest names keys and not files, so which format each icon is in
-      // is a question for the directory. Both are asked for, in the order a
-      // package would have been written either way.
-      final iconDir = directory.joinPath(_iconsDir);
-      final iconFiles = <String, String>{};
-      for (final key in carried) {
-        final stem = key.replaceAll('.', '_');
-        final svg = '$stem.svg';
-        final png = '$stem.png';
-        if (File(iconDir.joinPath(svg)).existsSync()) {
-          iconFiles[key] = svg;
-        } else if (File(iconDir.joinPath(png)).existsSync()) {
-          iconFiles[key] = png;
-        } else {
-          return null;
-        }
-      }
-      final iconColors = _iconColors(
-        icons['colors'] == null
-            ? <String, dynamic>{}
-            : _map(icons['colors'], 'icon colors'),
-        iconFiles.keys,
-      );
-      final splash = _splash(data['splash']);
-      _requireFeatureSchema(
-        min: schemaMin,
-        iconFiles: iconFiles.values,
-        iconColors: iconColors,
-        splash: splash,
-        components: components,
-        backgroundTile: backgroundTile,
-      );
+      final manifest = _manifestAt(directory);
+      if (manifest == null) return null;
+      final iconDir = Directory(directory.joinPath(_iconsDir));
+      final iconFiles = iconDir.existsSync()
+          ? [
+              for (final entry in iconDir.listSync(followLinks: false))
+                if (entry is File) entry.uri.pathSegments.last,
+            ]
+          : const <String>[];
+      final data =
+          jsonDecode(readInstalledTheme(manifest: manifest, iconFiles: iconFiles))
+              as Map<String, dynamic>;
+      final background = data['background'] as Map<String, dynamic>;
+      final shapes = data['shapes'] as Map<String, dynamic>;
+      final splash = data['splash'] as Map<String, dynamic>?;
       final package = ThemePackage(
         installationId: installationId,
-        id: themeId,
-        name: _label(data['name'], 'name'),
+        id: data['id'] as String,
+        name: data['name'] as String,
         variant: variant,
         variants: variants,
-        schemaMin: schemaMin,
-        schemaMax: schemaMax,
-        mode: _integer(colors['mode'], 0, 2),
-        modes: _themeModes(data['modes']),
-        seed: _integer(colors['seed'], 0, 0xffffffff),
-        systemColor: colors['systemColor'] as bool,
-        paletteLight: _palette(palette[Brightness.light.name]),
-        paletteDark: _palette(palette[Brightness.dark.name]),
-        components: components,
-        iconStyle: style,
-        iconFiles: iconFiles,
-        iconColors: iconColors,
-        backgroundStyle: bgStyle,
-        opacity: _fraction(background['opacity'], maxBackgroundOpacity),
-        blur: _fraction(background['blur'], maxBackgroundBlur),
-        backgroundTile: backgroundTile,
-        cardRadius: _fraction(shapes['card'], ThemeComponents.maxRadius),
-        tileRadius: _fraction(shapes['tile'], ThemeComponents.maxRadius),
-        buttonRadius: _fraction(shapes['button'], ThemeComponents.maxRadius),
+        schemaMin: data['schemaMin'] as int,
+        schemaMax: data['schemaMax'] as int,
+        mode: data['mode'] as int,
+        modes: {
+          for (final mode in data['modes'] as List)
+            _declaredModes.firstWhere((m) => m.name == mode),
+        },
+        seed: data['seed'] as int,
+        systemColor: data['systemColor'] as bool,
+        paletteLight: (data['paletteLight'] as Map).cast<String, int>(),
+        paletteDark: (data['paletteDark'] as Map).cast<String, int>(),
+        components: ThemeComponents.checked(
+          (data['components'] as Map).cast<String, dynamic>(),
+          density: data['density'] as String?,
+          neededSchema: data['componentsSchema'] as int,
+        ),
+        iconStyle: IconStyle.parse(data['iconStyle'])!,
+        iconFiles: (data['iconFiles'] as Map).cast<String, String>(),
+        iconColors: (data['iconColors'] as Map).cast<String, Object>(),
+        backgroundStyle: BackgroundStyle.parse(background['style'])!,
+        opacity: (background['opacity'] as num).toDouble(),
+        blur: (background['blur'] as num).toDouble(),
+        backgroundTile: (background['tile'] as num).toDouble(),
+        cardRadius: (shapes['card'] as num).toDouble(),
+        tileRadius: (shapes['tile'] as num).toDouble(),
+        buttonRadius: (shapes['button'] as num).toDouble(),
         directory: directory,
-        splash: splash,
+        splash: splash == null
+            ? null
+            : ThemeSplash(
+                color: splash['color'] as Object,
+                logo: splash['logo'] as String?,
+                duration: splash['duration'] as int,
+              ),
       );
       if (package.backgroundPath case final path?
           when !File(path).existsSync()) {
@@ -1401,6 +1042,29 @@ abstract final class ThemePackages {
       return package;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Removes every installation in [rootDirectory] this build cannot read.
+  /// Only for the built-in directory, a copy of the app's own assets: an
+  /// installation there that does not read (written by a build with another
+  /// format) is never selected again, and as it does not read, no update of
+  /// its theme finds it to replace. A user's installations are never removed
+  /// for it: they may be read again by the build that wrote them.
+  static void _removeUnreadable(String rootDirectory) {
+    // Before the reader is loaded nothing reads, and nothing may go.
+    if (!ThemeRust.ready) return;
+    final directory = Directory(rootDirectory);
+    if (!directory.existsSync()) return;
+    for (final entry in directory.listSync(followLinks: false)) {
+      if (entry is! Directory) continue;
+      final name = entry.uri.pathSegments.where((part) => part.isNotEmpty).last;
+      // Staging directories are not digests; an installation is renamed to
+      // its digest only once complete.
+      if (!_digestPattern.hasMatch(name)) continue;
+      if (installed(name, rootDirectory: rootDirectory) == null) {
+        entry.deleteSync(recursive: true);
+      }
     }
   }
 
@@ -1585,480 +1249,4 @@ abstract final class ThemePackages {
 
   static void _selectDefaultFallback() =>
       select(defaultTheme, preset: BuiltinTheme.defaultTheme.id);
-
-  /// What a manifest that omits a field is read as, spelled the way the
-  /// manifest spells it.
-  static final _defaults = {
-    'colors': {'mode': 0, 'seed': 0xFF880E4F, 'systemColor': false},
-    'icons': {'style': IconStyle.classic.name, 'images': <String, String>{}},
-    'background': {
-      'type': BackgroundStyle.none.name,
-      'opacity': 0.18,
-      'blur': 0,
-    },
-    'shapes': {'card': 12, 'tile': 8, 'button': 10},
-  };
-
-  static Map<String, dynamic> _decodeManifest(String source) {
-    final Map<String, dynamic> data;
-    try {
-      data = TomlDocument.parse(source).toMap();
-    } on TomlException {
-      throw const FormatException('Invalid TOML manifest');
-    }
-    data.putIfAbsent('format', () => 1);
-    for (final entry in _defaults.entries) {
-      final values = data.containsKey(entry.key)
-          ? _map(data[entry.key], entry.key)
-          : <String, dynamic>{};
-      data[entry.key] = {...entry.value, ...values};
-    }
-    return data;
-  }
-
-  static Map<String, dynamic> _map(Object? value, String field) {
-    if (value is Map<String, dynamic>) return value;
-    throw FormatException('Invalid $field');
-  }
-
-  static String _label(Object? value, String field) {
-    if (value is! String ||
-        value.trim().isEmpty ||
-        value.length > maxNameLength ||
-        value.contains(RegExp(r'[\x00-\x1f]'))) {
-      throw FormatException('Invalid $field');
-    }
-    return value.trim();
-  }
-
-  static int _integer(Object? value, int min, int max) {
-    if (value is! int || value < min || value > max) {
-      throw const FormatException('Invalid number');
-    }
-    return value;
-  }
-
-  static Set<ThemeMode> _themeModes(Object? raw) {
-    if (raw is! List ||
-        raw.isEmpty ||
-        raw.length > 2 ||
-        raw.toSet().length != raw.length) {
-      throw const FormatException('Declare supported theme modes: light, dark');
-    }
-    return Set.unmodifiable(raw.map(_declaredMode));
-  }
-
-  /// One declared mode, refused when the manifest named something else. The
-  /// spellings are [ThemeMode]'s own `name`s — see [_declaredModes].
-  static ThemeMode _declaredMode(Object? raw) {
-    for (final mode in _declaredModes) {
-      if (mode.name == raw) return mode;
-    }
-    throw const FormatException('Declare supported theme modes: light, dark');
-  }
-
-  static (int, int) _schemaRange(Object? raw) {
-    final schema = _map(raw, 'schema');
-    if (schema.length != 2 ||
-        !schema.containsKey('min') ||
-        !schema.containsKey('max')) {
-      throw const FormatException('Invalid theme schema range');
-    }
-    final min = _integer(schema['min'], 1, 0x7fffffff);
-    final max = _integer(schema['max'], 1, 0x7fffffff);
-    if (min > max || max < supportedSchemaMin || min > supportedSchemaMax) {
-      throw const FormatException('Unsupported theme schema range');
-    }
-    return (min, max);
-  }
-
-  /// `background.tile`: 0 when absent, and only on an image background.
-  static double _backgroundTile(
-    Map<String, dynamic> background,
-    BackgroundStyle style,
-  ) {
-    final raw = background['tile'];
-    if (raw == null) return 0;
-    if (style != BackgroundStyle.image) {
-      throw const FormatException('A background tile needs an image');
-    }
-    final tile = _fraction(raw, maxBackgroundTile);
-    if (tile < minBackgroundTile) {
-      throw const FormatException('Invalid background tile');
-    }
-    return tile;
-  }
-
-  static double _fraction(Object? value, double max) {
-    if (value is! num || !value.isFinite || value < 0 || value > max) {
-      throw const FormatException('Invalid number');
-    }
-    return value.toDouble();
-  }
-
-  static Map<String, int> _palette(Object? raw) {
-    if (raw == null) return {};
-    final values = _map(raw, 'palette');
-    if (!values.keys.every(ThemePalette.roles.contains)) {
-      throw const FormatException('Invalid palette role');
-    }
-    return {
-      for (final entry in values.entries)
-        entry.key: _integer(entry.value, 0, 0xffffffff),
-    };
-  }
-
-  /// A color as both [ThemePalette] and the splash accept one: an ARGB integer
-  /// or the name of a role, which is what lets one value read correctly in both
-  /// brightnesses.
-  static Object _colorSpec(Object? value) {
-    if (value is int && value >= 0 && value <= 0xffffffff) return value;
-    if (value is String && ThemePalette.roles.contains(value)) return value;
-    throw const FormatException('Invalid color');
-  }
-
-  /// Per-icon colors, each of which has to belong to an icon the package
-  /// carries — a color for a key that is not there is a typo that would
-  /// otherwise show up as nothing at all.
-  static Map<String, Object> _iconColors(
-    Map<String, dynamic> raw,
-    Iterable<String> icons,
-  ) {
-    final colors = <String, Object>{};
-    for (final entry in raw.entries) {
-      if (!icons.contains(entry.key)) {
-        throw const FormatException('Icon color without an image');
-      }
-      colors[entry.key] = _colorSpec(entry.value);
-    }
-    return colors;
-  }
-
-  /// The splash table, or null when the package asks for none — which is why it
-  /// is not in [_defaults]: every package would otherwise carry one.
-  static ThemeSplash? _splash(Object? raw) {
-    if (raw == null) return null;
-    final table = _map(raw, 'splash');
-    if (!table.keys.every(splashFields.contains)) {
-      throw const FormatException('Unknown splash field');
-    }
-    final logo = table['logo'];
-    if (logo != null && !splashLogos.contains(logo)) {
-      throw const FormatException('Invalid splash logo path');
-    }
-    final duration = table.containsKey('duration')
-        ? _integer(
-            table['duration'],
-            ThemeSplash.minDuration,
-            ThemeSplash.maxDuration,
-          )
-        : ThemeSplash.defaultDuration;
-    return ThemeSplash(
-      color: table.containsKey('color') ? _colorSpec(table['color']) : 'surface',
-      logo: logo as String?,
-      duration: duration,
-    );
-  }
-
-  /// Refuses a package that reaches for what schema [featureSchema] added while
-  /// saying an older schema can read it, because that build installs the same
-  /// bytes and then quietly drops the feature — an SVG icon becomes the built-in
-  /// glyph, a per-icon color or a splash simply does not happen.
-  ///
-  /// So what is asked of such a package is not that its range *contains*
-  /// [featureSchema] but that it *needs* it: `min` is the version a reader has
-  /// to understand, and one that does not understand schema 2 must not be
-  /// handed the files.
-  static void _requireFeatureSchema({
-    required int min,
-    required Iterable<String> iconFiles,
-    required Map<String, Object> iconColors,
-    required ThemeSplash? splash,
-    required ThemeComponents components,
-    required double backgroundTile,
-  }) {
-    if (min < componentSchema &&
-        (components.neededSchema >= componentSchema || backgroundTile > 0)) {
-      throw const FormatException('This theme needs schema $componentSchema');
-    }
-    final uses =
-        iconFiles.any((name) => name.endsWith('.svg')) ||
-        iconColors.isNotEmpty ||
-        splash != null;
-    if (uses && min < featureSchema) {
-      throw const FormatException('This theme needs schema $featureSchema');
-    }
-  }
-
-  /// The only two names a package may give an icon. Both are derived from the
-  /// key, so the manifest cannot point at a file that is some other icon.
-  static String _iconAssetPath(String key, Object? value) {
-    final stem = key.replaceAll('.', '_');
-    if (value != '$_iconsDir/$stem.png' && value != '$_iconsDir/$stem.svg') {
-      throw const FormatException('Invalid icon path');
-    }
-    return value as String;
-  }
-
-  static Future<Uint8List> _iconPng(
-    Map<String, Uint8List> assets,
-    String path,
-    int maxBytes,
-  ) async {
-    final bytes = _imageAsset(assets, path, maxBytes);
-    if (!_isPng(bytes)) {
-      throw const FormatException('Icons must be PNG or SVG');
-    }
-    await _verifyImage(bytes, maxDimension: 512, maxPixels: 512 * 512);
-    return bytes;
-  }
-
-  /// What an SVG icon may not be, as the parsed document rather than as text.
-  ///
-  /// A spelling is not a reference: `href = "http://…"` and `url( http://… )`
-  /// are the same target to the parser as the spellings a substring test held,
-  /// and a namespace prefix is the same attribute. Read off the tree, the rules
-  /// are the ones they were written to mean.
-  static void _checkSvg(xml.XmlDocument document) {
-    for (final element in document.descendantElements) {
-      if (const {'script', 'style', 'foreignobject'}.contains(
-        element.name.local.toLowerCase(),
-      )) {
-        throw const FormatException('Unsupported SVG content');
-      }
-      for (final attribute in element.attributes) {
-        if (attribute.name.local == 'href' &&
-            !attribute.value.startsWith('#')) {
-          throw const FormatException('Unsupported SVG content');
-        }
-        if (_hasForeignUrl(attribute.value)) {
-          throw const FormatException('Unsupported SVG content');
-        }
-      }
-    }
-    // An instruction is the document telling its reader to read something else,
-    // and `<?xml-stylesheet href="…"?>` is the one that fetches. The XML
-    // declaration is a node of its own type, so nothing that belongs in a
-    // drawing is one of these.
-    if (document.children.whereType<xml.XmlProcessing>().isNotEmpty) {
-      throw const FormatException('Unsupported SVG content');
-    }
-  }
-
-  /// Whether a value reaches outside the file through a `url(…)`, which is how
-  /// a paint, a filter or a mask names what it uses.
-  ///
-  /// A reference to something in this same document — `url(#gradient)` — is
-  /// what a drawing is made of. Anything else, quotes and spacing included, is
-  /// a target that is not in the file.
-  static bool _hasForeignUrl(String value) {
-    final lower = value.toLowerCase();
-    for (var from = 0; ; ) {
-      final start = lower.indexOf('url(', from);
-      if (start < 0) return false;
-      var target = value.substring(start + 4).trimLeft();
-      if (target.startsWith('"') || target.startsWith("'")) {
-        target = target.substring(1);
-      }
-      if (!target.startsWith('#')) return true;
-      from = start + 4;
-    }
-  }
-
-  /// An SVG icon is checked as a document rather than rendered: it has no
-  /// raster size to measure, and what a bad one costs is a fallback to the
-  /// built-in glyph rather than a broken install. Refused are the things that
-  /// make an SVG a document instead of a drawing — a DTD, which is what entity
-  /// expansion and external entities need to exist, and anything that reaches
-  /// outside the file.
-  static Uint8List _svgAsset(
-    Map<String, Uint8List> assets,
-    String path,
-    int maxBytes,
-  ) {
-    final bytes = _assetBytes(assets, path, maxBytes);
-    final String source;
-    try {
-      source = utf8.decode(bytes);
-    } on FormatException {
-      throw const FormatException('SVG must be UTF-8');
-    }
-    // Before the parse, because a DTD is what the parser would otherwise be
-    // handed for no reason: entities are how a document describes itself
-    // instead of drawing, and neither expansion nor an external entity is
-    // anything an icon wants.
-    final lower = source.toLowerCase();
-    for (final refused in const ['<!doctype', '<!entity']) {
-      if (lower.contains(refused)) {
-        throw const FormatException('Unsupported SVG content');
-      }
-    }
-    final xml.XmlDocument document;
-    try {
-      document = xml.XmlDocument.parse(source);
-    } on xml.XmlException {
-      throw const FormatException('Invalid SVG document');
-    }
-    if (document.rootElement.name.local != 'svg') {
-      throw const FormatException('An SVG must have svg as its root element');
-    }
-    _checkSvg(document);
-    return bytes;
-  }
-
-  static Map<String, Uint8List> _readArchive(List<int> bytes) {
-    try {
-      final zip = ZipDirectory()
-        ..read(InputMemoryStream(Uint8List.fromList(bytes)));
-      if (zip.filePosition < 0 ||
-          zip.numberOfThisDisk != 0 ||
-          zip.diskWithTheStartOfTheCentralDirectory != 0 ||
-          zip.totalCentralDirectoryEntries != zip.fileHeaders.length ||
-          zip.totalCentralDirectoryEntriesOnThisDisk !=
-              zip.fileHeaders.length ||
-          zip.fileHeaders.isEmpty ||
-          // The two directory entries, `icons/` and `variants/`, besides.
-          zip.fileHeaders.length > _maxAssets + 2) {
-        throw const FormatException('Invalid theme ZIP');
-      }
-      final assets = <String, Uint8List>{};
-      var total = 0;
-      for (final header in zip.fileHeaders) {
-        final path = header.filename;
-        final file = header.file;
-        if (_isDirectoryEntry(path) &&
-            !assets.containsKey(path) &&
-            header.uncompressedSize == 0 &&
-            header.compressedSize == 0 &&
-            header.crc32 == 0 &&
-            header.compressionMethod == 0 &&
-            (header.generalPurposeBitFlag & 1) == 0 &&
-            ((header.externalFileAttributes >> 16) & 0xf000) != 0xa000 &&
-            file?.filename == path &&
-            file?.flags == header.generalPurposeBitFlag &&
-            file?.compressionMethod == CompressionType.none) {
-          assets[path] = Uint8List(0);
-          continue;
-        }
-        final max = path == 'manifest.toml'
-            ? _maxManifestBytes
-            : path.startsWith('$_iconsDir/')
-            ? _maxIconBytes
-            : path.split('/').last.startsWith('splash_logo.')
-            ? _maxSplashLogoBytes
-            : _maxBackgroundBytes;
-        if (path.isEmpty ||
-            path.startsWith('/') ||
-            path.contains('\\') ||
-            path
-                .split('/')
-                .any((part) => part.isEmpty || part == '.' || part == '..') ||
-            assets.containsKey(path) ||
-            ((header.externalFileAttributes >> 16) & 0xf000) == 0xa000 ||
-            (header.generalPurposeBitFlag & 1) != 0 ||
-            (header.compressionMethod != 0 && header.compressionMethod != 8) ||
-            header.diskNumberStart != 0 ||
-            header.compressedSize < 0 ||
-            header.compressedSize > maxPackageBytes ||
-            header.uncompressedSize <= 0 ||
-            header.uncompressedSize > max ||
-            total + header.uncompressedSize > maxPackageBytes) {
-          throw const FormatException('Invalid theme ZIP entry');
-        }
-        if (file == null ||
-            file.filename != path ||
-            file.flags != header.generalPurposeBitFlag ||
-            file.compressionMethod !=
-                (header.compressionMethod == 8
-                    ? CompressionType.deflate
-                    : CompressionType.none)) {
-          throw const FormatException('Invalid theme ZIP entry');
-        }
-        final output = BoundedOutputStream(max);
-        file.decompress(output);
-        final decoded = output.getBytes();
-        if (decoded.length != header.uncompressedSize ||
-            getCrc32(decoded) != header.crc32) {
-          throw const FormatException('Corrupt theme ZIP entry');
-        }
-        assets[path] = decoded;
-        total += decoded.length;
-      }
-      if (!assets.containsKey('manifest.toml')) {
-        throw const FormatException('Missing theme manifest');
-      }
-      return assets;
-    } on OutputLimitExceeded {
-      throw const FormatException('Theme asset exceeds size limit');
-    } on FormatException {
-      rethrow;
-    } catch (_) {
-      throw const FormatException('Invalid theme ZIP');
-    }
-  }
-
-  static Uint8List _assetBytes(
-    Map<String, Uint8List> assets,
-    String path,
-    int maxBytes,
-  ) {
-    final bytes = assets[path];
-    if (bytes == null || bytes.isEmpty || bytes.length > maxBytes) {
-      throw const FormatException('Theme asset exceeds size limit');
-    }
-    return bytes;
-  }
-
-  static Uint8List _imageAsset(
-    Map<String, Uint8List> assets,
-    String path,
-    int maxBytes,
-  ) {
-    final bytes = _assetBytes(assets, path, maxBytes);
-    if (!(_isPng(bytes) || _isJpeg(bytes))) {
-      throw const FormatException('Use a PNG or JPEG image');
-    }
-    return bytes;
-  }
-
-  static bool _isPng(Uint8List bytes) =>
-      bytes.length >= 8 &&
-      const [
-        137,
-        80,
-        78,
-        71,
-        13,
-        10,
-        26,
-        10,
-      ].asMap().entries.every((entry) => bytes[entry.key] == entry.value);
-
-  static bool _isJpeg(Uint8List bytes) =>
-      bytes.length >= 3 &&
-      bytes[0] == 0xff &&
-      bytes[1] == 0xd8 &&
-      bytes[2] == 0xff;
-
-  static Future<void> _verifyImage(
-    Uint8List bytes, {
-    required int maxDimension,
-    required int maxPixels,
-  }) async {
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    try {
-      final descriptor = await ui.ImageDescriptor.encoded(buffer);
-      try {
-        if (descriptor.width > maxDimension ||
-            descriptor.height > maxDimension ||
-            descriptor.width * descriptor.height > maxPixels) {
-          throw const FormatException('Image resolution exceeds limit');
-        }
-      } finally {
-        descriptor.dispose();
-      }
-    } finally {
-      buffer.dispose();
-    }
-  }
 }

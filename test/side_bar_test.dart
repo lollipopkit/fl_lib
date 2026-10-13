@@ -1,5 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -225,5 +226,54 @@ void main() {
     // pinning the exact figure would fail on a font metric change that costs
     // the rail nothing.
     expect(running - target, lessThanOrEqualTo(2.0));
+  });
+
+  testWidgets('a row whose menu is unavailable does nothing on hold or right-click', (
+    tester,
+  ) async {
+    var menus = 0, holds = 0;
+    Widget tile({required bool enabled}) => MaterialApp(
+      home: Scaffold(
+        body: SideBarTile(
+          title: 'prod-1',
+          onMenu: (_) => menus++,
+          menuEnabled: enabled,
+          onLongPress: () => holds++,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(tile(enabled: false));
+    await tester.longPress(find.text('prod-1'));
+    await tester.tap(find.text('prod-1'), buttons: kSecondaryButton);
+    await tester.pump();
+    expect((menus, holds), (0, 0));
+
+    await tester.pumpWidget(tile(enabled: true));
+    await tester.longPress(find.text('prod-1'));
+    await tester.pump();
+    expect((menus, holds), (1, 0), reason: 'the menu, not the other action');
+  });
+
+  testWidgets('the row of buttons stays at the top of a long rail', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        names: const ['add'],
+        actions: [BarAction(icon: Icons.add, label: 'New', onTap: () {})],
+        targets: [
+          for (var i = 0; i < 60; i++) SideBarTile(title: 'host-$i'),
+        ],
+      ),
+    );
+    final top = tester.getTopLeft(find.byIcon(Icons.add)).dy;
+
+    await tester.drag(find.text('host-3'), const Offset(0, -600));
+    await tester.pump();
+
+    expect(find.text('host-0'), findsNothing, reason: 'the entries scrolled');
+    expect(find.byIcon(Icons.add), findsOneWidget);
+    expect(tester.getTopLeft(find.byIcon(Icons.add)).dy, top);
   });
 }
