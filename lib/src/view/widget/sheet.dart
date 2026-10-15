@@ -49,6 +49,7 @@ class SheetChoiceTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.icon,
+    this.leading,
     this.subtitle,
     this.action,
     this.onFocusChange,
@@ -59,6 +60,9 @@ class SheetChoiceTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final IconData? icon;
+
+  /// In place of [icon], for a row whose mark is not an icon — a server's.
+  final Widget? leading;
 
   /// A second line under [title], for a row the title alone does not tell
   /// apart — which servers a workspace holds, which key runs a command.
@@ -81,7 +85,7 @@ class SheetChoiceTile extends StatelessWidget {
       child: ListTile(
         autofocus: autofocus,
         selected: selected,
-        leading: icon == null ? null : Icon(icon),
+        leading: leading ?? (icon == null ? null : Icon(icon)),
         title: Text(title),
         subtitle: subtitle == null
             ? null

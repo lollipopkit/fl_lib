@@ -156,6 +156,28 @@ extension DialogX on BuildContext {
     final isAscending = ascend ?? nvn<bool>();
     showLoading ??= false.vn;
 
+    // A phone gets rows in a sheet, as `showTagEditor` does; the window, not
+    // the surface, decides — see there.
+    if (MediaQuery.sizeOf(this).width < 500) {
+      final sure = await showResizableSheet<bool>(
+        this,
+        builder: (_) => PickSheet<T>(
+          title: title,
+          items: itemsList,
+          initial: vals,
+          onChanged: (value) => vals = value,
+          display: display,
+          avatar: avatar,
+          multi: multi,
+          clearable: clearable,
+          actions: btns,
+          showLoading: showLoading!,
+          ascend: isAscending,
+        ),
+      );
+      return sure == true ? vals : null;
+    }
+
     Widget buildChoice() {
       return ChoiceWidget<T>(
         onChanged: (value) {
