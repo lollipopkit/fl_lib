@@ -3,11 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
-  Future<void> open(
-    WidgetTester tester, {
-    double? heightFactor,
-    int rows = 40,
-  }) async {
+  Future<void> open(WidgetTester tester, {int rows = 40}) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -18,7 +14,6 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => showResizableSheet<void>(
                 context,
-                heightFactor: heightFactor,
                 builder: (_) => ListView(
                   key: const Key('content'),
                   shrinkWrap: true,
@@ -38,49 +33,81 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// A frame between moves, as a finger gives one.
+  Future<void> drag(WidgetTester tester, double dy) async {
+    final g = await tester.startGesture(
+      tester.getCenter(find.byType(SheetGrip)),
+    );
+    const steps = 10;
+    for (var i = 0; i < steps; i++) {
+      await g.moveBy(Offset(0, dy / steps));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await g.up();
+  }
+
   double sheetHeight(WidgetTester tester) =>
       tester.getSize(find.byType(ResizableSheet)).height;
 
-  testWidgets('opens at its content height, capped at 9/16', (tester) async {
+  const rest = 800 * ResizableSheet.restFactor;
+
+  testWidgets('opens at its content height, up to 60%', (tester) async {
     await open(tester, rows: 2);
-    final short = sheetHeight(tester);
-    expect(short, lessThan(800 * ResizableSheet.defaultContentMaxFactor));
+    expect(sheetHeight(tester), lessThan(rest));
 
     Navigator.of(tester.element(find.byKey(const Key('content')))).pop();
     await tester.pumpAndSettle();
     await open(tester);
-    expect(sheetHeight(tester), 800 * ResizableSheet.defaultContentMaxFactor);
+    expect(sheetHeight(tester), rest);
   });
 
-  testWidgets('dragging the grip up takes the window, down restores', (
-    tester,
-  ) async {
-    await open(tester, heightFactor: 0.5);
-    expect(sheetHeight(tester), 400);
-
-    await tester.drag(find.byType(SheetGrip), const Offset(0, -600));
+  testWidgets('one drag past halfway up takes the window', (tester) async {
+    await open(tester);
+    await drag(tester, -200);
     await tester.pumpAndSettle();
     expect(sheetHeight(tester), 800);
-
-    await tester.drag(find.byType(SheetGrip), const Offset(0, 300));
-    await tester.pumpAndSettle();
-    expect(sheetHeight(tester), 500);
-
-    // Below where it opened, but not by half: back to where it opened.
-    await tester.drag(find.byType(SheetGrip), const Offset(0, 200));
-    await tester.pumpAndSettle();
-    expect(sheetHeight(tester), 400);
   });
 
-  testWidgets('dragging the grip well below where it opened closes it', (
+  testWidgets('a short drag snaps back to its own height', (tester) async {
+    await open(tester);
+    await drag(tester, -100);
+    await tester.pumpAndSettle();
+    expect(sheetHeight(tester), rest);
+    await drag(tester, 100);
+    await tester.pumpAndSettle();
+    expect(sheetHeight(tester), rest);
+  });
+
+  testWidgets('a fling goes one step: up to the window, down to its own', (
     tester,
   ) async {
-    await open(tester, heightFactor: 0.5);
-    await tester.drag(find.byType(SheetGrip), const Offset(0, 300));
-    // On its way out it does not grow back first.
-    await tester.pump();
+    await open(tester);
+    await tester.fling(find.byType(SheetGrip), const Offset(0, -80), 1500);
+    await tester.pumpAndSettle();
+    expect(sheetHeight(tester), 800);
+    await tester.fling(find.byType(SheetGrip), const Offset(0, 80), 1500);
+    await tester.pumpAndSettle();
+    expect(sheetHeight(tester), rest);
+  });
+
+  testWidgets('from the window, down past halfway to closed lands at its own', (
+    tester,
+  ) async {
+    await open(tester);
+    await drag(tester, -400);
+    await tester.pumpAndSettle();
+    await drag(tester, 400);
+    await tester.pumpAndSettle();
+    expect(sheetHeight(tester), rest);
+  });
+
+  testWidgets('down past half its own height closes, without growing back', (
+    tester,
+  ) async {
+    await open(tester);
+    await drag(tester, 300);
     await tester.pump(const Duration(milliseconds: 50));
-    expect(sheetHeight(tester), 100);
+    expect(sheetHeight(tester), rest - 300);
     await tester.pumpAndSettle();
     expect(find.byType(ResizableSheet), findsNothing);
   });
@@ -110,7 +137,7 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.byType(SheetGrip), findsOneWidget);
-    await tester.drag(find.byType(SheetGrip), const Offset(0, -600));
+    await drag(tester, -300);
     await tester.pumpAndSettle();
     expect(sheetHeight(tester), 800);
   });

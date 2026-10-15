@@ -1,21 +1,18 @@
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// A modal bottom sheet whose height the user sets by dragging its grip: up to
-/// the whole window, back down, or down past where it opened to close it.
+/// A modal bottom sheet with three heights, moved between by dragging its
+/// grip: closed, its own, and the whole window.
 ///
-/// [heightFactor] is the share of the window it opens at. Null opens it at the
-/// height of its content, up to [contentMaxFactor] of the window — Material's
-/// 9/16 for a sheet that is not scroll-controlled, unless said otherwise. The
-/// content sets no cap of its own: one would stop it following the sheet up.
+/// Its own is the height of its content, up to [ResizableSheet.restFactor] of
+/// the window. The content sets no cap of its own: one would stop it following
+/// the sheet up.
 ///
 /// [showGrip] false is for a [builder] that draws its own surface — a sheet
 /// with a transparent background — and places a [SheetGrip] on it.
 Future<T?> showResizableSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
-  double? heightFactor,
-  double contentMaxFactor = ResizableSheet.defaultContentMaxFactor,
   bool showGrip = true,
   bool useRootNavigator = true,
   bool useSafeArea = true,
@@ -34,42 +31,29 @@ Future<T?> showResizableSheet<T>(
     backgroundColor: backgroundColor,
     constraints: constraints,
     sheetAnimationStyle: sheetAnimationStyle,
-    builder: (ctx) => ResizableSheet(
-      heightFactor: heightFactor,
-      contentMaxFactor: contentMaxFactor,
-      showGrip: showGrip,
-      child: builder(ctx),
-    ),
+    builder: (ctx) => ResizableSheet(showGrip: showGrip, child: builder(ctx)),
   );
 }
 
 /// The body of a [showResizableSheet]: the grip and the height it sets.
 class ResizableSheet extends StatefulWidget {
-  const ResizableSheet({
-    super.key,
-    required this.child,
-    this.heightFactor,
-    this.contentMaxFactor = defaultContentMaxFactor,
-    this.showGrip = true,
-  });
+  const ResizableSheet({super.key, required this.child, this.showGrip = true});
 
   final Widget child;
-  final double? heightFactor;
-  final double contentMaxFactor;
   final bool showGrip;
 
-  /// Material's cap for a sheet that is not scroll-controlled.
-  static const defaultContentMaxFactor = 9 / 16;
+  /// The most of the window a sheet takes before it is asked for more.
+  static const restFactor = 0.6;
 
   @override
   State<ResizableSheet> createState() => _ResizableSheetState();
 }
 
 class _ResizableSheetState extends State<ResizableSheet> {
-  /// Null until the first drag: before it the sheet keeps its opening height.
+  /// Null while it is at its own height, which its content decides.
   double? _height;
 
-  /// The height it opened at, which a drag below closes it from.
+  /// Its own height, as laid out before the first drag.
   double? _restHeight;
 
   double _maxHeight = double.infinity;
@@ -77,12 +61,18 @@ class _ResizableSheetState extends State<ResizableSheet> {
 
   static const _flingVelocity = 700.0;
 
+  /// Its own height, measured while it still has it.
+  double? _rest() {
+    if (_restHeight case final rest?) return rest;
+    if (_height != null) return null;
+    return _restHeight = context.size?.height;
+  }
+
   void _dragStart() {
-    final height = context.size?.height;
-    if (height == null) return;
-    _restHeight ??= height;
+    final rest = _rest();
+    if (rest == null) return;
     setState(() {
-      _height ??= height;
+      _height ??= rest;
       _dragging = true;
     });
   }
@@ -97,35 +87,40 @@ class _ResizableSheetState extends State<ResizableSheet> {
     final height = _height;
     final rest = _restHeight;
     if (height == null || rest == null) return;
-    final double? target;
-    if (height <= rest &&
-        (velocity > _flingVelocity || height < rest / 2)) {
-      // Material's own drag to close still works on the rest of the sheet;
-      // this is the same gesture started on the grip. Left where it is:
-      // growing back to [rest] while the route slid it away read as the sheet
-      // bouncing before it closed. Back to [rest] only if it stays.
+    final full = _maxHeight;
+    // A fling goes one step its way; a slow release to the nearest.
+    final double target;
+    if (velocity < -_flingVelocity) {
+      target = height < rest ? rest : full;
+    } else if (velocity > _flingVelocity) {
+      target = height > rest ? rest : 0;
+    } else if (height < rest / 2) {
+      target = 0;
+    } else if (height < (rest + full) / 2) {
+      target = rest;
+    } else {
+      target = full;
+    }
+    if (target == 0) {
+      // Left where it is: growing back while the route slid it away read as
+      // the sheet bouncing before it closed. Back to its own height only if it
+      // stays.
+      setState(() => _dragging = false);
       Navigator.maybePop(context).then((closed) {
         if (!closed && mounted) setState(() => _height = rest);
       });
-      target = null;
-    } else if (velocity > _flingVelocity || height < rest) {
-      target = rest;
-    } else if (velocity < -_flingVelocity) {
-      target = _maxHeight;
-    } else {
-      target = null;
+      return;
     }
     setState(() {
       _dragging = false;
-      if (target != null) _height = target;
+      _height = target;
     });
   }
 
-  /// Keyboard and screen reader steps, between where it opened and the window.
+  /// Keyboard and screen reader steps: its own height and the window.
   void _step(bool up) {
-    final rest = _restHeight ?? context.size?.height;
+    final rest = _rest();
     if (rest == null) return;
-    _restHeight ??= rest;
     setState(() => _height = up ? _maxHeight : rest);
   }
 
@@ -146,24 +141,16 @@ class _ResizableSheetState extends State<ResizableSheet> {
             ],
           ),
         );
+        // One widget at every height. Swapping a box for another at the first
+        // drag rebuilt the grip under the finger, and the drag ended there.
         final height = _height;
-        if (height != null) {
-          return AnimatedContainer(
-            duration: _dragging
-                ? Duration.zero
-                : const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            height: height.clamp(0.0, _maxHeight),
-            child: content,
-          );
-        }
-        if (widget.heightFactor case final factor?) {
-          return SizedBox(height: _maxHeight * factor, child: content);
-        }
-        return ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: _maxHeight * widget.contentMaxFactor,
-          ),
+        return AnimatedContainer(
+          duration: _dragging ? Duration.zero : const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          height: height?.clamp(0.0, _maxHeight),
+          constraints: height == null
+              ? BoxConstraints(maxHeight: _maxHeight * ResizableSheet.restFactor)
+              : null,
           child: content,
         );
       },
@@ -226,6 +213,7 @@ class SheetGrip extends StatelessWidget {
           dragStartBehavior: DragStartBehavior.down,
           onVerticalDragStart: (_) => state._dragStart(),
           onVerticalDragUpdate: (d) => state._dragUpdate(d.delta.dy),
+          onVerticalDragCancel: () => state._dragEnd(0),
           onVerticalDragEnd: (d) =>
               state._dragEnd(d.velocity.pixelsPerSecond.dy),
           child: SizedBox(
