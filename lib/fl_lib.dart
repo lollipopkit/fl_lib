@@ -186,6 +186,7 @@ export 'src/view/widget/row.dart';
 export 'src/view/widget/segmented.dart';
 export 'src/view/widget/side_bar.dart';
 export 'src/view/widget/session_tab_bar.dart';
+export 'src/view/widget/resizable_sheet.dart';
 export 'src/view/widget/sheet.dart';
 export 'src/view/widget/session_tabs.dart';
 export 'src/view/widget/slide_trans.dart';
