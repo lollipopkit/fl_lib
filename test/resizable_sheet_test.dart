@@ -77,6 +77,10 @@ void main() {
   ) async {
     await open(tester, heightFactor: 0.5);
     await tester.drag(find.byType(SheetGrip), const Offset(0, 300));
+    // On its way out it does not grow back first.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(sheetHeight(tester), 100);
     await tester.pumpAndSettle();
     expect(find.byType(ResizableSheet), findsNothing);
   });

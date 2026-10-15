@@ -101,9 +101,13 @@ class _ResizableSheetState extends State<ResizableSheet> {
     if (height <= rest &&
         (velocity > _flingVelocity || height < rest / 2)) {
       // Material's own drag to close still works on the rest of the sheet;
-      // this is the same gesture started on the grip.
-      Navigator.maybePop(context);
-      target = rest;
+      // this is the same gesture started on the grip. Left where it is:
+      // growing back to [rest] while the route slid it away read as the sheet
+      // bouncing before it closed. Back to [rest] only if it stays.
+      Navigator.maybePop(context).then((closed) {
+        if (!closed && mounted) setState(() => _height = rest);
+      });
+      target = null;
     } else if (velocity > _flingVelocity || height < rest) {
       target = rest;
     } else if (velocity < -_flingVelocity) {
