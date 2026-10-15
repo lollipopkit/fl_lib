@@ -148,4 +148,22 @@ void main() {
     );
     expect(tester.getSize(find.byType(SheetGrip)), Size.zero);
   });
+
+  testWidgets('it sits on the keyboard, its heights out of what is left', (
+    tester,
+  ) async {
+    await open(tester);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    final content = tester.getRect(find.byKey(const Key('content')));
+    // Above the keyboard, and 60% of the 500 it leaves.
+    expect(content.bottom, lessThanOrEqualTo(500));
+    expect(sheetHeight(tester), 500 * ResizableSheet.restFactor + 300);
+
+    await drag(tester, -300);
+    await tester.pumpAndSettle();
+    expect(sheetHeight(tester), 800);
+    expect(tester.getRect(find.byKey(const Key('content'))).bottom, 500);
+  });
 }

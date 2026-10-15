@@ -5,8 +5,9 @@ import 'package:material_ui/material_ui.dart';
 /// grip: closed, its own, and the whole window.
 ///
 /// Its own is the height of its content, up to [ResizableSheet.restFactor] of
-/// the window. The content sets no cap of its own: one would stop it following
-/// the sheet up.
+/// the window — of what the keyboard leaves of it, which the sheet sits on.
+/// The content sets no cap of its own, nor room for the keyboard: a cap would
+/// stop it following the sheet up, and the room would be made twice.
 ///
 /// [showGrip] false is for a [builder] that draws its own surface — a sheet
 /// with a transparent background — and places a [SheetGrip] on it.
@@ -56,7 +57,12 @@ class _ResizableSheetState extends State<ResizableSheet> {
   /// Its own height, as laid out before the first drag.
   double? _restHeight;
 
+  /// What there is above the keyboard: the window, while it is down.
   double _maxHeight = double.infinity;
+
+  /// The keyboard, which the sheet sits on rather than its content making
+  /// room for it: inside, it came out of the 60% and left the content little.
+  double _inset = 0;
   bool _dragging = false;
 
   static const _flingVelocity = 700.0;
@@ -65,7 +71,9 @@ class _ResizableSheetState extends State<ResizableSheet> {
   double? _rest() {
     if (_restHeight case final rest?) return rest;
     if (_height != null) return null;
-    return _restHeight = context.size?.height;
+    final size = context.size;
+    if (size == null) return null;
+    return _restHeight = size.height - _inset;
   }
 
   void _dragStart() {
@@ -128,9 +136,11 @@ class _ResizableSheetState extends State<ResizableSheet> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        _maxHeight = constraints.hasBoundedHeight
+        _inset = MediaQuery.viewInsetsOf(context).bottom;
+        final window = constraints.hasBoundedHeight
             ? constraints.maxHeight
             : MediaQuery.sizeOf(context).height;
+        _maxHeight = (window - _inset).clamp(0.0, window);
         final content = _SheetScope(
           state: this,
           child: Column(
@@ -143,15 +153,23 @@ class _ResizableSheetState extends State<ResizableSheet> {
         );
         // One widget at every height. Swapping a box for another at the first
         // drag rebuilt the grip under the finger, and the drag ended there.
+        // The keyboard outside the animation, which would trail it.
         final height = _height;
-        return AnimatedContainer(
-          duration: _dragging ? Duration.zero : const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          height: height?.clamp(0.0, _maxHeight),
-          constraints: height == null
-              ? BoxConstraints(maxHeight: _maxHeight * ResizableSheet.restFactor)
-              : null,
-          child: content,
+        return Padding(
+          padding: EdgeInsets.only(bottom: _inset),
+          child: AnimatedContainer(
+            duration: _dragging
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            height: height?.clamp(0.0, _maxHeight),
+            constraints: height == null
+                ? BoxConstraints(
+                    maxHeight: _maxHeight * ResizableSheet.restFactor,
+                  )
+                : null,
+            child: content,
+          ),
         );
       },
     );
