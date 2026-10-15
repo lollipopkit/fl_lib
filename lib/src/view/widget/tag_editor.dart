@@ -48,13 +48,10 @@ Future<void> showTagEditor(
   // screen, and a dialog centred in the window is still right there.
   final narrow = MediaQuery.sizeOf(context).width < 500;
   if (narrow) {
-    return showModalBottomSheet<void>(
-      context: context,
-      // Above whatever navigator raised it — this is reached from inside a
-      // tab, whose own navigator would clip the sheet to the tab.
-      useRootNavigator: true,
-      isScrollControlled: true,
-      showDragHandle: false,
+    // The editor is its own surface, so it carries the grip — see [SheetGrip].
+    return showResizableSheet<void>(
+      context,
+      showGrip: false,
       backgroundColor: Colors.transparent,
       builder: (_) => editor,
     );
@@ -232,6 +229,7 @@ class _TagEditorState extends State<TagEditor> {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const SheetGrip(),
               _buildHeader(scheme, selected),
               const Divider(height: 1),
               Flexible(child: _buildBody(scheme, selected)),

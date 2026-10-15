@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:fl_lib/src/view/widget/resizable_sheet.dart';
 
 /// Text editors retain their own caret-navigation shortcuts.
 class _RowTraversalActivator extends SingleActivator {
@@ -27,17 +28,10 @@ Future<T?> showRowsSheet<T>(
   BuildContext context, {
   required List<Widget> Function(BuildContext context) rows,
 }) {
-  return showModalBottomSheet<T>(
-    context: context,
-    // Above whatever navigator raised it. A tab's own navigator would clip the
-    // sheet to the tab, and these are raised from tabs.
-    useRootNavigator: true,
-    // Not Material's: it puts the handle in a strip `kMinInteractiveDimension`
-    // tall — 48 points to draw a 4-point line, which on a sheet of three rows
-    // is a fifth of the sheet. [RowsSheet] draws its own, and dragging the
-    // sheet away works the same either way; the handle only says that it can
-    // be.
-    showDragHandle: false,
+  // Resizable like every other sheet: a list of a hundred network interfaces
+  // is still "a list of things to pick from", and wants the window.
+  return showResizableSheet<T>(
+    context,
     builder: (ctx) => RowsSheet(children: rows(ctx)),
   );
 }
@@ -55,6 +49,7 @@ class SheetChoiceTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.icon,
+    this.leading,
     this.subtitle,
     this.action,
     this.onFocusChange,
@@ -65,6 +60,9 @@ class SheetChoiceTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final IconData? icon;
+
+  /// In place of [icon], for a row whose mark is not an icon — a server's.
+  final Widget? leading;
 
   /// A second line under [title], for a row the title alone does not tell
   /// apart — which servers a workspace holds, which key runs a command.
@@ -87,7 +85,7 @@ class SheetChoiceTile extends StatelessWidget {
       child: ListTile(
         autofocus: autofocus,
         selected: selected,
-        leading: icon == null ? null : Icon(icon),
+        leading: leading ?? (icon == null ? null : Icon(icon)),
         title: Text(title),
         subtitle: subtitle == null
             ? null
@@ -118,14 +116,8 @@ class RowsSheet extends StatelessWidget {
 
   final List<Widget> children;
 
-  /// The grip, at Material's own measurements — only the room around it is
-  /// this file's own.
-  static const _handleSize = Size(32, 4);
-
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Shortcuts(
       shortcuts: const <ShortcutActivator, Intent>{
         _RowTraversalActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
@@ -142,17 +134,6 @@ class RowsSheet extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 10),
-                  width: _handleSize.width,
-                  height: _handleSize.height,
-                  decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).bottomSheetTheme.dragHandleColor ??
-                        scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(_handleSize.height / 2),
-                  ),
-                ),
                 Flexible(
                   // Compact rather than dense: `dense` shrinks the text as well, and
                   // these rows are read, not scanned. What is being taken out is the
