@@ -26,18 +26,21 @@ class DebugPage extends StatelessWidget {
       appBar: CustomAppBar(
         leading: IconButton(
           onPressed: () => context.pop(),
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
           icon: const Icon(Icons.arrow_back),
         ),
         title: Text(args?.title ?? l10n.log, style: const TextStyle(fontSize: 17)),
         actions: [
-          const Btn.icon(
-            icon: Icon(Icons.copy, size: 23),
+          Btn.icon(
+            text: l10n.copy,
+            icon: const Icon(Icons.copy, size: 23),
             onTap: DebugProvider.copy,
           ),
           Btn.icon(
+            text: l10n.clear,
             onTap: () {
               context.showRoundDialog(
-                title: 'Clear logs?',
+                title: '${l10n.clear}?',
                 actions: Btn.ok(
                   onTap: () {
                     DebugProvider.clear();

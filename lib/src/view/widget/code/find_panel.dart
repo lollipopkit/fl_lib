@@ -109,12 +109,14 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
                     _buildCheckText(
                       context: context,
                       text: 'Aa',
+                      label: libL10n.caseSensitive,
                       checked: value.option.caseSensitive,
                       onPressed: controller.toggleCaseSensitive,
                     ),
                     _buildCheckText(
                       context: context,
                       text: '.*',
+                      label: libL10n.regex,
                       checked: value.option.regex,
                       onPressed: controller.toggleRegex,
                     )
@@ -199,21 +201,31 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
   Widget _buildCheckText({
     required BuildContext context,
     required String text,
+    required String label,
     required bool checked,
     required VoidCallback onPressed,
   }) {
     final Color selectedColor = iconSelectedColor ?? Theme.of(context).primaryColor;
-    return GestureDetector(
+    // The glyphs are what a sighted reader knows these by; a screen reader
+    // gets the option's name and whether it is on.
+    return Semantics(
+      button: true,
+      toggled: checked,
+      label: label,
+      excludeSemantics: true,
       onTap: onPressed,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: SizedBox(
-          width: _kDefaultFindIconWidth * 0.75,
-          child: Text(
-            text,
-            style: TextStyle(
-              color: checked ? selectedColor : iconColor,
-              fontSize: inputFontSize,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: SizedBox(
+            width: _kDefaultFindIconWidth * 0.75,
+            child: Text(
+              text,
+              style: TextStyle(
+                color: checked ? selectedColor : iconColor,
+                fontSize: inputFontSize,
+              ),
             ),
           ),
         ),
@@ -221,8 +233,9 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  Widget _buildIconButton({required IconData icon, VoidCallback? onPressed, String? tooltip}) {
+  Widget _buildIconButton({required IconData icon, VoidCallback? onPressed, required String tooltip}) {
     return Btn.icon(
+      text: tooltip,
       onTap: onPressed,
       icon: Icon(
         icon,

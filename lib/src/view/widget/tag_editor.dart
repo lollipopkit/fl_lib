@@ -259,9 +259,13 @@ class _TagEditorState extends State<TagEditor> {
             Text(widget.countLabel!(selected.length), style: UIs.text12Grey),
             const SizedBox(width: 9),
           ],
-          InkWell(
-            onTap: context.popDialog,
-            child: Icon(Icons.close, size: 19, color: scheme.onSurfaceVariant),
+          Semantics(
+            button: true,
+            label: l10n.close,
+            child: InkWell(
+              onTap: context.popDialog,
+              child: Icon(Icons.close, size: 19, color: scheme.onSurfaceVariant),
+            ),
           ),
         ],
       ),
@@ -409,12 +413,16 @@ class _TagEditorState extends State<TagEditor> {
               if (selected)
                 const Icon(Icons.check, size: 17)
               else if (widget.onRename != null)
-                InkWell(
-                  onTap: () => _rename(tag),
-                  child: Icon(
-                    Icons.edit,
-                    size: 17,
-                    color: scheme.onSurfaceVariant,
+                Semantics(
+                  button: true,
+                  label: l10n.rename,
+                  child: InkWell(
+                    onTap: () => _rename(tag),
+                    child: Icon(
+                      Icons.edit,
+                      size: 17,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
             ],

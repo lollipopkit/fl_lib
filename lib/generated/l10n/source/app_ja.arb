@@ -286,5 +286,11 @@
   "appearanceCardCorners": "カードの角丸",
   "appearanceTileCorners": "タイルの角丸",
   "appearanceButtonCorners": "ボタンの角丸",
-  "appearanceThemeModeLocked": "このテーマは{mode}のみ対応しています。モードを変更するには、別のテーマを選択してください。"
+  "appearanceThemeModeLocked": "このテーマは{mode}のみ対応しています。モードを変更するには、別のテーマを選択してください。",
+  "caseSensitive": "大文字と小文字を区別",
+  "flashlight": "ライト",
+  "regex": "正規表現",
+  "showPwd": "パスワードを表示",
+  "existsFmt": "{name} は既に存在します",
+  "tooLargeFmt": "{size} を超えています"
 }

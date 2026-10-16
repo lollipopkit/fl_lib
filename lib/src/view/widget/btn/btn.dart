@@ -261,14 +261,24 @@ final class Btn extends StatelessWidget {
   /// Right-click reaches [onLongTap], for the same reason every other tile
   /// does — see `WidgetSecondaryX`. Wrapped once here rather than in each of
   /// the six shapes below, which all carry the same callback.
+  ///
+  /// The [InkWell] shapes say they are buttons themselves: an [InkWell] only
+  /// gives a screen reader a tap action, so it read as plain text or an icon
+  /// that happened to respond, where [TextButton] and [ElevatedButton] say so.
   @override
   Widget build(BuildContext context) => switch (type) {
     BtnType.text => _text(context),
-    BtnType.icon => _icon(context),
-    BtnType.column => _column(context),
-    BtnType.row || BtnType.tile => _row(context),
+    BtnType.icon => _asButton(context, _icon(context)),
+    BtnType.column => _asButton(context, _column(context)),
+    BtnType.row || BtnType.tile => _asButton(context, _row(context)),
     BtnType.elevated => _elevated(context),
   }.onSecondary(asSecondary(onLongTap));
+
+  Widget _asButton(BuildContext context, Widget child) => Semantics(
+    button: true,
+    enabled: _resolveOnTap(context) != null || onLongTap != null,
+    child: child,
+  );
 
   VoidCallback? _resolveOnTap(BuildContext c) {
     if (onTap == _defaultOnTap) {

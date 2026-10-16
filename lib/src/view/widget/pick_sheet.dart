@@ -94,6 +94,7 @@ class _PickSheetState<T> extends State<PickSheet<T>> {
                 false => Icons.arrow_downward,
                 null => Icons.sort,
               }),
+              tooltip: l10n.sort,
               onPressed: _sort,
             ),
           ),

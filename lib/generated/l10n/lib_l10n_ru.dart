@@ -943,4 +943,26 @@ class LibLocalizationsRu extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Эта тема поддерживает только режим «$mode». Для смены режима выберите другую тему.';
   }
+
+  @override
+  String get caseSensitive => 'Учитывать регистр';
+
+  @override
+  String get flashlight => 'Фонарик';
+
+  @override
+  String get regex => 'Регулярное выражение';
+
+  @override
+  String get showPwd => 'Показать пароль';
+
+  @override
+  String existsFmt(String name) {
+    return '$name уже существует';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Больше $size';
+  }
 }

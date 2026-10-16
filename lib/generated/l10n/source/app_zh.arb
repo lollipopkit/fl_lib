@@ -286,5 +286,11 @@
   "appearanceCardCorners": "卡片圆角",
   "appearanceTileCorners": "Tile 圆角",
   "appearanceButtonCorners": "按钮圆角",
-  "appearanceThemeModeLocked": "此主题仅支持{mode}。如需切换模式，请选择其他主题。"
+  "appearanceThemeModeLocked": "此主题仅支持{mode}。如需切换模式，请选择其他主题。",
+  "caseSensitive": "区分大小写",
+  "flashlight": "手电筒",
+  "regex": "正则表达式",
+  "showPwd": "显示密码",
+  "existsFmt": "{name} 已存在",
+  "tooLargeFmt": "超过 {size}"
 }

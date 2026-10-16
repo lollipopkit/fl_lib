@@ -928,4 +928,26 @@ class LibLocalizationsJa extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'このテーマは$modeのみ対応しています。モードを変更するには、別のテーマを選択してください。';
   }
+
+  @override
+  String get caseSensitive => '大文字と小文字を区別';
+
+  @override
+  String get flashlight => 'ライト';
+
+  @override
+  String get regex => '正規表現';
+
+  @override
+  String get showPwd => 'パスワードを表示';
+
+  @override
+  String existsFmt(String name) {
+    return '$name は既に存在します';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size を超えています';
+  }
 }

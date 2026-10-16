@@ -286,5 +286,11 @@
   "appearanceCardCorners": "Kaarthoeken",
   "appearanceTileCorners": "Tegelhoeken",
   "appearanceButtonCorners": "Knophoeken",
-  "appearanceThemeModeLocked": "Dit thema ondersteunt alleen {mode}. Kies een ander thema om de modus te wijzigen."
+  "appearanceThemeModeLocked": "Dit thema ondersteunt alleen {mode}. Kies een ander thema om de modus te wijzigen.",
+  "caseSensitive": "Hoofdlettergevoelig",
+  "flashlight": "Zaklamp",
+  "regex": "Reguliere expressie",
+  "showPwd": "Wachtwoord tonen",
+  "existsFmt": "{name} bestaat al",
+  "tooLargeFmt": "Groter dan {size}"
 }

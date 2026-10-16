@@ -938,4 +938,26 @@ class LibLocalizationsFr extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Ce thème prend uniquement en charge le mode $mode. Choisissez un autre thème pour changer de mode.';
   }
+
+  @override
+  String get caseSensitive => 'Respecter la casse';
+
+  @override
+  String get flashlight => 'Lampe torche';
+
+  @override
+  String get regex => 'Expression régulière';
+
+  @override
+  String get showPwd => 'Afficher le mot de passe';
+
+  @override
+  String existsFmt(String name) {
+    return '$name existe déjà';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Plus de $size';
+  }
 }

@@ -929,4 +929,26 @@ class LibLocalizationsKo extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return '이 테마는 $mode만 지원합니다. 모드를 변경하려면 다른 테마를 선택하세요.';
   }
+
+  @override
+  String get caseSensitive => '대소문자 구분';
+
+  @override
+  String get flashlight => '손전등';
+
+  @override
+  String get regex => '정규식';
+
+  @override
+  String get showPwd => '비밀번호 표시';
+
+  @override
+  String existsFmt(String name) {
+    return '$name은(는) 이미 있습니다';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size 초과';
+  }
 }

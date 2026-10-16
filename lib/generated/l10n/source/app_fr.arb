@@ -286,5 +286,11 @@
   "appearanceCardCorners": "Coins des cartes",
   "appearanceTileCorners": "Coins des éléments",
   "appearanceButtonCorners": "Coins des boutons",
-  "appearanceThemeModeLocked": "Ce thème prend uniquement en charge le mode {mode}. Choisissez un autre thème pour changer de mode."
+  "appearanceThemeModeLocked": "Ce thème prend uniquement en charge le mode {mode}. Choisissez un autre thème pour changer de mode.",
+  "caseSensitive": "Respecter la casse",
+  "flashlight": "Lampe torche",
+  "regex": "Expression régulière",
+  "showPwd": "Afficher le mot de passe",
+  "existsFmt": "{name} existe déjà",
+  "tooLargeFmt": "Plus de {size}"
 }

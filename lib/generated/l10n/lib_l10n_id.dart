@@ -932,4 +932,26 @@ class LibLocalizationsId extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Tema ini hanya mendukung $mode. Pilih tema lain untuk mengubah mode.';
   }
+
+  @override
+  String get caseSensitive => 'Peka huruf besar/kecil';
+
+  @override
+  String get flashlight => 'Senter';
+
+  @override
+  String get regex => 'Ekspresi reguler';
+
+  @override
+  String get showPwd => 'Tampilkan kata sandi';
+
+  @override
+  String existsFmt(String name) {
+    return '$name sudah ada';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Lebih dari $size';
+  }
 }

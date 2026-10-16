@@ -91,6 +91,8 @@ class _BarcodeScannerWithOverlayState extends State<BarcodeScannerPage> {
         actions: [
           IconButton(
             onPressed: () => unawaited(_toggleTorch()),
+            tooltip: libL10n.flashlight,
+            isSelected: _torch,
             icon: Icon(
               _torch ? Icons.flashlight_on_rounded : Icons.flashlight_off_rounded,
             ),

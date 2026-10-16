@@ -939,4 +939,26 @@ class LibLocalizationsNl extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Dit thema ondersteunt alleen $mode. Kies een ander thema om de modus te wijzigen.';
   }
+
+  @override
+  String get caseSensitive => 'Hoofdlettergevoelig';
+
+  @override
+  String get flashlight => 'Zaklamp';
+
+  @override
+  String get regex => 'Reguliere expressie';
+
+  @override
+  String get showPwd => 'Wachtwoord tonen';
+
+  @override
+  String existsFmt(String name) {
+    return '$name bestaat al';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Groter dan $size';
+  }
 }

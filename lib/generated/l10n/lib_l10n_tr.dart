@@ -931,4 +931,26 @@ class LibLocalizationsTr extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Bu tema yalnızca $mode modunu destekler. Modu değiştirmek için başka bir tema seçin.';
   }
+
+  @override
+  String get caseSensitive => 'Büyük/küçük harf duyarlı';
+
+  @override
+  String get flashlight => 'El feneri';
+
+  @override
+  String get regex => 'Düzenli ifade';
+
+  @override
+  String get showPwd => 'Parolayı göster';
+
+  @override
+  String existsFmt(String name) {
+    return '$name zaten var';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size boyutundan büyük';
+  }
 }

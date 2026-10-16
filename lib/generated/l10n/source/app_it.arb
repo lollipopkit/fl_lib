@@ -286,5 +286,11 @@
   "appearanceCardCorners": "Angoli delle schede",
   "appearanceTileCorners": "Angoli degli elementi",
   "appearanceButtonCorners": "Angoli dei pulsanti",
-  "appearanceThemeModeLocked": "Questo tema supporta solo {mode}. Seleziona un altro tema per cambiare modalità."
+  "appearanceThemeModeLocked": "Questo tema supporta solo {mode}. Seleziona un altro tema per cambiare modalità.",
+  "caseSensitive": "Maiuscole/minuscole",
+  "flashlight": "Torcia",
+  "regex": "Espressione regolare",
+  "showPwd": "Mostra password",
+  "existsFmt": "{name} esiste già",
+  "tooLargeFmt": "Più di {size}"
 }

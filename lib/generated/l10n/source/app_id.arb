@@ -286,5 +286,11 @@
   "appearanceCardCorners": "Sudut kartu",
   "appearanceTileCorners": "Sudut tile",
   "appearanceButtonCorners": "Sudut tombol",
-  "appearanceThemeModeLocked": "Tema ini hanya mendukung {mode}. Pilih tema lain untuk mengubah mode."
+  "appearanceThemeModeLocked": "Tema ini hanya mendukung {mode}. Pilih tema lain untuk mengubah mode.",
+  "caseSensitive": "Peka huruf besar/kecil",
+  "flashlight": "Senter",
+  "regex": "Ekspresi reguler",
+  "showPwd": "Tampilkan kata sandi",
+  "existsFmt": "{name} sudah ada",
+  "tooLargeFmt": "Lebih dari {size}"
 }

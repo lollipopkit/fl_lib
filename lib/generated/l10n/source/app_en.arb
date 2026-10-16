@@ -1248,5 +1248,39 @@
         "type": "String"
       }
     }
+  },
+  "caseSensitive": "Case sensitive",
+  "@caseSensitive": {
+    "description": "A find option: matching respects upper and lower case."
+  },
+  "flashlight": "Flashlight",
+  "@flashlight": {
+    "description": "The camera's light, switched on and off while scanning."
+  },
+  "regex": "Regular expression",
+  "@regex": {
+    "description": "A find option: the query is a regular expression."
+  },
+  "showPwd": "Show password",
+  "@showPwd": {
+    "description": "A toggle on a password field: show the password as plain text."
+  },
+  "existsFmt": "{name} already exists",
+  "@existsFmt": {
+    "description": "Refusing a name or key that is already taken. {name} is that name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "tooLargeFmt": "Larger than {size}",
+  "@tooLargeFmt": {
+    "description": "Refusing something larger than a limit. {size} is the limit, formatted, e.g. 64 MB.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
   }
 }

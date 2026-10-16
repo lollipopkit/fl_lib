@@ -54,6 +54,7 @@ class _FullscreenEditWidgetState extends State<PlainEditPage> {
           actions: [
             IconButton(
               icon: const Icon(Icons.save),
+              tooltip: libL10n.save,
               onPressed: () {
                 context.pop(_controller.text);
               },

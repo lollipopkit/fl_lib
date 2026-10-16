@@ -943,4 +943,26 @@ class LibLocalizationsUk extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Ця тема підтримує лише режим «$mode». Щоб змінити режим, виберіть іншу тему.';
   }
+
+  @override
+  String get caseSensitive => 'Враховувати регістр';
+
+  @override
+  String get flashlight => 'Ліхтарик';
+
+  @override
+  String get regex => 'Регулярний вираз';
+
+  @override
+  String get showPwd => 'Показати пароль';
+
+  @override
+  String existsFmt(String name) {
+    return '$name вже існує';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Більше ніж $size';
+  }
 }

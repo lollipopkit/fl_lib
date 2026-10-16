@@ -49,8 +49,8 @@ class _JsonListEditorState extends State<JsonListEditor> {
       appBar: CustomAppBar(
         title: Text(l10n.edit),
         actions: [
-          IconButton(onPressed: _onTapAdd, icon: const Icon(Icons.add)),
-          IconButton(onPressed: () => context.pop(_saveList()), icon: const Icon(Icons.save)),
+          IconButton(onPressed: _onTapAdd, tooltip: l10n.add, icon: const Icon(Icons.add)),
+          IconButton(onPressed: () => context.pop(_saveList()), tooltip: l10n.save, icon: const Icon(Icons.save)),
         ],
       ),
       body: animatedList,

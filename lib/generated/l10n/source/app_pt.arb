@@ -286,5 +286,11 @@
   "appearanceCardCorners": "Cantos dos cartões",
   "appearanceTileCorners": "Cantos dos itens",
   "appearanceButtonCorners": "Cantos dos botões",
-  "appearanceThemeModeLocked": "Este tema só suporta {mode}. Selecione outro tema para alterar o modo."
+  "appearanceThemeModeLocked": "Este tema só suporta {mode}. Selecione outro tema para alterar o modo.",
+  "caseSensitive": "Diferenciar maiúsculas",
+  "flashlight": "Lanterna",
+  "regex": "Expressão regular",
+  "showPwd": "Mostrar senha",
+  "existsFmt": "{name} já existe",
+  "tooLargeFmt": "Maior que {size}"
 }

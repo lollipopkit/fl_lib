@@ -273,6 +273,7 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
 
   void _onDragStart() {
     _settle.stop();
+    _throwingOut = false;
     _dragging = true;
     _syncTimer();
   }
@@ -292,7 +293,9 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
     _throwingOut = thrown;
     _settleFrom = _drag.value;
     _settleTo = thrown ? extent + _rubberLimit : 0;
-    _settle.forward(from: 0).whenCompleteOrCancel(() {
+    // On completion only: a toast grabbed again on its way out has its settle
+    // cancelled, and is the reader's to keep rather than dismissed anyway.
+    _settle.forward(from: 0).then((_) {
       // Gone from the screen but not yet from the pile: it still has to give up
       // the height it holds, which is what moves the rest of the pile up. The
       // same path an expiring toast takes, so both look the same.
@@ -735,18 +738,23 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
           // the tap over with `onTap`, this is the only way left to open it.
           SizedBox(
             height: _lineHeight,
-            child: InkResponse(
-              onTap: _toggleExpand,
-              radius: 16,
-              child: AnimatedRotation(
-                turns: _isExpanded ? 0.5 : 0,
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : Durations.short3,
-                child: Icon(
-                  Icons.keyboard_arrow_down,
-                  size: _iconSize,
-                  color: theme.colorScheme.onSurfaceVariant,
+            child: Semantics(
+              button: true,
+              expanded: _isExpanded,
+              label: l10n.more,
+              child: InkResponse(
+                onTap: _toggleExpand,
+                radius: 16,
+                child: AnimatedRotation(
+                  turns: _isExpanded ? 0.5 : 0,
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : Durations.short3,
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: _iconSize,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),

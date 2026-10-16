@@ -935,4 +935,26 @@ class LibLocalizationsEn extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'This theme only supports $mode. Select another theme to change the mode.';
   }
+
+  @override
+  String get caseSensitive => 'Case sensitive';
+
+  @override
+  String get flashlight => 'Flashlight';
+
+  @override
+  String get regex => 'Regular expression';
+
+  @override
+  String get showPwd => 'Show password';
+
+  @override
+  String existsFmt(String name) {
+    return '$name already exists';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Larger than $size';
+  }
 }

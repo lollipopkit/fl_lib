@@ -474,6 +474,7 @@ final class _MenuButton extends StatelessWidget {
     return Builder(
       builder: (ctx) => IconButton(
         icon: const Icon(Icons.more_vert, size: 17),
+        tooltip: MaterialLocalizations.of(context).showMenuTooltip,
         color: Theme.of(context).colorScheme.onSurfaceVariant,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 26, height: 26),
@@ -502,6 +503,7 @@ class _CloseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(MingCute.close_circle_fill, size: 15),
+      tooltip: libL10n.close,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 26, height: 26),

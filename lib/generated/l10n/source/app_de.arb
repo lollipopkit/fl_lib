@@ -286,5 +286,11 @@
   "appearanceCardCorners": "Kartenecken",
   "appearanceTileCorners": "Kachelecken",
   "appearanceButtonCorners": "Schaltflächenecken",
-  "appearanceThemeModeLocked": "Dieses Theme unterstützt nur {mode}. Wähle ein anderes Theme, um den Modus zu ändern."
+  "appearanceThemeModeLocked": "Dieses Theme unterstützt nur {mode}. Wähle ein anderes Theme, um den Modus zu ändern.",
+  "caseSensitive": "Groß-/Kleinschreibung beachten",
+  "flashlight": "Taschenlampe",
+  "regex": "Regulärer Ausdruck",
+  "showPwd": "Passwort anzeigen",
+  "existsFmt": "{name} existiert bereits",
+  "tooLargeFmt": "Größer als {size}"
 }
