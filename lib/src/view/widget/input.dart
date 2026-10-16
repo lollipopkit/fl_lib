@@ -92,6 +92,16 @@ class _InputState extends State<Input> {
   late final _obscureText = widget.obscureText.vn;
 
   @override
+  void didUpdateWidget(Input oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A field that stops (or starts) being a password follows; what the eye
+    // last chose only holds while the parent keeps saying the same thing.
+    if (widget.obscureText != oldWidget.obscureText) {
+      _obscureText.value = widget.obscureText;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) =>
       _FormRow(icon: widget.icon, noWrap: widget.noWrap, child: _buildField());
 

@@ -950,4 +950,14 @@ class LibLocalizationsIt extends LibLocalizations {
 
   @override
   String get showPwd => 'Mostra password';
+
+  @override
+  String existsFmt(String name) {
+    return '$name esiste già';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Più di $size';
+  }
 }

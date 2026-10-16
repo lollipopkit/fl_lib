@@ -943,4 +943,14 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get showPwd => 'Parolayı göster';
+
+  @override
+  String existsFmt(String name) {
+    return '$name zaten var';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size boyutundan büyük';
+  }
 }

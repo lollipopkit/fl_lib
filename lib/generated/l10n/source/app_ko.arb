@@ -290,5 +290,7 @@
   "caseSensitive": "대소문자 구분",
   "flashlight": "손전등",
   "regex": "정규식",
-  "showPwd": "비밀번호 표시"
+  "showPwd": "비밀번호 표시",
+  "existsFmt": "{name}은(는) 이미 있습니다",
+  "tooLargeFmt": "{size} 초과"
 }

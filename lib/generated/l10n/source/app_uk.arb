@@ -290,5 +290,7 @@
   "caseSensitive": "Враховувати регістр",
   "flashlight": "Ліхтарик",
   "regex": "Регулярний вираз",
-  "showPwd": "Показати пароль"
+  "showPwd": "Показати пароль",
+  "existsFmt": "{name} вже існує",
+  "tooLargeFmt": "Більше ніж {size}"
 }

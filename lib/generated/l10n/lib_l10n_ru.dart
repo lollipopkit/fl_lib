@@ -955,4 +955,14 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get showPwd => 'Показать пароль';
+
+  @override
+  String existsFmt(String name) {
+    return '$name уже существует';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Больше $size';
+  }
 }

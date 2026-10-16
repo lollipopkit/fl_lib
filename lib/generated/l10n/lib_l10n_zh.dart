@@ -940,6 +940,16 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get showPwd => '显示密码';
+
+  @override
+  String existsFmt(String name) {
+    return '$name 已存在';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '超过 $size';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -1877,4 +1887,14 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get showPwd => '顯示密碼';
+
+  @override
+  String existsFmt(String name) {
+    return '$name 已存在';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '超過 $size';
+  }
 }

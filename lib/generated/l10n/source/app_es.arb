@@ -290,5 +290,7 @@
   "caseSensitive": "Distinguir mayúsculas",
   "flashlight": "Linterna",
   "regex": "Expresión regular",
-  "showPwd": "Mostrar contraseña"
+  "showPwd": "Mostrar contraseña",
+  "existsFmt": "{name} ya existe",
+  "tooLargeFmt": "Más de {size}"
 }

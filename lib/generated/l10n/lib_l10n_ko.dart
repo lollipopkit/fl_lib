@@ -941,4 +941,14 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get showPwd => '비밀번호 표시';
+
+  @override
+  String existsFmt(String name) {
+    return '$name은(는) 이미 있습니다';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size 초과';
+  }
 }

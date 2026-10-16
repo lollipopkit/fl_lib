@@ -290,5 +290,7 @@
   "caseSensitive": "Hoofdlettergevoelig",
   "flashlight": "Zaklamp",
   "regex": "Reguliere expressie",
-  "showPwd": "Wachtwoord tonen"
+  "showPwd": "Wachtwoord tonen",
+  "existsFmt": "{name} bestaat al",
+  "tooLargeFmt": "Groter dan {size}"
 }

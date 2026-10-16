@@ -290,5 +290,7 @@
   "caseSensitive": "Учитывать регистр",
   "flashlight": "Фонарик",
   "regex": "Регулярное выражение",
-  "showPwd": "Показать пароль"
+  "showPwd": "Показать пароль",
+  "existsFmt": "{name} уже существует",
+  "tooLargeFmt": "Больше {size}"
 }

@@ -944,4 +944,14 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get showPwd => 'Tampilkan kata sandi';
+
+  @override
+  String existsFmt(String name) {
+    return '$name sudah ada';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Lebih dari $size';
+  }
 }

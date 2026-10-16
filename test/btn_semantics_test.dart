@@ -1,4 +1,4 @@
-import 'dart:ui' show SemanticsFlag;
+import 'dart:ui' show Tristate;
 
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,8 +22,8 @@ void main() {
     );
 
     final node = tester.getSemantics(find.byType(Btn));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isEnabled), isTrue);
+    expect(node.flagsCollection.isButton, isTrue);
+    expect(node.flagsCollection.isEnabled, Tristate.isTrue);
     expect(node.tooltip, 'Delete');
     handle.dispose();
   });
@@ -36,7 +36,7 @@ void main() {
     );
 
     final node = tester.getSemantics(find.byType(Btn));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.flagsCollection.isButton, isTrue);
     expect(node.label, 'Open');
     handle.dispose();
   });
@@ -49,9 +49,8 @@ void main() {
     );
 
     final node = tester.getSemantics(find.byType(Btn));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
-    expect(node.hasFlag(SemanticsFlag.hasEnabledState), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isEnabled), isFalse);
+    expect(node.flagsCollection.isButton, isTrue);
+    expect(node.flagsCollection.isEnabled, Tristate.isFalse);
     handle.dispose();
   });
 

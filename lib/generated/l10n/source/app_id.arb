@@ -290,5 +290,7 @@
   "caseSensitive": "Peka huruf besar/kecil",
   "flashlight": "Senter",
   "regex": "Ekspresi reguler",
-  "showPwd": "Tampilkan kata sandi"
+  "showPwd": "Tampilkan kata sandi",
+  "existsFmt": "{name} sudah ada",
+  "tooLargeFmt": "Lebih dari {size}"
 }

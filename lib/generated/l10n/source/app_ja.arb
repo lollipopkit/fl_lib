@@ -290,5 +290,7 @@
   "caseSensitive": "大文字と小文字を区別",
   "flashlight": "ライト",
   "regex": "正規表現",
-  "showPwd": "パスワードを表示"
+  "showPwd": "パスワードを表示",
+  "existsFmt": "{name} は既に存在します",
+  "tooLargeFmt": "{size} を超えています"
 }

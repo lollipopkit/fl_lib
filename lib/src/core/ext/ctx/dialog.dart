@@ -147,10 +147,12 @@ extension DialogX on BuildContext {
     VNode<bool>? ascend,
   }) async {
     var vals = initial ?? <T>[];
-    final btns = actions ?? <Widget>[];
-    if (multi && addOkBtn) {
-      btns.add(TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)));
-    }
+    // A list of its own: the caller's may be reused for the next dialog, or
+    // const, and appending to it would grow it by an OK each time or throw.
+    final btns = <Widget>[
+      ...?actions,
+      if (multi && addOkBtn) TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)),
+    ];
 
     final itemsList = items.toList();
     final isAscending = ascend ?? nvn<bool>();

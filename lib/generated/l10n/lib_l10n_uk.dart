@@ -955,4 +955,14 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get showPwd => 'Показати пароль';
+
+  @override
+  String existsFmt(String name) {
+    return '$name вже існує';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Більше ніж $size';
+  }
 }

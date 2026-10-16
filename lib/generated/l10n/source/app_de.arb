@@ -290,5 +290,7 @@
   "caseSensitive": "Groß-/Kleinschreibung beachten",
   "flashlight": "Taschenlampe",
   "regex": "Regulärer Ausdruck",
-  "showPwd": "Passwort anzeigen"
+  "showPwd": "Passwort anzeigen",
+  "existsFmt": "{name} existiert bereits",
+  "tooLargeFmt": "Größer als {size}"
 }

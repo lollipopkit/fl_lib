@@ -7,8 +7,8 @@ final class SearchPage<T> extends SearchDelegate<T> {
   final EdgeInsetsGeometry? padding;
   final Duration throttleInterval;
 
-  List<T> _cache = [];
-  DateTime? _lastSearch;
+  String? _query;
+  Future<List<T>>? _results;
 
   SearchPage({
     required this.future,
@@ -72,15 +72,21 @@ final class SearchPage<T> extends SearchDelegate<T> {
     );
   }
 
-  Future<List<T>> _search(String query) async {
-    final lastSearch = _lastSearch;
-    if (lastSearch != null) {
-      final now = DateTime.now();
-      if (now.difference(lastSearch) < throttleInterval) {
-        return _cache;
-      }
-    }
-    _cache = await future(query);
-    return _cache;
+  /// One search per query: a rebuild for the same text gets the same future
+  /// back rather than asking again, and a different text never gets the
+  /// previous one's results.
+  Future<List<T>> _search(String query) {
+    final results = _results;
+    if (results != null && query == _query) return results;
+    _query = query;
+    return _results = _afterPause(query);
+  }
+
+  /// Typing changes the query once a key, so it is asked for only once it has
+  /// held for [throttleInterval]; one typed over in the meantime is dropped.
+  Future<List<T>> _afterPause(String query) async {
+    await Future<void>.delayed(throttleInterval);
+    if (query != _query) return _results!;
+    return future(query);
   }
 }

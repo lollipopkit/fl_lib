@@ -290,5 +290,7 @@
   "caseSensitive": "Böyük/kiçik hərfə həssas",
   "flashlight": "Fənər",
   "regex": "Müntəzəm ifadə",
-  "showPwd": "Şifrəni göstər"
+  "showPwd": "Şifrəni göstər",
+  "existsFmt": "{name} artıq mövcuddur",
+  "tooLargeFmt": "{size}-dan böyükdür"
 }

@@ -945,4 +945,14 @@ class LibLocalizationsAz extends LibLocalizations {
 
   @override
   String get showPwd => 'Şifrəni göstər';
+
+  @override
+  String existsFmt(String name) {
+    return '$name artıq mövcuddur';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size-dan böyükdür';
+  }
 }

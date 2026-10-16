@@ -290,5 +290,7 @@
   "caseSensitive": "区分大小写",
   "flashlight": "手电筒",
   "regex": "正则表达式",
-  "showPwd": "显示密码"
+  "showPwd": "显示密码",
+  "existsFmt": "{name} 已存在",
+  "tooLargeFmt": "超过 {size}"
 }

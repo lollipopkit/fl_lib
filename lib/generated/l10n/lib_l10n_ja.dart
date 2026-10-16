@@ -940,4 +940,14 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get showPwd => 'パスワードを表示';
+
+  @override
+  String existsFmt(String name) {
+    return '$name は既に存在します';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return '$size を超えています';
+  }
 }

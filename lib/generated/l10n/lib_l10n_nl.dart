@@ -951,4 +951,14 @@ class LibLocalizationsNl extends LibLocalizations {
 
   @override
   String get showPwd => 'Wachtwoord tonen';
+
+  @override
+  String existsFmt(String name) {
+    return '$name bestaat al';
+  }
+
+  @override
+  String tooLargeFmt(String size) {
+    return 'Groter dan $size';
+  }
 }

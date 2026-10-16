@@ -1870,6 +1870,18 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Show password'**
   String get showPwd;
+
+  /// Refusing a name or key that is already taken. {name} is that name.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} already exists'**
+  String existsFmt(String name);
+
+  /// Refusing something larger than a limit. {size} is the limit, formatted, e.g. 64 MB.
+  ///
+  /// In en, this message translates to:
+  /// **'Larger than {size}'**
+  String tooLargeFmt(String size);
 }
 
 class _LibLocalizationsDelegate

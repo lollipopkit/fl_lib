@@ -290,5 +290,7 @@
   "caseSensitive": "Respecter la casse",
   "flashlight": "Lampe torche",
   "regex": "Expression régulière",
-  "showPwd": "Afficher le mot de passe"
+  "showPwd": "Afficher le mot de passe",
+  "existsFmt": "{name} existe déjà",
+  "tooLargeFmt": "Plus de {size}"
 }

@@ -117,9 +117,16 @@ class _KvEditorState extends State<KvEditor> {
     void onSave() async {
       final newK = ctrlK.text;
       final newV = ctrlV.text;
-      if (newK.isEmpty || newV.isEmpty) {
+      final err = newK.isEmpty || newV.isEmpty
+          ? l10n.empty
+          // Renaming onto another key would replace that entry's value.
+          : newK != k && _map.containsKey(newK)
+          ? l10n.existsFmt(newK)
+          : null;
+      if (err != null) {
         context.popDialog();
-        await context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
+        await context.showRoundDialog(title: l10n.fail, child: Text(err));
+        return;
       }
       _map.remove(k);
       _map[newK] = newV;
@@ -156,9 +163,16 @@ class _KvEditorState extends State<KvEditor> {
     void onSave() {
       final k = ctrlK.text;
       final v = ctrlV.text;
-      if (k.isEmpty || v.isEmpty) {
+      final err = k.isEmpty || v.isEmpty
+          ? l10n.empty
+          // Adding a key that is there would replace its value, and the list
+          // would gain a row the map does not.
+          : _map.containsKey(k)
+          ? l10n.existsFmt(k)
+          : null;
+      if (err != null) {
         context.popDialog();
-        context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
+        context.showRoundDialog(title: l10n.fail, child: Text(err));
         return;
       }
       _map[k] = v;

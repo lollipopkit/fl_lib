@@ -290,5 +290,7 @@
   "caseSensitive": "Büyük/küçük harf duyarlı",
   "flashlight": "El feneri",
   "regex": "Düzenli ifade",
-  "showPwd": "Parolayı göster"
+  "showPwd": "Parolayı göster",
+  "existsFmt": "{name} zaten var",
+  "tooLargeFmt": "{size} boyutundan büyük"
 }
