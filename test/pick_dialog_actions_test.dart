@@ -22,12 +22,19 @@ void main() {
     );
 
     for (final list in [actions, const <Widget>[]]) {
-      ctx.showPickDialog<String>(items: const ['a'], actions: list);
-      await tester.pump(const Duration(milliseconds: 300));
+      final picked = ctx.showPickDialog<String>(
+        items: const ['a'],
+        initial: const ['a'],
+        actions: list,
+      );
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text(libL10n.ok), findsOneWidget);
-      Navigator.of(ctx, rootNavigator: true).pop();
-      await tester.pump(const Duration(milliseconds: 300));
+
+      // The one OK there is, and it is the one that answers and closes.
+      await tester.tap(find.text(libL10n.ok));
+      await tester.pumpAndSettle();
+      expect(await picked, ['a']);
+      expect(find.text(libL10n.ok), findsNothing);
     }
     expect(actions, hasLength(1));
   });

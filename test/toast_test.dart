@@ -33,6 +33,27 @@ void main() {
     expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
   });
 
+  // A throw-out that is interrupted is the reader's: the settle being cancelled
+  // used to count as the throw finishing, and the toast left anyway.
+  testWidgets('a toast caught on its way out stays', (tester) async {
+    await _show(tester, 'Saved');
+    final card = find.text('Saved');
+
+    await tester.fling(card, const Offset(300, 0), 3000);
+    await tester.pump(const Duration(milliseconds: 40));
+    final grab = await tester.startGesture(tester.getCenter(card, warnIfMissed: false));
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await grab.moveBy(const Offset(-60, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pump(const Duration(milliseconds: 300));
+    await grab.up();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(card, findsOneWidget);
+  });
+
   // Measured the way the button paints its label: a title that fits beside
   // the button with the default style does not beside a wider one, and has
   // to be openable there.
