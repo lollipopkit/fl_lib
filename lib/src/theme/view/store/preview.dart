@@ -94,7 +94,14 @@ class _ThemeStorePreviewState extends State<ThemeStorePreview> {
               ],
             ),
           ),
-        _PreviewScreen(theme: _theme, brightness: brightness),
+        // A picture of the app in these colours: its buttons do nothing, so a
+        // screen reader is told what it is rather than walked through them.
+        Semantics(
+          image: true,
+          label: libL10n.preview,
+          excludeSemantics: true,
+          child: _PreviewScreen(theme: _theme, brightness: brightness),
+        ),
       ],
     );
   }

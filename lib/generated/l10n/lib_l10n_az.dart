@@ -933,4 +933,16 @@ class LibLocalizationsAz extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Bu mövzu yalnız $mode rejimini dəstəkləyir. Rejimi dəyişmək üçün başqa mövzu seçin.';
   }
+
+  @override
+  String get caseSensitive => 'Böyük/kiçik hərfə həssas';
+
+  @override
+  String get flashlight => 'Fənər';
+
+  @override
+  String get regex => 'Müntəzəm ifadə';
+
+  @override
+  String get showPwd => 'Şifrəni göstər';
 }

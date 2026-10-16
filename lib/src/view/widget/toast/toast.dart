@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
+import 'package:fl_lib/src/res/l10n.dart';
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/component_styles.dart';
 import 'package:fl_lib/src/view/widget/appbar.dart';

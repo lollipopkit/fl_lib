@@ -145,6 +145,8 @@ class _InputState extends State<Input> {
       // whose height came from its button rather than its content. Compact is
       // 40, still a target worth aiming at.
       visualDensity: VisualDensity.compact,
+      tooltip: libL10n.showPwd,
+      isSelected: !obscureText,
       icon: Icon(obscureText ? Icons.visibility : Icons.visibility_off),
       onPressed: () {
         _obscureText.value = !obscureText;

@@ -286,5 +286,9 @@
   "appearanceCardCorners": "Kart küncləri",
   "appearanceTileCorners": "Element küncləri",
   "appearanceButtonCorners": "Düymə küncləri",
-  "appearanceThemeModeLocked": "Bu mövzu yalnız {mode} rejimini dəstəkləyir. Rejimi dəyişmək üçün başqa mövzu seçin."
+  "appearanceThemeModeLocked": "Bu mövzu yalnız {mode} rejimini dəstəkləyir. Rejimi dəyişmək üçün başqa mövzu seçin.",
+  "caseSensitive": "Böyük/kiçik hərfə həssas",
+  "flashlight": "Fənər",
+  "regex": "Müntəzəm ifadə",
+  "showPwd": "Şifrəni göstər"
 }

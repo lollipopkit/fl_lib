@@ -286,5 +286,9 @@
   "appearanceCardCorners": "Углы карточек",
   "appearanceTileCorners": "Углы элементов",
   "appearanceButtonCorners": "Углы кнопок",
-  "appearanceThemeModeLocked": "Эта тема поддерживает только режим «{mode}». Для смены режима выберите другую тему."
+  "appearanceThemeModeLocked": "Эта тема поддерживает только режим «{mode}». Для смены режима выберите другую тему.",
+  "caseSensitive": "Учитывать регистр",
+  "flashlight": "Фонарик",
+  "regex": "Регулярное выражение",
+  "showPwd": "Показать пароль"
 }

@@ -928,6 +928,18 @@ class LibLocalizationsZh extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return '此主题仅支持$mode。如需切换模式，请选择其他主题。';
   }
+
+  @override
+  String get caseSensitive => '区分大小写';
+
+  @override
+  String get flashlight => '手电筒';
+
+  @override
+  String get regex => '正则表达式';
+
+  @override
+  String get showPwd => '显示密码';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -1853,4 +1865,16 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String appearanceThemeModeLocked(String mode) {
     return '此主題僅支援$mode。如需切換模式，請選擇其他主題。';
   }
+
+  @override
+  String get caseSensitive => '區分大小寫';
+
+  @override
+  String get flashlight => '手電筒';
+
+  @override
+  String get regex => '正規表示式';
+
+  @override
+  String get showPwd => '顯示密碼';
 }

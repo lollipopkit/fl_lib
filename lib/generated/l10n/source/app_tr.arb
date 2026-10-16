@@ -286,5 +286,9 @@
   "appearanceCardCorners": "Kart köşeleri",
   "appearanceTileCorners": "Kutucuk köşeleri",
   "appearanceButtonCorners": "Düğme köşeleri",
-  "appearanceThemeModeLocked": "Bu tema yalnızca {mode} modunu destekler. Modu değiştirmek için başka bir tema seçin."
+  "appearanceThemeModeLocked": "Bu tema yalnızca {mode} modunu destekler. Modu değiştirmek için başka bir tema seçin.",
+  "caseSensitive": "Büyük/küçük harf duyarlı",
+  "flashlight": "El feneri",
+  "regex": "Düzenli ifade",
+  "showPwd": "Parolayı göster"
 }

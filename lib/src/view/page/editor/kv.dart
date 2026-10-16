@@ -57,8 +57,8 @@ class _KvEditorState extends State<KvEditor> {
       appBar: CustomAppBar(
         title: Text(l10n.edit),
         actions: [
-          IconButton(onPressed: _onTapAdd, icon: const Icon(Icons.add)),
-          IconButton(onPressed: () => context.pop(_saveMap()), icon: const Icon(Icons.save)),
+          IconButton(onPressed: _onTapAdd, tooltip: l10n.add, icon: const Icon(Icons.add)),
+          IconButton(onPressed: () => context.pop(_saveMap()), tooltip: l10n.save, icon: const Icon(Icons.save)),
         ],
       ),
       body: animatedList,

@@ -1846,6 +1846,30 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'This theme only supports {mode}. Select another theme to change the mode.'**
   String appearanceThemeModeLocked(String mode);
+
+  /// A find option: matching respects upper and lower case.
+  ///
+  /// In en, this message translates to:
+  /// **'Case sensitive'**
+  String get caseSensitive;
+
+  /// The camera's light, switched on and off while scanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Flashlight'**
+  String get flashlight;
+
+  /// A find option: the query is a regular expression.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression'**
+  String get regex;
+
+  /// A toggle on a password field: show the password as plain text.
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get showPwd;
 }
 
 class _LibLocalizationsDelegate

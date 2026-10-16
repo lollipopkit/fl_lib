@@ -735,18 +735,23 @@ class _ToastItemState extends State<_ToastItem> with TickerProviderStateMixin {
           // the tap over with `onTap`, this is the only way left to open it.
           SizedBox(
             height: _lineHeight,
-            child: InkResponse(
-              onTap: _toggleExpand,
-              radius: 16,
-              child: AnimatedRotation(
-                turns: _isExpanded ? 0.5 : 0,
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : Durations.short3,
-                child: Icon(
-                  Icons.keyboard_arrow_down,
-                  size: _iconSize,
-                  color: theme.colorScheme.onSurfaceVariant,
+            child: Semantics(
+              button: true,
+              expanded: _isExpanded,
+              label: l10n.more,
+              child: InkResponse(
+                onTap: _toggleExpand,
+                radius: 16,
+                child: AnimatedRotation(
+                  turns: _isExpanded ? 0.5 : 0,
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : Durations.short3,
+                  child: Icon(
+                    Icons.keyboard_arrow_down,
+                    size: _iconSize,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),

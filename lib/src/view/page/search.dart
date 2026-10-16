@@ -22,6 +22,7 @@ final class SearchPage<T> extends SearchDelegate<T> {
     return [
       IconButton(
         icon: const Icon(Icons.clear),
+        tooltip: libL10n.clear,
         onPressed: () {
           query = '';
         },
@@ -33,6 +34,7 @@ final class SearchPage<T> extends SearchDelegate<T> {
   Widget? buildLeading(BuildContext context) {
     return IconButton(
       onPressed: context.pop,
+      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
       icon: const Icon(Icons.arrow_back),
     );
   }

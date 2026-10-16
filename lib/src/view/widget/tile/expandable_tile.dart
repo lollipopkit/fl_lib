@@ -179,7 +179,7 @@ class _ExpandableTileState extends State<ExpandableTile>
   Widget _buildHeader(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final summary = widget.summary;
-    return CardX(
+    final header = CardX(
       // Null is the card colour the theme gives every other row, which is what
       // a closed header is.
       color: _closed
@@ -243,5 +243,8 @@ class _ExpandableTileState extends State<ExpandableTile>
         ),
       ),
     );
+    // The header is the button that opens the rows, so it says whether they
+    // are open.
+    return Semantics(button: true, expanded: !_closed, child: header);
   }
 }

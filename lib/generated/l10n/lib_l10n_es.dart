@@ -937,4 +937,16 @@ class LibLocalizationsEs extends LibLocalizations {
   String appearanceThemeModeLocked(String mode) {
     return 'Este tema solo admite $mode. Selecciona otro tema para cambiar de modo.';
   }
+
+  @override
+  String get caseSensitive => 'Distinguir mayúsculas';
+
+  @override
+  String get flashlight => 'Linterna';
+
+  @override
+  String get regex => 'Expresión regular';
+
+  @override
+  String get showPwd => 'Mostrar contraseña';
 }

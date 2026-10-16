@@ -214,6 +214,7 @@ final class _IntroPageState extends State<IntroPage> {
             return FadeIn(
               child: IconButton(
                 icon: const Icon(Icons.arrow_back),
+                tooltip: context.libL10n.previous,
                 onPressed: _toPre,
               ),
             );

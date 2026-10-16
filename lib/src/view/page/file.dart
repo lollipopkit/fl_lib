@@ -111,6 +111,7 @@ final class _FileCardViewState extends State<FileCardView> with AutomaticKeepAli
                 Text([?mime, if (sizeStr.isNotEmpty) sizeStr, if (dateStr.isNotEmpty) dateStr].join(' · ')),
             trailing: IconButton(
               icon: const Icon(Icons.open_in_new),
+              tooltip: libL10n.open,
               onPressed: _onTapCard,
             ),
           );

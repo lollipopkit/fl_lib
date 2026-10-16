@@ -199,6 +199,7 @@ extension DialogX on BuildContext {
           duration: Durations.medium1,
           child: IconButton(
             key: ValueKey(asc),
+            tooltip: libL10n.sort,
             icon: Icon(switch (asc) {
               true => Icons.arrow_upward,
               false => Icons.arrow_downward,

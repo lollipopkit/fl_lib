@@ -87,6 +87,7 @@ final class ImagePage extends StatelessWidget {
               title: args.title,
             );
           },
+          tooltip: l10n.share,
           icon: const Icon(Icons.share),
         ),
         // Delete
@@ -100,6 +101,7 @@ final class ImagePage extends StatelessWidget {
             if (sure != true || !context.mounted) return;
             context.pop(const ImagePageRet(isDeleted: true));
           },
+          tooltip: l10n.delete,
           icon: const Icon(Icons.delete),
         ),
       ],
