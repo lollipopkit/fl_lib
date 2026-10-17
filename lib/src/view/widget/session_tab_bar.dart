@@ -39,6 +39,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     required this.onClose,
     required this.sessionActions,
     required this.leadingActions,
+    this.sessionMenu,
     this.leadingIcon = MingCute.add_circle_fill,
     this.detailOf,
     this.leadingOf,
@@ -61,6 +62,11 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
 
   /// Shown while the leading tab is open.
   final List<BarAction> leadingActions;
+
+  /// Rows that always live behind the last button while a session is open —
+  /// see [SwitcherBar.menu]. For what is not worth a slot of its own: it
+  /// costs none of the [sessionActions] theirs when they do not all fit.
+  final List<ContextMenuAction> Function()? sessionMenu;
 
   /// What the leading tab shows instead of a label.
   final IconData leadingIcon;
@@ -104,6 +110,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     return SwitcherBar(
       switcher: _buildSwitcher(context),
       actions: _actions,
+      menu: _onLeading ? null : sessionMenu,
       search: search,
       searchHint: searchHint,
     );
