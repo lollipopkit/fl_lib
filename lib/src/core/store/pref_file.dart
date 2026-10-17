@@ -32,7 +32,12 @@ final class AtomicFilePrefs extends SharedPreferencesStorePlatform {
     } on FormatException catch (e) {
       final aside = '${file.path}.corrupt-${DateTime.now().millisecondsSinceEpoch}';
       Loggers.app.warning('Unreadable ${file.path}, moved to $aside', e);
-      file.renameSync(aside);
+      try {
+        file.renameSync(aside);
+      } on FileSystemException catch (e) {
+        // Another process starting on the same file moved it first.
+        Loggers.app.warning('Setting ${file.path} aside', e);
+      }
       return {};
     }
   }
