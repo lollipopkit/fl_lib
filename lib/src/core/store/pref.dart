@@ -88,8 +88,32 @@ final class PrefStore extends KvStore {
   Future<void> init({String prefix = ''}) async {
     if (_instance != null) return;
     SharedPreferences.setPrefix(prefix);
-    _instance = await SharedPreferences.getInstance();
+    try {
+      _instance = await SharedPreferences.getInstance();
+    } on FormatException catch (e) {
+      // Windows and Linux keep them in a JSON file the plugin overwrites in
+      // place, so a shutdown mid-write can leave it zero-filled; reading it
+      // then threw on every launch, before the app had a window. Set aside
+      // for a look, and started again empty.
+      final file = await (prefsFileForTest ?? _prefsFile)();
+      if (file == null || !await file.exists()) rethrow;
+      final aside = '${file.path}.corrupt-${DateTime.now().millisecondsSinceEpoch}';
+      Loggers.app.warning('Unreadable ${file.path}, moved to $aside', e);
+      await file.rename(aside);
+      _instance = await SharedPreferences.getInstance();
+    }
   }
+
+  /// Where `shared_preferences` keeps them as a file: null where it does not.
+  static Future<File?> _prefsFile() async {
+    if (!Platform.isWindows && !Platform.isLinux) return null;
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}${Platform.pathSeparator}shared_preferences.json');
+  }
+
+  /// Stands in for [_prefsFile], which asks the platform.
+  @visibleForTesting
+  static Future<File?> Function()? prefsFileForTest;
 
   /// Get the value of the key.
   ///
