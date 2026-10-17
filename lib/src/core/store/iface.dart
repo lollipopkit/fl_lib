@@ -8,10 +8,14 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/method_channel_shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:shared_preferences_platform_interface/types.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 part 'hive.dart';
 part 'pref.dart';
+part 'pref_file.dart';
 part 'mock.dart';
 part 'sqlite.dart';
 
