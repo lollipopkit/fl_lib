@@ -23,8 +23,10 @@ final class AtomicFilePrefs extends SharedPreferencesStorePlatform {
     try {
       final text = file.readAsStringSync();
       if (text.isEmpty) return {};
+      // Copied now rather than cast, which would throw on a null only when
+      // it was read, past this recovery.
       if (json.decode(text) case final Map<String, dynamic> map) {
-        return map.cast<String, Object>();
+        return {for (final MapEntry(:key, :value) in map.entries) if (value != null) key: value as Object};
       }
       throw const FormatException('Not a JSON object');
     } on FormatException catch (e) {
@@ -35,8 +37,11 @@ final class AtomicFilePrefs extends SharedPreferencesStorePlatform {
     }
   }
 
+  /// Names this process's temp files apart, from another's and its own.
+  static var _saves = 0;
+
   bool _save() {
-    final tmp = File('${file.path}.tmp');
+    final tmp = File('${file.path}.$pid-${_saves++}.tmp');
     try {
       file.parent.createSync(recursive: true);
       tmp.writeAsStringSync(json.encode(_prefs), flush: true);
@@ -44,6 +49,9 @@ final class AtomicFilePrefs extends SharedPreferencesStorePlatform {
       return true;
     } catch (e, s) {
       Loggers.app.warning('Writing ${file.path}', e, s);
+      try {
+        if (tmp.existsSync()) tmp.deleteSync();
+      } catch (_) {}
       return false;
     }
   }

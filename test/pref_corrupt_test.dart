@@ -43,6 +43,16 @@ void main() {
     expect(store.get<String>('k'), 'v');
   });
 
+  test('a null in the file is dropped, not thrown on later', () async {
+    file.writeAsStringSync(json.encode({'flutter.k': null, 'flutter.j': 'v'}));
+
+    final store = PrefStore();
+    await store.init(prefix: 'flutter.');
+
+    expect(store.get<String>('k'), isNull);
+    expect(store.get<String>('j'), 'v');
+  });
+
   test('a write replaces the file whole, and leaves nothing beside it', () async {
     final store = PrefStore();
     await store.init(prefix: 'flutter.');
