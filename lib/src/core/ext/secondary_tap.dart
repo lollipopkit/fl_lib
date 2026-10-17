@@ -25,6 +25,11 @@ extension WidgetSecondaryX on Widget {
       // Translucent, not opaque: this claims the secondary button and leaves
       // everything else — taps, long presses, scroll drags — to the child.
       behavior: HitTestBehavior.translucent,
+      // A secondary button has no accessibility action, but any tap
+      // recogniser gives the node a tap one: a screen reader found this as a
+      // nameless button covering whatever it wraps, and activating it did
+      // nothing.
+      excludeFromSemantics: true,
       child: this,
     );
   }

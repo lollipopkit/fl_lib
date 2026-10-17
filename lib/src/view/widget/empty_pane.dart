@@ -1,3 +1,4 @@
+import 'package:fl_lib/src/core/ext/ctx/l10n.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// The surface beside a rail, with nothing open on it.
@@ -86,7 +87,16 @@ class EmptyMark extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 56, color: scheme.outlineVariant),
+          Icon(
+            icon,
+            size: 56,
+            color: scheme.outlineVariant,
+            // The mark alone says "empty" only to someone who sees it. With no
+            // words under it, a screen reader had nothing to read.
+            semanticLabel: title_ == null && label_ == null
+                ? libL10n.empty
+                : null,
+          ),
           if (title_ != null) ...[
             const SizedBox(height: 11),
             Padding(
