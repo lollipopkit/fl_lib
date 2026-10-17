@@ -5,30 +5,9 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
-import 'package:shared_preferences_platform_interface/types.dart';
 
-/// The Windows and Linux plugins: a JSON file, decoded without a guard.
-final class _FilePrefs extends SharedPreferencesStorePlatform {
-  _FilePrefs(this.file);
-
-  final File file;
-
-  @override
-  Future<Map<String, Object>> getAllWithParameters(GetAllParameters parameters) async {
-    if (!file.existsSync()) return {};
-    return (json.decode(file.readAsStringSync()) as Map).cast<String, Object>();
-  }
-
-  @override
-  Future<bool> clear() async => true;
-  @override
-  Future<Map<String, Object>> getAll() => getAllWithParameters(GetAllParameters(filter: PreferencesFilter(prefix: '')));
-  @override
-  Future<bool> remove(String key) async => true;
-  @override
-  Future<bool> setValue(String valueType, String key, Object value) async => true;
-}
-
+/// `PrefStore` on Windows and Linux, where the preferences are one JSON file
+/// [AtomicFilePrefs] reads and writes in place of the plugin.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -39,35 +18,57 @@ void main() {
     dir = Directory.systemTemp.createTempSync('prefs');
     file = File('${dir.path}/shared_preferences.json');
     SharedPreferences.resetStatic();
-    SharedPreferencesStorePlatform.instance = _FilePrefs(file);
     PrefStore.prefsFileForTest = () async => file;
   });
 
   tearDown(() {
     PrefStore.prefsFileForTest = null;
+    SharedPreferences.setMockInitialValues({});
     dir.deleteSync(recursive: true);
+  });
+
+  List<String> names() => dir.listSync().map((e) => e.uri.pathSegments.last).toList()..sort();
+
+  test('it takes over the file', () async {
+    await PrefStore().init();
+    expect(SharedPreferencesStorePlatform.instance, isA<AtomicFilePrefs>());
+  });
+
+  test('what the plugin wrote is read as it was', () async {
+    file.writeAsStringSync(json.encode({'flutter.k': 'v'}));
+
+    final store = PrefStore();
+    await store.init(prefix: 'flutter.');
+
+    expect(store.get<String>('k'), 'v');
+  });
+
+  test('a write replaces the file whole, and leaves nothing beside it', () async {
+    final store = PrefStore();
+    await store.init(prefix: 'flutter.');
+
+    store.set('k', 'v');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(json.decode(file.readAsStringSync()), containsPair('flutter.k', 'v'));
+    expect(names(), ['shared_preferences.json']);
   });
 
   test('a zero-filled file, left by a shutdown mid-write, is set aside', () async {
     file.writeAsBytesSync(List.filled(299, 0));
 
     final store = PrefStore();
-    await store.init();
+    await store.init(prefix: 'flutter.');
 
     expect(store.get<String>('k'), isNull);
     expect(file.existsSync(), isFalse);
-    final aside = dir.listSync().whereType<File>().single;
-    expect(aside.path, startsWith('${file.path}.corrupt-'));
-    expect(aside.lengthSync(), 299);
-  });
+    final aside = names().single;
+    expect(aside, startsWith('shared_preferences.json.corrupt-'));
+    expect(File('${dir.path}/$aside').lengthSync(), 299);
 
-  test('a readable file is left alone', () async {
-    file.writeAsStringSync(json.encode({'k': 'v'}));
-
-    final store = PrefStore();
-    await store.init();
-
-    expect(store.get<String>('k'), 'v');
-    expect(file.existsSync(), isTrue);
+    // And it is written again from there.
+    store.set('k', 'v');
+    await Future<void>.delayed(Duration.zero);
+    expect(json.decode(file.readAsStringSync()), containsPair('flutter.k', 'v'));
   });
 }

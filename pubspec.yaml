@@ -55,6 +55,7 @@ dependencies:
   re_highlight: ^0.0.3
   share_plus: ^13.3.0
   shared_preferences: ^2.2.3
+  shared_preferences_platform_interface: ^2.4.2
   # Bundled through Dart build hooks, so it adds no podspec and no
   # Package.swift. Which SQLite variant is compiled in is chosen by the root
   # app's `hooks.user_defines.sqlite3` — a dependency cannot set its own.
@@ -89,7 +90,6 @@ dev_dependencies:
   json_serializable: ^6.8.0
   riverpod_generator: ^4.0.3
   riverpod_lint: ^3.1.3
-  shared_preferences_platform_interface: ^2.4.2
 
 flutter:
   assets:
