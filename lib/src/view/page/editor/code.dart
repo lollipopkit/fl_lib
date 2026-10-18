@@ -107,6 +107,10 @@ class _EditorPageState extends State<EditorPage> {
 
   var _saved = false;
 
+  /// False while the file is read: saving then would write an empty file,
+  /// and typing would be replaced by what was read.
+  var _loaded = false;
+
   /// Markdown opens rendered; the source is one tap away.
   late var _previewing = _isMarkdown;
 
@@ -170,7 +174,7 @@ class _EditorPageState extends State<EditorPage> {
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: libL10n.search,
-            onPressed: () => _findController.findMode(),
+            onPressed: _loaded ? () => _findController.findMode() : null,
           ),
         // PopupMenuButton<String>(
         //   icon: const Icon(Icons.language),
@@ -191,13 +195,14 @@ class _EditorPageState extends State<EditorPage> {
         IconButton(
           icon: const Icon(Icons.save),
           tooltip: libL10n.save,
-          onPressed: _onSave,
+          onPressed: _loaded ? _onSave : null,
         )
       ],
     );
   }
 
   Widget _buildBody() {
+    if (!_loaded) return const Center(child: SizedLoading.medium);
     if (_previewing) return _buildPreview();
     // The family is named even when the user chose none: `re_editor` reads a
     // null family as "start at the fallback list", so the first entry would
@@ -244,6 +249,8 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
+  void _markLoaded() => setState(() => _loaded = true);
+
   void _togglePreview() {
     setState(() => _previewing = !_previewing);
     if (_previewing) {
@@ -279,9 +286,12 @@ extension on _EditorPageState {
       }
       if (!mounted) return;
       _controller.text = code;
-    } else if (text != null) {
-      _controller.text = text;
+      _markLoaded();
+      return;
     }
+    // Synchronous, from `initState`: no rebuild needed yet.
+    if (text != null) _controller.text = text;
+    _loaded = true;
   }
 
   void _closeWith(String message) {
@@ -332,7 +342,7 @@ extension on _EditorPageState {
   }
 
   void _onPop() async {
-    if (_saved) {
+    if (_saved || !_loaded) {
       contextSafe?.pop();
       return;
     }

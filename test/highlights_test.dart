@@ -39,6 +39,8 @@ void main() {
     expect(ProgLang.parseFileName('main.RS'), ProgLang.rust);
     expect(ProgLang.parseFileName(r'C:\Users\a\script.py'), ProgLang.python);
     expect(ProgLang.parseFileName('/srv/Makefile'), ProgLang.makefile);
+    expect(ProgLang.parseFileName('ViewController.m'), ProgLang.objectivec);
+    expect(ProgLang.parseFileName('query.sql'), ProgLang.sql);
     expect(ProgLang.parseFileName('README'), isNull);
     expect(ProgLang.parseFileName('file.unknownext'), isNull);
   });
