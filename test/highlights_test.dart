@@ -29,4 +29,17 @@ void main() {
     expect(HighlightTheme.fromThemeMapKey('unknown-theme'), isNull);
     expect(HighlightTheme.fromThemeMapKey(null), isNull);
   });
+
+  test('suffixes match in any case, on either path separator', () {
+    expect(ProgLang.parseFileName('README.md'), ProgLang.markdown);
+    expect(ProgLang.parseFileName('notes.MD'), ProgLang.markdown);
+    expect(ProgLang.parseFileName('doc.mdown'), ProgLang.markdown);
+    expect(ProgLang.parseFileName('doc.mkd'), ProgLang.markdown);
+    expect(ProgLang.parseFileName('doc.mdwn'), ProgLang.markdown);
+    expect(ProgLang.parseFileName('main.RS'), ProgLang.rust);
+    expect(ProgLang.parseFileName(r'C:\Users\a\script.py'), ProgLang.python);
+    expect(ProgLang.parseFileName('/srv/Makefile'), ProgLang.makefile);
+    expect(ProgLang.parseFileName('README'), isNull);
+    expect(ProgLang.parseFileName('file.unknownext'), isNull);
+  });
 }
