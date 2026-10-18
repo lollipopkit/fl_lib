@@ -99,16 +99,25 @@ class _EditorPageState extends State<EditorPage> {
   final _focusNode = FocusNode();
 
   final _controller = CodeLineEditingController();
-  late final _findController = CodeFindController(_controller);
+  late final CodeFindController _findController;
   late Map<String, TextStyle> _codeTheme;
-  late final _modesMap = _parseModesMap;
+  late final _lang = widget.args?.lang ?? ProgLang.parseFileName(widget.args?.path);
+  late final _modesMap = _lang?.editorLangs ?? ProgLang.defaultLangModeMap;
+  late final _isMarkdown = _lang == ProgLang.markdown;
 
   var _saved = false;
 
+  /// False while the file is read: saving then would write an empty file,
+  /// and typing would be replaced by what was read.
+  var _loaded = false;
+
+  /// Markdown opens rendered; the source is one tap away.
+  late var _previewing = _isMarkdown;
+
   @override
   void dispose() {
-    _controller.dispose();
     _findController.dispose();
+    _controller.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -116,6 +125,9 @@ class _EditorPageState extends State<EditorPage> {
   @override
   void initState() {
     super.initState();
+    // Not lazy: in preview nothing reads it before `dispose`, which would then
+    // create it on the already disposed [_controller].
+    _findController = CodeFindController(_controller);
     _setupCtrl();
   }
 
@@ -128,13 +140,13 @@ class _EditorPageState extends State<EditorPage> {
     } else {
       _codeTheme = widget.args?.lightTheme?.theme ?? a11yLightTheme;
     }
-    _focusNode.requestFocus();
+    if (!_previewing) _focusNode.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _codeTheme['root']?.backgroundColor,
+      backgroundColor: _previewing ? null : _codeTheme['root']?.backgroundColor,
       appBar: _buildAppBar(),
       body: _buildBody(),
     );
@@ -144,7 +156,7 @@ class _EditorPageState extends State<EditorPage> {
     return CustomAppBar(
       title: TwoLineText(
         up: widget.args?.title ?? widget.args?.path?.getFileName() ?? libL10n.unknown,
-        down: libL10n.editor,
+        down: _previewing ? libL10n.preview : libL10n.editor,
       ),
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
@@ -152,11 +164,18 @@ class _EditorPageState extends State<EditorPage> {
         onPressed: _onPop,
       ),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.search),
-          tooltip: libL10n.search,
-          onPressed: () => _findController.findMode(),
-        ),
+        if (_isMarkdown)
+          IconButton(
+            icon: Icon(_previewing ? Icons.edit_outlined : Icons.visibility_outlined),
+            tooltip: _previewing ? libL10n.edit : libL10n.preview,
+            onPressed: _togglePreview,
+          ),
+        if (!_previewing)
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: libL10n.search,
+            onPressed: _loaded ? () => _findController.findMode() : null,
+          ),
         // PopupMenuButton<String>(
         //   icon: const Icon(Icons.language),
         //   tooltip: libL10n.language,
@@ -176,13 +195,15 @@ class _EditorPageState extends State<EditorPage> {
         IconButton(
           icon: const Icon(Icons.save),
           tooltip: libL10n.save,
-          onPressed: _onSave,
+          onPressed: _loaded ? _onSave : null,
         )
       ],
     );
   }
 
   Widget _buildBody() {
+    if (!_loaded) return const Center(child: SizedLoading.medium);
+    if (_previewing) return _buildPreview();
     // The family is named even when the user chose none: `re_editor` reads a
     // null family as "start at the fallback list", so the first entry would
     // become the editor's font instead of its last resort.
@@ -216,6 +237,28 @@ class _EditorPageState extends State<EditorPage> {
       toolbarController: widget.args?.toolbarController ?? (isMobile ? AdaptiveSelectionToolbarController() : null),
     );
   }
+
+  Widget _buildPreview() {
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        // The file may come from anywhere, e.g. a remote server.
+        child: SimpleMarkdown(data: _controller.text, selectable: true, loadImages: false),
+      ),
+    );
+  }
+
+  void _markLoaded() => setState(() => _loaded = true);
+
+  void _togglePreview() {
+    setState(() => _previewing = !_previewing);
+    if (_previewing) {
+      _focusNode.unfocus();
+    } else {
+      _focusNode.requestFocus();
+    }
+  }
 }
 
 extension on _EditorPageState {
@@ -243,20 +286,18 @@ extension on _EditorPageState {
       }
       if (!mounted) return;
       _controller.text = code;
-    } else if (text != null) {
-      _controller.text = text;
+      _markLoaded();
+      return;
     }
+    // Synchronous, from `initState`: no rebuild needed yet.
+    if (text != null) _controller.text = text;
+    _loaded = true;
   }
 
   void _closeWith(String message) {
     if (!mounted) return;
     Toast.show(message);
     context.pop();
-  }
-
-  Map<String, CodeHighlightThemeMode> get _parseModesMap {
-    final lang = widget.args?.lang ?? ProgLang.parseFileName(widget.args?.path);
-    return lang?.editorLangs ?? ProgLang.defaultLangModeMap;
   }
 
   void _onSave() async {
@@ -301,7 +342,7 @@ extension on _EditorPageState {
   }
 
   void _onPop() async {
-    if (_saved) {
+    if (_saved || !_loaded) {
       contextSafe?.pop();
       return;
     }

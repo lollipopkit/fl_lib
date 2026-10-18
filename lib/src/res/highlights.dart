@@ -239,15 +239,16 @@ enum ProgLang {
   llvm(['ll']),
   lua(['lua']),
   makefile(null, ['Makefile']),
-  markdown(['md', 'markdown']),
-  matlab(['m']),
+  markdown(['md', 'markdown', 'mdown', 'mkd', 'mdwn']),
+  // `.m` is left to Objective-C: a suffix goes to the first language listing it.
+  matlab(null),
   nginx(['conf']),
   nim(['nim']),
   nix(['nix']),
   objectivec(['m', 'mm']),
   ocaml(['ml', 'mli']),
   perl(['pl', 'pm']),
-  pgsql(['sql']),
+  pgsql(['pgsql']),
   php(['php']),
   plaintext(['txt']),
   powershell(['ps1']),
@@ -362,15 +363,15 @@ enum ProgLang {
   /// Returns the language mode for the given file name.
   static ProgLang? parseFileName(String? fileName) {
     if (fileName == null) return null;
-    final name = fileName.split('/').last;
+    final name = fileName.split(RegExp(r'[/\\]')).last;
     // 1. Try filename match
     for (final e in ProgLang.values) {
       if (e.filenames != null && e.filenames!.contains(name)) {
         return e;
       }
     }
-    // 2. Try suffix match
-    final ext = name.split('.').length > 1 ? name.split('.').last : null;
+    // 2. Try suffix match. Suffixes are listed in lowercase: `README.MD` too.
+    final ext = name.split('.').length > 1 ? name.split('.').last.toLowerCase() : null;
     if (ext == null) return null;
     for (final e in ProgLang.values) {
       if (e.suffixes != null && e.suffixes!.contains(ext)) {
