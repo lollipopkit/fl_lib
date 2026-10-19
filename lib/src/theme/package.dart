@@ -278,7 +278,7 @@ abstract final class ThemePackages {
   static final installedChanged = ValueNotifier<int>(0);
 
   static const supportedSchemaMin = 1;
-  static const supportedSchemaMax = 3;
+  static const supportedSchemaMax = 4;
 
   /// What schema 2 added: SVG icons, per-icon colors, and [ThemeSplash]. A
   /// package that uses one of them has to say it needs 2, because a build that
@@ -292,6 +292,10 @@ abstract final class ThemePackages {
   /// package outright (an unknown table), so saying so up front is what lets
   /// the store show it as needing a newer app rather than failing to install.
   static const componentSchema = 3;
+
+  /// What schema 4 added: more than 48 icons. A build that reads only 3
+  /// refuses such a package, so it has to say it needs 4.
+  static const iconSchema = 4;
   static String get supportedSchemaRange =>
       'v$supportedSchemaMin–v$supportedSchemaMax';
 

@@ -122,7 +122,7 @@ fn requires_a_compatible_schema_range() {
     assert_eq!((p.schema_min, p.schema_max), (1, 2));
     for schema in [
         None,
-        Some(json!({"min": 4, "max": 4})),
+        Some(json!({"min": 5, "max": 5})),
         Some(json!({"min": 2, "max": 1})),
         Some(json!({"min": 0, "max": 1})),
         Some(json!({"min": 1})),
@@ -222,9 +222,10 @@ fn installs_svg_and_png_icons_together() {
 }
 
 #[test]
-fn carries_up_to_128_icons() {
-    let with = |n: usize| {
+fn more_than_48_icons_need_schema_4() {
+    let with = |n: usize, min: u32| {
         let mut data = package2();
+        data["schema"] = json!({"min": min, "max": 4});
         let names: Vec<String> = (0..n).map(|i| format!("icons/file_e{i}.svg")).collect();
         for (i, name) in names.iter().enumerate() {
             set_icon(&mut data, &format!("file.e{i}"), name);
@@ -232,8 +233,10 @@ fn carries_up_to_128_icons() {
         let files: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), SVG_ICON.as_bytes())).collect();
         bundle(&data, &files)
     };
-    assert_eq!(ok(&with(128)).themes[0].files.icons.len(), 128);
-    assert_eq!(install(&with(129)).unwrap_err().0, "Invalid icon keys");
+    assert_eq!(ok(&with(48, 2)).themes[0].files.icons.len(), 48);
+    assert_eq!(install(&with(49, 3)).unwrap_err().0, "This theme needs schema 4");
+    assert_eq!(ok(&with(128, 4)).themes[0].files.icons.len(), 128);
+    assert_eq!(install(&with(129, 4)).unwrap_err().0, "Invalid icon keys");
 }
 
 #[test]
