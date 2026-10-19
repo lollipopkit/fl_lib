@@ -170,6 +170,22 @@ void main() {
     expect(ThemeIconPacks.active, isNull);
   });
 
+  test('removing a pack elsewhere leaves the app\'s choice alone', () async {
+    final pack = await ThemePackages.installAny(_pack()) as ThemeIconPack;
+    ThemeIconPacks.select(pack);
+    final other = await Directory.systemTemp.createTemp('themes-c-');
+    addTearDown(() => other.delete(recursive: true));
+    final elsewhere = await ThemePackages.installAny(
+      _pack(name: 'Elsewhere'),
+      rootDirectory: other.path,
+    );
+    await ThemeIconPacks.remove(
+      elsewhere.installationId,
+      rootDirectory: ThemeIconPacks.rootIn(other.path),
+    );
+    expect(testThemeStore.appIconPack.fetch(), pack.installationId);
+  });
+
   test('a backup carries a pack and its selection', () async {
     final device = await Directory.systemTemp.createTemp('themes-a-');
     final other = await Directory.systemTemp.createTemp('themes-b-');

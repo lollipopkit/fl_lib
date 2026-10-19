@@ -155,9 +155,12 @@ abstract final class ThemeIconPacks {
     if (!await directory.exists()) return false;
     await directory.delete(recursive: true);
     await dropSource(rootPath, installationId);
-    _activeId = null;
-    _active = null;
-    reconcileSelection();
+    // No directory given is the app's own, the only one a selection names.
+    if (rootDirectory == null) {
+      _activeId = null;
+      _active = null;
+      reconcileSelection();
+    }
     ThemePackages.installedChanged.value++;
     return true;
   }

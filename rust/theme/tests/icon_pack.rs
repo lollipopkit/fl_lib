@@ -45,6 +45,13 @@ fn installs_and_reads_back() {
     assert_eq!(read.icon_files["file.py"], "file_py.svg");
     assert_eq!(read.icon_colors["tab.server"], ColorSpec::Role("primary".into()));
 
+    // Read back as strictly as it was installed.
+    let older = manifest.replace("min = 4", "min = 3");
+    assert_eq!(read_installed_icon_pack(&older, &["file_py.svg".into()]).unwrap_err().0, "An icon pack needs schema 4");
+    let empty = "format = 1\nid = \"example.devicons\"\nname = \"Devicons\"\nkind = \"icons\"\n\
+                 [schema]\nmin = 4\nmax = 4\n[icons]\nimages = []\n";
+    assert_eq!(read_installed_icon_pack(empty, &[]).unwrap_err().0, "An icon pack carries no icons");
+
     // Neither reader takes the other's manifest.
     assert!(read_installed(manifest, &["file_py.svg".into()]).is_err());
     let theme = install(&bundle(&package("gradient"), &[])).unwrap();

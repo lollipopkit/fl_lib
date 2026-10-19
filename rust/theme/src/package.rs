@@ -1172,11 +1172,21 @@ pub fn read_installed_icon_pack(manifest: &str, icon_files: &[String]) -> Result
         return fail("Unsupported theme package");
     }
     let (schema_min, schema_max) = schema_range(data.get("schema"))?;
+    // Held to what installing it was, as a theme's read-back is.
+    if schema_min < ICON_SCHEMA {
+        return fail(format!("An icon pack needs schema {ICON_SCHEMA}"));
+    }
     let id = match data.get("id") {
         Some(Value::String(id)) if is_id(id) => id.clone(),
         _ => return fail("Invalid theme id"),
     };
     let (icon_files, icon_colors) = installed_icons(map(data.get("icons"), "icons")?, icon_files)?;
+    if icon_files.is_empty() {
+        return fail("An icon pack carries no icons");
+    }
+    if icon_files.len() > MAX_ICONS {
+        return fail("Invalid icon keys");
+    }
     Ok(InstalledIconPack { id, name: label(data.get("name"), "name")?, schema_min, schema_max, icon_files, icon_colors })
 }
 
