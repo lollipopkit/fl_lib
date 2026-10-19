@@ -20,6 +20,7 @@ void main() {
     expect(ThemePackages.supportedSchemaMax, format['supportedSchemaMax']);
     expect(ThemePackages.featureSchema, format['featureSchema']);
     expect(ThemePackages.componentSchema, format['componentSchema']);
+    expect(ThemePackages.iconSchema, format['iconSchema']);
     expect(ThemePackages.maxPackageBytes, format['maxPackageBytes']);
     expect(ThemePackages.maxVariants, format['maxVariants']);
     expect(ThemePackages.maxNameLength, format['maxNameLength']);

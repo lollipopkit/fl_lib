@@ -17,12 +17,14 @@ use crate::palette::{self, Scheme, is_role};
 use crate::{image, svg};
 
 pub const SUPPORTED_SCHEMA_MIN: u32 = 1;
-pub const SUPPORTED_SCHEMA_MAX: u32 = 3;
+pub const SUPPORTED_SCHEMA_MAX: u32 = 4;
 /// What schema 2 added: SVG icons, per-icon colors, the splash.
 const FEATURE_SCHEMA: u32 = 2;
 /// What schema 3 added: components beyond schema 2's, `[layout]`,
 /// `background.tile`, `[variants]`.
 const COMPONENT_SCHEMA: u32 = 3;
+/// What schema 4 added: more than [MAX_ICONS_BEFORE_ICON_SCHEMA] icons.
+const ICON_SCHEMA: u32 = 4;
 
 pub const MAX_PACKAGE_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const MAX_BACKGROUND_BYTES: usize = 8 * 1024 * 1024;
@@ -30,6 +32,8 @@ pub(crate) const MAX_SPLASH_LOGO_BYTES: usize = 512 * 1024;
 pub(crate) const MAX_ICON_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 const MAX_ICONS: usize = 128;
+/// What a build reading only schema 3 or older accepts.
+const MAX_ICONS_BEFORE_ICON_SCHEMA: usize = 48;
 pub const MAX_VARIANTS: usize = 8;
 /// The manifest, its icons, a background and a splash logo, and for each
 /// variant a background, a splash logo and its directory entry.
@@ -664,6 +668,9 @@ fn require_feature_schema(
     components: &Components,
     tile: f64,
 ) -> Result<()> {
+    if min < ICON_SCHEMA && icon_files.len() > MAX_ICONS_BEFORE_ICON_SCHEMA {
+        return fail(format!("This theme needs schema {ICON_SCHEMA}"));
+    }
     if min < COMPONENT_SCHEMA && (components.needed_schema() >= COMPONENT_SCHEMA || tile > 0.0) {
         return fail(format!("This theme needs schema {COMPONENT_SCHEMA}"));
     }
@@ -1033,6 +1040,7 @@ pub fn format() -> serde_json::Value {
         "supportedSchemaMax": SUPPORTED_SCHEMA_MAX,
         "featureSchema": FEATURE_SCHEMA,
         "componentSchema": COMPONENT_SCHEMA,
+        "iconSchema": ICON_SCHEMA,
         "maxPackageBytes": MAX_PACKAGE_BYTES,
         "maxBackgroundBytes": MAX_BACKGROUND_BYTES,
         "maxSplashLogoBytes": MAX_SPLASH_LOGO_BYTES,

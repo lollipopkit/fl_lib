@@ -311,7 +311,7 @@ void main() {
 
       for (final schema in [
         null,
-        {'min': 4, 'max': 4},
+        {'min': 5, 'max': 5},
         {'min': 2, 'max': 1},
         {'min': 0, 'max': 1},
         {'min': 1},
@@ -330,7 +330,7 @@ void main() {
 
       final stored = File('${installed.directory}/manifest.toml');
       final profile = TomlDocument.parse(await stored.readAsString()).toMap();
-      profile['schema'] = {'min': 4, 'max': 4};
+      profile['schema'] = {'min': 5, 'max': 5};
       await stored.writeAsString(TomlDocument.fromMap(profile).toString());
       expect(
         ThemePackages.installed(
