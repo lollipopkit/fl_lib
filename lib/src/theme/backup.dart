@@ -182,7 +182,26 @@ abstract final class ThemeBackup {
       // Listed so the restore can say it is missing; see the class doc.
       throw const FormatException('The backup does not carry this theme');
     }
-    return ThemePackages.installAny(bytes, rootDirectory: rootDirectory);
+    final installed = await ThemePackages.installAny(
+      bytes,
+      rootDirectory: rootDirectory,
+    );
+    // Its digest may differ from the entry's — an app update ships the next
+    // version — but it has to be the theme the entry names.
+    if (installed.id != raw['id']) {
+      await switch (installed) {
+        ThemePackage() => ThemePackages.remove(
+          installed.installationId,
+          rootDirectory: rootDirectory,
+        ),
+        ThemeIconPack() => ThemeIconPacks.remove(
+          installed.installationId,
+          rootDirectory: _packsRoot(rootDirectory),
+        ),
+      };
+      throw const FormatException('The package is another theme');
+    }
+    return installed;
   }
 
   static const _iconsKind = 'icons';
