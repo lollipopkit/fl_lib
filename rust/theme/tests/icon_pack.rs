@@ -52,6 +52,12 @@ fn installs_and_reads_back() {
                  [schema]\nmin = 4\nmax = 4\n[icons]\nimages = []\n";
     assert_eq!(read_installed_icon_pack(empty, &[]).unwrap_err().0, "An icon pack carries no icons");
 
+    let extra = format!("{manifest}\n[shapes]\ncard = 3\n");
+    assert_eq!(read_installed_icon_pack(&extra, &["file_py.svg".into(), "tab_server.svg".into()]).unwrap_err().0, "Unknown icon pack section");
+    let styled = manifest.replace("[icons]\n", "[icons]\nstyle = \"classic\"\n");
+    assert_ne!(styled, manifest);
+    assert_eq!(read_installed_icon_pack(&styled, &["file_py.svg".into(), "tab_server.svg".into()]).unwrap_err().0, "Unknown icon field");
+
     // Neither reader takes the other's manifest.
     assert!(read_installed(manifest, &["file_py.svg".into()]).is_err());
     let theme = install(&bundle(&package("gradient"), &[])).unwrap();

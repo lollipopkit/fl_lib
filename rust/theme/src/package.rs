@@ -1171,6 +1171,13 @@ pub fn read_installed_icon_pack(manifest: &str, icon_files: &[String]) -> Result
     if !matches!(data.get("format"), Some(Value::Integer(1))) || !is_icon_pack(&data)? {
         return fail("Unsupported theme package");
     }
+    if !data.keys().all(|k| ICON_PACK_SECTIONS.contains(&k.as_str())) {
+        return fail("Unknown icon pack section");
+    }
+    let icons = map(data.get("icons"), "icons")?;
+    if !icons.keys().all(|k| ICON_PACK_FIELDS.contains(&k.as_str())) {
+        return fail("Unknown icon field");
+    }
     let (schema_min, schema_max) = schema_range(data.get("schema"))?;
     // Held to what installing it was, as a theme's read-back is.
     if schema_min < ICON_SCHEMA {
@@ -1180,7 +1187,7 @@ pub fn read_installed_icon_pack(manifest: &str, icon_files: &[String]) -> Result
         Some(Value::String(id)) if is_id(id) => id.clone(),
         _ => return fail("Invalid theme id"),
     };
-    let (icon_files, icon_colors) = installed_icons(map(data.get("icons"), "icons")?, icon_files)?;
+    let (icon_files, icon_colors) = installed_icons(icons, icon_files)?;
     if icon_files.is_empty() {
         return fail("An icon pack carries no icons");
     }
