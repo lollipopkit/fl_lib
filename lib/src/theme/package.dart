@@ -300,7 +300,7 @@ abstract final class ThemePackages {
   static const _maxSplashLogoBytes = 512 * 1024;
   static const _maxIconBytes = 256 * 1024;
   static const _maxManifestBytes = 64 * 1024;
-  static const _maxIcons = 48;
+  static const _maxIcons = 128;
 
   /// Files a package may carry: the manifest, its icons, a background and a
   /// splash logo, and for each variant a background, a splash logo and its

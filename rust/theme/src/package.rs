@@ -29,7 +29,7 @@ pub(crate) const MAX_BACKGROUND_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAX_SPLASH_LOGO_BYTES: usize = 512 * 1024;
 pub(crate) const MAX_ICON_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_MANIFEST_BYTES: usize = 64 * 1024;
-const MAX_ICONS: usize = 48;
+const MAX_ICONS: usize = 128;
 pub const MAX_VARIANTS: usize = 8;
 /// The manifest, its icons, a background and a splash logo, and for each
 /// variant a background, a splash logo and its directory entry.
