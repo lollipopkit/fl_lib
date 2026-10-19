@@ -58,6 +58,10 @@ fn installs_and_reads_back() {
     assert_ne!(styled, manifest);
     assert_eq!(read_installed_icon_pack(&styled, &["file_py.svg".into(), "tab_server.svg".into()]).unwrap_err().0, "Unknown icon field");
 
+    let twice = manifest.replace("\"file.py\",", "\"file.py\", \"file.py\",");
+    assert_ne!(twice, manifest);
+    assert_eq!(read_installed_icon_pack(&twice, &["file_py.svg".into(), "tab_server.svg".into()]).unwrap_err().0, "Invalid icon keys");
+
     // Neither reader takes the other's manifest.
     assert!(read_installed(manifest, &["file_py.svg".into()]).is_err());
     let theme = install(&bundle(&package("gradient"), &[])).unwrap();

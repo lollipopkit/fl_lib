@@ -7,7 +7,7 @@ use std::io::Write;
 use indexmap::IndexMap;
 use fl_theme::repo::{
     Kind,
-    Catalog, Index, Listing, MAX_ENTRY_BYTES, MAX_TAR_BYTES, Text, archive_url_of, compare_versions, read_archive,
+    Catalog, Index, Listing, MAX_ARCHIVE_BYTES, MAX_ENTRY_BYTES, MAX_TAR_BYTES, Text, archive_url_of, compare_versions, read_archive,
 };
 
 fn catalog_toml(schema: &str, repos: &str) -> String {
@@ -294,6 +294,7 @@ fn unsafe_oversized_and_bogus_archives_are_refused() {
     let twice = tar_gz(&[("repo.toml", b"schema = 1".to_vec()), ("repo.toml", b"schema = 9".to_vec())], Some("t"));
     assert!(read_archive(&twice).is_err(), "one path twice leaves the tree to the order of the entries");
     assert!(read_archive(&tar_gz(&[("themes/big.toml", vec![b'x'; MAX_ENTRY_BYTES + 1])], Some("t"))).is_err());
+    assert!(read_archive(&vec![0; MAX_ARCHIVE_BYTES + 1]).unwrap_err().0.contains("larger than"));
     let bomb = read_archive(&tar_gz(&[("themes/big.toml", vec![0; MAX_TAR_BYTES + 1])], Some("t"))).unwrap_err();
     assert!(bomb.0.contains("unpacks to too much"), "{bomb}");
 }

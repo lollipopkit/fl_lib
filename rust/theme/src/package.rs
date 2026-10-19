@@ -1128,6 +1128,10 @@ fn installed_icons(icons: &Table, icon_files: &[String]) -> Result<(IndexMap<Str
             .collect::<Result<_>>()?,
         _ => return fail("Invalid icon keys"),
     };
+    // A key is one file: the installer writes each once.
+    if carried.iter().collect::<HashSet<_>>().len() != carried.len() {
+        return fail("Invalid icon keys");
+    }
     let mut files = IndexMap::new();
     for key in &carried {
         let stem = key.replace('.', "_");

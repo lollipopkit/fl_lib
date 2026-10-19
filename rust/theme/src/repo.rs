@@ -379,6 +379,9 @@ pub fn archive_url_of(address: &str) -> String {
 /// A repository's `.tar.gz` unpacked into its files, without the directory a
 /// hosting service wraps them in.
 pub fn read_archive(bytes: &[u8]) -> Result<IndexMap<String, Vec<u8>>> {
+    if bytes.len() > MAX_ARCHIVE_BYTES {
+        return fail("the repository archive is larger than this app reads");
+    }
     let mut tar = Vec::new();
     flate2::read::GzDecoder::new(bytes)
         .take(MAX_TAR_BYTES as u64 + 1)
