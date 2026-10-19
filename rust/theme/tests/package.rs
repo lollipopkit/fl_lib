@@ -222,6 +222,21 @@ fn installs_svg_and_png_icons_together() {
 }
 
 #[test]
+fn carries_up_to_128_icons() {
+    let with = |n: usize| {
+        let mut data = package2();
+        let names: Vec<String> = (0..n).map(|i| format!("icons/file_e{i}.svg")).collect();
+        for (i, name) in names.iter().enumerate() {
+            set_icon(&mut data, &format!("file.e{i}"), name);
+        }
+        let files: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), SVG_ICON.as_bytes())).collect();
+        bundle(&data, &files)
+    };
+    assert_eq!(ok(&with(128)).themes[0].files.icons.len(), 128);
+    assert_eq!(install(&with(129)).unwrap_err().0, "Invalid icon keys");
+}
+
+#[test]
 fn an_svg_is_refused_as_a_png_and_a_png_as_an_svg() {
     let png = png();
     for (name, bytes) in [("icons/tab_server.png", SVG_ICON.as_bytes()), ("icons/tab_server.svg", png.as_slice())] {
