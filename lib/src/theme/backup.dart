@@ -151,6 +151,11 @@ abstract final class ThemeBackup {
     }
     final Uint8List bytes;
     if (raw['bundled'] case final String manifestId) {
+      // The bytes are chosen by this name; an entry naming another shipped
+      // package than its own is not this one.
+      if (manifestId != raw['id']) {
+        throw const FormatException('The bundled reference is another theme');
+      }
       final dir = ThemeHost.current.bundledThemesDir;
       final shipped = dir == null ? null : await _bundledBytes(bundle, '$dir$manifestId.fsbt');
       if (shipped == null) {

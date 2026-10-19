@@ -198,6 +198,14 @@ void main() {
     expect(report.installedAs, isEmpty);
   });
 
+  test('an entry naming another shipped theme than its own is refused', () async {
+    final report = await ThemeBackup.restore({
+      'a' * 64: {'id': 'example.piggy', 'name': 'Piggy', 'bundled': 'example.pride'},
+    }, rootDirectory: other.path);
+    expect(report.failed, ['Piggy']);
+    expect(ThemePackages.listInstalled(rootDirectory: other.path), isEmpty);
+  });
+
   test('a theme the app no longer ships comes back from the store', () async {
     // The release the app shipped, now only in the store: found by its digest.
     final bytes = Uint8List.fromList(_fsbt(id: 'example.piggy', name: 'Piggy'));

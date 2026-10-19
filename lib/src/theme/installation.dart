@@ -8,26 +8,35 @@ import 'package:fl_lib/src/rust/api/theme.dart';
 final installationIdPattern = RegExp(r'^[a-f0-9]{64}$');
 
 /// Writes [prepared]'s files into `<rootPath>/<installation id>`, staged and
-/// moved in whole so a failed write leaves nothing half installed.
+/// moved in whole so a failed write leaves nothing half installed, and one
+/// already there (unreadable, or it would not be replaced) as it was.
 Future<void> writeInstallation(String rootPath, PreparedTheme prepared) async {
-  final directory = rootPath.joinPath(prepared.installationId);
+  final directory = Directory(rootPath.joinPath(prepared.installationId));
   await Directory(rootPath).create(recursive: true);
-  final staging = Directory(
-    rootPath.joinPath('.installing-${DateTime.now().microsecondsSinceEpoch}'),
-  );
-  await staging.create();
+  // Not a digest, so nothing that lists installations reads these.
+  final staging = await Directory(rootPath).createTemp('.installing-');
+  Directory? previous;
   try {
     for (final file in prepared.files) {
       final target = File(staging.path.joinPath(file.path));
       await target.parent.create(recursive: true);
       await target.writeAsBytes(file.bytes, flush: true);
     }
-    if (await Directory(directory).exists()) {
-      await Directory(directory).delete(recursive: true);
+    if (await directory.exists()) {
+      previous = await directory.rename('${staging.path}.previous');
     }
-    await staging.rename(directory);
+    await staging.rename(directory.path);
+  } catch (_) {
+    if (previous != null && !await directory.exists()) {
+      await previous.rename(directory.path);
+      previous = null;
+    }
+    rethrow;
   } finally {
     if (await staging.exists()) await staging.delete(recursive: true);
+    if (previous != null && await previous.exists()) {
+      await previous.delete(recursive: true);
+    }
   }
 }
 

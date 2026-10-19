@@ -186,6 +186,21 @@ void main() {
     expect(testThemeStore.appIconPack.fetch(), pack.installationId);
   });
 
+  test('an unreadable installation is replaced in whole', () async {
+    final pack = await ThemePackages.installAny(_pack()) as ThemeIconPack;
+    File('${pack.directory}/manifest.toml').writeAsStringSync('broken');
+    expect(ThemeIconPacks.installed(pack.installationId), isNull);
+    final again = await ThemePackages.installAny(_pack());
+    expect(again.installationId, pack.installationId);
+    expect(ThemeIconPacks.installed(pack.installationId)?.name, 'Devicons');
+    expect(
+      Directory(ThemeIconPacks.root).listSync().map((e) => e.uri.pathSegments
+          .where((p) => p.isNotEmpty).last).where((n) => n.startsWith('.installing')),
+      isEmpty,
+      reason: 'nothing staged is left behind',
+    );
+  });
+
   test('a backup carries a pack and its selection', () async {
     final device = await Directory.systemTemp.createTemp('themes-a-');
     final other = await Directory.systemTemp.createTemp('themes-b-');
