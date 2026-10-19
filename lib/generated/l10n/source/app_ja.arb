@@ -292,5 +292,10 @@
   "regex": "正規表現",
   "showPwd": "パスワードを表示",
   "existsFmt": "{name} は既に存在します",
-  "tooLargeFmt": "{size} を超えています"
+  "tooLargeFmt": "{size} を超えています",
+  "appearanceIconPack": "アイコンパック",
+  "appearanceIconPackTheme": "テーマのアイコン",
+  "themeStoreThemes": "テーマ",
+  "themeStoreIconPacks": "アイコンパック",
+  "themeStoreDeleteIconPack": "「{name}」を削除しますか？ファイルはこのデバイスから削除されます。使用中のアイコンパックの場合、アプリはテーマのアイコンに戻ります。"
 }

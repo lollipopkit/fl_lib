@@ -950,4 +950,21 @@ class LibLocalizationsJa extends LibLocalizations {
   String tooLargeFmt(String size) {
     return '$size を超えています';
   }
+
+  @override
+  String get appearanceIconPack => 'アイコンパック';
+
+  @override
+  String get appearanceIconPackTheme => 'テーマのアイコン';
+
+  @override
+  String get themeStoreThemes => 'テーマ';
+
+  @override
+  String get themeStoreIconPacks => 'アイコンパック';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '「$name」を削除しますか？ファイルはこのデバイスから削除されます。使用中のアイコンパックの場合、アプリはテーマのアイコンに戻ります。';
+  }
 }

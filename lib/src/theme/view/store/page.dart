@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'package:fl_lib/src/theme/icon_pack.dart';
 import 'package:fl_lib/src/theme/package.dart';
 import 'package:fl_lib/src/theme/repo.dart';
 import 'package:fl_lib/src/theme/sort.dart';
@@ -63,7 +64,12 @@ final class _ThemeStorePageState extends State<ThemeStorePage> {
   late final _setting = ThemeHost.settings;
 
   ThemeStore _store = const ThemeStore();
-  List<ThemePackage> _installed = const [];
+
+  /// Which list is on screen: themes, or icon packs.
+  ThemeListingKind _kind = ThemeListingKind.theme;
+
+  /// What this device has of [_kind].
+  List<ThemeInstallation> _installed = const [];
   bool _busy = false;
 
   /// Set when the last refresh produced nothing, and cleared by one that did.
@@ -84,7 +90,7 @@ final class _ThemeStorePageState extends State<ThemeStorePage> {
   /// different bytes — each installed in a directory of its own under
   /// [_previewRoot], apart from the user's themes and from one another.
   /// Kept for the page's life so reopening a row is instant.
-  final _previews = <String, Future<ThemePackage>>{};
+  final _previews = <String, Future<ThemeInstallation>>{};
 
   /// The query, and whether the bar is a field.
   final _search = InlineSearchController();
@@ -102,7 +108,7 @@ final class _ThemeStorePageState extends State<ThemeStorePage> {
   @override
   void initState() {
     super.initState();
-    _installed = ThemePackages.listInstalled();
+    _installed = _listInstalled();
     ThemePackages.installedChanged.addListener(_readInstalled);
     _store = _readCache();
     // The cache is on screen from the first frame; this only brings it up to
@@ -116,8 +122,13 @@ final class _ThemeStorePageState extends State<ThemeStorePage> {
   /// What this device has, read again after any install or removal — including
   /// one this page did not make, like a bundled theme installed after launch.
   void _readInstalled() {
-    if (mounted) setState(() => _installed = ThemePackages.listInstalled());
+    if (mounted) setState(() => _installed = _listInstalled());
   }
+
+  List<ThemeInstallation> _listInstalled() => switch (_kind) {
+    ThemeListingKind.theme => ThemePackages.listInstalled(),
+    ThemeListingKind.icons => ThemeIconPacks.listInstalled(),
+  };
 
   @override
   void dispose() {
@@ -243,8 +254,14 @@ extension on _ThemeStorePageState {
       builder: (context, _) {
         final rows = buildThemeRows(
           installed: _installed,
-          items: _store.items,
-          activeInstallationId: _setting.appThemePackage.fetch(),
+          items: [
+            for (final item in _store.items)
+              if (item.listing.kind == _kind) item,
+          ],
+          activeInstallationId: switch (_kind) {
+            ThemeListingKind.theme => _setting.appThemePackage.fetch(),
+            ThemeListingKind.icons => _setting.appIconPack.fetch(),
+          },
           query: _search.needle,
           sort: _sort,
         );
@@ -282,6 +299,7 @@ extension on _ThemeStorePageState {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(side, 7, side, 27),
           children: [
+            _buildKinds(),
             _buildCaption(),
             if (rows.isEmpty)
               _buildEmpty()
@@ -292,6 +310,37 @@ extension on _ThemeStorePageState {
           ],
         );
       },
+    );
+  }
+
+  /// Themes or icon packs: two lists, since a pack is chosen apart from the
+  /// theme and a row of either does something different.
+  Widget _buildKinds() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(3, 3, 3, 7),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SegmentedTabs<ThemeListingKind>(
+          segments: [
+            SegmentedTab(
+              value: ThemeListingKind.theme,
+              label: libL10n.themeStoreThemes,
+              icon: Icons.palette_outlined,
+            ),
+            SegmentedTab(
+              value: ThemeListingKind.icons,
+              label: libL10n.themeStoreIconPacks,
+              icon: Icons.interests_outlined,
+            ),
+          ],
+          selected: _kind,
+          onSelected: (kind) => _rebuild(() {
+            _kind = kind;
+            _expanded.clear();
+            _installed = _listInstalled();
+          }),
+        ),
+      ),
     );
   }
 
@@ -448,7 +497,7 @@ extension on _ThemeStorePageState {
       onTap: busy || row.inUse
           ? null
           : switch ((row.installed, row.item)) {
-              (final theme?, _) => () => _apply(theme),
+              (final installed?, _) => () => _apply(installed),
               (_, final item?) => () => _install(item),
               _ => null,
             },
@@ -457,10 +506,10 @@ extension on _ThemeStorePageState {
   }
 
   Widget? _trailingAction(ThemeRow row) => switch ((row.installed, row.item)) {
-    (final theme?, _) => Btn.icon(
+    (final installed?, _) => Btn.icon(
       text: libL10n.delete,
       icon: const Icon(Icons.delete_outline, size: 18),
-      onTap: () => _delete(theme),
+      onTap: () => _delete(installed),
     ),
     (_, final item?) => Btn.icon(
       text: libL10n.appearanceThemeInstall,
@@ -499,7 +548,7 @@ extension on _ThemeStorePageState {
           : const SizedBox(key: ValueKey(false), width: double.infinity),
     );
     final theme = row.installed;
-    if (theme == null || theme.variants.isEmpty) {
+    if (theme is! ThemePackage || theme.variants.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [tile, preview],
@@ -543,8 +592,8 @@ extension on _ThemeStorePageState {
   /// The open row's preview: the installed package, or one fetched for the
   /// purpose — checked against the listing's digest like any install.
   Widget _preview(ThemeRow row) {
-    if (row.installed case final theme?) {
-      return ThemeStorePreview(theme: theme);
+    if (row.installed case final installed?) {
+      return _previewOf(installed);
     }
     final item = row.item!;
     // A release without a digest is refused by the install before anything
@@ -559,11 +608,11 @@ extension on _ThemeStorePageState {
       key,
       () => ThemeRepos.install(item, rootDirectory: root),
     );
-    return FutureBuilder<ThemePackage>(
+    return FutureBuilder<ThemeInstallation>(
       future: future,
       builder: (context, snapshot) {
-        if (snapshot.data case final theme?) {
-          return ThemeStorePreview(theme: theme, rootDirectory: root);
+        if (snapshot.data case final installed?) {
+          return _previewOf(installed, rootDirectory: root);
         }
         if (snapshot.hasError) {
           return Padding(
@@ -586,6 +635,15 @@ extension on _ThemeStorePageState {
       },
     );
   }
+
+  Widget _previewOf(ThemeInstallation installed, {String? rootDirectory}) =>
+      switch (installed) {
+        final ThemePackage theme => ThemeStorePreview(
+          theme: theme,
+          rootDirectory: rootDirectory,
+        ),
+        final ThemeIconPack pack => ThemeIconPackPreview(pack: pack),
+      };
 }
 
 // --- The bar's sort ---
@@ -632,7 +690,7 @@ extension on _ThemeStorePageState {
       Toast.error(libL10n.appearanceThemeNeedsNewerApp(item.newestVersion ?? ''));
       return;
     }
-    final (theme, error) = await context.showLoadingDialog<ThemePackage>(
+    final (theme, error) = await context.showLoadingDialog<ThemeInstallation>(
       // No timeout: this waits on a download, and a slow link is not a reason
       // to call it failed.
       timeout: null,
@@ -653,7 +711,7 @@ extension on _ThemeStorePageState {
   /// use stays in use, now drawn from the new version; one that is not in use
   /// is not applied — updating is not choosing.
   Future<void> _update(ThemeStoreItem item) async {
-    final (theme, error) = await context.showLoadingDialog<ThemePackage>(
+    final (theme, error) = await context.showLoadingDialog<ThemeInstallation>(
       timeout: null,
       fn: () => ThemeRepos.install(item),
     );
@@ -662,15 +720,18 @@ extension on _ThemeStorePageState {
       Loggers.app.warning('Updating ${item.label} failed: $error');
       return;
     }
-    _rebuild(() => _installed = ThemePackages.listInstalled());
+    _rebuild(() => _installed = _listInstalled());
     unawaited(RNodes.app.notify());
     Toast.show(libL10n.success);
   }
 
-  Future<void> _delete(ThemePackage theme) async {
+  Future<void> _delete(ThemeInstallation theme) async {
     final confirmed = await context.showRoundDialog<bool>(
       title: libL10n.delete,
-      child: Text(libL10n.themeStoreDeleteTheme(theme.name)),
+      child: Text(switch (theme) {
+        ThemePackage() => libL10n.themeStoreDeleteTheme(theme.name),
+        ThemeIconPack() => libL10n.themeStoreDeleteIconPack(theme.name),
+      }),
       actions: Btnx.cancelOk,
     );
     if (confirmed != true || !mounted) return;
@@ -678,7 +739,10 @@ extension on _ThemeStorePageState {
     _rebuild(() => _working = theme.installationId);
     var removed = false;
     try {
-      removed = await ThemePackages.remove(theme.installationId);
+      removed = await switch (theme) {
+        ThemePackage() => ThemePackages.remove(theme.installationId),
+        ThemeIconPack() => ThemeIconPacks.remove(theme.installationId),
+      };
     } catch (e) {
       // A directory that cannot be deleted — a lock, a permission — is a
       // failure the row reports like any other, and never a spinner left on it.
@@ -687,7 +751,7 @@ extension on _ThemeStorePageState {
       if (mounted) {
         _rebuild(() {
           _working = null;
-          _installed = ThemePackages.listInstalled();
+          _installed = _listInstalled();
         });
       }
     }
@@ -714,9 +778,15 @@ extension on _ThemeStorePageState {
     _apply(chosen);
   }
 
-  void _apply(ThemePackage theme) {
-    ThemePackages.apply(theme);
-    _rebuild(() => _installed = ThemePackages.listInstalled());
+  /// Applies a theme, or draws an icon pack over the theme in use.
+  void _apply(ThemeInstallation installed) {
+    switch (installed) {
+      case final ThemePackage theme:
+        ThemePackages.apply(theme);
+      case final ThemeIconPack pack:
+        ThemeIconPacks.select(pack);
+    }
+    _rebuild(() => _installed = _listInstalled());
     RNodes.app.notify();
   }
 }

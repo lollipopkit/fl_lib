@@ -11,6 +11,7 @@ export 'src/theme/builtin.dart';
 export 'src/theme/components.dart';
 export 'src/theme/font.dart';
 export 'src/theme/host.dart';
+export 'src/theme/icon_pack.dart';
 export 'src/theme/package.dart';
 export 'src/theme/palette.dart';
 export 'src/theme/repo.dart';

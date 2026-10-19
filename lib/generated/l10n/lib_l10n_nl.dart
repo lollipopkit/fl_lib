@@ -961,4 +961,21 @@ class LibLocalizationsNl extends LibLocalizations {
   String tooLargeFmt(String size) {
     return 'Groter dan $size';
   }
+
+  @override
+  String get appearanceIconPack => 'Pictogrampakket';
+
+  @override
+  String get appearanceIconPackTheme => 'Pictogrammen van het thema';
+
+  @override
+  String get themeStoreThemes => 'Thema\'s';
+
+  @override
+  String get themeStoreIconPacks => 'Pictogrampakketten';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '“$name” verwijderen? De bestanden worden van dit apparaat verwijderd. Als dit het gebruikte pictogrampakket is, gebruikt de app weer de pictogrammen van het thema.';
+  }
 }

@@ -35,6 +35,16 @@ String readInstalledTheme({
   iconFiles: iconFiles,
 );
 
+/// Reads one installed icon pack's normalized manifest, as JSON
+/// (`fl_theme::InstalledIconPack`). [icon_files] is what its `icons/` holds.
+String readInstalledIconPack({
+  required String manifest,
+  required List<String> iconFiles,
+}) => RustLib.instance.api.crateApiThemeReadInstalledIconPack(
+  manifest: manifest,
+  iconFiles: iconFiles,
+);
+
 /// Checks `[components]` and `[layout]` given as JSON (null for absent), and
 /// answers them checked as JSON: `{ components, density, neededSchema }`.
 String checkThemeComponents({String? components, String? layout}) => RustLib
@@ -80,18 +90,26 @@ class PreparedTheme {
   final String installationId;
   final String id;
   final String name;
+
+  /// An icon pack rather than a theme: installed and chosen apart.
+  final bool iconPack;
   final List<ThemeFile> files;
 
   const PreparedTheme({
     required this.installationId,
     required this.id,
     required this.name,
+    required this.iconPack,
     required this.files,
   });
 
   @override
   int get hashCode =>
-      installationId.hashCode ^ id.hashCode ^ name.hashCode ^ files.hashCode;
+      installationId.hashCode ^
+      id.hashCode ^
+      name.hashCode ^
+      iconPack.hashCode ^
+      files.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -101,6 +119,7 @@ class PreparedTheme {
           installationId == other.installationId &&
           id == other.id &&
           name == other.name &&
+          iconPack == other.iconPack &&
           files == other.files;
 }
 

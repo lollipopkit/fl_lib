@@ -23,7 +23,8 @@ const FEATURE_SCHEMA: u32 = 2;
 /// What schema 3 added: components beyond schema 2's, `[layout]`,
 /// `background.tile`, `[variants]`.
 const COMPONENT_SCHEMA: u32 = 3;
-/// What schema 4 added: more than [MAX_ICONS_BEFORE_ICON_SCHEMA] icons.
+/// What schema 4 added: more than [MAX_ICONS_BEFORE_ICON_SCHEMA] icons, and
+/// icon packs (`kind = "icons"`).
 const ICON_SCHEMA: u32 = 4;
 
 pub const MAX_PACKAGE_BYTES: usize = 16 * 1024 * 1024;
@@ -59,6 +60,12 @@ const SECTIONS: [&str; 13] = [
     "splash",
     "variants",
 ];
+/// What an icon pack may say: no colors, shapes or anything else a theme
+/// draws, so it goes with whichever theme is in use.
+const ICON_PACK_SECTIONS: [&str; 6] = ["format", "schema", "id", "name", "kind", "icons"];
+/// An icon pack has no `style`: which built-in glyphs a missing key falls back
+/// to is the theme's.
+const ICON_PACK_FIELDS: [&str; 2] = ["images", "colors"];
 const VARIANT_FIELDS: [&str; 8] = ["name", "colors", "icons", "background", "splash", "shapes", "components", "layout"];
 const ICON_FIELDS: [&str; 3] = ["style", "images", "colors"];
 const BACKGROUND_FIELDS: [&str; 5] = ["type", "image", "opacity", "blur", "tile"];
@@ -221,8 +228,32 @@ pub struct Package {
     pub name: String,
     pub schema_min: u32,
     pub schema_max: u32,
-    /// One theme, or one per variant in the manifest's order.
+    /// One theme, or one per variant in the manifest's order; none for an
+    /// icon pack.
     pub themes: Vec<Theme>,
+    /// What an icon pack carries; None for a theme.
+    pub icon_pack: Option<IconPack>,
+}
+
+/// An icon pack: icons chosen apart from the theme, drawn over it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IconPack {
+    /// The keys the pack carries an image for.
+    pub images: Vec<String>,
+    pub colors: IndexMap<String, ColorSpec>,
+    /// File name inside `icons/` to its bytes.
+    #[serde(skip)]
+    pub files: IndexMap<String, Vec<u8>>,
+}
+
+/// What `kind` a manifest gives: an icon pack, or (none) a theme.
+fn is_icon_pack(data: &Table) -> Result<bool> {
+    match data.get("kind") {
+        None => Ok(false),
+        Some(Value::String(k)) if k == "icons" => Ok(true),
+        Some(_) => fail("Unknown package kind"),
+    }
 }
 
 // ---- installing ------------------------------------------------------------
@@ -249,6 +280,9 @@ fn install_assets(assets: &Assets, installation_id: String) -> Result<Package> {
         || data.contains_key("font")
     {
         return fail("Unsupported theme package");
+    }
+    if is_icon_pack(&data)? {
+        return install_icon_pack(&data, assets, installation_id);
     }
     if !data.keys().all(|k| SECTIONS.contains(&k.as_str())) {
         return fail("Unknown theme section");
@@ -304,7 +338,77 @@ fn install_assets(assets: &Assets, installation_id: String) -> Result<Package> {
         _ => return fail("Invalid theme id"),
     };
     let name = label(data.get("name"), "name")?;
-    Ok(Package { installation_id, id, name, schema_min, schema_max, themes })
+    Ok(Package { installation_id, id, name, schema_min, schema_max, themes, icon_pack: None })
+}
+
+fn install_icon_pack(data: &Table, assets: &Assets, installation_id: String) -> Result<Package> {
+    if !data.keys().all(|k| ICON_PACK_SECTIONS.contains(&k.as_str())) {
+        return fail("Unknown icon pack section");
+    }
+    let (schema_min, schema_max) = schema_range(data.get("schema"))?;
+    if schema_min < ICON_SCHEMA {
+        return fail(format!("An icon pack needs schema {ICON_SCHEMA}"));
+    }
+    let id = match data.get("id") {
+        Some(Value::String(id)) if is_id(id) => id.clone(),
+        _ => return fail("Invalid theme id"),
+    };
+    let name = label(data.get("name"), "name")?;
+    let icons = map(data.get("icons"), "icons")?;
+    if !icons.keys().all(|k| ICON_PACK_FIELDS.contains(&k.as_str())) {
+        return fail("Unknown icon field");
+    }
+    let empty = Table::new();
+    let images = map(icons.get("images"), "icon images")?;
+    if images.is_empty() {
+        return fail("An icon pack carries no icons");
+    }
+    let colors = match icons.get("colors") {
+        None => &empty,
+        raw => map(raw, "icon colors")?,
+    };
+    let checked = check_icons(images, colors, assets)?;
+    if assets.keys().any(|path| !is_directory_entry(path) && path != "manifest.toml" && !checked.used.contains(path)) {
+        return fail("Unexpected theme asset");
+    }
+    let icon_pack = IconPack { images: images.keys().cloned().collect(), colors: checked.colors, files: checked.files };
+    Ok(Package { installation_id, id, name, schema_min, schema_max, themes: Vec::new(), icon_pack: Some(icon_pack) })
+}
+
+/// A package's icons, checked: the files by name inside `icons/`, their
+/// colors, and the package paths they used.
+struct CheckedIcons {
+    files: IndexMap<String, Vec<u8>>,
+    colors: IndexMap<String, ColorSpec>,
+    used: HashSet<String>,
+}
+
+fn check_icons(images: &Table, colors: &Table, assets: &Assets) -> Result<CheckedIcons> {
+    if images.len() > MAX_ICONS || !images.keys().all(|k| is_icon_key(k)) {
+        return fail("Invalid icon keys");
+    }
+    let colors = icon_colors(colors, images)?;
+    let mut files = IndexMap::new();
+    let mut used = HashSet::new();
+    for (key, value) in images {
+        let path = icon_asset_path(key, value)?;
+        let name = path["icons/".len()..].to_string();
+        let bytes = if path.ends_with(".svg") {
+            let bytes = asset_bytes(assets, &path, MAX_ICON_BYTES)?;
+            svg::check(bytes)?;
+            bytes
+        } else {
+            let bytes = image_asset(assets, &path, MAX_ICON_BYTES)?;
+            if !image::is_png(bytes) {
+                return fail("Icons must be PNG or SVG");
+            }
+            image::verify(bytes, 512, 512 * 512)?;
+            bytes
+        };
+        files.insert(name, bytes.to_vec());
+        used.insert(path);
+    }
+    Ok(CheckedIcons { files, colors, used })
 }
 
 /// Checks one theme — a package, or one variant drawn over its base — and
@@ -346,15 +450,13 @@ fn prepare(data: &Table, assets: &Assets) -> Result<(Theme, HashSet<String>)> {
         None => &empty,
         raw => map(raw, "icon images")?,
     };
-    if images.len() > MAX_ICONS || !images.keys().all(|k| is_icon_key(k)) {
-        return fail("Invalid icon keys");
-    }
-    let icon_colors = icon_colors(
+    let checked_icons = check_icons(
+        images,
         match icons.get("colors") {
             None => &empty,
             raw => map(raw, "icon colors")?,
         },
-        images,
+        assets,
     )?;
     let splash = splash(data.get("splash"))?;
     let background = map(data.get("background"), "background")?;
@@ -389,26 +491,10 @@ fn prepare(data: &Table, assets: &Assets) -> Result<(Theme, HashSet<String>)> {
     } else if background.contains_key("image") {
         return fail("Unexpected background image");
     }
-    let mut icon_files = Vec::new();
-    for (key, value) in images {
-        let path = icon_asset_path(key, value)?;
-        let name = path["icons/".len()..].to_string();
-        let bytes = if path.ends_with(".svg") {
-            let bytes = asset_bytes(assets, &path, MAX_ICON_BYTES)?;
-            svg::check(bytes)?;
-            bytes
-        } else {
-            let bytes = image_asset(assets, &path, MAX_ICON_BYTES)?;
-            if !image::is_png(bytes) {
-                return fail("Icons must be PNG or SVG");
-            }
-            image::verify(bytes, 512, 512 * 512)?;
-            bytes
-        };
-        files.icons.insert(name.clone(), bytes.to_vec());
-        icon_files.push(name);
-        used.insert(path);
-    }
+    let icon_files: Vec<String> = checked_icons.files.keys().cloned().collect();
+    let icon_colors = checked_icons.colors;
+    files.icons = checked_icons.files;
+    used.extend(checked_icons.used);
     if let Some(Splash { logo: Some(logo), .. }) = &splash {
         let bytes = if logo.ends_with(".svg") {
             let bytes = asset_bytes(assets, logo, MAX_SPLASH_LOGO_BYTES)?;
@@ -487,6 +573,10 @@ fn merge(base: &Table, overrides: &Table) -> Table {
 fn decode_manifest(source: &str) -> Result<Table> {
     let mut data: Table = source.parse().map_err(|_| ThemeError::new("Invalid TOML manifest"))?;
     data.entry("format").or_insert(Value::Integer(1));
+    // An icon pack is not a theme, and is not read as one.
+    if data.contains_key("kind") {
+        return Ok(data);
+    }
     let defaults: [(&str, Table); 4] = [
         (
             "colors",
@@ -747,6 +837,10 @@ impl Package {
     /// `read_installed` reads back.
     pub fn layout(&self) -> Result<Vec<(String, Vec<u8>)>> {
         let mut out = Vec::new();
+        if let Some(pack) = &self.icon_pack {
+            self.write_icon_pack(pack, &mut out)?;
+            return Ok(out);
+        }
         match self.themes.as_slice() {
             [only] if only.variant.is_none() => self.write_theme(only, "", &mut out)?,
             themes => {
@@ -781,6 +875,21 @@ impl Package {
         ]))
     }
 
+    fn write_icon_pack(&self, pack: &IconPack, out: &mut Vec<(String, Vec<u8>)>) -> Result<()> {
+        let mut profile = Table::new();
+        profile.insert("format".into(), Value::Integer(1));
+        profile.insert("schema".into(), self.schema());
+        profile.insert("id".into(), Value::String(self.id.clone()));
+        profile.insert("name".into(), Value::String(self.name.clone()));
+        profile.insert("kind".into(), Value::String("icons".into()));
+        profile.insert("icons".into(), icons_value(&pack.images, &pack.colors, None));
+        out.push(("manifest.toml".into(), manifest_bytes(&profile)?));
+        for (name, bytes) in &pack.files {
+            out.push((format!("icons/{name}"), bytes.clone()));
+        }
+        Ok(())
+    }
+
     fn write_theme(&self, theme: &Theme, dir: &str, out: &mut Vec<(String, Vec<u8>)>) -> Result<()> {
         let mut profile = Table::new();
         profile.insert("format".into(), Value::Integer(1));
@@ -810,16 +919,7 @@ impl Package {
                 ),
             ])),
         );
-        let mut icons = Table::new();
-        icons.insert("style".into(), Value::String(theme.icons.style.clone()));
-        icons.insert("images".into(), Value::Array(theme.icons.images.iter().cloned().map(Value::String).collect()));
-        if !theme.icons.colors.is_empty() {
-            icons.insert(
-                "colors".into(),
-                Value::Table(theme.icons.colors.iter().map(|(k, c)| (k.clone(), color_value(c))).collect()),
-            );
-        }
-        profile.insert("icons".into(), Value::Table(icons));
+        profile.insert("icons".into(), icons_value(&theme.icons.images, &theme.icons.colors, Some(&theme.icons.style)));
         let mut background = Table::new();
         background.insert("type".into(), Value::String(theme.background.style.clone()));
         background.insert("opacity".into(), Value::Float(theme.background.opacity));
@@ -857,6 +957,19 @@ impl Package {
         }
         Ok(())
     }
+}
+
+/// An installed `[icons]`: the keys carried, as a list, and their colors.
+fn icons_value(images: &[String], colors: &IndexMap<String, ColorSpec>, style: Option<&str>) -> Value {
+    let mut icons = Table::new();
+    if let Some(style) = style {
+        icons.insert("style".into(), Value::String(style.into()));
+    }
+    icons.insert("images".into(), Value::Array(images.iter().cloned().map(Value::String).collect()));
+    if !colors.is_empty() {
+        icons.insert("colors".into(), Value::Table(colors.iter().map(|(k, c)| (k.clone(), color_value(c))).collect()));
+    }
+    Value::Table(icons)
 }
 
 fn color_value(color: &ColorSpec) -> Value {
@@ -954,16 +1067,7 @@ pub fn read_installed(manifest: &str, icon_files: &[String]) -> Result<Installed
     let icons = map(data.get("icons"), "icons")?;
     let background = map(data.get("background"), "background")?;
     let shapes = map(data.get("shapes"), "shapes")?;
-    let carried: Vec<String> = match icons.get("images") {
-        Some(Value::Array(keys)) => keys
-            .iter()
-            .map(|k| match k {
-                Value::String(k) if is_icon_key(k) => Ok(k.clone()),
-                _ => fail("Invalid icon keys"),
-            })
-            .collect::<Result<_>>()?,
-        _ => return fail("Invalid icon keys"),
-    };
+    let (files, icon_colors) = installed_icons(icons, icon_files)?;
     let icon_style = match icons.get("style") {
         Some(Value::String(s)) if s == "classic" || s == "mingcute" => s.clone(),
         _ => return fail("Invalid icon style"),
@@ -973,25 +1077,6 @@ pub fn read_installed(manifest: &str, icon_files: &[String]) -> Result<Installed
         _ => return fail("Invalid background type"),
     };
     let tile = background_tile(background, &background_style)?;
-    let mut files = IndexMap::new();
-    for key in &carried {
-        let stem = key.replace('.', "_");
-        let found = [format!("{stem}.svg"), format!("{stem}.png")].into_iter().find(|n| icon_files.contains(n));
-        match found {
-            Some(name) => {
-                files.insert(key.clone(), name);
-            }
-            None => return fail("Invalid icon path"),
-        }
-    }
-    let carried_table: Table = carried.iter().map(|k| (k.clone(), Value::Boolean(true))).collect();
-    let icon_colors = icon_colors(
-        match icons.get("colors") {
-            None => &empty,
-            raw => map(raw, "icon colors")?,
-        },
-        &carried_table,
-    )?;
     let splash = splash(data.get("splash"))?;
     let names: Vec<String> = files.values().cloned().collect();
     require_feature_schema(schema_min, &names, &icon_colors, splash.as_ref(), &components, tile)?;
@@ -1030,6 +1115,71 @@ pub fn read_installed(manifest: &str, icon_files: &[String]) -> Result<Installed
     })
 }
 
+/// An installation's `[icons]` read back: key to file name inside `icons/`
+/// (the `.svg`, else the `.png`, among [icon_files]), and their colors.
+fn installed_icons(icons: &Table, icon_files: &[String]) -> Result<(IndexMap<String, String>, IndexMap<String, ColorSpec>)> {
+    let carried: Vec<String> = match icons.get("images") {
+        Some(Value::Array(keys)) => keys
+            .iter()
+            .map(|k| match k {
+                Value::String(k) if is_icon_key(k) => Ok(k.clone()),
+                _ => fail("Invalid icon keys"),
+            })
+            .collect::<Result<_>>()?,
+        _ => return fail("Invalid icon keys"),
+    };
+    let mut files = IndexMap::new();
+    for key in &carried {
+        let stem = key.replace('.', "_");
+        let found = [format!("{stem}.svg"), format!("{stem}.png")].into_iter().find(|n| icon_files.contains(n));
+        match found {
+            Some(name) => {
+                files.insert(key.clone(), name);
+            }
+            None => return fail("Invalid icon path"),
+        }
+    }
+    let carried_table: Table = carried.iter().map(|k| (k.clone(), Value::Boolean(true))).collect();
+    let empty = Table::new();
+    let colors = icon_colors(
+        match icons.get("colors") {
+            None => &empty,
+            raw => map(raw, "icon colors")?,
+        },
+        &carried_table,
+    )?;
+    Ok((files, colors))
+}
+
+/// One installed icon pack as its normalized manifest describes it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledIconPack {
+    pub id: String,
+    pub name: String,
+    pub schema_min: u32,
+    pub schema_max: u32,
+    /// Key to file name inside `icons/`.
+    pub icon_files: IndexMap<String, String>,
+    pub icon_colors: IndexMap<String, ColorSpec>,
+}
+
+/// Reads one installed icon pack's normalized manifest; [icon_files] is what
+/// its `icons/` directory holds, by file name.
+pub fn read_installed_icon_pack(manifest: &str, icon_files: &[String]) -> Result<InstalledIconPack> {
+    let data = decode_manifest(manifest)?;
+    if !matches!(data.get("format"), Some(Value::Integer(1))) || !is_icon_pack(&data)? {
+        return fail("Unsupported theme package");
+    }
+    let (schema_min, schema_max) = schema_range(data.get("schema"))?;
+    let id = match data.get("id") {
+        Some(Value::String(id)) if is_id(id) => id.clone(),
+        _ => return fail("Invalid theme id"),
+    };
+    let (icon_files, icon_colors) = installed_icons(map(data.get("icons"), "icons")?, icon_files)?;
+    Ok(InstalledIconPack { id, name: label(data.get("name"), "name")?, schema_min, schema_max, icon_files, icon_colors })
+}
+
 // ---- the format, for others to be held to ----------------------------------
 
 /// What a package may say and how much it may carry, for a test to hold
@@ -1058,6 +1208,8 @@ pub fn format() -> serde_json::Value {
         "splashMaxDuration": SPLASH_MAX_DURATION,
         "splashDefaultDuration": SPLASH_DEFAULT_DURATION,
         "sections": SECTIONS,
+        "iconPackSections": ICON_PACK_SECTIONS,
+        "iconPackFields": ICON_PACK_FIELDS,
         "variantFields": VARIANT_FIELDS,
         "iconFields": ICON_FIELDS,
         "backgroundFields": BACKGROUND_FIELDS,

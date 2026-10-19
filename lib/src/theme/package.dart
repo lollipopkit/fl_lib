@@ -18,6 +18,8 @@ import 'package:fl_lib/src/theme/builtin.dart';
 import 'package:fl_lib/src/theme/style.dart';
 
 import 'package:fl_lib/src/theme/host.dart';
+import 'package:fl_lib/src/theme/icon_pack.dart';
+import 'package:fl_lib/src/theme/installation.dart';
 import 'package:fl_lib/src/theme/rust.dart';
 import 'package:fl_lib/src/rust/api/theme.dart';
 
@@ -83,8 +85,79 @@ final class ThemeVariant {
   int get hashCode => Object.hash(key, name);
 }
 
+/// What a theme and an icon pack share once installed: a directory named by
+/// [installationId] under a root of its kind, written from a package
+/// `fl_theme` checked.
+sealed class ThemeInstallation {
+  const ThemeInstallation();
+
+  /// SHA-256 of the package, lowercase hex, and the directory's name.
+  String get installationId;
+
+  /// The manifest's `id`: the same across versions.
+  String get id;
+  String get name;
+  int get schemaMin;
+  int get schemaMax;
+  String get directory;
+}
+
+/// An icon pack (`kind = "icons"`): icons chosen apart from the theme and
+/// drawn over whichever one is in use. Schema 4. See [ThemeIconPacks].
+final class ThemeIconPack extends ThemeInstallation {
+  const ThemeIconPack({
+    required this.installationId,
+    required this.id,
+    required this.name,
+    required this.schemaMin,
+    required this.schemaMax,
+    required this.iconFiles,
+    required this.directory,
+    this.iconColors = const {},
+  });
+
+  /// No pack: what previewing "follow the theme" shows while one is chosen.
+  static const none = ThemeIconPack(
+    installationId: '',
+    id: '',
+    name: '',
+    schemaMin: 0,
+    schemaMax: 0,
+    iconFiles: {},
+    directory: '',
+  );
+
+  @override
+  final String installationId;
+  @override
+  final String id;
+  @override
+  final String name;
+  @override
+  final int schemaMin;
+  @override
+  final int schemaMax;
+  @override
+  final String directory;
+
+  /// Icon key to the file that carries it, inside `icons/`.
+  final Map<String, String> iconFiles;
+
+  /// Icon key to an ARGB integer or a [ThemePalette] role name, resolved
+  /// against the theme in use.
+  final Map<String, Object> iconColors;
+
+  String? iconPath(String key) => switch (iconFiles[key]) {
+    final String file => directory.joinPath(_iconsDir).joinPath(file),
+    _ => null,
+  };
+
+  Color? iconColor(String key, ColorScheme scheme) =>
+      ThemePalette.spec(iconColors[key], scheme);
+}
+
 /// A versioned .fsbt resource bundle. Fonts and launcher icons are separate.
-final class ThemePackage {
+final class ThemePackage extends ThemeInstallation {
   const ThemePackage({
     required this.installationId,
     required this.id,
@@ -115,10 +188,15 @@ final class ThemePackage {
     this.components = const ThemeComponents.empty(),
   });
 
+  @override
   final String installationId;
+  @override
   final String id;
+  @override
   final String name;
+  @override
   final int schemaMin;
+  @override
   final int schemaMax;
   final int mode;
   final Set<ThemeMode> modes;
@@ -151,6 +229,7 @@ final class ThemePackage {
   final double cardRadius;
   final double tileRadius;
   final double buttonRadius;
+  @override
   final String directory;
   final ThemeSplash? splash;
   final String? backgroundFile;
@@ -258,9 +337,8 @@ final class BuiltinThemeLoader {
       throw const FormatException('Built-in theme metadata mismatch');
     }
     final directory = rootDirectory ?? ThemePackages.root.joinPath('builtin');
-    final package = await ThemePackages._installPrepared(
-      prepared,
-      rootDirectory: directory,
+    final package = ThemePackages._onlyTheme(
+      await ThemePackages._installPrepared(prepared, rootDirectory: directory),
     );
     ThemePackages._removeUnreadable(directory);
     return package;
@@ -293,8 +371,9 @@ abstract final class ThemePackages {
   /// the store show it as needing a newer app rather than failing to install.
   static const componentSchema = 3;
 
-  /// What schema 4 added: more than 48 icons. A build that reads only 3
-  /// refuses such a package, so it has to say it needs 4.
+  /// What schema 4 added: more than 48 icons, and icon packs
+  /// ([ThemeIconPack]). A build that reads only 3 refuses either, so a
+  /// package has to say it needs 4.
   static const iconSchema = 4;
   static String get supportedSchemaRange =>
       'v$supportedSchemaMin–v$supportedSchemaMax';
@@ -310,7 +389,7 @@ abstract final class ThemePackages {
   /// splash logo, and for each variant a background, a splash logo and its
   /// directory entry.
   static const _maxAssets = _maxIcons + 3 + maxVariants * 3;
-  static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
+  static final _digestPattern = installationIdPattern;
 
   /// Every top-level table a package may carry. One that is not here is refused
   /// rather than ignored, because an ignored one is a theme that silently does
@@ -351,6 +430,18 @@ abstract final class ThemePackages {
   /// The fields `[icons]` and `[splash]` may carry, held against the schema's
   /// properties by the same test that holds the enums above.
   static const iconFields = {'style', 'images', 'colors'};
+
+  /// What an icon pack ([ThemeIconPack]) may carry, and the fields of its
+  /// `[icons]`: no `style`, which is the theme's.
+  static const iconPackSections = {
+    'format',
+    'schema',
+    'id',
+    'name',
+    'kind',
+    'icons',
+  };
+  static const iconPackFields = {'images', 'colors'};
   static const backgroundFields = {'type', 'image', 'opacity', 'blur', 'tile'};
   static const splashFields = {'color', 'logo', 'duration'};
 
@@ -491,17 +582,22 @@ abstract final class ThemePackages {
         final id = path.substring(bundledDir.length, path.length - '.fsbt'.length);
         if (done.contains(id)) continue;
         try {
-          final onDevice = listInstalled(
-            rootDirectory: rootDirectory,
-          ).any((theme) => theme.id == id);
+          final onDevice = [
+            ...listInstalled(rootDirectory: rootDirectory),
+            ...ThemeIconPacks.listInstalled(
+              rootDirectory: rootDirectory == null
+                  ? null
+                  : ThemeIconPacks.rootIn(rootDirectory),
+            ),
+          ].any((installed) => installed.id == id);
           if (!onDevice) {
             final data = await assets.load(path);
-            final theme = await install(
+            final installed = await installAny(
               data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
               rootDirectory: rootDirectory,
             );
-            if (theme.id != id) {
-              throw FormatException('$path installs as ${theme.id}');
+            if (installed.id != id) {
+              throw FormatException('$path installs as ${installed.id}');
             }
           }
           done.add(id);
@@ -598,63 +694,63 @@ abstract final class ThemePackages {
   static Future<ThemePackage> installUrl(
     String url, {
     String? expectedSha256,
+  }) async => _onlyTheme(await installUrlAny(url, expectedSha256: expectedSha256));
+
+  /// A theme or an icon pack from [url].
+  static Future<ThemeInstallation> installUrlAny(
+    String url, {
+    String? expectedSha256,
   }) async {
     final bytes = await download(url);
     if (expectedSha256 != null &&
         sha256.convert(bytes).toString() != expectedSha256) {
       throw const FormatException('Theme checksum mismatch');
     }
-    return install(bytes);
+    return installAny(bytes);
   }
 
+  /// Installs a theme; an icon pack is refused here, see [installAny].
   static Future<ThemePackage> install(
+    List<int> bytes, {
+    String? rootDirectory,
+  }) async => _onlyTheme(await installAny(bytes, rootDirectory: rootDirectory));
+
+  /// Installs a theme into [rootDirectory], or an icon pack into the icon
+  /// packs' root inside it ([ThemeIconPacks.rootIn]).
+  static Future<ThemeInstallation> installAny(
     List<int> bytes, {
     String? rootDirectory,
   }) async {
     if (bytes.isEmpty || bytes.length > maxPackageBytes) {
       throw const FormatException('Invalid theme package size');
     }
-    final package = await _installPrepared(
+    final installed = await _installPrepared(
       await ThemeRust.preparePackage(bytes),
       rootDirectory: rootDirectory,
     );
-    await _keepSource(rootDirectory ?? root, package.installationId, bytes);
-    return package;
+    await keepSource(
+      _rootOf(installed, rootDirectory),
+      installed.installationId,
+      bytes,
+    );
+    return installed;
   }
 
-  /// Where the `.fsbt` an installation came from is kept: what is installed
-  /// is rewritten from it, and cannot be packed back into the same bytes, so
-  /// a backup has nothing else to carry a theme the store does not hold
-  /// (#1637). Beside the installations, under a name [installed] never reads.
-  static String _sourcePath(String rootPath, String installationId) =>
-      rootPath.joinPath(_sourcesDir).joinPath('$installationId.fsbt');
+  static ThemePackage _onlyTheme(ThemeInstallation installed) =>
+      switch (installed) {
+        final ThemePackage theme => theme,
+        ThemeIconPack() => throw const FormatException(
+          'This is an icon pack, not a theme',
+        ),
+      };
 
-  static const _sourcesDir = '.sources';
-
-  static Future<void> _keepSource(
-    String rootPath,
-    String installationId,
-    List<int> bytes,
-  ) async {
-    try {
-      final file = File(_sourcePath(rootPath, installationId));
-      // One that is there already stays only when it is whole: a write cut
-      // short would otherwise be kept, and fail [sourceOf]'s check for good.
-      if (await _sourceIntact(file, installationId)) return;
-      await file.parent.create(recursive: true);
-      final part = File('${file.path}.part');
-      await part.writeAsBytes(bytes, flush: true);
-      await part.rename(file.path);
-    } catch (error, stack) {
-      // The theme is installed either way; only a backup of it is lost.
-      Loggers.app.warning('Keeping theme source $installationId', error, stack);
-    }
-  }
-
-  static Future<void> _dropSource(String rootPath, String installationId) async {
-    final file = File(_sourcePath(rootPath, installationId));
-    if (await file.exists()) await file.delete();
-  }
+  /// The root [installed] is under, given the themes' root it was installed
+  /// into.
+  static String _rootOf(ThemeInstallation installed, String? rootDirectory) =>
+      switch (installed) {
+        ThemePackage() => rootDirectory ?? root,
+        ThemeIconPack() => ThemeIconPacks.rootIn(rootDirectory ?? root),
+      };
 
   /// The `.fsbt` [installationId] was installed from, or null for one
   /// installed from a folder, or before these were kept. Checked against the
@@ -662,33 +758,18 @@ abstract final class ThemePackages {
   static Future<Uint8List?> sourceOf(
     String installationId, {
     String? rootDirectory,
-  }) async {
-    if (!_digestPattern.hasMatch(installationId)) return null;
-    final file = File(_sourcePath(rootDirectory ?? root, installationId));
-    try {
-      if (!await file.exists()) return null;
-      final bytes = await file.readAsBytes();
-      if (sha256.convert(bytes).toString() != installationId) return null;
-      return bytes;
-    } on FileSystemException catch (error) {
-      // As a missing one: the theme is left out of a backup, not the backup.
-      Loggers.app.warning('Reading theme source $installationId', error);
-      return null;
-    }
-  }
-
-  static Future<bool> _sourceIntact(File file, String installationId) async {
-    if (!await file.exists()) return false;
-    try {
-      return sha256.convert(await file.readAsBytes()).toString() ==
-          installationId;
-    } on FileSystemException {
-      return false;
-    }
-  }
+  }) => readSource(rootDirectory ?? root, installationId);
 
   /// Imports a development directory without requiring a ZIP build step.
   static Future<ThemePackage> installFolder(
+    String folderPath, {
+    String? rootDirectory,
+  }) async => _onlyTheme(
+    await installFolderAny(folderPath, rootDirectory: rootDirectory),
+  );
+
+  /// A theme or an icon pack from a development directory.
+  static Future<ThemeInstallation> installFolderAny(
     String folderPath, {
     String? rootDirectory,
   }) async {
@@ -787,7 +868,10 @@ abstract final class ThemePackages {
         await readFile(entry, name, _maxSplashLogoBytes);
       }
     }
-    return installAssets(assets, rootDirectory: rootDirectory);
+    return _installPrepared(
+      await ThemeRust.prepareFiles(assets),
+      rootDirectory: rootDirectory,
+    );
   }
 
   /// Installs uncompressed assets from a local folder or the Flutter bundle.
@@ -797,49 +881,40 @@ abstract final class ThemePackages {
   static Future<ThemePackage> installAssets(
     Map<String, Uint8List> assets, {
     String? rootDirectory,
-  }) async => _installPrepared(
-    await ThemeRust.prepareFiles(assets),
-    rootDirectory: rootDirectory,
+  }) async => _onlyTheme(
+    await _installPrepared(
+      await ThemeRust.prepareFiles(assets),
+      rootDirectory: rootDirectory,
+    ),
   );
 
-  /// Writes a theme `fl_theme` checked: [prepared]'s files, as they are laid
-  /// out once installed, into its installation directory, staged and moved in
-  /// whole so a failed write leaves nothing half installed.
-  static Future<ThemePackage> _installPrepared(
+  /// Writes a package `fl_theme` checked into its installation directory: a
+  /// theme under [rootDirectory], an icon pack under its root inside it.
+  static Future<ThemeInstallation> _installPrepared(
     PreparedTheme prepared, {
     String? rootDirectory,
   }) async {
+    if (prepared.iconPack) {
+      return ThemeIconPacks.installPrepared(
+        prepared,
+        rootDirectory: rootDirectory == null
+            ? null
+            : ThemeIconPacks.rootIn(rootDirectory),
+      );
+    }
     final installationId = prepared.installationId;
     final rootPath = rootDirectory ?? root;
-    final directory = rootPath.joinPath(installationId);
     final existing = installed(installationId, rootDirectory: rootPath);
     if (existing != null) return existing;
-    await Directory(rootPath).create(recursive: true);
-    final staging = Directory(
-      rootPath.joinPath('.installing-${DateTime.now().microsecondsSinceEpoch}'),
-    );
-    await staging.create();
-    try {
-      for (final file in prepared.files) {
-        final target = File(staging.path.joinPath(file.path));
-        await target.parent.create(recursive: true);
-        await target.writeAsBytes(file.bytes, flush: true);
-      }
-      if (await Directory(directory).exists()) {
-        await Directory(directory).delete(recursive: true);
-      }
-      await staging.rename(directory);
-      _activeId = null;
-      final package = installed(installationId, rootDirectory: rootPath);
-      if (package == null) {
-        throw const FormatException('Theme installed but unreadable');
-      }
-      await _replaceOlder(package, rootDirectory: rootDirectory);
-      installedChanged.value++;
-      return package;
-    } finally {
-      if (await staging.exists()) await staging.delete(recursive: true);
+    await writeInstallation(rootPath, prepared);
+    _activeId = null;
+    final package = installed(installationId, rootDirectory: rootPath);
+    if (package == null) {
+      throw const FormatException('Theme installed but unreadable');
     }
+    await _replaceOlder(package, rootDirectory: rootDirectory);
+    installedChanged.value++;
+    return package;
   }
 
   /// Removes every other installation of [package]'s manifest id: a package
@@ -876,7 +951,7 @@ abstract final class ThemePackages {
       await Directory(
         rootPath.joinPath(old.installationId),
       ).delete(recursive: true);
-      await _dropSource(rootPath, old.installationId);
+      await dropSource(rootPath, old.installationId);
     }
     _activeId = null;
     _active = null;
@@ -962,14 +1037,8 @@ abstract final class ThemePackages {
     }
   }
 
-  /// The manifest an installation wrote, or null when there is none to read.
-  static String? _manifestAt(String directory) {
-    final file = File(directory.joinPath('manifest.toml'));
-    if (!file.existsSync() || file.lengthSync() > _maxManifestBytes) {
-      return null;
-    }
-    return file.readAsStringSync();
-  }
+  static String? _manifestAt(String directory) =>
+      installedManifest(directory, maxBytes: _maxManifestBytes);
 
   /// One installed theme, read back by `fl_theme` from the manifest written at
   /// install; the files it names are this side's to find.
@@ -982,15 +1051,13 @@ abstract final class ThemePackages {
     try {
       final manifest = _manifestAt(directory);
       if (manifest == null) return null;
-      final iconDir = Directory(directory.joinPath(_iconsDir));
-      final iconFiles = iconDir.existsSync()
-          ? [
-              for (final entry in iconDir.listSync(followLinks: false))
-                if (entry is File) entry.uri.pathSegments.last,
-            ]
-          : const <String>[];
       final data =
-          jsonDecode(readInstalledTheme(manifest: manifest, iconFiles: iconFiles))
+          jsonDecode(
+                readInstalledTheme(
+                  manifest: manifest,
+                  iconFiles: installedIconFiles(directory),
+                ),
+              )
               as Map<String, dynamic>;
       final background = data['background'] as Map<String, dynamic>;
       final shapes = data['shapes'] as Map<String, dynamic>;
@@ -1122,7 +1189,7 @@ abstract final class ThemePackages {
     );
     if (!await directory.exists()) return false;
     await directory.delete(recursive: true);
-    await _dropSource(rootDirectory ?? root, installationId);
+    await dropSource(rootDirectory ?? root, installationId);
 
     if (_activeId?.split('#').first == installationId) {
       _activeId = null;
@@ -1133,14 +1200,22 @@ abstract final class ThemePackages {
     return true;
   }
 
+  /// The image drawn for [key]: the chosen icon pack's, else the theme's.
   static String? activeIconPath(String key) {
-    if (!iconKeys.contains(key)) return null;
-    return activeTheme?.iconPath(key);
+    if (!ThemeHost.current.icons.draws(key)) return null;
+    return ThemeIconPacks.active?.iconPath(key) ?? activeTheme?.iconPath(key);
   }
 
-  /// The color a package gives this icon, or `null` to follow the ambient one.
-  static Color? activeIconColor(String key, ColorScheme scheme) =>
-      iconKeys.contains(key) ? activeTheme?.iconColor(key, scheme) : null;
+  /// The color the package whose image [activeIconPath] draws gives [key],
+  /// or `null` to follow the ambient one.
+  static Color? activeIconColor(String key, ColorScheme scheme) {
+    if (!ThemeHost.current.icons.draws(key)) return null;
+    final pack = ThemeIconPacks.active;
+    if (pack != null && pack.iconFiles.containsKey(key)) {
+      return pack.iconColor(key, scheme);
+    }
+    return activeTheme?.iconColor(key, scheme);
+  }
 
   static ThemePackage? get activeTheme {
     if (preview.value case final theme?) return theme;

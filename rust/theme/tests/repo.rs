@@ -6,6 +6,7 @@ use std::io::Write;
 
 use indexmap::IndexMap;
 use fl_theme::repo::{
+    Kind,
     Catalog, Index, Listing, MAX_ENTRY_BYTES, MAX_TAR_BYTES, Text, archive_url_of, compare_versions, read_archive,
 };
 
@@ -168,7 +169,7 @@ fn a_repository_keeps_what_its_tree_carries() {
     ))
     .unwrap();
     assert_eq!(index.name.as_deref(), Some("A test repository"));
-    assert_eq!(index.themes[0].id, "aurora");
+    assert_eq!(index.listings[0].id, "aurora");
     assert_eq!(index.packages.keys().collect::<Vec<_>>(), ["packages/a-1.1.0.fsbt"]);
 }
 
@@ -188,7 +189,20 @@ fn a_plugins_section_yields_nothing_installable() {
         ],
     ))
     .unwrap();
-    assert_eq!(index.themes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora"]);
+    assert_eq!(index.listings.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora"]);
+}
+
+#[test]
+fn an_icons_section_lists_icon_packs() {
+    let index = Index::from_files(&files(
+        Some(REPO),
+        &[aurora(), ("icons/devicons.toml", theme_toml("devicons", &version(V::default())))],
+        &[],
+    ))
+    .unwrap();
+    let listed: Vec<(Kind, &str)> = index.listings.iter().map(|l| (l.kind, l.id.as_str())).collect();
+    assert_eq!(listed, [(Kind::Icons, "devicons"), (Kind::Theme, "aurora")]);
+    assert!(Listing::parse(&theme_toml("aurora", &version(V::default())), "icons/devicons.toml").is_err());
 }
 
 #[test]
@@ -203,7 +217,7 @@ fn one_unreadable_theme_file_costs_that_theme_only() {
         &[],
     ))
     .unwrap();
-    assert_eq!(index.themes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora", "dracula"]);
+    assert_eq!(index.listings.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora", "dracula"]);
 }
 
 #[test]
@@ -263,7 +277,7 @@ fn a_fetched_tree_is_read_without_its_wrapping_directory() {
     ))
     .unwrap();
     assert!(read.contains_key("repo.toml") && read.contains_key("themes/aurora.toml"));
-    assert_eq!(Index::from_files(&read).unwrap().themes[0].id, "aurora");
+    assert_eq!(Index::from_files(&read).unwrap().listings[0].id, "aurora");
 }
 
 #[test]

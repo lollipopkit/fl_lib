@@ -35,6 +35,8 @@ pub struct PreparedTheme {
     pub installation_id: String,
     pub id: String,
     pub name: String,
+    /// An icon pack rather than a theme: installed and chosen apart.
+    pub icon_pack: bool,
     pub files: Vec<ThemeFile>,
 }
 
@@ -60,7 +62,13 @@ pub struct ThemeRepoTree {
 
 fn prepared(package: fl_theme::Package) -> Result<PreparedTheme, ThemeFailure> {
     let files = package.layout()?.into_iter().map(|(path, bytes)| ThemeFile { path, bytes }).collect();
-    Ok(PreparedTheme { installation_id: package.installation_id, id: package.id, name: package.name, files })
+    Ok(PreparedTheme {
+        icon_pack: package.icon_pack.is_some(),
+        installation_id: package.installation_id,
+        id: package.id,
+        name: package.name,
+        files,
+    })
 }
 
 fn files_map(files: Vec<ThemeFile>) -> IndexMap<String, Vec<u8>> {
@@ -94,6 +102,13 @@ pub fn installed_theme_variants(manifest: String) -> Result<Option<Vec<ThemeVari
 #[frb(sync)]
 pub fn read_installed_theme(manifest: String, icon_files: Vec<String>) -> Result<String, ThemeFailure> {
     Ok(json(&fl_theme::read_installed(&manifest, &icon_files)?))
+}
+
+/// Reads one installed icon pack's normalized manifest, as JSON
+/// (`fl_theme::InstalledIconPack`). [icon_files] is what its `icons/` holds.
+#[frb(sync)]
+pub fn read_installed_icon_pack(manifest: String, icon_files: Vec<String>) -> Result<String, ThemeFailure> {
+    Ok(json(&fl_theme::read_installed_icon_pack(&manifest, &icon_files)?))
 }
 
 /// Checks `[components]` and `[layout]` given as JSON (null for absent), and
@@ -136,7 +151,7 @@ pub fn read_theme_repo(files: Vec<ThemeFile>) -> Result<ThemeRepoTree, ThemeFail
     let index = fl_theme::repo::Index::from_files(&files_map(files))?;
     Ok(ThemeRepoTree {
         name: index.name,
-        listings: json(&index.themes),
+        listings: json(&index.listings),
         packages: index.packages.into_iter().map(|(path, bytes)| ThemeFile { path, bytes }).collect(),
     })
 }

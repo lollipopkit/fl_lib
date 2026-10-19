@@ -9,10 +9,11 @@
 /// request that adds a line here.
 ///
 /// A repository is a git repository of TOML files, read by fetching its tree —
-/// `repo.toml` for the schema, then one file per theme under `themes/`. That is
-/// the shape the plugin repository uses, deliberately: **one repository can
-/// serve both kinds**, and what it offers is whatever its tree holds. This
-/// build reads `themes/`; a `plugins/` section beside it is skipped rather than
+/// `repo.toml` for the schema, then one file per theme under `themes/` and per
+/// icon pack under `icons/`. That is the shape the plugin repository uses,
+/// deliberately: **one repository can serve every kind**, and what it offers
+/// is whatever its tree holds. This build reads `themes/` and `icons/`; a
+/// `plugins/` section beside them is skipped rather than
 /// refused, because a section this build does not know is not a reason to throw
 /// away one it does.
 ///
@@ -50,19 +51,34 @@ import 'package:fl_lib/src/theme/host.dart';
 abstract final class ThemeRepoLayout {
   static const dir = 'themes/';
 
+  /// Where icon packs are listed, the same way: `icons/<id>.toml`. A build
+  /// before icon packs skips the directory.
+  static const iconsDir = 'icons/';
+
   /// Where a `.fsbt` carried inside the repository lives. Shared with the
   /// plugin layout on purpose — a repository offering both keeps one place for
   /// the packages its files name.
   static const packagesDir = 'packages/';
 
-  static String? pathOf(String id) =>
-      ThemePackages.idPattern.hasMatch(id) ? '$dir$id.toml' : null;
+  static String? pathOf(
+    String id, {
+    ThemeListingKind kind = ThemeListingKind.theme,
+  }) => ThemePackages.idPattern.hasMatch(id)
+      ? '${kind == ThemeListingKind.icons ? iconsDir : dir}$id.toml'
+      : null;
 
-  static String? idOf(String path) => _file.firstMatch(path)?.group(1);
-
-  static final _file = RegExp(
-    '^$dir([a-z0-9][a-z0-9._-]{0,63})\\.toml\$',
-  );
+  /// What [path] lists, and its id: `themes/<id>.toml` or `icons/<id>.toml`.
+  static (ThemeListingKind, String)? listedAt(String path) {
+    for (final (kind, prefix) in [
+      (ThemeListingKind.theme, dir),
+      (ThemeListingKind.icons, iconsDir),
+    ]) {
+      if (!path.startsWith(prefix) || !path.endsWith('.toml')) continue;
+      final id = path.substring(prefix.length, path.length - '.toml'.length);
+      if (ThemePackages.idPattern.hasMatch(id)) return (kind, id);
+    }
+    return null;
+  }
 }
 
 /// One repository the catalog lists.
@@ -316,8 +332,12 @@ final class ThemeText {
   );
 }
 
+/// What a listing offers, by the directory it is listed in.
+enum ThemeListingKind { theme, icons }
+
 final class ThemeListing {
   const ThemeListing({
+    this.kind = ThemeListingKind.theme,
     required this.id,
     required this.name,
     required this.description,
@@ -326,6 +346,8 @@ final class ThemeListing {
     this.license,
   });
 
+  /// A theme, or an icon pack ([ThemeIconPack]).
+  final ThemeListingKind kind;
   final String id;
   final String name;
 
@@ -374,6 +396,7 @@ final class ThemeListing {
   /// later build may install is a question about that build, and a cache that
   /// answered it would go stale in the one direction a refresh cannot fix.
   Map<String, dynamic> toJson() => {
+    'kind': kind.name,
     'id': id,
     'name': name,
     'description': description.toJson(),
@@ -397,6 +420,10 @@ final class ThemeListing {
     if (releases.isEmpty) return null;
 
     return ThemeListing(
+      // A cache written before icon packs carries no kind: themes only.
+      kind: raw['kind'] == ThemeListingKind.icons.name
+          ? ThemeListingKind.icons
+          : ThemeListingKind.theme,
       id: id,
       name: raw['name'] is String ? raw['name'] as String : id,
       description: ThemeText.parse(raw['description']),
@@ -410,12 +437,13 @@ final class ThemeListing {
 /// One repository's tree, read.
 final class ThemeRepoIndex {
   const ThemeRepoIndex({
-    required this.themes,
+    required this.listings,
     this.name,
     this.packages = const {},
   });
 
-  final List<ThemeListing> themes;
+  /// Its themes and icon packs ([ThemeListing.kind]).
+  final List<ThemeListing> listings;
 
   /// What the repository calls itself, for the list of repositories.
   final String? name;
@@ -433,7 +461,8 @@ final class ThemeRepoIndex {
   /// repository, because a file this build cannot read is a theme it cannot
   /// offer while a repository it cannot identify is one it cannot describe.
   ///
-  /// A section that is not `themes/` is skipped, not refused: the same tree may
+  /// A section that is not `themes/` or `icons/` is skipped, not refused: the
+  /// same tree may
   /// carry a `plugins/` section this build has no business reading.
   static ThemeRepoIndex fromFiles(Map<String, Uint8List> files) {
     final tree = _repoCall(
@@ -445,7 +474,7 @@ final class ThemeRepoIndex {
       ),
     );
     return ThemeRepoIndex(
-      themes: [
+      listings: [
         for (final raw in jsonDecode(tree.listings) as List)
           ?ThemeListing.fromJson(raw),
       ],
@@ -749,7 +778,7 @@ abstract final class ThemeRepos {
           ? index.name!.trim()
           : ref.label;
       repos.add(label);
-      for (final listing in index.themes) {
+      for (final listing in index.listings) {
         items.add(
           ThemeStoreItem(
             repo: label,
@@ -784,7 +813,7 @@ abstract final class ThemeRepos {
   /// [rootDirectory] is where it lands, spelled the way every other install
   /// spells it, so a test can install a published theme without touching the
   /// installation a user would be looking at.
-  static Future<ThemePackage> install(
+  static Future<ThemeInstallation> install(
     ThemeStoreItem item, {
     String? rootDirectory,
   }) async {
@@ -813,7 +842,23 @@ abstract final class ThemeRepos {
       // proceeding through.
       throw const ThemeRepoError('Theme checksum mismatch');
     }
-    return ThemePackages.install(bytes, rootDirectory: rootDirectory);
+    final installed = await ThemePackages.installAny(
+      bytes,
+      rootDirectory: rootDirectory,
+    );
+    // What the listing said it was: a pack listed as a theme, or the other way
+    // round, is a repository mistake the user should not be left applying.
+    final expected = switch (installed) {
+      ThemePackage() => ThemeListingKind.theme,
+      ThemeIconPack() => ThemeListingKind.icons,
+    };
+    if (expected != item.listing.kind) {
+      throw ThemeRepoError(
+        '${item.listing.id} is listed as a ${item.listing.kind.name} '
+        'and is a ${expected.name}',
+      );
+    }
+    return installed;
   }
 
   /// The bytes a version carries inside its repository's tree.

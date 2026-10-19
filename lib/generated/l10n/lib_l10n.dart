@@ -1882,6 +1882,36 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Larger than {size}'**
   String tooLargeFmt(String size);
+
+  /// Settings row and sheet title: the icon pack drawn over the theme, chosen apart from it.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon pack'**
+  String get appearanceIconPack;
+
+  /// The choice of no icon pack: the theme's own icons are drawn.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme\'s icons'**
+  String get appearanceIconPackTheme;
+
+  /// Theme store tab listing themes.
+  ///
+  /// In en, this message translates to:
+  /// **'Themes'**
+  String get themeStoreThemes;
+
+  /// Theme store tab listing icon packs.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon packs'**
+  String get themeStoreIconPacks;
+
+  /// Confirm dialog for deleting one installed icon pack, and what happens when it is the one in use.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete “{name}”? Its files are removed from this device. If it is the icon pack in use, the app returns to the theme\'s icons.'**
+  String themeStoreDeleteIconPack(String name);
 }
 
 class _LibLocalizationsDelegate

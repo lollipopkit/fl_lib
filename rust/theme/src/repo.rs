@@ -217,9 +217,29 @@ impl Release {
     }
 }
 
-/// One theme in a repository, with every version it offers.
+/// What a listing offers: a theme (`themes/<id>.toml`) or an icon pack
+/// (`icons/<id>.toml`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    Theme,
+    Icons,
+}
+
+impl Kind {
+    /// The repository directory its listings are in.
+    pub fn dir(self) -> &'static str {
+        match self {
+            Kind::Theme => "themes",
+            Kind::Icons => "icons",
+        }
+    }
+}
+
+/// One theme or icon pack in a repository, with every version it offers.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Listing {
+    pub kind: Kind,
     pub id: String,
     pub name: String,
     pub description: Text,
@@ -254,7 +274,8 @@ impl Listing {
             Some(Value::String(id)) if !id.is_empty() => id.clone(),
             _ => return fail(format!("{path} names no id")),
         };
-        if let Some(expected) = id_of(path)
+        let listed = listed_at(path);
+        if let Some((_, expected)) = listed
             && expected != id
         {
             return fail(format!("{path} says it is {id}, and its path says {expected}"));
@@ -271,6 +292,7 @@ impl Listing {
             _ => None,
         };
         Ok(Self {
+            kind: listed.map_or(Kind::Theme, |(kind, _)| kind),
             name: text("name").unwrap_or_else(|| id.clone()),
             id,
             description: Text::parse(raw.get("description")),
@@ -281,23 +303,29 @@ impl Listing {
     }
 }
 
-/// The theme a repository path describes: `themes/<id>.toml`.
-pub fn id_of(path: &str) -> Option<&str> {
-    path.strip_prefix("themes/").and_then(|rest| rest.strip_suffix(".toml")).filter(|id| is_id(id))
+/// What a repository path lists: `themes/<id>.toml` or `icons/<id>.toml`.
+pub fn listed_at(path: &str) -> Option<(Kind, &str)> {
+    [Kind::Theme, Kind::Icons].into_iter().find_map(|kind| {
+        path.strip_prefix(kind.dir())
+            .and_then(|rest| rest.strip_prefix('/'))
+            .and_then(|rest| rest.strip_suffix(".toml"))
+            .filter(|id| is_id(id))
+            .map(|id| (kind, id))
+    })
 }
 
 /// One repository's tree, read.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Index {
     pub name: Option<String>,
-    pub themes: Vec<Listing>,
+    pub listings: Vec<Listing>,
     /// The `.fsbt` files the tree carried, by path.
     pub packages: IndexMap<String, Vec<u8>>,
 }
 
 impl Index {
-    /// One bad theme file costs that theme; a bad `repo.toml` costs the
-    /// repository. A section that is not `themes/` is skipped.
+    /// One bad listing costs that listing; a bad `repo.toml` costs the
+    /// repository. A section that is not `themes/` or `icons/` is skipped.
     pub fn from_files(files: &IndexMap<String, Vec<u8>>) -> Result<Self> {
         let Some(repo) = files.get("repo.toml") else {
             return fail("no repo.toml, so this is not a repository");
@@ -313,9 +341,9 @@ impl Index {
         }
         let mut paths: Vec<&String> = files.keys().collect();
         paths.sort();
-        let themes = paths
+        let listings = paths
             .into_iter()
-            .filter(|p| id_of(p).is_some())
+            .filter(|p| listed_at(p).is_some())
             .filter_map(|p| std::str::from_utf8(&files[p]).ok().and_then(|t| Listing::parse(t, p).ok()))
             .collect();
         Ok(Self {
@@ -323,7 +351,7 @@ impl Index {
                 Some(Value::String(n)) => Some(n.clone()),
                 _ => None,
             },
-            themes,
+            listings,
             packages: files
                 .iter()
                 .filter(|(k, _)| k.starts_with("packages/"))
@@ -455,5 +483,6 @@ pub fn format() -> serde_json::Value {
         "maxUnpackedBytes": MAX_UNPACKED_BYTES,
         "maxEntryBytes": MAX_ENTRY_BYTES,
         "maxTarBytes": MAX_TAR_BYTES,
+        "listingDirs": [Kind::Theme.dir(), Kind::Icons.dir()],
     })
 }

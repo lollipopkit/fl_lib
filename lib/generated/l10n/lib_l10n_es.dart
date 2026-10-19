@@ -959,4 +959,21 @@ class LibLocalizationsEs extends LibLocalizations {
   String tooLargeFmt(String size) {
     return 'Más de $size';
   }
+
+  @override
+  String get appearanceIconPack => 'Paquete de iconos';
+
+  @override
+  String get appearanceIconPackTheme => 'Iconos del tema';
+
+  @override
+  String get themeStoreThemes => 'Temas';
+
+  @override
+  String get themeStoreIconPacks => 'Paquetes de iconos';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '¿Eliminar «$name»? Sus archivos se eliminarán de este dispositivo. Si es el paquete de iconos en uso, la app volverá a los iconos del tema.';
+  }
 }

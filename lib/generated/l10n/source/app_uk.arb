@@ -292,5 +292,10 @@
   "regex": "Регулярний вираз",
   "showPwd": "Показати пароль",
   "existsFmt": "{name} вже існує",
-  "tooLargeFmt": "Більше ніж {size}"
+  "tooLargeFmt": "Більше ніж {size}",
+  "appearanceIconPack": "Набір значків",
+  "appearanceIconPackTheme": "Значки теми",
+  "themeStoreThemes": "Теми",
+  "themeStoreIconPacks": "Набори значків",
+  "themeStoreDeleteIconPack": "Видалити «{name}»? Його файли буде видалено з цього пристрою. Якщо це набір значків, що використовується, застосунок повернеться до значків теми."
 }

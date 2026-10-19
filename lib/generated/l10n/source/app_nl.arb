@@ -292,5 +292,10 @@
   "regex": "Reguliere expressie",
   "showPwd": "Wachtwoord tonen",
   "existsFmt": "{name} bestaat al",
-  "tooLargeFmt": "Groter dan {size}"
+  "tooLargeFmt": "Groter dan {size}",
+  "appearanceIconPack": "Pictogrampakket",
+  "appearanceIconPackTheme": "Pictogrammen van het thema",
+  "themeStoreThemes": "Thema's",
+  "themeStoreIconPacks": "Pictogrampakketten",
+  "themeStoreDeleteIconPack": "“{name}” verwijderen? De bestanden worden van dit apparaat verwijderd. Als dit het gebruikte pictogrampakket is, gebruikt de app weer de pictogrammen van het thema."
 }

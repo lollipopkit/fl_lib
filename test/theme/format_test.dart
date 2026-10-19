@@ -34,6 +34,8 @@ void main() {
     expect(ThemePackages.sections, set(format['sections']));
     expect(ThemePackages.variantFields, set(format['variantFields']));
     expect(ThemePackages.iconFields, set(format['iconFields']));
+    expect(ThemePackages.iconPackSections, set(format['iconPackSections']));
+    expect(ThemePackages.iconPackFields, set(format['iconPackFields']));
     expect(ThemePackages.backgroundFields, set(format['backgroundFields']));
     expect(ThemePackages.splashFields, set(format['splashFields']));
     expect(ThemePackages.backgroundImages, set(format['backgroundImages']));

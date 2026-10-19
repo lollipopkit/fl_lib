@@ -292,5 +292,10 @@
   "regex": "Regulärer Ausdruck",
   "showPwd": "Passwort anzeigen",
   "existsFmt": "{name} existiert bereits",
-  "tooLargeFmt": "Größer als {size}"
+  "tooLargeFmt": "Größer als {size}",
+  "appearanceIconPack": "Symbolpaket",
+  "appearanceIconPackTheme": "Symbole des Themes",
+  "themeStoreThemes": "Themes",
+  "themeStoreIconPacks": "Symbolpakete",
+  "themeStoreDeleteIconPack": "„{name}“ löschen? Die Dateien werden von diesem Gerät entfernt. Ist es das verwendete Symbolpaket, verwendet die App wieder die Symbole des Themes."
 }

@@ -962,4 +962,21 @@ class LibLocalizationsDe extends LibLocalizations {
   String tooLargeFmt(String size) {
     return 'Größer als $size';
   }
+
+  @override
+  String get appearanceIconPack => 'Symbolpaket';
+
+  @override
+  String get appearanceIconPackTheme => 'Symbole des Themes';
+
+  @override
+  String get themeStoreThemes => 'Themes';
+
+  @override
+  String get themeStoreIconPacks => 'Symbolpakete';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '„$name“ löschen? Die Dateien werden von diesem Gerät entfernt. Ist es das verwendete Symbolpaket, verwendet die App wieder die Symbole des Themes.';
+  }
 }

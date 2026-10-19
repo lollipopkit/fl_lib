@@ -954,4 +954,21 @@ class LibLocalizationsId extends LibLocalizations {
   String tooLargeFmt(String size) {
     return 'Lebih dari $size';
   }
+
+  @override
+  String get appearanceIconPack => 'Paket ikon';
+
+  @override
+  String get appearanceIconPackTheme => 'Ikon tema';
+
+  @override
+  String get themeStoreThemes => 'Tema';
+
+  @override
+  String get themeStoreIconPacks => 'Paket ikon';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return 'Hapus “$name”? Filenya dihapus dari perangkat ini. Jika ini paket ikon yang sedang digunakan, aplikasi kembali ke ikon tema.';
+  }
 }

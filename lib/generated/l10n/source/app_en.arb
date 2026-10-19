@@ -1282,5 +1282,30 @@
         "type": "String"
       }
     }
+  },
+  "appearanceIconPack": "Icon pack",
+  "@appearanceIconPack": {
+    "description": "Settings row and sheet title: the icon pack drawn over the theme, chosen apart from it."
+  },
+  "appearanceIconPackTheme": "Theme's icons",
+  "@appearanceIconPackTheme": {
+    "description": "The choice of no icon pack: the theme's own icons are drawn."
+  },
+  "themeStoreThemes": "Themes",
+  "@themeStoreThemes": {
+    "description": "Theme store tab listing themes."
+  },
+  "themeStoreIconPacks": "Icon packs",
+  "@themeStoreIconPacks": {
+    "description": "Theme store tab listing icon packs."
+  },
+  "themeStoreDeleteIconPack": "Delete “{name}”? Its files are removed from this device. If it is the icon pack in use, the app returns to the theme's icons.",
+  "@themeStoreDeleteIconPack": {
+    "description": "Confirm dialog for deleting one installed icon pack, and what happens when it is the one in use.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

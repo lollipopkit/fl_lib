@@ -951,4 +951,21 @@ class LibLocalizationsKo extends LibLocalizations {
   String tooLargeFmt(String size) {
     return '$size 초과';
   }
+
+  @override
+  String get appearanceIconPack => '아이콘 팩';
+
+  @override
+  String get appearanceIconPackTheme => '테마 아이콘';
+
+  @override
+  String get themeStoreThemes => '테마';
+
+  @override
+  String get themeStoreIconPacks => '아이콘 팩';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '“$name”을(를) 삭제할까요? 파일이 이 기기에서 제거됩니다. 사용 중인 아이콘 팩이면 앱이 테마 아이콘으로 돌아갑니다.';
+  }
 }

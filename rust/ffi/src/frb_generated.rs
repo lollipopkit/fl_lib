@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
                     default_rust_auto_opaque = RustAutoOpaqueMoi,
                 );
                 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -792159565;
+                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1677860727;
             
 
 // Section: executor
@@ -110,6 +110,15 @@ let api_path = <String>::sse_decode(&mut deserializer);deserializer.end();
                          let output_ok = crate::api::theme::prepare_theme_package(api_bytes)?;   std::result::Result::Ok(output_ok)
                     })())
                 } })
+            }fn wire__crate__api__theme__read_installed_icon_pack_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "read_installed_icon_pack", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_manifest = <String>::sse_decode(&mut deserializer);
+let api_icon_files = <Vec<String>>::sse_decode(&mut deserializer);deserializer.end();
+                transform_result_sse::<_, crate::api::theme::ThemeFailure>((move || {
+                     let output_ok = crate::api::theme::read_installed_icon_pack(api_manifest, api_icon_files)?;   std::result::Result::Ok(output_ok)
+                })()) })
             }fn wire__crate__api__theme__read_installed_theme_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "read_installed_theme", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -160,6 +169,11 @@ let api_icon_files = <Vec<String>>::sse_decode(&mut deserializer);deserializer.e
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut inner = <Vec<u8>>::sse_decode(deserializer);
         return String::from_utf8(inner).unwrap();}
+                }
+                
+                impl SseDecode for bool {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {deserializer.cursor.read_u8().unwrap() != 0}
                 }
                 
                 impl SseDecode for i32 {
@@ -222,8 +236,9 @@ let api_icon_files = <Vec<String>>::sse_decode(&mut deserializer);deserializer.e
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_installationId = <String>::sse_decode(deserializer);
 let mut var_id = <String>::sse_decode(deserializer);
 let mut var_name = <String>::sse_decode(deserializer);
+let mut var_iconPack = <bool>::sse_decode(deserializer);
 let mut var_files = <Vec<crate::api::theme::ThemeFile>>::sse_decode(deserializer);
-return crate::api::theme::PreparedTheme{installation_id: var_installationId, id: var_id, name: var_name, files: var_files};}
+return crate::api::theme::PreparedTheme{installation_id: var_installationId, id: var_id, name: var_name, icon_pack: var_iconPack, files: var_files};}
                 }
                 
                 impl SseDecode for crate::api::theme::ThemeCatalogInfo {
@@ -271,11 +286,6 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
                 }
                 
-                impl SseDecode for bool {
-                    // Codec=Sse (Serialization based), see doc to use other codecs
-                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {deserializer.cursor.read_u8().unwrap() != 0}
-                }
-                
                 fn pde_ffi_dispatcher_primary_impl(
                     func_id: i32,port: flutter_rust_bridge::for_generated::MessagePort,
                     ptr: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -303,11 +313,12 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
 3 => wire__crate__api__theme__installed_theme_variants_impl(ptr, rust_vec_len, data_len),
 4 => wire__crate__api__theme__parse_theme_catalog_impl(ptr, rust_vec_len, data_len),
 5 => wire__crate__api__theme__parse_theme_listing_impl(ptr, rust_vec_len, data_len),
-8 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
-9 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
-10 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
-11 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
-12 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
+8 => wire__crate__api__theme__read_installed_icon_pack_impl(ptr, rust_vec_len, data_len),
+9 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
+10 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
+11 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
+12 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
+13 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
                 }
@@ -322,6 +333,7 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
                     self.installation_id.into_into_dart().into_dart(),
 self.id.into_into_dart().into_dart(),
 self.name.into_into_dart().into_dart(),
+self.icon_pack.into_into_dart().into_dart(),
 self.files.into_into_dart().into_dart()
                 ].into_dart()
                 }
@@ -413,6 +425,11 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::theme::ThemeVariantInfo> for 
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<Vec<u8>>::sse_encode(self.into_bytes(), serializer);}
                 }
                 
+                impl SseEncode for bool {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {serializer.cursor.write_u8(self as _).unwrap();}
+                }
+                
                 impl SseEncode for i32 {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {serializer.cursor.write_i32::<NativeEndian>(self).unwrap();}
@@ -463,6 +480,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::theme::ThemeVariantInfo> for 
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.installation_id, serializer);
 <String>::sse_encode(self.id, serializer);
 <String>::sse_encode(self.name, serializer);
+<bool>::sse_encode(self.icon_pack, serializer);
 <Vec<crate::api::theme::ThemeFile>>::sse_encode(self.files, serializer);}
                 }
                 
@@ -504,11 +522,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::theme::ThemeVariantInfo> for 
                 impl SseEncode for () {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
-                }
-                
-                impl SseEncode for bool {
-                    // Codec=Sse (Serialization based), see doc to use other codecs
-                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {serializer.cursor.write_u8(self as _).unwrap();}
                 }
                 
 

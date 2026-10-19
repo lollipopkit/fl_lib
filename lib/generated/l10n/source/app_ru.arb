@@ -292,5 +292,10 @@
   "regex": "Регулярное выражение",
   "showPwd": "Показать пароль",
   "existsFmt": "{name} уже существует",
-  "tooLargeFmt": "Больше {size}"
+  "tooLargeFmt": "Больше {size}",
+  "appearanceIconPack": "Набор значков",
+  "appearanceIconPackTheme": "Значки темы",
+  "themeStoreThemes": "Темы",
+  "themeStoreIconPacks": "Наборы значков",
+  "themeStoreDeleteIconPack": "Удалить «{name}»? Его файлы будут удалены с этого устройства. Если это используемый набор значков, приложение вернётся к значкам темы."
 }

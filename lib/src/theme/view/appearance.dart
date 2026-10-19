@@ -10,6 +10,7 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/theme/builtin.dart';
 import 'package:fl_lib/src/theme/font.dart';
 import 'package:fl_lib/src/theme/host.dart';
+import 'package:fl_lib/src/theme/icon_pack.dart';
 import 'package:fl_lib/src/theme/package.dart';
 import 'package:fl_lib/src/theme/settings.dart';
 import 'package:fl_lib/src/theme/style.dart';
@@ -66,6 +67,7 @@ final class ThemeAppearance {
     _buildThemeMode(),
     _buildAppColor(),
     _buildThemePreset(),
+    _buildIconPack(),
     _buildThemeInstall(),
     if (ThemeHost.current.catalogUrl != null) _buildThemeStore(),
     if (_setting.appThemePreset.fetch() == ThemePackages.customPreset) ...[
@@ -211,6 +213,67 @@ final class ThemeAppearance {
     );
   }
 
+  /// The icon pack drawn over the theme, or the theme's own icons. Listed
+  /// once one is installed: there is nothing to choose before.
+  ThemeSettingRow _buildIconPack() {
+    final label = libL10n.appearanceIconPack;
+    return ThemeSettingRow(
+      label,
+      () => ListenableBuilder(
+        listenable: Listenable.merge([
+          _setting.appIconPack.listenable(),
+          ThemePackages.installedChanged,
+        ]),
+        builder: (context, _) {
+          final packs = ThemeIconPacks.listInstalled();
+          if (packs.isEmpty) return UIs.placeholder;
+          final chosen = ThemeIconPacks.installed(
+            _setting.appIconPack.fetch(),
+          );
+          return ListTile(
+            leading: const Icon(Icons.interests_outlined),
+            title: Text(label),
+            trailing: Text(chosen?.name ?? libL10n.appearanceIconPackTheme),
+            onTap: () => _pickIconPack(packs, chosen),
+          );
+        },
+      ),
+      keywords: 'icons icon pack file icons',
+    );
+  }
+
+  Future<void> _pickIconPack(
+    List<ThemeIconPack> packs,
+    ThemeIconPack? chosen,
+  ) async {
+    final current = chosen ?? ThemeIconPack.none;
+    ThemeIconPack? picked;
+    try {
+      picked = await showRowsSheet<ThemeIconPack>(
+        context,
+        rows: (ctx) => [
+          for (final pack in [ThemeIconPack.none, ...packs])
+            SheetChoiceTile(
+              title: identical(pack, ThemeIconPack.none)
+                  ? libL10n.appearanceIconPackTheme
+                  : pack.name,
+              selected: pack.installationId == current.installationId,
+              autofocus: pack.installationId == current.installationId,
+              onFocusChange: (focused) {
+                if (focused) ThemeIconPacks.preview.value = pack;
+              },
+              onTap: () => Navigator.of(ctx).pop(pack),
+            ),
+        ],
+      );
+    } finally {
+      ThemeIconPacks.preview.value = null;
+    }
+    if (picked == null || !context.mounted) return;
+    ThemeIconPacks.select(identical(picked, ThemeIconPack.none) ? null : picked);
+    setState(() {});
+  }
+
   /// What a bundled theme is called in the picker: "Default" in the user's
   /// language, and the rest by their own names.
   String? _presetLabel(BuiltinTheme? theme) => switch (theme) {
@@ -269,7 +332,8 @@ final class ThemeAppearance {
                 return;
               }
               await _completeThemeInstall(
-                () async => ThemePackages.install(await picked.readAsBytes()),
+                () async =>
+                    ThemePackages.installAny(await picked.readAsBytes()),
               );
             case _ThemeInstallSource.folder:
               final folder = await FilePicker.getDirectoryPath(
@@ -277,7 +341,7 @@ final class ThemeAppearance {
               );
               if (folder == null || !context.mounted) return;
               await _completeThemeInstall(
-                () => ThemePackages.installFolder(folder),
+                () => ThemePackages.installFolderAny(folder),
               );
             case _ThemeInstallSource.url:
               final url = await _promptAppText(
@@ -285,7 +349,9 @@ final class ThemeAppearance {
                 hint: 'https://…/theme.fsbt',
               );
               if (url == null || url.isEmpty || !context.mounted) return;
-              await _completeThemeInstall(() => ThemePackages.installUrl(url));
+              await _completeThemeInstall(
+                () => ThemePackages.installUrlAny(url),
+              );
           }
         },
       ),
@@ -307,19 +373,25 @@ final class ThemeAppearance {
     );
   }
 
+  /// Installs a theme and applies it, or an icon pack and draws it.
   Future<void> _completeThemeInstall(
-    Future<ThemePackage> Function() install,
+    Future<ThemeInstallation> Function() install,
   ) async {
-    final (package, error) = await context.showLoadingDialog<ThemePackage>(
-      fn: install,
-    );
+    final (installed, error) = await context
+        .showLoadingDialog<ThemeInstallation>(fn: install);
     if (!context.mounted) return;
-    if (error != null || package == null) {
+    if (error != null || installed == null) {
       Loggers.app.warning('Theme installation failed: ${error.runtimeType}');
       Toast.error(libL10n.appearanceInvalidTheme);
       return;
     }
-    _applyTheme(package);
+    switch (installed) {
+      case final ThemePackage package:
+        _applyTheme(package);
+      case final ThemeIconPack pack:
+        ThemeIconPacks.select(pack);
+        setState(() {});
+    }
     Toast.show(libL10n.success);
   }
 

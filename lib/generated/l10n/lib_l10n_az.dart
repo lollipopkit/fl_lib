@@ -955,4 +955,21 @@ class LibLocalizationsAz extends LibLocalizations {
   String tooLargeFmt(String size) {
     return '$size-dan böyükdür';
   }
+
+  @override
+  String get appearanceIconPack => 'İkon paketi';
+
+  @override
+  String get appearanceIconPackTheme => 'Temanın ikonları';
+
+  @override
+  String get themeStoreThemes => 'Temalar';
+
+  @override
+  String get themeStoreIconPacks => 'İkon paketləri';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '“$name” silinsin? Faylları bu cihazdan silinəcək. İstifadə olunan ikon paketidirsə, tətbiq temanın ikonlarına qayıdacaq.';
+  }
 }

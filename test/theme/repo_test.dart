@@ -212,8 +212,34 @@ void main() {
         ),
       );
       expect(index.name, 'A test repository');
-      expect(index.themes.single.id, 'aurora');
+      expect(index.listings.single.id, 'aurora');
       expect(index.packages.keys, ['packages/a-1.1.0.fsbt']);
+    });
+
+    test('an icons section lists icon packs', () {
+      final index = ThemeRepoIndex.fromFiles(
+        files(
+          themes: {
+            'themes/aurora.toml': '',
+            'icons/devicons.toml': themeToml(id: 'devicons', versions: version()),
+          },
+        ),
+      );
+      expect(
+        {for (final l in index.listings) l.id: l.kind},
+        {
+          'aurora': ThemeListingKind.theme,
+          'devicons': ThemeListingKind.icons,
+        },
+      );
+      final cached = ThemeListing.fromJson(
+        index.listings.firstWhere((l) => l.id == 'devicons').toJson(),
+      );
+      expect(cached?.kind, ThemeListingKind.icons);
+      // A cache from before icon packs names no kind: it held themes only.
+      final old = index.listings.firstWhere((l) => l.id == 'aurora').toJson()
+        ..remove('kind');
+      expect(ThemeListing.fromJson(old)?.kind, ThemeListingKind.theme);
     });
 
     test('a plugins section beside themes costs nothing', () {
@@ -229,7 +255,7 @@ void main() {
           },
         ),
       );
-      expect(index.themes.single.id, 'aurora');
+      expect(index.listings.single.id, 'aurora');
     });
 
     test('a plugins section yields nothing that can be installed', () {
@@ -263,11 +289,11 @@ void main() {
           },
         ),
       );
-      expect(index.themes.map((t) => t.id), ['aurora']);
+      expect(index.listings.map((t) => t.id), ['aurora']);
       // The one thing offered is the theme file's own release, so nothing in
       // the store's list resolves to a plugin archive.
       expect(
-        index.themes.single.releases.single.url,
+        index.listings.single.releases.single.url,
         'https://example.org/aurora-1.0.0.fsbt',
       );
     });
@@ -285,7 +311,7 @@ void main() {
           },
         ),
       );
-      expect(index.themes.map((t) => t.id), ['aurora', 'dracula']);
+      expect(index.listings.map((t) => t.id), ['aurora', 'dracula']);
     });
 
     test('a tree that is not a repository is refused', () {
@@ -319,7 +345,7 @@ void main() {
           },
         ),
       );
-      expect(index.themes.single.id, 'serverbox.aurora');
+      expect(index.listings.single.id, 'serverbox.aurora');
     });
 
   });
@@ -389,7 +415,7 @@ void main() {
         () => ThemeRepos.install(
           ThemeStoreItem(
             repo: 'a/b',
-            index: const ThemeRepoIndex(themes: []),
+            index: const ThemeRepoIndex(listings: []),
             listing: theme,
             release: theme.releases.single,
           ),
@@ -404,7 +430,7 @@ void main() {
         () => ThemeRepos.install(
           ThemeStoreItem(
             repo: 'a/b',
-            index: const ThemeRepoIndex(themes: []),
+            index: const ThemeRepoIndex(listings: []),
             listing: theme,
             release: null,
           ),
@@ -423,7 +449,7 @@ void main() {
         }),
       );
       expect(read.keys, containsAll(['repo.toml', 'themes/aurora.toml']));
-      expect(ThemeRepoIndex.fromFiles(read).themes.single.id, 'aurora');
+      expect(ThemeRepoIndex.fromFiles(read).listings.single.id, 'aurora');
     });
 
     test('an address becomes the tarball it is fetched from', () {

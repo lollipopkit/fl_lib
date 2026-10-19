@@ -950,6 +950,23 @@ class LibLocalizationsZh extends LibLocalizations {
   String tooLargeFmt(String size) {
     return '超过 $size';
   }
+
+  @override
+  String get appearanceIconPack => '图标包';
+
+  @override
+  String get appearanceIconPackTheme => '主题自带图标';
+
+  @override
+  String get themeStoreThemes => '主题';
+
+  @override
+  String get themeStoreIconPacks => '图标包';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '删除“$name”？其文件将从本机移除。如果它正在使用中，应用将改用主题自带的图标。';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -1896,5 +1913,22 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   @override
   String tooLargeFmt(String size) {
     return '超過 $size';
+  }
+
+  @override
+  String get appearanceIconPack => '圖示包';
+
+  @override
+  String get appearanceIconPackTheme => '主題內建圖示';
+
+  @override
+  String get themeStoreThemes => '主題';
+
+  @override
+  String get themeStoreIconPacks => '圖示包';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return '刪除「$name」？其檔案將從本機移除。如果它正在使用中，應用程式將改用主題內建的圖示。';
   }
 }
