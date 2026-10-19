@@ -16,5 +16,8 @@ mod image;
 pub mod package;
 mod svg;
 
-pub use package::{Installed, Package, Theme, format, install, install_files, installed_variants, read_installed};
+pub use package::{
+    IconPack, Installed, InstalledIconPack, Package, Theme, format, install, install_files, installed_variants, read_installed,
+    read_installed_icon_pack,
+};
 pub mod repo;

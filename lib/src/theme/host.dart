@@ -1,4 +1,5 @@
 import 'package:fl_lib/src/theme/settings.dart';
+import 'package:fl_lib/src/theme/package.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// What the shared theme code needs from the app using it.
@@ -110,7 +111,12 @@ final class ThemePreviewContent {
 /// be well formed (`ThemePackages.iconKeyPattern`) — and an app draws the ones
 /// it declares here and ignores the rest. So one package can theme two apps.
 final class ThemeIcons {
-  ThemeIcons({this.tabs = const [], this.symbols = const {}});
+  ThemeIcons({
+    this.tabs = const [],
+    this.symbols = const {},
+    this.namespaces = const {},
+    this.untinted = const {},
+  });
 
   /// The app's navigation tabs, by name. Each has two keys: [tabKey] with
   /// `selected` false and true.
@@ -120,6 +126,33 @@ final class ThemeIcons {
   /// draws, so a call site keeps passing the icon it always did and the theme
   /// decides what is drawn.
   final Map<IconData, ThemeSymbol> symbols;
+
+  /// Key prefixes under which this app draws any well-formed key, such as
+  /// `file` for a file browser's `file.<extension>`: too many to declare one
+  /// by one, and each is looked up only if the app asks for it.
+  final Set<String> namespaces;
+
+  /// Namespaces whose images keep the colors they were drawn with, unless a
+  /// package names one: a file browser's language logos all look alike in
+  /// the ambient icon color.
+  final Set<String> untinted;
+
+  /// Whether an image for [key] without a color of its own takes the ambient
+  /// icon color.
+  bool tints(String key) {
+    final dot = key.indexOf('.');
+    return dot < 0 || !untinted.contains(key.substring(0, dot));
+  }
+
+  /// Whether this app draws [key]: one of [keys], or a well-formed key in one
+  /// of [namespaces].
+  bool draws(String key) {
+    if (keys.contains(key)) return true;
+    final dot = key.indexOf('.');
+    return dot > 0 &&
+        namespaces.contains(key.substring(0, dot)) &&
+        ThemePackages.iconKeyPattern.hasMatch(key);
+  }
 
   /// The key a tab's icon is stored under.
   static String tabKey(String tab, {required bool selected}) =>

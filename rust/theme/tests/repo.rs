@@ -6,7 +6,8 @@ use std::io::Write;
 
 use indexmap::IndexMap;
 use fl_theme::repo::{
-    Catalog, Index, Listing, MAX_ENTRY_BYTES, MAX_TAR_BYTES, Text, archive_url_of, compare_versions, read_archive,
+    Kind,
+    Catalog, Index, Listing, MAX_ARCHIVE_BYTES, MAX_ENTRY_BYTES, MAX_TAR_BYTES, Text, archive_url_of, compare_versions, read_archive,
 };
 
 fn catalog_toml(schema: &str, repos: &str) -> String {
@@ -168,7 +169,7 @@ fn a_repository_keeps_what_its_tree_carries() {
     ))
     .unwrap();
     assert_eq!(index.name.as_deref(), Some("A test repository"));
-    assert_eq!(index.themes[0].id, "aurora");
+    assert_eq!(index.listings[0].id, "aurora");
     assert_eq!(index.packages.keys().collect::<Vec<_>>(), ["packages/a-1.1.0.fsbt"]);
 }
 
@@ -188,7 +189,20 @@ fn a_plugins_section_yields_nothing_installable() {
         ],
     ))
     .unwrap();
-    assert_eq!(index.themes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora"]);
+    assert_eq!(index.listings.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora"]);
+}
+
+#[test]
+fn an_icons_section_lists_icon_packs() {
+    let index = Index::from_files(&files(
+        Some(REPO),
+        &[aurora(), ("icons/devicons.toml", theme_toml("devicons", &version(V::default())))],
+        &[],
+    ))
+    .unwrap();
+    let listed: Vec<(Kind, &str)> = index.listings.iter().map(|l| (l.kind, l.id.as_str())).collect();
+    assert_eq!(listed, [(Kind::Icons, "devicons"), (Kind::Theme, "aurora")]);
+    assert!(Listing::parse(&theme_toml("aurora", &version(V::default())), "icons/devicons.toml").is_err());
 }
 
 #[test]
@@ -203,7 +217,7 @@ fn one_unreadable_theme_file_costs_that_theme_only() {
         &[],
     ))
     .unwrap();
-    assert_eq!(index.themes.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora", "dracula"]);
+    assert_eq!(index.listings.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), ["aurora", "dracula"]);
 }
 
 #[test]
@@ -263,7 +277,7 @@ fn a_fetched_tree_is_read_without_its_wrapping_directory() {
     ))
     .unwrap();
     assert!(read.contains_key("repo.toml") && read.contains_key("themes/aurora.toml"));
-    assert_eq!(Index::from_files(&read).unwrap().themes[0].id, "aurora");
+    assert_eq!(Index::from_files(&read).unwrap().listings[0].id, "aurora");
 }
 
 #[test]
@@ -280,6 +294,7 @@ fn unsafe_oversized_and_bogus_archives_are_refused() {
     let twice = tar_gz(&[("repo.toml", b"schema = 1".to_vec()), ("repo.toml", b"schema = 9".to_vec())], Some("t"));
     assert!(read_archive(&twice).is_err(), "one path twice leaves the tree to the order of the entries");
     assert!(read_archive(&tar_gz(&[("themes/big.toml", vec![b'x'; MAX_ENTRY_BYTES + 1])], Some("t"))).is_err());
+    assert!(read_archive(&vec![0; MAX_ARCHIVE_BYTES + 1]).unwrap_err().0.contains("larger than"));
     let bomb = read_archive(&tar_gz(&[("themes/big.toml", vec![0; MAX_TAR_BYTES + 1])], Some("t"))).unwrap_err();
     assert!(bomb.0.contains("unpacks to too much"), "{bomb}");
 }

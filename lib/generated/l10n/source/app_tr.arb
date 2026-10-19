@@ -292,5 +292,10 @@
   "regex": "Düzenli ifade",
   "showPwd": "Parolayı göster",
   "existsFmt": "{name} zaten var",
-  "tooLargeFmt": "{size} boyutundan büyük"
+  "tooLargeFmt": "{size} boyutundan büyük",
+  "appearanceIconPack": "Simge paketi",
+  "appearanceIconPackTheme": "Temanın simgeleri",
+  "themeStoreThemes": "Temalar",
+  "themeStoreIconPacks": "Simge paketleri",
+  "themeStoreDeleteIconPack": "“{name}” silinsin mi? Dosyaları bu cihazdan kaldırılır. Kullanımdaki simge paketiyse uygulama temanın simgelerine döner."
 }

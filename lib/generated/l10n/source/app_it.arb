@@ -292,5 +292,10 @@
   "regex": "Espressione regolare",
   "showPwd": "Mostra password",
   "existsFmt": "{name} esiste già",
-  "tooLargeFmt": "Più di {size}"
+  "tooLargeFmt": "Più di {size}",
+  "appearanceIconPack": "Pacchetto di icone",
+  "appearanceIconPackTheme": "Icone del tema",
+  "themeStoreThemes": "Temi",
+  "themeStoreIconPacks": "Pacchetti di icone",
+  "themeStoreDeleteIconPack": "Eliminare «{name}»? I suoi file vengono rimossi da questo dispositivo. Se è il pacchetto di icone in uso, l’app torna alle icone del tema."
 }

@@ -965,4 +965,21 @@ class LibLocalizationsUk extends LibLocalizations {
   String tooLargeFmt(String size) {
     return 'Більше ніж $size';
   }
+
+  @override
+  String get appearanceIconPack => 'Набір значків';
+
+  @override
+  String get appearanceIconPackTheme => 'Значки теми';
+
+  @override
+  String get themeStoreThemes => 'Теми';
+
+  @override
+  String get themeStoreIconPacks => 'Набори значків';
+
+  @override
+  String themeStoreDeleteIconPack(String name) {
+    return 'Видалити «$name»? Його файли буде видалено з цього пристрою. Якщо це набір значків, що використовується, застосунок повернеться до значків теми.';
+  }
 }

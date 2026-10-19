@@ -28,14 +28,16 @@ Future<void> closeTestThemeStore() async {
   await SqliteDb.close();
 }
 
-/// The icons the tests' app draws: `tab.server[.selected]`, `nav.settings`
-/// and `nav.folder`.
+/// The icons the tests' app draws: `tab.server[.selected]`, `nav.settings`,
+/// `nav.folder`, and any `file.*`, drawn in their own colors.
 final testIcons = ThemeIcons(
   tabs: ['server'],
   symbols: {
     Icons.settings_outlined: const ThemeSymbol('nav.settings'),
     Icons.folder_outlined: const ThemeSymbol('nav.folder'),
   },
+  namespaces: {'file'},
+  untinted: {'file'},
 );
 
 /// The host these tests run under: see `flutter_test_config.dart`.

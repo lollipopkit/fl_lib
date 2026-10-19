@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/theme/host.dart';
+import 'package:fl_lib/src/theme/icon_pack.dart';
 import 'package:fl_lib/src/theme/package.dart';
 import 'package:fl_lib/src/theme/repo.dart';
 import 'package:flutter/services.dart';
@@ -22,6 +23,9 @@ import 'package:flutter/services.dart';
 /// - `fsbt`: the package itself, base64, for one imported by hand — when it
 ///   was kept ([ThemePackages.sourceOf]) and is at most [maxEmbeddedBytes].
 ///
+/// An icon pack ([ThemeIconPack]) is described the same way, and marked
+/// `kind = icons`.
+///
 /// One none of them can describe — installed from a folder, or imported
 /// before packages were kept — is still listed, by name with nothing to
 /// install it from, so a restore names it rather than quietly falling back to
@@ -35,7 +39,10 @@ abstract final class ThemeBackup {
     String? rootDirectory,
     AssetBundle? bundle,
   }) async {
-    final installed = ThemePackages.listInstalled(rootDirectory: rootDirectory);
+    final installed = <ThemeInstallation>[
+      ...ThemePackages.listInstalled(rootDirectory: rootDirectory),
+      ...ThemeIconPacks.listInstalled(rootDirectory: _packsRoot(rootDirectory)),
+    ];
     if (installed.isEmpty) return const ThemeBackupExport({}, []);
 
     final bundled = await _bundledDigests(bundle ?? rootBundle);
@@ -44,7 +51,11 @@ abstract final class ThemeBackup {
     final skipped = <String>[];
     for (final theme in installed) {
       final id = theme.installationId;
-      final base = {'id': theme.id, 'name': theme.name};
+      final base = {
+        'id': theme.id,
+        'name': theme.name,
+        if (theme is ThemeIconPack) 'kind': _iconsKind,
+      };
       if (bundled[id] case final manifestId?) {
         entries[id] = {...base, 'bundled': manifestId};
         continue;
@@ -53,10 +64,16 @@ abstract final class ThemeBackup {
         entries[id] = {...base, 'store': item.toJson()};
         continue;
       }
-      final source = await ThemePackages.sourceOf(
-        id,
-        rootDirectory: rootDirectory,
-      );
+      final source = switch (theme) {
+        ThemePackage() => await ThemePackages.sourceOf(
+          id,
+          rootDirectory: rootDirectory,
+        ),
+        ThemeIconPack() => await ThemeIconPacks.sourceOf(
+          id,
+          rootDirectory: _packsRoot(rootDirectory),
+        ),
+      };
       if (source != null && source.length <= maxEmbeddedBytes) {
         entries[id] = {...base, 'fsbt': base64Encode(source)};
         continue;
@@ -87,14 +104,19 @@ abstract final class ThemeBackup {
         continue;
       }
       final name = raw['name'] is String ? raw['name'] as String : id;
-      if (ThemePackages.installed(id, rootDirectory: rootDirectory) != null) {
+      final pack = raw['kind'] == _iconsKind;
+      final here = pack
+          ? ThemeIconPacks.installed(id, rootDirectory: _packsRoot(rootDirectory))
+          : ThemePackages.installed(id, rootDirectory: rootDirectory);
+      if (here != null) {
         installedAs[id] = id;
         continue;
       }
       final manifestId = raw['id'];
-      final local = ThemePackages.listInstalled(rootDirectory: rootDirectory)
-          .where((t) => t.id == manifestId)
-          .firstOrNull;
+      final List<ThemeInstallation> sameKind = pack
+          ? ThemeIconPacks.listInstalled(rootDirectory: _packsRoot(rootDirectory))
+          : ThemePackages.listInstalled(rootDirectory: rootDirectory);
+      final local = sameKind.where((t) => t.id == manifestId).firstOrNull;
       if (local != null) {
         installedAs[id] = local.installationId;
         continue;
@@ -110,7 +132,7 @@ abstract final class ThemeBackup {
     return ThemeRestoreReport(installedAs, failed);
   }
 
-  static Future<ThemePackage> _install(
+  static Future<ThemeInstallation> _install(
     String id,
     Map<Object?, Object?> raw,
     String? rootDirectory,
@@ -129,6 +151,11 @@ abstract final class ThemeBackup {
     }
     final Uint8List bytes;
     if (raw['bundled'] case final String manifestId) {
+      // The bytes are chosen by this name; an entry naming another shipped
+      // package than its own is not this one.
+      if (manifestId != raw['id']) {
+        throw const FormatException('The bundled reference is another theme');
+      }
       final dir = ThemeHost.current.bundledThemesDir;
       final shipped = dir == null ? null : await _bundledBytes(bundle, '$dir$manifestId.fsbt');
       if (shipped == null) {
@@ -155,8 +182,32 @@ abstract final class ThemeBackup {
       // Listed so the restore can say it is missing; see the class doc.
       throw const FormatException('The backup does not carry this theme');
     }
-    return ThemePackages.install(bytes, rootDirectory: rootDirectory);
+    final installed = await ThemePackages.installAny(
+      bytes,
+      rootDirectory: rootDirectory,
+    );
+    // Its digest may differ from the entry's — an app update ships the next
+    // version — but it has to be the theme the entry names.
+    if (installed.id != raw['id']) {
+      await switch (installed) {
+        ThemePackage() => ThemePackages.remove(
+          installed.installationId,
+          rootDirectory: rootDirectory,
+        ),
+        ThemeIconPack() => ThemeIconPacks.remove(
+          installed.installationId,
+          rootDirectory: _packsRoot(rootDirectory),
+        ),
+      };
+      throw const FormatException('The package is another theme');
+    }
+    return installed;
   }
+
+  static const _iconsKind = 'icons';
+
+  static String? _packsRoot(String? rootDirectory) =>
+      rootDirectory == null ? null : ThemeIconPacks.rootIn(rootDirectory);
 
   /// Brings the settings a restore wrote back to this device.
   ///
@@ -181,7 +232,12 @@ abstract final class ThemeBackup {
         settings.appBackgroundPath.put(theme.backgroundPath ?? '');
       }
     }
+    final pack = settings.appIconPack.fetch();
+    if (report.installedAs[pack] case final to? when to != pack) {
+      settings.appIconPack.put(to);
+    }
     ThemePackages.reconcileSelection();
+    ThemeIconPacks.reconcileSelection();
   }
 
   static ThemeStoreItem? _storeItemFor(ThemeStore? store, String digest) {

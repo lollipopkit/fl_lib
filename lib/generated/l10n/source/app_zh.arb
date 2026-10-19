@@ -292,5 +292,10 @@
   "regex": "正则表达式",
   "showPwd": "显示密码",
   "existsFmt": "{name} 已存在",
-  "tooLargeFmt": "超过 {size}"
+  "tooLargeFmt": "超过 {size}",
+  "appearanceIconPack": "图标包",
+  "appearanceIconPackTheme": "主题自带图标",
+  "themeStoreThemes": "主题",
+  "themeStoreIconPacks": "图标包",
+  "themeStoreDeleteIconPack": "删除“{name}”？其文件将从本机移除。如果它正在使用中，应用将改用主题自带的图标。"
 }

@@ -1,11 +1,14 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:fl_lib/src/theme/icon_pack.dart';
 import 'package:fl_lib/src/theme/package.dart';
 import 'package:fl_lib/src/theme/style.dart';
 
 import 'package:fl_lib/src/theme/view/package_image.dart';
 import 'package:fl_lib/src/theme/host.dart';
 
-/// A package image tinted like an icon, with the built-in glyph as fallback.
+/// A package image tinted like an icon, with the built-in glyph as fallback:
+/// the chosen icon pack's, else the theme's. Untinted where the app says so
+/// ([ThemeIcons.untinted]).
 class ThemeIconAsset extends StatelessWidget {
   const ThemeIconAsset({
     required this.keyName,
@@ -23,7 +26,9 @@ class ThemeIconAsset extends StatelessWidget {
       // A variant of the same package changes the preset and not the package,
       // and its icon colors can differ.
       ThemeHost.settings.appThemePreset.listenable(),
+      ThemeHost.settings.appIconPack.listenable(),
       ThemePackages.preview,
+      ThemeIconPacks.preview,
     ]),
     builder: (context, _) {
       final path = ThemePackages.activeIconPath(keyName);
@@ -38,8 +43,9 @@ class ThemeIconAsset extends StatelessWidget {
         // which is what every icon did before a package could say otherwise.
         color:
             ThemePackages.activeIconColor(keyName, scheme) ??
-            iconTheme.color ??
-            scheme.onSurface,
+            (ThemeHost.current.icons.tints(keyName)
+                ? iconTheme.color ?? scheme.onSurface
+                : null),
         fallback: fallback,
       );
     },

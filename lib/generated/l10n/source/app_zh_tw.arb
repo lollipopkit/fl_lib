@@ -292,5 +292,10 @@
   "regex": "正規表示式",
   "showPwd": "顯示密碼",
   "existsFmt": "{name} 已存在",
-  "tooLargeFmt": "超過 {size}"
+  "tooLargeFmt": "超過 {size}",
+  "appearanceIconPack": "圖示包",
+  "appearanceIconPackTheme": "主題內建圖示",
+  "themeStoreThemes": "主題",
+  "themeStoreIconPacks": "圖示包",
+  "themeStoreDeleteIconPack": "刪除「{name}」？其檔案將從本機移除。如果它正在使用中，應用程式將改用主題內建的圖示。"
 }

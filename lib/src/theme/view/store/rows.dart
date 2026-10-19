@@ -2,7 +2,7 @@ import 'package:fl_lib/src/theme/package.dart';
 import 'package:fl_lib/src/theme/repo.dart';
 import 'package:fl_lib/src/theme/sort.dart';
 
-/// One theme, as the store page draws it.
+/// One theme or icon pack, as the store page draws it.
 ///
 /// The page used to draw two lists — what this device has and what the catalog
 /// offers — and a theme installed from the catalog appeared in both, as
@@ -28,7 +28,7 @@ final class ThemeRow {
   final bool inUse;
 
   /// What this device has, when it has something.
-  final ThemePackage? installed;
+  final ThemeInstallation? installed;
 
   /// What the catalog offers, when it offers this theme.
   final ThemeStoreItem? item;
@@ -66,9 +66,10 @@ final class ThemeRow {
   /// search for the manifest id or the repository finds it as well.
   String get searchText => [
     name,
-    if (installed case final theme?) ...[
-      theme.id,
-      for (final variant in theme.variants) variant.name,
+    if (installed case final installed?) ...[
+      installed.id,
+      if (installed case final ThemePackage theme)
+        for (final variant in theme.variants) variant.name,
     ],
     if (item case final item?) ...[
       item.listing.id,
@@ -78,14 +79,14 @@ final class ThemeRow {
   ].join('\n').toLowerCase();
 }
 
-/// The rows the page draws: one per theme, filtered by [query] and ordered by
-/// [sort].
+/// The rows the page draws: one per theme (or per icon pack, given packs and
+/// their listings), filtered by [query] and ordered by [sort].
 ///
 /// Pure, and separate from the page for that reason — the merge is the part
 /// with a decision in it, and it is the part a widget test cannot reach without
 /// a filesystem full of themes to read.
 List<ThemeRow> buildThemeRows({
-  required List<ThemePackage> installed,
+  required List<ThemeInstallation> installed,
   required List<ThemeStoreItem> items,
   required String activeInstallationId,
   String query = '',
@@ -95,7 +96,7 @@ List<ThemeRow> buildThemeRows({
   // One manifest id can be behind two installations — the store's copy and one
   // imported beside it, or two versions installed one after the other — and the
   // catalog's row is whichever of them the app is drawing.
-  final byManifestId = <String, ThemePackage>{};
+  final byManifestId = <String, ThemeInstallation>{};
   for (final theme in installed) {
     if (theme.installationId == activeInstallationId ||
         !byManifestId.containsKey(theme.id)) {

@@ -261,3 +261,51 @@ class _PreviewScreen extends StatelessWidget {
     );
   }
 }
+
+/// An icon pack's icons, each under its key, drawn as the app draws them in
+/// the theme in use: a pack has no colors of its own to preview.
+class ThemeIconPackPreview extends StatelessWidget {
+  const ThemeIconPackPreview({super.key, required this.pack});
+
+  final ThemeIconPack pack;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final icons = ThemeHost.current.icons;
+    final keys = pack.iconFiles.keys.toList()..sort();
+    return Semantics(
+      image: true,
+      label: libL10n.preview,
+      excludeSemantics: true,
+      child: Wrap(
+        spacing: 7,
+        runSpacing: 7,
+        children: [
+          for (final key in keys)
+            SizedBox(
+              width: 72,
+              child: Column(
+                children: [
+                  PackageImage(
+                    path: pack.iconPath(key)!,
+                    size: 28,
+                    color:
+                        pack.iconColor(key, scheme) ??
+                        (icons.tints(key) ? scheme.onSurface : null),
+                  ),
+                  UIs.height7,
+                  Text(
+                    key,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: UIs.text11Grey,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

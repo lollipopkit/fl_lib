@@ -292,5 +292,10 @@
   "regex": "Ekspresi reguler",
   "showPwd": "Tampilkan kata sandi",
   "existsFmt": "{name} sudah ada",
-  "tooLargeFmt": "Lebih dari {size}"
+  "tooLargeFmt": "Lebih dari {size}",
+  "appearanceIconPack": "Paket ikon",
+  "appearanceIconPackTheme": "Ikon tema",
+  "themeStoreThemes": "Tema",
+  "themeStoreIconPacks": "Paket ikon",
+  "themeStoreDeleteIconPack": "Hapus “{name}”? Filenya dihapus dari perangkat ini. Jika ini paket ikon yang sedang digunakan, aplikasi kembali ke ikon tema."
 }

@@ -292,5 +292,10 @@
   "regex": "Müntəzəm ifadə",
   "showPwd": "Şifrəni göstər",
   "existsFmt": "{name} artıq mövcuddur",
-  "tooLargeFmt": "{size}-dan böyükdür"
+  "tooLargeFmt": "{size}-dan böyükdür",
+  "appearanceIconPack": "İkon paketi",
+  "appearanceIconPackTheme": "Temanın ikonları",
+  "themeStoreThemes": "Temalar",
+  "themeStoreIconPacks": "İkon paketləri",
+  "themeStoreDeleteIconPack": "“{name}” silinsin? Faylları bu cihazdan silinəcək. İstifadə olunan ikon paketidirsə, tətbiq temanın ikonlarına qayıdacaq."
 }

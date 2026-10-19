@@ -292,5 +292,10 @@
   "regex": "정규식",
   "showPwd": "비밀번호 표시",
   "existsFmt": "{name}은(는) 이미 있습니다",
-  "tooLargeFmt": "{size} 초과"
+  "tooLargeFmt": "{size} 초과",
+  "appearanceIconPack": "아이콘 팩",
+  "appearanceIconPackTheme": "테마 아이콘",
+  "themeStoreThemes": "테마",
+  "themeStoreIconPacks": "아이콘 팩",
+  "themeStoreDeleteIconPack": "“{name}”을(를) 삭제할까요? 파일이 이 기기에서 제거됩니다. 사용 중인 아이콘 팩이면 앱이 테마 아이콘으로 돌아갑니다."
 }

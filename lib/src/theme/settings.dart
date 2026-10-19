@@ -32,6 +32,12 @@ mixin ThemeSettings on SqliteStore {
 
   /// Hash of the installed theme whose image/icon assets are active.
   late final appThemePackage = propertyDefault('appThemePackage', '');
+  /// Hash of the installed icon pack drawn over the theme, or empty to draw
+  /// the theme's own icons. Unlike [appThemePackage], the only record of the
+  /// choice, so a backup carries it and `ThemeBackup.reselect` points it at
+  /// the restoring device's copy.
+  late final appIconPack = propertyDefault('appIconPack', '');
+
   late final appThemePaletteEnabled = propertyDefault(
     'appThemePaletteEnabled',
     true,
