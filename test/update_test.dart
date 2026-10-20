@@ -341,6 +341,28 @@ void main() {
     );
   });
 
+  test('github windows prefers the installer over the zip', () {
+    AppUpdate.fromGitHubReleasesStr(
+      raw: _githubRaw([
+        _release(
+          tag: 'v1.0.5',
+          assets: [
+            _asset('ServerBox_v1.0.5_windows_amd64.zip'),
+            _asset('ServerBox_v1.0.5_windows_amd64.exe'),
+          ],
+        ),
+      ]),
+      build: 1,
+      platform: Pfs.windows,
+      arch: CpuArch.amd64,
+    );
+
+    expect(
+      AppUpdate.url,
+      'https://download/ServerBox_v1.0.5_windows_amd64.exe',
+    );
+  });
+
   test('github linux prefers non legacy AppImage', () {
     AppUpdate.fromGitHubReleasesStr(
       raw: _githubRaw([
