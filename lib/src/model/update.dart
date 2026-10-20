@@ -550,13 +550,13 @@ abstract final class AppUpdate {
         );
         return _preferNonLegacy(appImages)?.url;
       case Pfs.windows:
-        return _findGitHubAsset(
-          assets,
-          (asset) =>
-              asset.name.endsWith('.zip') &&
-              asset.name.contains('windows') &&
-              asset.hasArch(arch),
-        )?.url;
+        // The installer first; the portable zip for releases that have none.
+        bool windows(_GitHubAsset asset, String ext) =>
+            asset.name.endsWith(ext) &&
+            asset.name.contains('windows') &&
+            asset.hasArch(arch);
+        return _findGitHubAsset(assets, (a) => windows(a, '.exe'))?.url ??
+            _findGitHubAsset(assets, (a) => windows(a, '.zip'))?.url;
       case Pfs.macos:
         // A release carries a dmg per architecture, and next to each one the
         // unsigned build CI publishes for inspection. Gatekeeper refuses that
