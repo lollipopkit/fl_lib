@@ -14,11 +14,15 @@ abstract final class _StoreSecret {
 
   /// Reads the key, generating one the first time.
   ///
-  /// Returns the raw bytes rather than the stored base64, because both callers
-  /// want bytes and the encoding is an artifact of the vault taking strings.
-  static Future<Uint8List> read() async {
+  /// Returns the raw bytes rather than the stored base64, because the caller
+  /// wants bytes and the encoding is an artifact of the vault taking strings.
+  /// [generated] tells a first launch from a vault that lost the key: the two
+  /// look the same here, and only the file on disk tells them apart.
+  static Future<({Uint8List key, bool generated})> read() async {
     final existing = await _stored();
-    if (existing != null) return base64Url.decode(existing);
+    if (existing != null) {
+      return (key: base64Url.decode(existing), generated: false);
+    }
 
     // `Random.secure()` rather than a counter or a hash of anything on the
     // device: this is the only thing standing between a copied `.db` file and
@@ -34,7 +38,7 @@ abstract final class _StoreSecret {
     if (confirmed == null) {
       throw StateError('Failed to persist the store encryption key');
     }
-    return base64Url.decode(confirmed);
+    return (key: base64Url.decode(confirmed), generated: true);
   }
 
   static Future<String?> _stored() async {
@@ -49,6 +53,38 @@ abstract final class _StoreSecret {
     if (fromPrefs != null) await SecureStoreProps.hivePwd.write(fromPrefs);
     return fromPrefs;
   }
+}
+
+/// Why [SqliteDb.open] could not read the file it found.
+enum StoreUnreadableReason {
+  /// The vault held no key, so a new one was made, and the file was written
+  /// with the old one. The platform keystore lost it — reset by the system, or
+  /// the app's data copied to this device without it — and no key on this
+  /// device opens the file.
+  keyLost,
+
+  /// The vault's key does not open the file: it was written with another key,
+  /// or it is damaged. SQLite cannot tell these apart.
+  keyRejected,
+}
+
+/// [SqliteDb.open] found a file that its key does not open.
+///
+/// Thrown rather than recovered from here: whether to start empty is the
+/// app's decision, and so is telling the user. [SqliteDb.setAside] moves the
+/// file out of the way for the next [SqliteDb.open].
+final class StoreUnreadableException implements Exception {
+  const StoreUnreadableException(this.reason, this.path, this.cause);
+
+  final StoreUnreadableReason reason;
+
+  /// The file that did not open.
+  final String path;
+
+  final SqliteException cause;
+
+  @override
+  String toString() => 'StoreUnreadableException(${reason.name}, $path): $cause';
 }
 
 /// The single encrypted database file behind every [SqliteStore].
@@ -102,8 +138,10 @@ abstract final class SqliteDb {
   }
 
   static Future<Database> _open(String dir) async {
-    final key = await _StoreSecret.read();
+    final (:key, :generated) = await _StoreSecret.read();
     final path = dir.joinPath(fileName);
+    // Asked before `sqlite3.open`, which creates it.
+    final existed = File(path).existsSync();
     final db = sqlite3.open(path);
 
     try {
@@ -120,7 +158,15 @@ abstract final class SqliteDb {
       // The first statement that actually reads a page, and so the first that
       // can fail on a wrong key. Doing it here means a bad key surfaces as a
       // failure to open rather than as an empty store.
-      db.select('SELECT count(*) FROM sqlite_master;');
+      try {
+        db.select('SELECT count(*) FROM sqlite_master;');
+      } on SqliteException catch (e) {
+        if (e.resultCode != SqlError.SQLITE_NOTADB) rethrow;
+        final reason = generated && existed
+            ? StoreUnreadableReason.keyLost
+            : StoreUnreadableReason.keyRejected;
+        throw StoreUnreadableException(reason, path, e);
+      }
 
       db.execute('PRAGMA journal_mode = WAL;');
       db.execute('PRAGMA foreign_keys = ON;');
@@ -141,6 +187,24 @@ CREATE TABLE IF NOT EXISTS kv (
     _db = db;
     _path = path;
     return db;
+  }
+
+  /// Moves the file at [path] and its sidecars aside, so the next [open]
+  /// starts an empty one, and returns where it went.
+  ///
+  /// Renamed rather than deleted: the key may yet turn up — a keychain
+  /// restored, a device migrated back — and the file is the only copy.
+  static String setAside(String path) {
+    if (_db != null || _opening != null) {
+      throw StateError('SqliteDb is open or opening');
+    }
+    final aside = '$path.unreadable-${DateTime.now().millisecondsSinceEpoch}';
+    // The sidecars keep their suffix, so `<aside>-wal` still belongs to it.
+    for (final suffix in const ['', '-wal', '-shm']) {
+      final file = File('$path$suffix');
+      if (file.existsSync()) file.renameSync('$aside$suffix');
+    }
+    return aside;
   }
 
   /// Opens an unencrypted in-memory database, for tests.
