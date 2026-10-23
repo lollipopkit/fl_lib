@@ -11,6 +11,55 @@ import 'package:flutter/widgets.dart';
 /// platform and an iPad app in full screen.
 abstract final class WindowControls {
   static final zones = ValueNotifier<List<Rect>>(const []);
+
+  /// Where iPhone Duo stands its own vertical bar, in logical pixels from the
+  /// window's top left: a line of no width, the bar's centre, from below the
+  /// status bar and camera to above the bottom inset. Null where the system
+  /// lays its bars across the top and bottom — every other device, and
+  /// iPhone Duo open in portrait. An app that draws its own rail can centre
+  /// it here, in line with the status bar above it as the system's bars are.
+  static final verticalBar = ValueNotifier<Rect?>(null);
+
+  /// How far content keeps from each edge while the bars are at the side,
+  /// with no status bar across the top to keep it from the screen's corners:
+  /// the safe area, adapted to the corners. Zero everywhere else; a window
+  /// takes it as the least of its padding — see [WindowCornerInsets].
+  static final cornerInsets = ValueNotifier<EdgeInsets>(EdgeInsets.zero);
+}
+
+/// Raises its subtree's padding, edge by edge, to
+/// [WindowControls.cornerInsets]: at the root of an app, so nothing in it
+/// runs into the screen's corners where no status bar keeps it from them
+/// (iPhone Duo with its bars at the side).
+class WindowCornerInsets extends StatelessWidget {
+  const WindowCornerInsets({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<EdgeInsets>(
+      valueListenable: WindowControls.cornerInsets,
+      child: child,
+      builder: (context, least, child) {
+        if (least == EdgeInsets.zero) return child!;
+        EdgeInsets raise(EdgeInsets e) => EdgeInsets.fromLTRB(
+          _max(e.left, least.left),
+          _max(e.top, least.top),
+          _max(e.right, least.right),
+          _max(e.bottom, least.bottom),
+        );
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(
+            padding: raise(mq.padding),
+            viewPadding: raise(mq.viewPadding),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
 }
 
 /// Adds to its subtree's `MediaQuery.padding` whatever part of
