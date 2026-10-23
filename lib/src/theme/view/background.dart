@@ -341,11 +341,11 @@ class BackgroundLayer extends StatelessWidget {
 /// [_MotionAware].
 abstract final class AppPageTransitions {
   /// For a theme whose pages are opaque: the platform's own transitions.
-  static final plain = _wrap((builder) => _MotionAware(builder));
+  static final plain = _wrap((builder) => _SafeSides(_MotionAware(builder)));
 
   /// For a theme whose pages are transparent.
   static final backgrounded = _wrap(
-    (builder) => _Backgrounded(_MotionAware(builder)),
+    (builder) => _SafeSides(_Backgrounded(_MotionAware(builder))),
   );
 
   /// [current] ([plain] or [backgrounded]) with a slide across on every
@@ -355,9 +355,11 @@ abstract final class AppPageTransitions {
       ? _paneSlideBackgrounded
       : _paneSlidePlain;
 
-  static final _paneSlidePlain = _every(const _MotionAware(_PaneSlide()));
+  static final _paneSlidePlain = _every(
+    const _SafeSides(_MotionAware(_PaneSlide())),
+  );
   static final _paneSlideBackgrounded = _every(
-    const _Backgrounded(_MotionAware(_PaneSlide())),
+    const _SafeSides(_Backgrounded(_MotionAware(_PaneSlide()))),
   );
 
   /// Flutter's defaults, with Android's predictive back, driven by an edge
@@ -414,6 +416,66 @@ final class _PaneSlide extends PageTransitionsBuilder {
         position: animation.drive(_incoming),
         textDirection: direction,
         child: child,
+      ),
+    );
+  }
+}
+
+/// A pushed page kept clear of the window's insets on its sides.
+///
+/// `Scaffold` hands its body the side insets untouched and a `ListView` takes
+/// only those along its axis, so a pushed page laid its rows under a landscape
+/// notch, or under the column iPhone Duo keeps its status bar and camera in,
+/// while each `ListTile`, a `SafeArea` of its own, pulled its trailing in by
+/// the inset: switches and chevrons out of line with everything else on the
+/// row's card. Taken here, for every page, as a tab's root takes its own.
+///
+/// The first page of a navigator is left alone: the app's home and a tab's
+/// root lay out their own insets, and their bars span the window. What the
+/// insets leave is the theme's: the page's own colour where pages are opaque,
+/// the background where they are not.
+final class _SafeSides extends PageTransitionsBuilder {
+  const _SafeSides(this._inner);
+
+  final PageTransitionsBuilder _inner;
+
+  @override
+  Duration get transitionDuration => _inner.transitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration => _inner.reverseTransitionDuration;
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      _inner.delegatedTransition;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    // One shape either way: a page that becomes the first (the one under it
+    // replaced) keeps its state rather than being built under a new parent.
+    final first = route.isFirst;
+    return _inner.buildTransitions(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      ColoredBox(
+        color: first
+            ? Colors.transparent
+            : Theme.of(context).scaffoldBackgroundColor,
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          left: !first,
+          right: !first,
+          child: child,
+        ),
       ),
     );
   }

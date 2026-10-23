@@ -63,11 +63,16 @@ final class ThemeAppearance {
 
   /// The theme group: its mode, color and preset, where a theme comes from,
   /// and — while the custom theme is selected — what it is made of.
+  ///
+  /// The icon pack row only once a pack is installed: an empty row is still a
+  /// row to the group, which drew its rule as well as the next one's, a
+  /// doubled hairline under the preset. A page showing these rebuilds on
+  /// [ThemePackages.installedChanged] for it to appear.
   List<ThemeSettingRow> themeRows() => [
     _buildThemeMode(),
     _buildAppColor(),
     _buildThemePreset(),
-    _buildIconPack(),
+    if (ThemeIconPacks.listInstalled().isNotEmpty) _buildIconPack(),
     _buildThemeInstall(),
     if (ThemeHost.current.catalogUrl != null) _buildThemeStore(),
     if (_setting.appThemePreset.fetch() == ThemePackages.customPreset) ...[
@@ -226,7 +231,6 @@ final class ThemeAppearance {
         ]),
         builder: (context, _) {
           final packs = ThemeIconPacks.listInstalled();
-          if (packs.isEmpty) return UIs.placeholder;
           final chosen = ThemeIconPacks.installed(
             _setting.appIconPack.fetch(),
           );
