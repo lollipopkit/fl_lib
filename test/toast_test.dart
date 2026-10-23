@@ -75,4 +75,21 @@ void main() {
     );
     expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget, reason: 'the spaced label leaves it no room');
   });
+
+  // The default corner, top end, is where iPhone Duo's inner display keeps its
+  // status bar beside a bar in the top inset, and where iPad puts nothing.
+  testWidgets('a toast at the top steps below the zones over it', (tester) async {
+    tester.view.physicalSize = const Size(669, 951);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    addTearDown(() => WindowControls.zones.value = const []);
+    WindowControls.zones.value = const [Rect.fromLTRB(525, 0, 669, 82)];
+    await _show(tester, 'Saved');
+    expect(tester.getTopLeft(find.text('Saved')).dy, greaterThanOrEqualTo(82));
+
+    WindowControls.zones.value = const [Rect.fromLTRB(0, 0, 16, 82)];
+    await tester.pump();
+    expect(tester.getTopLeft(find.text('Saved')).dy, lessThan(82), reason: 'a zone off to the side is no reason to move');
+  });
 }
+

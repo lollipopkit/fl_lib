@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 
 /// One entry in a context menu.
@@ -438,7 +439,11 @@ class _ContextMenuRoute extends PopupRoute<VoidCallback> {
     final menuTheme = PopupMenuTheme.of(context);
     final menuShape = menuTheme.shape;
     return CustomSingleChildLayout(
-      delegate: _ContextMenuLayout(at: at, padding: MediaQuery.paddingOf(context)),
+      delegate: _ContextMenuLayout(
+        at: at,
+        padding: MediaQuery.paddingOf(context),
+        zones: WindowControls.zones.value,
+      ),
       child: Material(
         color: menuTheme.color ?? scheme.surfaceContainerHigh,
         // The tint is off: the colour above is the one the design names, and
@@ -511,12 +516,20 @@ class _ContextMenuRoute extends PopupRoute<VoidCallback> {
 /// near the bottom of a window, where the flip is what would happen, the row
 /// being acted on is exactly the one worth keeping visible.
 class _ContextMenuLayout extends SingleChildLayoutDelegate {
-  const _ContextMenuLayout({required this.at, required this.padding});
+  const _ContextMenuLayout({
+    required this.at,
+    required this.padding,
+    required this.zones,
+  });
 
   final Offset at;
 
   /// What the window itself has already spent: a notch, a home indicator.
   final EdgeInsets padding;
+
+  /// What the system draws over the window and leaves out of [padding] — see
+  /// [WindowControls.zones]. A menu that would land on one is pushed below it.
+  final List<Rect> zones;
 
   EdgeInsets get _clear => padding + const EdgeInsets.all(ContextMenuUi.edge);
 
@@ -539,12 +552,19 @@ class _ContextMenuLayout extends SingleChildLayoutDelegate {
     // throws rather than laying anything out.
     final right = math.max(left, size.width - clear.right - childSize.width);
     final bottom = math.max(top, size.height - clear.bottom - childSize.height);
-    return Offset(at.dx.clamp(left, right), at.dy.clamp(top, bottom));
+    final x = at.dx.clamp(left, right);
+    var y = at.dy.clamp(top, bottom);
+    for (final zone in zones) {
+      if ((Offset(x, y) & childSize).overlaps(zone)) {
+        y = math.max(y, zone.bottom + ContextMenuUi.edge);
+      }
+    }
+    return Offset(x, y);
   }
 
   @override
   bool shouldRelayout(_ContextMenuLayout old) =>
-      old.at != at || old.padding != padding;
+      old.at != at || old.padding != padding || !listEquals(old.zones, zones);
 }
 
 /// A button that opens [actions] under itself, as [showContextMenu] does at

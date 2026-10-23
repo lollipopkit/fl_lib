@@ -20,17 +20,37 @@ abstract final class WindowControls {
   /// it here, in line with the status bar above it as the system's bars are.
   static final verticalBar = ValueNotifier<Rect?>(null);
 
+  /// Where iPhone Duo puts a bar across the top when it stands inside the
+  /// top inset, beside the status bar and camera rather than below them, in
+  /// logical pixels from the window's top left. Its inner display in
+  /// portrait; null everywhere else, and while [verticalBar] is not. The
+  /// corner and the status bar on either side of it are in [zones], and
+  /// [WindowCornerInsets] lowers the top padding to its top, so a bar that
+  /// keeps out of both stands in that strip.
+  static final topBar = ValueNotifier<Rect?>(null);
+
   /// How far content keeps from each edge while the bars are at the side,
   /// with no status bar across the top to keep it from the screen's corners:
   /// the safe area, adapted to the corners. Zero everywhere else; a window
   /// takes it as the least of its padding — see [WindowCornerInsets].
   static final cornerInsets = ValueNotifier<EdgeInsets>(EdgeInsets.zero);
+
+  /// iPhone Duo's fold, on the inner display, in logical pixels from the
+  /// window's top left: there whether the device is bent ([active]) or flat
+  /// (no width). Null on a display without one — every other device, and
+  /// iPhone Duo's outer display.
+  static final fold = ValueNotifier<({Rect rect, bool active})?>(null);
 }
 
 /// Raises its subtree's padding, edge by edge, to
 /// [WindowControls.cornerInsets]: at the root of an app, so nothing in it
 /// runs into the screen's corners where no status bar keeps it from them
 /// (iPhone Duo with its bars at the side).
+///
+/// And lowers its top padding to [WindowControls.topBar]'s top, where the
+/// system puts a bar inside the top inset (iPhone Duo's inner display in
+/// portrait): a page's bar then stands beside the status bar, stepping around
+/// it through [WindowControlsInset].
 class WindowCornerInsets extends StatelessWidget {
   const WindowCornerInsets({super.key, required this.child});
 
@@ -38,22 +58,27 @@ class WindowCornerInsets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<EdgeInsets>(
-      valueListenable: WindowControls.cornerInsets,
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        WindowControls.cornerInsets,
+        WindowControls.topBar,
+      ]),
       child: child,
-      builder: (context, least, child) {
-        if (least == EdgeInsets.zero) return child!;
-        EdgeInsets raise(EdgeInsets e) => EdgeInsets.fromLTRB(
+      builder: (context, child) {
+        final least = WindowControls.cornerInsets.value;
+        final top = WindowControls.topBar.value?.top;
+        if (least == EdgeInsets.zero && top == null) return child!;
+        EdgeInsets fit(EdgeInsets e) => EdgeInsets.fromLTRB(
           _max(e.left, least.left),
-          _max(e.top, least.top),
+          top ?? _max(e.top, least.top),
           _max(e.right, least.right),
           _max(e.bottom, least.bottom),
         );
         final mq = MediaQuery.of(context);
         return MediaQuery(
           data: mq.copyWith(
-            padding: raise(mq.padding),
-            viewPadding: raise(mq.viewPadding),
+            padding: fit(mq.padding),
+            viewPadding: fit(mq.viewPadding),
           ),
           child: child!,
         );
@@ -233,3 +258,4 @@ class _RenderBoundsProbe extends RenderProxyBox {
     return origin;
   }
 }
+

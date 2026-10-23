@@ -121,7 +121,11 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
 
   @override
   Widget build(BuildContext context) {
-    return ValBuilder(listenable: _ToastCtrl.entries, builder: _build);
+    // The zones too: a pile at the top steps below them, see [_clearOfZones].
+    return ListenableBuilder(
+      listenable: Listenable.merge([_ToastCtrl.entries, WindowControls.zones]),
+      builder: (_, _) => _build(_ToastCtrl.entries.value),
+    );
   }
 
   Widget _build(List<_ToastEntry> entries) {
@@ -148,7 +152,18 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
     // On Windows and Linux the virtual window frame draws the minimize and
     // close buttons across the top; a toast in that band would sit on them.
     final caption = WindowFrameConfig.showCaption ? CustomAppBar.sysStatusBarHeight : 0.0;
-    final top = align.isTop ? safe.top + caption + margin.top : null;
+    final start = ltr ? safe.left + margin.left : safe.right + margin.right;
+    final end = ltr ? safe.right + margin.right : safe.left + margin.left;
+    // The pile's left edge, for the zones: [start] and [end] are directional.
+    final onRight = align.isEnd == ltr;
+    final left = align.isCenter
+        ? (mediaQuery.size.width - width) / 2
+        : onRight
+        ? mediaQuery.size.width - (align.isEnd ? end : start) - width
+        : (align.isEnd ? end : start);
+    final top = align.isTop
+        ? _clearOfZones(safe.top + caption + margin.top, left, width, margin.top)
+        : null;
     final bottom = align.isTop ? null : safe.bottom + margin.bottom;
 
     // No `AnimatedBuilder` around the pile: opening it used to rebuild every
@@ -176,10 +191,24 @@ class _ToastLayerState extends State<_ToastLayer> with SingleTickerProviderState
       textDirection: dir,
       top: top,
       bottom: bottom,
-      start: align.isEnd ? null : (ltr ? safe.left + margin.left : safe.right + margin.right),
-      end: align.isEnd ? (ltr ? safe.right + margin.right : safe.left + margin.left) : null,
+      start: align.isEnd ? null : start,
+      end: align.isEnd ? end : null,
       child: pile,
     );
+  }
+
+  /// [top], or below every [WindowControls.zones] the pile's columns from
+  /// [left] across [width] run into: what the system draws over the window
+  /// and leaves out of the padding — iPad's window controls, iPhone Duo's
+  /// status bar beside a bar in the top inset.
+  double _clearOfZones(double top, double left, double width, double gap) {
+    var out = top;
+    for (final zone in WindowControls.zones.value) {
+      if (zone.left < left + width && zone.right > left && zone.bottom > out) {
+        out = zone.bottom + gap;
+      }
+    }
+    return out;
   }
 
   Widget _buildPile(List<_ToastEntry> entries, double width, ToastAlign align) {

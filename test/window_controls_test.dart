@@ -123,4 +123,41 @@ void main() {
       greaterThanOrEqualTo(53),
     );
   });
+
+  testWidgets('a menu opened under the controls lands below them', (
+    tester,
+  ) async {
+    WindowControls.zones.value = zones;
+    await pump(tester, const Scaffold(body: SizedBox.expand()));
+    final context = tester.element(find.byType(Scaffold));
+    showContextMenu(context, [
+      ContextMenuAction(text: 'row', onTap: () {}),
+    ], at: const Offset(20, 30));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('row')).dy, greaterThanOrEqualTo(53));
+  });
+
+  testWidgets('a bar inside the top inset lowers the top padding to it', (
+    tester,
+  ) async {
+    addTearDown(() => WindowControls.topBar.value = null);
+    WindowControls.topBar.value = const Rect.fromLTRB(16, 26, 525, 70);
+    late EdgeInsets padding;
+    await pump(
+      tester,
+      MediaQuery(
+        data: const MediaQueryData(padding: EdgeInsets.only(top: 82)),
+        child: WindowCornerInsets(
+          child: Builder(
+            builder: (context) {
+              padding = MediaQuery.paddingOf(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+    expect(padding.top, 26);
+  });
 }
+

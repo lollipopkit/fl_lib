@@ -230,6 +230,7 @@ final class SwitcherBar extends StatelessWidget implements PreferredSizeWidget {
     required this.switcher,
     this.actions = const [],
     this.menu,
+    this.menuActions = const [],
     this.menuLabel,
     this.menuKey,
     this.search,
@@ -248,6 +249,10 @@ final class SwitcherBar extends StatelessWidget implements PreferredSizeWidget {
   /// Rows that always live behind the last button, before any action that did
   /// not fit.
   final List<ContextMenuAction> Function()? menu;
+
+  /// Buttons that always live behind the last button, after [menu]: rows of
+  /// it as an action that did not fit is, opening what they open from it.
+  final List<BarAction> menuActions;
 
   /// The overflow button's tooltip; [LibLocalizations.more] by default.
   final String? menuLabel;
@@ -311,7 +316,8 @@ final class SwitcherBar extends StatelessWidget implements PreferredSizeWidget {
     final room = constraints.maxWidth - switcherMinWidth;
     final fits = room.isFinite ? (room / slot).floor() : actions.length;
     // The menu button takes one of the slots whenever there is a menu.
-    final hasMenu = menu != null || fits < actions.length;
+    final hasMenu =
+        menu != null || menuActions.isNotEmpty || fits < actions.length;
     final roomForActions = hasMenu ? fits - 1 : fits;
     final shown = actions.take(roomForActions.clamp(0, actions.length));
     final folded = actions.skip(shown.length).toList();
@@ -326,6 +332,7 @@ final class SwitcherBar extends StatelessWidget implements PreferredSizeWidget {
               tooltip: menuLabel ?? libL10n.more,
               actions: () => [
                 ...?menu?.call(),
+                for (final a in menuActions) ?a.menuItem(anchor),
                 for (final a in folded) ?a.menuItem(anchor),
               ],
               child: const Padding(
