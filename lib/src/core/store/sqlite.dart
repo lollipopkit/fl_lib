@@ -200,9 +200,21 @@ CREATE TABLE IF NOT EXISTS kv (
     }
     final aside = '$path.unreadable-${DateTime.now().millisecondsSinceEpoch}';
     // The sidecars keep their suffix, so `<aside>-wal` still belongs to it.
-    for (final suffix in const ['', '-wal', '-shm']) {
-      final file = File('$path$suffix');
-      if (file.existsSync()) file.renameSync('$aside$suffix');
+    // All or none: a WAL can hold committed pages, and one left behind would
+    // be read into the empty database the next `open` creates.
+    final moved = <String>[];
+    try {
+      for (final suffix in const ['', '-wal', '-shm']) {
+        final file = File('$path$suffix');
+        if (!file.existsSync()) continue;
+        file.renameSync('$aside$suffix');
+        moved.add(suffix);
+      }
+    } catch (_) {
+      for (final suffix in moved.reversed) {
+        File('$aside$suffix').renameSync('$path$suffix');
+      }
+      rethrow;
     }
     return aside;
   }
