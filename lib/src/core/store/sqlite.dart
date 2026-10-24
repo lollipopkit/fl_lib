@@ -12,17 +12,17 @@ abstract final class _StoreSecret {
   /// Where installs older than [SecureStoreProps] kept the key.
   static const _legacyPrefKey = 'hive_key';
 
-  /// Reads the key, generating one the first time.
+  /// Reads the key, generating one when there is none and [generate] is set.
   ///
   /// Returns the raw bytes rather than the stored base64, because the caller
   /// wants bytes and the encoding is an artifact of the vault taking strings.
-  /// [generated] tells a first launch from a vault that lost the key: the two
-  /// look the same here, and only the file on disk tells them apart.
-  static Future<({Uint8List key, bool generated})> read() async {
+  /// Null when the vault has no key and [generate] is false: a database that
+  /// exists was written with a key, and making a new one would overwrite it
+  /// if the vault is only unavailable this once (a keyring not yet unlocked).
+  static Future<Uint8List?> read({required bool generate}) async {
     final existing = await _stored();
-    if (existing != null) {
-      return (key: base64Url.decode(existing), generated: false);
-    }
+    if (existing != null) return base64Url.decode(existing);
+    if (!generate) return null;
 
     // `Random.secure()` rather than a counter or a hash of anything on the
     // device: this is the only thing standing between a copied `.db` file and
@@ -38,7 +38,7 @@ abstract final class _StoreSecret {
     if (confirmed == null) {
       throw StateError('Failed to persist the store encryption key');
     }
-    return (key: base64Url.decode(confirmed), generated: true);
+    return base64Url.decode(confirmed);
   }
 
   static Future<String?> _stored() async {
@@ -57,10 +57,10 @@ abstract final class _StoreSecret {
 
 /// Why [SqliteDb.open] could not read the file it found.
 enum StoreUnreadableReason {
-  /// The vault held no key, so a new one was made, and the file was written
-  /// with the old one. The platform keystore lost it — reset by the system, or
-  /// the app's data copied to this device without it — and no key on this
-  /// device opens the file.
+  /// The vault holds no key, and the file exists. The platform keystore lost
+  /// it — reset by the system, or the app's data copied to this device
+  /// without it — or cannot be read right now (a keyring not yet unlocked).
+  /// No key is made, so a later attempt can still find the old one.
   keyLost,
 
   /// The vault's key does not open the file: it was written with another key,
@@ -81,13 +81,16 @@ final class StoreUnreadableException implements Exception {
   /// The file that did not open.
   final String path;
 
-  final SqliteException cause;
+  /// What SQLite said; null for [StoreUnreadableReason.keyLost], which is
+  /// decided before the file is opened.
+  final SqliteException? cause;
 
   /// What the file and its sidecars looked like — see [describe].
   final String file;
 
   @override
-  String toString() => 'StoreUnreadableException(${reason.name}, $path): $cause\n$file';
+  String toString() =>
+      'StoreUnreadableException(${reason.name}, $path)${cause == null ? '' : ': $cause'}\n$file';
 
   /// Size, first page and sidecars of the database at [path].
   ///
@@ -172,10 +175,20 @@ abstract final class SqliteDb {
   }
 
   static Future<Database> _open(String dir) async {
-    final (:key, :generated) = await _StoreSecret.read();
     final path = dir.joinPath(fileName);
-    // Asked before `sqlite3.open`, which creates it.
-    final existed = File(path).existsSync();
+    // Asked before `sqlite3.open`, which creates it. An empty file holds
+    // nothing a key was ever used on.
+    final file = File(path);
+    final existed = file.existsSync() && file.lengthSync() > 0;
+    final key = await _StoreSecret.read(generate: !existed);
+    if (key == null) {
+      throw StoreUnreadableException(
+        StoreUnreadableReason.keyLost,
+        path,
+        null,
+        StoreUnreadableException.describe(path),
+      );
+    }
     final db = sqlite3.open(path);
 
     try {
@@ -196,10 +209,12 @@ abstract final class SqliteDb {
         db.select('SELECT count(*) FROM sqlite_master;');
       } on SqliteException catch (e) {
         if (e.resultCode != SqlError.SQLITE_NOTADB) rethrow;
-        final reason = generated && existed
-            ? StoreUnreadableReason.keyLost
-            : StoreUnreadableReason.keyRejected;
-        throw StoreUnreadableException(reason, path, e, StoreUnreadableException.describe(path));
+        throw StoreUnreadableException(
+          StoreUnreadableReason.keyRejected,
+          path,
+          e,
+          StoreUnreadableException.describe(path),
+        );
       }
 
       db.execute('PRAGMA journal_mode = WAL;');

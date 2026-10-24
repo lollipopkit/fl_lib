@@ -119,8 +119,12 @@ abstract final class SecureStore {
   ///
   /// With [defaultAccountName], [KeychainAccessibility.first_unlock_this_device],
   static const storage = FlutterSecureStorage(
+    // Off: on a Keystore error the plugin would delete every secret, the
+    // store's key included, and the next read would make a new one — an
+    // error that may pass by the next launch became data lost for good
+    // (ServerBox #1780).
     aOptions: AndroidOptions(
-      resetOnError: true,
+      resetOnError: false,
     ),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock_this_device,

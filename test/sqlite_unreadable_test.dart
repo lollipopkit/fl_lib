@@ -39,12 +39,21 @@ void main() {
     fail('open succeeded');
   }
 
-  test('a file older than a freshly made key is keyLost', () async {
+  test('a file with no key in the vault is keyLost, and no key is made', () async {
     writeGarbage();
     final e = await openFails();
     expect(e.reason, StoreUnreadableReason.keyLost);
     expect(e.path, db.path);
+    expect(e.cause, isNull);
     expect(SqliteDb.isOpen, isFalse);
+    expect(await SecureStoreProps.hivePwd.read(), isNull);
+  });
+
+  test('an empty file with no key opens as a first launch', () async {
+    db.writeAsBytesSync([]);
+    await SqliteDb.open(dir.path);
+    expect(SqliteDb.isOpen, isTrue);
+    expect(await SecureStoreProps.hivePwd.read(), isNotNull);
   });
 
   test('a file the stored key does not open is keyRejected', () async {
@@ -54,6 +63,7 @@ void main() {
   });
 
   test('the exception describes the file', () async {
+    await SecureStoreProps.hivePwd.write('A' * 43 + '=');
     writeGarbage();
     final e = await openFails();
     expect(e.file, contains('db=4096B@'));
@@ -78,6 +88,7 @@ void main() {
   });
 
   test('setAside keeps the file and its sidecars, and open starts empty', () async {
+    await SecureStoreProps.hivePwd.write('A' * 43 + '=');
     writeGarbage();
     final e = await openFails();
     // After the failed open, which drops an invalid `-wal` as it closes.
