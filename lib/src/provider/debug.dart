@@ -28,7 +28,10 @@ final class DebugProvider {
     final message = record.error == null
         ? '\n${record.message}'
         : '\n${record.message}: ${record.error}';
-    lines.add('$title$level$message');
+    // The stack trace too, so a copy holds what the page shows.
+    lines.add(record.stackTrace == null
+        ? '$title$level$message'
+        : '$title$level$message\n${record.stackTrace}');
     widgets.value.add(Text.rich(TextSpan(
       children: [
         TextSpan(text: title, style: TextStyle(color: color)),
