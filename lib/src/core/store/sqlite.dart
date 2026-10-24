@@ -74,7 +74,7 @@ enum StoreUnreadableReason {
 /// app's decision, and so is telling the user. [SqliteDb.setAside] moves the
 /// file out of the way for the next [SqliteDb.open].
 final class StoreUnreadableException implements Exception {
-  const StoreUnreadableException(this.reason, this.path, this.cause);
+  const StoreUnreadableException(this.reason, this.path, this.cause, [this.file = '']);
 
   final StoreUnreadableReason reason;
 
@@ -83,8 +83,42 @@ final class StoreUnreadableException implements Exception {
 
   final SqliteException cause;
 
+  /// What the file and its sidecars looked like — see [describe].
+  final String file;
+
   @override
-  String toString() => 'StoreUnreadableException(${reason.name}, $path): $cause';
+  String toString() => 'StoreUnreadableException(${reason.name}, $path): $cause\n$file';
+
+  /// Size, first page and sidecars of the database at [path].
+  ///
+  /// A wrong key and a damaged first page are both `SQLITE_NOTADB`; a zeroed,
+  /// truncated or plaintext file is told apart here.
+  static String describe(String path) {
+    String one(String suffix) {
+      final f = File('$path$suffix');
+      if (!f.existsSync()) return '${suffix.isEmpty ? 'db' : suffix}=none';
+      final stat = f.statSync();
+      return '${suffix.isEmpty ? 'db' : suffix}=${stat.size}B@${stat.modified.toIso8601String()}';
+    }
+
+    try {
+      final raf = File(path).openSync();
+      final List<int> head;
+      try {
+        head = raf.readSync(4096);
+      } finally {
+        raf.closeSync();
+      }
+      final kind = head.every((b) => b == 0)
+          ? 'zero'
+          : String.fromCharCodes(head.take(16)) == 'SQLite format 3\x00'
+          ? 'plain'
+          : 'opaque';
+      return '${one('')} ${one('-wal')} ${one('-shm')} page1=$kind';
+    } catch (e) {
+      return 'unavailable: $e';
+    }
+  }
 }
 
 /// The single encrypted database file behind every [SqliteStore].
@@ -165,7 +199,7 @@ abstract final class SqliteDb {
         final reason = generated && existed
             ? StoreUnreadableReason.keyLost
             : StoreUnreadableReason.keyRejected;
-        throw StoreUnreadableException(reason, path, e);
+        throw StoreUnreadableException(reason, path, e, StoreUnreadableException.describe(path));
       }
 
       db.execute('PRAGMA journal_mode = WAL;');

@@ -53,6 +53,25 @@ void main() {
     expect((await openFails()).reason, StoreUnreadableReason.keyRejected);
   });
 
+  test('the exception describes the file', () async {
+    writeGarbage();
+    final e = await openFails();
+    expect(e.file, contains('db=4096B@'));
+    expect(e.file, contains('page1=opaque'));
+    expect('$e', contains(e.file));
+  });
+
+  test('describe tells a zeroed file and a plaintext one apart', () {
+    db.writeAsBytesSync(List.filled(8192, 0));
+    expect(StoreUnreadableException.describe(db.path), contains('page1=zero'));
+    db.writeAsBytesSync([...'SQLite format 3\x00'.codeUnits, ...List.filled(100, 1)]);
+    File('${db.path}-wal').writeAsBytesSync([1, 2]);
+    final s = StoreUnreadableException.describe(db.path);
+    expect(s, contains('page1=plain'));
+    expect(s, contains('-wal=2B@'));
+    expect(s, contains('-shm=none'));
+  });
+
   test('a first launch opens', () async {
     await SqliteDb.open(dir.path);
     expect(SqliteDb.isOpen, isTrue);
