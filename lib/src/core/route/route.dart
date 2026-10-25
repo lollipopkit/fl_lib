@@ -52,7 +52,8 @@ sealed class AppRouteIface {
   /// Returns true if the current route is the same as this route.
   bool get alreadyIn => AppRouteObserver.currentRoute?.name == path;
 
-  /// Returns the [RouteSettings] of the this route.
+  /// Returns the [RouteSettings] of the this route. A push also carries its
+  /// arguments there, for an observer to tell what the page is about.
   RouteSettings get routeSettings => RouteSettings(name: path);
 }
 
@@ -77,7 +78,7 @@ final class AppRoute<Ret, Arg extends Object> extends AppRouteIface {
     if (_rejected(middlewares, context, this)) return Future.value(null);
     return _push<Ret>(
       context,
-      settings: routeSettings,
+      settings: RouteSettings(name: path, arguments: args),
       build: (ctx) => _framed(ctx, page(key: key, args: args)),
       target: target,
       route: route,
@@ -122,7 +123,7 @@ final class AppRouteArg<Ret, Arg extends Object> extends AppRouteIface {
     if (_rejected(middlewares, context, this)) return Future.value(null);
     return _push<Ret>(
       context,
-      settings: routeSettings,
+      settings: RouteSettings(name: path, arguments: args),
       build: (ctx) => _framed(ctx, page(key: key, args: args)),
       target: target,
       route: route,
