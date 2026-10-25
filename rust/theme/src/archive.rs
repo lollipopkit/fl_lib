@@ -32,7 +32,7 @@ pub fn read(bytes: &[u8]) -> Result<Assets> {
         let (path, method, encrypted, symlink, size, compressed, crc) = {
             let entry = zip.by_index_raw(i).map_err(|_| ThemeError::new("Invalid theme ZIP"))?;
             (
-                entry.name().to_string(),
+                entry.name().map_err(|_| ThemeError::new("Invalid theme ZIP entry"))?.into_owned(),
                 entry.compression(),
                 entry.encrypted(),
                 entry.unix_mode().is_some_and(|m| m & S_IFMT == S_IFLNK),
