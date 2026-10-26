@@ -126,19 +126,41 @@ abstract final class SecureStore {
     aOptions: AndroidOptions(
       resetOnError: false,
     ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock_this_device,
-      accountName: defaultAccountName,
-      synchronizable: false,
-      groupId: null,
-    ),
-    mOptions: MacOsOptions(
-      accountName: defaultAccountName,
-      synchronizable: false,
-      accessibility: KeychainAccessibility.first_unlock_this_device,
-      groupId: null,
-    ),
+    iOptions: _iOptions,
+    mOptions: _mOptions,
   );
+
+  /// [storage] with the plugin's own reset allowed, for [reset] only.
+  static const _resetting = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: true),
+    iOptions: _iOptions,
+    mOptions: _mOptions,
+  );
+
+  static const _iOptions = IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    accountName: defaultAccountName,
+    synchronizable: false,
+    groupId: null,
+  );
+
+  static const _mOptions = MacOsOptions(
+    accountName: defaultAccountName,
+    synchronizable: false,
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+    groupId: null,
+  );
+
+  /// Deletes every entry, and on Android the key that encrypts them.
+  ///
+  /// For a vault that cannot decrypt its own key (ServerBox #1784): [storage]
+  /// never gets past initialization then, and only `resetOnError` lets the
+  /// plugin discard that key. Only on the user's explicit choice.
+  ///
+  /// The plugin keeps one instance per preferences name, configured by the
+  /// first call that initializes it: after this, [storage] also resets on
+  /// error until the process ends.
+  static Future<void> reset() => _resetting.deleteAll();
 
   static Future<T?> readJson<T>(String key, JsonFromJson<T> fromJson) {
     return storage.readJson<T>(key, fromJson);

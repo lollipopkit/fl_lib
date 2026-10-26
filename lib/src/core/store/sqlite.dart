@@ -66,6 +66,13 @@ enum StoreUnreadableReason {
   /// The vault's key does not open the file: it was written with another key,
   /// or it is damaged. SQLite cannot tell these apart.
   keyRejected,
+
+  /// The file exists, and reading its key from the vault failed. On Android
+  /// the plugin's key pair may have been replaced, which leaves the key it
+  /// wrapped unreadable for good (flutter_secure_storage#1298), or the
+  /// Keystore failed this once. No key is made; only [SecureStore.reset]
+  /// gets the vault working again.
+  vaultFailed,
 }
 
 /// [SqliteDb.open] found a file that its key does not open.
@@ -81,9 +88,11 @@ final class StoreUnreadableException implements Exception {
   /// The file that did not open.
   final String path;
 
-  /// What SQLite said; null for [StoreUnreadableReason.keyLost], which is
-  /// decided before the file is opened.
-  final SqliteException? cause;
+  /// What SQLite said for [StoreUnreadableReason.keyRejected], what the vault
+  /// threw for [StoreUnreadableReason.vaultFailed]; null for
+  /// [StoreUnreadableReason.keyLost], which is decided before the file is
+  /// opened.
+  final Object? cause;
 
   /// What the file and its sidecars looked like — see [describe].
   final String file;
@@ -180,7 +189,19 @@ abstract final class SqliteDb {
     // nothing a key was ever used on.
     final file = File(path);
     final existed = file.existsSync() && file.lengthSync() > 0;
-    final key = await _StoreSecret.read(generate: !existed);
+    final Uint8List? key;
+    try {
+      key = await _StoreSecret.read(generate: !existed);
+    } on Exception catch (e) {
+      // No file: nothing to protect, and the vault's own error says more.
+      if (!existed) rethrow;
+      throw StoreUnreadableException(
+        StoreUnreadableReason.vaultFailed,
+        path,
+        e,
+        StoreUnreadableException.describe(path),
+      );
+    }
     if (key == null) {
       throw StoreUnreadableException(
         StoreUnreadableReason.keyLost,

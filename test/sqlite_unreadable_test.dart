@@ -1,9 +1,30 @@
 import 'dart:io';
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage/test/test_flutter_secure_storage_platform.dart';
+import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// A vault whose every read throws, as Android's does once its key pair no
+/// longer unwraps the stored key (ServerBox #1784).
+class _FailingVault extends TestFlutterSecureStoragePlatform {
+  _FailingVault() : super({});
+
+  final deleteAllOptions = <Map<String, String>>[];
+
+  @override
+  Future<String?> read({required String key, required Map<String, String> options}) =>
+      throw PlatformException(code: 'Exception encountered', message: 'Failed to unwrap key');
+
+  @override
+  Future<void> deleteAll({required Map<String, String> options}) {
+    deleteAllOptions.add(options);
+    return super.deleteAll(options: options);
+  }
+}
 
 /// `SqliteDb.open` on a file its key does not open (ServerBox #1780).
 ///
@@ -106,5 +127,30 @@ void main() {
   test('setAside refuses an open database', () async {
     await SqliteDb.open(dir.path);
     expect(() => SqliteDb.setAside(db.path), throwsStateError);
+  });
+
+  test('a file whose key the vault cannot read is vaultFailed, and no key is made', () async {
+    writeGarbage();
+    final vault = _FailingVault();
+    FlutterSecureStoragePlatform.instance = vault;
+    final e = await openFails();
+    expect(e.reason, StoreUnreadableReason.vaultFailed);
+    expect(e.path, db.path);
+    expect(e.cause, isA<PlatformException>());
+    expect(SqliteDb.isOpen, isFalse);
+    expect(db.readAsBytesSync(), List.filled(4096, 0x5a));
+    expect(vault.data, isEmpty);
+  });
+
+  test('a first launch with a vault that throws rethrows the vault\'s error', () async {
+    FlutterSecureStoragePlatform.instance = _FailingVault();
+    await expectLater(SqliteDb.open(dir.path), throwsA(isA<PlatformException>()));
+  });
+
+  test('SecureStore.reset lets the Android plugin reset', () async {
+    final vault = _FailingVault();
+    FlutterSecureStoragePlatform.instance = vault;
+    await SecureStore.reset();
+    expect(vault.deleteAllOptions.single['resetOnError'], 'true');
   });
 }
