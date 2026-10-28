@@ -54,6 +54,7 @@ const _entitlements = [
 
 LkcClient _client({required bool webCheckout}) => LkcClient(
   oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://cb'),
+  cache: LkcMemoryCache(),
   webCheckout: webCheckout,
   api: Dio()
     ..httpClientAdapter = _Adapter({

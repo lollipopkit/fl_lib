@@ -38,9 +38,10 @@ final class LkcAccountPage extends StatefulWidget {
 final class _LkcAccountPageState extends State<LkcAccountPage> {
   LkcClient get _client => widget.args.client;
 
-  List<LkcPlan>? _plans;
-  LkcBenefits? _benefits;
   LkcUsage? _usage;
+
+  /// A read in flight. What was read before, the cache's included, shows meanwhile.
+  bool _loading = false;
 
   @override
   void initState() {
@@ -56,43 +57,30 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     super.dispose();
   }
 
-  /// Signed in by [LkcClient.init] while the page is open, or out.
+  /// Signed in by [LkcClient.init] while the page is open.
   void _onUser() {
-    if (!mounted) return;
-    setState(() {});
-    if (_client.user.value != null && _benefits == null && !_loading) {
+    if (_client.user.value != null && _usage == null && !_loading) {
       unawaited(_load());
     }
   }
 
-  bool _loading = false;
-
   Future<void> _load() async {
-    _loading = true;
+    if (_loading) return;
+    setState(() => _loading = true);
     try {
       // One after another: a future failing while another is awaited is an
-      // unhandled error. The benefits and the catalog only word the page.
-      final b = await _client.benefits().then<LkcBenefits?>(
-        (b) => b,
-        onError: (_) => null,
-      );
-      final p = await _client.plans().then<List<LkcPlan>?>(
-        (p) => p,
-        onError: (_) => null,
-      );
+      // unhandled error. The benefits and the catalog only word the page:
+      // without them it shows what it read last.
+      await _client.refreshBenefits().then((_) {}, onError: (_) {});
+      await _client.refreshPlans().then((_) {}, onError: (_) {});
       if (_client.signedIn) {
         await _client.refresh();
         await _loadUsage();
       }
-      if (!mounted) return;
-      setState(() {
-        _benefits = b ?? _benefits;
-        _plans = p ?? _plans;
-      });
     } catch (e) {
       if (mounted) context._showLkcErr(e);
     } finally {
-      _loading = false;
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -108,17 +96,50 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = _client.user.value;
     return Scaffold(
       appBar: widget.args.embedded
           ? null
           : CustomAppBar(title: Text(l10n.lkcAccount)),
-      body: ValBuilder(
-        listenable: _client.entitlements,
-        builder: (_) => RefreshIndicator(
-          onRefresh: _load,
-          child: user == null ? _buildSignedOut() : _buildSignedIn(user),
-        ),
+      body: ListenableBuilder(
+        listenable: Listenable.merge([
+          _client.user,
+          _client.entitlements,
+          _client.benefits,
+          _client.plans,
+        ]),
+        builder: (_, _) {
+          final user = _client.user.value;
+          return Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: _load,
+                child: AnimatedSwitcher(
+                  duration: _kFade,
+                  child: user == null
+                      ? KeyedSubtree(
+                          key: const ValueKey('out'),
+                          child: _buildSignedOut(),
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('in'),
+                          child: _buildSignedIn(user),
+                        ),
+                ),
+              ),
+              // Over the page rather than in it, so nothing below moves.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: AnimatedOpacity(
+                  opacity: _loading ? 1 : 0,
+                  duration: _kFade,
+                  child: const LinearProgressIndicator(minHeight: 2),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -173,11 +194,11 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   Widget _buildSignedIn(LkcUser user) {
     final first = [
       _LkcProfileCard(user: user, client: _client),
-      ?_buildLine(LkcLine.basic),
+      _buildLine(LkcLine.basic),
     ];
     final second = [
-      ?_buildLine(LkcLine.storage),
-      ?_buildLine(LkcLine.conduit),
+      _buildLine(LkcLine.storage),
+      _buildLine(LkcLine.conduit),
       _buildActions(),
     ];
     return LayoutBuilder(
@@ -213,7 +234,9 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   /// A line's section: what its plan grants, or nothing for a line neither
   /// held nor granting anything for free.
-  Widget? _buildLine(LkcLine line) {
+  Widget _buildLine(LkcLine line) => _Section(child: _lineContent(line));
+
+  Widget? _lineContent(LkcLine line) {
     final held = _client.entitlementOf(line);
     final tier = held?.plan ?? LkcBenefits.free;
     final items = line == LkcLine.conduit
@@ -221,13 +244,33 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
             final LkcConduitLimits limits => lkcConduitItems(l10n, limits),
             null => const <LkcBenefitItem>[],
           }
-        : _benefits?.items(l10n, tier, line) ?? const <LkcBenefitItem>[];
+        : _client.benefits.value?.items(l10n, tier, line) ??
+              const <LkcBenefitItem>[];
     final onSale = [
       if (_client.webCheckout)
-        for (final plan in _plans ?? const <LkcPlan>[])
+        for (final plan in _client.plans.value ?? const <LkcPlan>[])
           if (plan.line == line && plan.stripe != null && plan.id != held?.plan)
             plan,
     ];
+    // Not read yet, neither now nor before: rows to come rather than none.
+    final unknown = line == LkcLine.conduit
+        ? held != null && _client.plans.value == null
+        : _client.benefits.value == null;
+    if (unknown) {
+      if (!_loading || (line == LkcLine.conduit && held == null)) {
+        return held == null
+            ? null
+            : _GroupTitle(_lineName(line), _summaryOf(held));
+      }
+      return Column(
+        key: const ValueKey('skeleton'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _GroupTitle(_lineName(line), held == null ? '' : _summaryOf(held)),
+          const _LkcCard(child: _Rows([_SkeletonTile(), _SkeletonTile()])),
+        ],
+      );
+    }
     if (held == null && items.isEmpty && onSale.isEmpty) return null;
 
     final rows = <Widget>[
@@ -249,6 +292,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
       for (final plan in onSale) _buildPlan(plan),
     ];
     return Column(
+      key: const ValueKey('rows'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _GroupTitle(_lineName(line), _summaryOf(held)),
@@ -257,8 +301,9 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     );
   }
 
-  LkcPlan? _planOf(String? id) =>
-      id == null ? null : _plans?.where((p) => p.id == id).firstOrNull;
+  LkcPlan? _planOf(String? id) => id == null
+      ? null
+      : _client.plans.value?.where((p) => p.id == id).firstOrNull;
 
   /// What the group title says of the plan held: its name past the line's,
   /// and when it renews or ends.
@@ -278,7 +323,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     final muted = TextStyle(fontSize: 13, color: theme.colorScheme.outline);
     final usage = _usage;
     final quota = usage == null
-        ? _benefits?.amount(tier, LkcBenefit.fileBytes)
+        ? _client.benefits.value?.amount(tier, LkcBenefit.fileBytes)
         : usage.quotaBytes;
     final total = quota == null ? l10n.lkcUnlimited : lkcBytes(quota);
     return Padding(
@@ -911,11 +956,85 @@ final class _Stack extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final (i, child) in children.indexed) ...[
-          if (i > 0) const SizedBox(height: 13),
-          child,
-        ],
+        for (final child in children)
+          // A section keeps its own gap, so one that is empty leaves none.
+          child is _Section
+              ? child
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 13),
+                  child: child,
+                ),
       ],
+    );
+  }
+}
+
+const _kFade = Duration(milliseconds: 250);
+
+/// A section that may have nothing to show yet: it grows into place, and its
+/// rows fade in, when there is.
+final class _Section extends StatelessWidget {
+  final Widget? child;
+
+  const _Section({this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final child = this.child;
+    return AnimatedSize(
+      duration: _kFade,
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: _kFade,
+        // The rows replace their skeleton in place: top-aligned, not centered.
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.topCenter,
+          children: [...previous, ?current],
+        ),
+        child: child == null
+            ? const SizedBox(key: ValueKey('none'), width: double.infinity)
+            : Padding(
+                key: child.key ?? const ValueKey('content'),
+                padding: const EdgeInsets.only(bottom: 13),
+                child: child,
+              ),
+      ),
+    );
+  }
+}
+
+/// A row to come: grey bars where the icon and its text will be.
+final class _SkeletonTile extends StatelessWidget {
+  const _SkeletonTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final bar = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08);
+    Widget block(double w, double h) => Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: bar,
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      child: Row(
+        children: [
+          block(22, 22),
+          const SizedBox(width: 13),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              block(97, 13),
+              const SizedBox(height: 7),
+              block(173, 11),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

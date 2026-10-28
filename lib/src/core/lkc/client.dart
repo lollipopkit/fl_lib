@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:fl_lib/src/core/lkc/auth.dart';
 import 'package:fl_lib/src/core/lkc/model.dart';
+import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
 import 'package:flutter/widgets.dart';
@@ -76,6 +77,15 @@ final class LkcClient {
   /// The effective plan of each line the user holds one in, null until read.
   final entitlements = ValueNotifier<List<LkcEntitlement>?>(null);
 
+  /// What every plan grants, null until read. Public, as is [plans].
+  final benefits = ValueNotifier<LkcBenefits?>(null);
+
+  /// The plan catalog, null until read.
+  final plans = ValueNotifier<List<LkcPlan>?>(null);
+
+  /// The last replies of the reads above, shown until the network answers.
+  final LkcCache cache;
+
   LkcClient({
     required this.oidc,
     Uri? baseUrl,
@@ -86,7 +96,9 @@ final class LkcClient {
     Dio? idp,
     @visibleForTesting Future<bool> Function(Uri url)? openBrowser,
     @visibleForTesting bool? loopback,
-  }) : baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
+    LkcCache? cache,
+  }) : cache = cache ?? LkcCache(),
+       baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
        webCheckout = webCheckout ?? (!isIOS && !isMacOS),
        _api = api ?? Dio(),
        _store = store ?? Dio(),
@@ -100,6 +112,28 @@ final class LkcClient {
        ) {
     _timed(_api).options.baseUrl = this.baseUrl.toString();
     _store.options.validateStatus = (_) => true;
+    benefits.value = _cached(
+      _kBenefits,
+      (d) => LkcBenefits.fromJson(d as List),
+    );
+    plans.value = _cached(_kPlans, (d) => _list(d, LkcPlan.fromJson));
+  }
+
+  static const _kBenefits = 'benefits';
+  static const _kPlans = 'plans';
+  static const _kUser = 'user';
+  static const _kEntitlements = 'entitlements';
+
+  /// [key]'s cached reply, parsed; null when there is none or it no longer parses.
+  T? _cached<T>(String key, T Function(Object? data) parse) {
+    final data = cache.read(key);
+    if (data == null) return null;
+    try {
+      return parse(data);
+    } catch (_) {
+      cache.remove(key);
+      return null;
+    }
   }
 
   /// Replies of every status for the caller, and no request left hanging.
@@ -125,6 +159,15 @@ final class LkcClient {
       await tokenProp.write(null);
       return;
     }
+    // The account as last read, until homebase says it again.
+    user.value ??= _cached(
+      _kUser,
+      (d) => LkcUser.fromJson(d as Map<String, dynamic>),
+    );
+    entitlements.value ??= _cached(
+      _kEntitlements,
+      (d) => _list(d, LkcEntitlement.fromJson),
+    );
     try {
       await refresh();
     } on LkcException catch (e) {
@@ -135,8 +178,16 @@ final class LkcClient {
 
   /// Re-read the user and the entitlements.
   Future<void> refresh() async {
-    user.value = await _getUser();
+    await _refreshUser();
     await refreshEntitlements();
+  }
+
+  Future<LkcUser> _refreshUser() async {
+    final data = await _call('GET', '/auth/user');
+    final u = LkcUser.fromJson(data as Map<String, dynamic>);
+    user.value = u;
+    cache.write(_kUser, data);
+    return u;
   }
 
   /// Sign in at the IdP: AppAuth where the app has a URL scheme, a loopback
@@ -146,7 +197,7 @@ final class LkcClient {
     if (tokens == null) return null;
     _tokens = tokens;
     try {
-      final u = await _getUser();
+      final u = await _refreshUser();
       await _save(tokens);
       user.value = u;
       await refreshEntitlements();
@@ -168,6 +219,9 @@ final class LkcClient {
     _tokens = null;
     user.value = null;
     entitlements.value = null;
+    cache
+      ..remove(_kUser)
+      ..remove(_kEntitlements);
     await tokenProp.write(null);
   }
 
@@ -198,13 +252,9 @@ final class LkcClient {
     return fresh;
   }
 
-  Future<LkcUser> _getUser() async => LkcUser.fromJson(
-    await _call('GET', '/auth/user') as Map<String, dynamic>,
-  );
-
   Future<void> updateUser({String? name, String? avatar}) async {
     await _call('POST', '/auth/user', body: {'name': ?name, 'avatar': ?avatar});
-    user.value = await _getUser();
+    user.value = await _refreshUser();
   }
 
   /// Whether the user has a subscription only its app store can cancel. Ask
@@ -227,11 +277,10 @@ final class LkcClient {
   // Subscriptions
 
   Future<List<LkcEntitlement>> refreshEntitlements() async {
-    final list = _list(
-      await _call('GET', '/v2/entitlements'),
-      LkcEntitlement.fromJson,
-    );
+    final data = await _call('GET', '/v2/entitlements');
+    final list = _list(data, LkcEntitlement.fromJson);
     entitlements.value = list;
+    cache.write(_kEntitlements, data);
     return list;
   }
 
@@ -245,17 +294,24 @@ final class LkcClient {
     LkcEntitlement.fromJson,
   );
 
-  /// What every plan grants, and having none. Public: no sign-in needed.
-  Future<LkcBenefits> benefits() async => LkcBenefits.fromJson(
-    await _call('GET', '/v2/billing/benefits', auth: false) as List? ??
-        const [],
-  );
+  /// Read [benefits] again. Public: no sign-in needed.
+  Future<LkcBenefits> refreshBenefits() async {
+    final data =
+        await _call('GET', '/v2/billing/benefits', auth: false) ?? const [];
+    final b = LkcBenefits.fromJson(data as List);
+    benefits.value = b;
+    cache.write(_kBenefits, data);
+    return b;
+  }
 
-  /// The plan catalog. Public: no sign-in needed.
-  Future<List<LkcPlan>> plans() async => _list(
-    await _call('GET', '/v2/billing/plans', auth: false),
-    LkcPlan.fromJson,
-  );
+  /// Read [plans] again. Public: no sign-in needed.
+  Future<List<LkcPlan>> refreshPlans() async {
+    final data = await _call('GET', '/v2/billing/plans', auth: false);
+    final list = _list(data, LkcPlan.fromJson);
+    plans.value = list;
+    cache.write(_kPlans, data);
+    return list;
+  }
 
   /// Open the Stripe checkout of [plan] in the browser, with a discount [code].
   /// The entitlements are read again when the app comes back.
@@ -463,10 +519,62 @@ final class LkcClient {
   ];
 
   void dispose() {
+    benefits.dispose();
+    plans.dispose();
     _returnListener?.dispose();
     user.dispose();
     entitlements.dispose();
     _api.close();
     _store.close();
   }
+}
+
+/// Replies kept in the app's preferences: nothing secret, the tokens are elsewhere.
+class LkcCache {
+  final String prefix;
+
+  LkcCache({this.prefix = 'lkc_cache_'});
+
+  Object? read(String key) {
+    final raw = PrefStore.shared.get<String>('$prefix$key');
+    if (raw == null) return null;
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  void write(String key, Object? data) {
+    // Not a setting: no backup or sync is due for it.
+    unawaited(
+      PrefStore.shared.set(
+        '$prefix$key',
+        jsonEncode(data),
+        updateLastUpdateTsOnSet: false,
+      ),
+    );
+  }
+
+  void remove(String key) {
+    unawaited(
+      PrefStore.shared.remove('$prefix$key', updateLastUpdateTsOnRemove: false),
+    );
+  }
+}
+
+/// A cache held in memory only, for tests and for apps without preferences.
+final class LkcMemoryCache extends LkcCache {
+  final _data = <String, Object?>{};
+
+  LkcMemoryCache();
+
+  @override
+  Object? read(String key) => _data[key];
+
+  @override
+  void write(String key, Object? data) => _data[key] = data;
+
+  @override
+  void remove(String key) => _data.remove(key);
 }

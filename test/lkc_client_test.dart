@@ -43,6 +43,7 @@ void main() {
   late _Adapter store;
   late _Adapter idp;
   late LkcClient client;
+  late LkcMemoryCache cache;
   Future<bool> Function(Uri url) browser = (_) async => false;
 
   setUp(() {
@@ -53,7 +54,9 @@ void main() {
     store = _Adapter();
     idp = _Adapter()
       ..on('GET /auth/v1/.well-known/openid-configuration', _discovery);
+    cache = LkcMemoryCache();
     client = LkcClient(
+      cache: cache,
       oidc: LkcOidc(
         clientId: 'test',
         redirectUrl: 'test://auth/callback',
@@ -502,12 +505,34 @@ void main() {
   test('no web checkout where it is off', () async {
     final ios = LkcClient(
       oidc: LkcOidc(clientId: 'a', redirectUrl: 'a://cb'),
+      cache: LkcMemoryCache(),
       webCheckout: false,
       api: Dio()..httpClientAdapter = api,
     );
     expect(() => ios.openCheckout('storage.plus'), throwsStateError);
     expect(() => ios.openPortal(), throwsStateError);
     expect(api.requests, isEmpty);
+  });
+
+  test('what was read shows before the network answers', () async {
+    api.on('GET /v2/billing/benefits', {
+      'data': [
+        {'tier': 'free', 'benefit': 'sync', 'value': 1},
+      ],
+    });
+    await client.refreshBenefits();
+    await signedIn();
+    final next = LkcClient(
+      cache: cache,
+      oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://cb'),
+    );
+    expect(next.benefits.value?.amount('free', LkcBenefit.sync), 1);
+
+    // The account's own replies go with it.
+    await client.signOut();
+    expect(cache.read('user'), isNull);
+    expect(cache.read('entitlements'), isNull);
+    expect(cache.read('benefits'), isNotNull);
   });
 
   test('plans need no sign-in', () async {
@@ -530,7 +555,7 @@ void main() {
         },
       ],
     });
-    final plan = (await client.plans()).single;
+    final plan = (await client.refreshPlans()).single;
     expect(plan.line, LkcLine.conduit);
     expect(plan.stripe?.amount, 500);
     expect(plan.limits?.concurrency, isNull);
