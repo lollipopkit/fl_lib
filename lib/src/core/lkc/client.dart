@@ -135,15 +135,7 @@ final class LkcClient {
     if (tokens == null) return null;
     _tokens = tokens;
     try {
-      var u = await _getUser();
-      // homebase made the account of a new IdP user from the token's subject
-      // alone, so its name was the id until set.
-      // TODO: rm once homebase#21 (the name from userinfo) is deployed.
-      final name = tokens.name;
-      if (u.name == u.id && name != null) {
-        await _call('POST', '/auth/user', body: {'name': name});
-        u = await _getUser();
-      }
+      final u = await _getUser();
       await _save(tokens);
       user.value = u;
       await refreshEntitlements();

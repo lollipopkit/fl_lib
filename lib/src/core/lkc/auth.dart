@@ -94,22 +94,6 @@ final class LkcTokens {
     'expires_at': expiresAt.millisecondsSinceEpoch,
     'id_token': ?idToken,
   };
-
-  /// The name in the ID token, for an account homebase made from the token's subject alone.
-  String? get name {
-    final parts = idToken?.split('.');
-    if (parts == null || parts.length != 3) return null;
-    try {
-      final claims = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      if (claims is! Map) return null;
-      final name = claims['name'] ?? claims['preferred_username'];
-      return name is String && name.trim().isNotEmpty ? name.trim() : null;
-    } on FormatException {
-      return null;
-    }
-  }
 }
 
 /// The endpoints of the IdP's discovery document.
