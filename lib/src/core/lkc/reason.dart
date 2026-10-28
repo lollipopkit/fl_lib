@@ -1,7 +1,7 @@
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
 import 'package:fl_lib/src/core/lkc/client.dart';
 
-/// Reasons as homebase names them (`service::billing::reason`).
+/// Reasons as homebase names them (`service::reason`).
 extension LkcExceptionL10n on LkcException {
   /// What to tell the user: [reason] translated, else the server's [message].
   String text(LibLocalizations l10n) =>
