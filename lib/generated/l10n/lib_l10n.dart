@@ -815,6 +815,12 @@ abstract class LibLocalizations {
   /// **'License'**
   String get license;
 
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'LKC Cloud account'**
+  String get lkcAccount;
+
   /// LKC Cloud paywall: a benefit of a plan.
   ///
   /// In en, this message translates to:
@@ -916,6 +922,96 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
   String lkcBenefitUptimeUnlimited(int minutes);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Current plan'**
+  String get lkcCurrentPlan;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get lkcDeleteAccount;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account, your files and your web subscriptions are deleted for good. This can’t be undone.'**
+  String get lkcDeleteAccountTip;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Ends on {date}'**
+  String lkcEndsOn(String date);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}'**
+  String lkcFileCount(int count);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get lkcFiles;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get lkcFreeTier;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscriptions'**
+  String get lkcManageSubscriptions;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment past due'**
+  String get lkcPastDue;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste token'**
+  String get lkcPasteToken;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'If the app doesn’t open after you sign in, copy the token shown on the page and paste it here.'**
+  String get lkcPasteTokenTip;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get lkcPaused;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{price} / month'**
+  String lkcPerMonth(String price);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{price} / year'**
+  String lkcPerYear(String price);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans'**
+  String get lkcPlans;
 
   /// LKC Cloud rejection `already_subscribed`.
   ///
@@ -1330,6 +1426,42 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'The user no longer exists'**
   String get lkcReasonUserGone;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Renews on {date}'**
+  String lkcRenewsOn(String date);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in in the browser'**
+  String get lkcSignInBrowser;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with your lollipopkit account to see your plans and files.'**
+  String get lkcSignInTip;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'You have a subscription billed by the App Store or Google Play. Cancel it in the store first: deleting the account doesn’t stop it.'**
+  String get lkcStoreSubscriptionTip;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe'**
+  String get lkcSubscribe;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {quota}'**
+  String lkcUsageOf(String used, String quota);
 
   /// Abbreviated text for loading ellipsis.
   ///

@@ -365,6 +365,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get license => 'Lisensi';
 
   @override
+  String get lkcAccount => 'Akun LKC Cloud';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return 'hingga $size per aplikasi';
   }
@@ -468,6 +471,67 @@ class LibLocalizationsId extends LibLocalizations {
     );
     return 'Pemeriksaan downtime eksternal setiap $_temp0, target tanpa batas';
   }
+
+  @override
+  String get lkcCurrentPlan => 'Paket saat ini';
+
+  @override
+  String get lkcDeleteAccount => 'Hapus akun';
+
+  @override
+  String get lkcDeleteAccountTip =>
+      'Akun, file, dan langganan web Anda akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.';
+
+  @override
+  String lkcEndsOn(String date) {
+    return 'Berakhir pada $date';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count file',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'File';
+
+  @override
+  String get lkcFreeTier => 'Gratis';
+
+  @override
+  String get lkcManageSubscriptions => 'Kelola langganan';
+
+  @override
+  String get lkcPastDue => 'Pembayaran terlambat';
+
+  @override
+  String get lkcPasteToken => 'Tempel token';
+
+  @override
+  String get lkcPasteTokenTip =>
+      'Jika aplikasi tidak terbuka setelah Anda masuk, salin token yang ditampilkan di halaman dan tempel di sini.';
+
+  @override
+  String get lkcPaused => 'Dijeda';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / bulan';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / tahun';
+  }
+
+  @override
+  String get lkcPlans => 'Paket';
 
   @override
   String get lkcReasonAlreadySubscribed => 'Sudah berlangganan';
@@ -695,6 +759,30 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => 'Pengguna sudah tidak ada';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return 'Diperpanjang pada $date';
+  }
+
+  @override
+  String get lkcSignInBrowser => 'Masuk di browser';
+
+  @override
+  String get lkcSignInTip =>
+      'Masuk dengan akun lollipopkit Anda untuk melihat paket dan file Anda.';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'Anda memiliki langganan yang ditagih melalui App Store atau Google Play. Batalkan dulu di toko: menghapus akun tidak menghentikannya.';
+
+  @override
+  String get lkcSubscribe => 'Berlangganan';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used dari $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

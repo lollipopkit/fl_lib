@@ -364,6 +364,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get license => 'ライセンス';
 
   @override
+  String get lkcAccount => 'LKC Cloud アカウント';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return 'アプリごとに最大 $size';
   }
@@ -459,6 +462,66 @@ class LibLocalizationsJa extends LibLocalizations {
     );
     return '外部ダウンタイム監視：$_temp0ごとに外部からチェック、対象数無制限';
   }
+
+  @override
+  String get lkcCurrentPlan => '現在のプラン';
+
+  @override
+  String get lkcDeleteAccount => 'アカウントを削除';
+
+  @override
+  String get lkcDeleteAccountTip =>
+      'アカウント、ファイル、Web サブスクリプションは完全に削除されます。この操作は取り消せません。';
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date に終了';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個のファイル',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'ファイル';
+
+  @override
+  String get lkcFreeTier => '無料';
+
+  @override
+  String get lkcManageSubscriptions => 'サブスクリプションを管理';
+
+  @override
+  String get lkcPastDue => '支払い期限超過';
+
+  @override
+  String get lkcPasteToken => 'トークンを貼り付け';
+
+  @override
+  String get lkcPasteTokenTip =>
+      'サインイン後にアプリが開かない場合は、ページに表示されたトークンをコピーしてここに貼り付けてください。';
+
+  @override
+  String get lkcPaused => '一時停止中';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
+  }
+
+  @override
+  String get lkcPlans => 'プラン';
 
   @override
   String get lkcReasonAlreadySubscribed => 'すでに購読しています。';
@@ -669,6 +732,29 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => 'このユーザーはすでに存在しません。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date に更新';
+  }
+
+  @override
+  String get lkcSignInBrowser => 'ブラウザでサインイン';
+
+  @override
+  String get lkcSignInTip => 'lollipopkit アカウントでサインインすると、プランとファイルを確認できます。';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'App Store または Google Play で請求されるサブスクリプションがあります。先にストアで解約してください。アカウントを削除しても停止されません。';
+
+  @override
+  String get lkcSubscribe => '購読する';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

@@ -364,6 +364,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get license => '라이선스';
 
   @override
+  String get lkcAccount => 'LKC Cloud 계정';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return '앱당 최대 $size';
   }
@@ -459,6 +462,66 @@ class LibLocalizationsKo extends LibLocalizations {
     );
     return '외부 다운타임 감지: $_temp0마다 외부에서 확인, 대상 무제한';
   }
+
+  @override
+  String get lkcCurrentPlan => '현재 요금제';
+
+  @override
+  String get lkcDeleteAccount => '계정 삭제';
+
+  @override
+  String get lkcDeleteAccountTip =>
+      '계정, 파일, 웹 구독이 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.';
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date에 종료';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '파일 $count개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => '파일';
+
+  @override
+  String get lkcFreeTier => '무료';
+
+  @override
+  String get lkcManageSubscriptions => '구독 관리';
+
+  @override
+  String get lkcPastDue => '결제 연체';
+
+  @override
+  String get lkcPasteToken => '토큰 붙여넣기';
+
+  @override
+  String get lkcPasteTokenTip =>
+      '로그인한 뒤 앱이 열리지 않으면 페이지에 표시된 토큰을 복사해 여기에 붙여넣으세요.';
+
+  @override
+  String get lkcPaused => '일시 중지됨';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 월';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 년';
+  }
+
+  @override
+  String get lkcPlans => '요금제';
 
   @override
   String get lkcReasonAlreadySubscribed => '이미 구독 중입니다.';
@@ -668,6 +731,29 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => '더 이상 존재하지 않는 사용자입니다.';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date에 갱신';
+  }
+
+  @override
+  String get lkcSignInBrowser => '브라우저에서 로그인';
+
+  @override
+  String get lkcSignInTip => 'lollipopkit 계정으로 로그인하면 요금제와 파일을 볼 수 있습니다.';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'App Store 또는 Google Play에서 결제되는 구독이 있습니다. 먼저 스토어에서 취소하세요. 계정을 삭제해도 구독은 중지되지 않습니다.';
+
+  @override
+  String get lkcSubscribe => '구독';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

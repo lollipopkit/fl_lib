@@ -364,6 +364,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get license => '许可证';
 
   @override
+  String get lkcAccount => 'LKC Cloud 账号';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return '每个 app 合计最大 $size';
   }
@@ -461,6 +464,64 @@ class LibLocalizationsZh extends LibLocalizations {
     );
     return '外部宕机检测：$_temp0从外部检查，不限目标数';
   }
+
+  @override
+  String get lkcCurrentPlan => '当前计划';
+
+  @override
+  String get lkcDeleteAccount => '删除账号';
+
+  @override
+  String get lkcDeleteAccountTip => '你的账号、文件和网页订阅将被永久删除，且无法撤销。';
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date 结束';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => '文件';
+
+  @override
+  String get lkcFreeTier => '免费';
+
+  @override
+  String get lkcManageSubscriptions => '管理订阅';
+
+  @override
+  String get lkcPastDue => '付款逾期';
+
+  @override
+  String get lkcPasteToken => '粘贴令牌';
+
+  @override
+  String get lkcPasteTokenTip => '如果登录后 app 没有打开，请复制页面上显示的令牌，粘贴到这里。';
+
+  @override
+  String get lkcPaused => '已暂停';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
+  }
+
+  @override
+  String get lkcPlans => '计划';
 
   @override
   String get lkcReasonAlreadySubscribed => '这条产品线已有订阅，请在账单门户中更改。';
@@ -668,6 +729,29 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => '该用户已不存在。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date 续订';
+  }
+
+  @override
+  String get lkcSignInBrowser => '在浏览器中登录';
+
+  @override
+  String get lkcSignInTip => '登录你的 lollipopkit 账号，查看你的计划和文件。';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      '你有一项通过 App Store 或 Google Play 计费的订阅。请先在商店中取消：删除账号不会停止该订阅。';
+
+  @override
+  String get lkcSubscribe => '订阅';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';
@@ -1634,6 +1718,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get license => '授權';
 
   @override
+  String get lkcAccount => 'LKC Cloud 帳號';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return '每個 app 合計最大 $size';
   }
@@ -1731,6 +1818,64 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
     );
     return '外部停機偵測：$_temp0從外部檢查，不限目標數';
   }
+
+  @override
+  String get lkcCurrentPlan => '目前方案';
+
+  @override
+  String get lkcDeleteAccount => '刪除帳號';
+
+  @override
+  String get lkcDeleteAccountTip => '你的帳號、檔案和網頁訂閱將被永久刪除，且無法復原。';
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date 結束';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個檔案',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => '檔案';
+
+  @override
+  String get lkcFreeTier => '免費';
+
+  @override
+  String get lkcManageSubscriptions => '管理訂閱';
+
+  @override
+  String get lkcPastDue => '付款逾期';
+
+  @override
+  String get lkcPasteToken => '貼上權杖';
+
+  @override
+  String get lkcPasteTokenTip => '如果登入後 app 沒有開啟，請複製頁面上顯示的權杖，貼到這裡。';
+
+  @override
+  String get lkcPaused => '已暫停';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
+  }
+
+  @override
+  String get lkcPlans => '方案';
 
   @override
   String get lkcReasonAlreadySubscribed => '這條產品線已有訂閱，請在帳單入口網站中變更。';
@@ -1938,6 +2083,29 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcReasonUserGone => '該使用者已不存在。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date 續訂';
+  }
+
+  @override
+  String get lkcSignInBrowser => '在瀏覽器中登入';
+
+  @override
+  String get lkcSignInTip => '登入你的 lollipopkit 帳號，查看你的方案和檔案。';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      '你有一項透過 App Store 或 Google Play 計費的訂閱。請先在商店中取消：刪除帳號不會停止該訂閱。';
+
+  @override
+  String get lkcSubscribe => '訂閱';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

@@ -365,6 +365,9 @@ class LibLocalizationsEs extends LibLocalizations {
   String get license => 'Licencia';
 
   @override
+  String get lkcAccount => 'Cuenta de LKC Cloud';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return 'hasta $size por app';
   }
@@ -468,6 +471,67 @@ class LibLocalizationsEs extends LibLocalizations {
     );
     return 'Comprobación externa de caídas $_temp0, destinos ilimitados';
   }
+
+  @override
+  String get lkcCurrentPlan => 'Plan actual';
+
+  @override
+  String get lkcDeleteAccount => 'Eliminar cuenta';
+
+  @override
+  String get lkcDeleteAccountTip =>
+      'Tu cuenta, tus archivos y tus suscripciones web se eliminan para siempre. No se puede deshacer.';
+
+  @override
+  String lkcEndsOn(String date) {
+    return 'Termina el $date';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'Archivos';
+
+  @override
+  String get lkcFreeTier => 'Gratis';
+
+  @override
+  String get lkcManageSubscriptions => 'Gestionar suscripciones';
+
+  @override
+  String get lkcPastDue => 'Pago vencido';
+
+  @override
+  String get lkcPasteToken => 'Pegar token';
+
+  @override
+  String get lkcPasteTokenTip =>
+      'Si la app no se abre después de iniciar sesión, copia el token que aparece en la página y pégalo aquí.';
+
+  @override
+  String get lkcPaused => 'En pausa';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / mes';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / año';
+  }
+
+  @override
+  String get lkcPlans => 'Planes';
 
   @override
   String get lkcReasonAlreadySubscribed => 'Ya tienes una suscripción';
@@ -703,6 +767,30 @@ class LibLocalizationsEs extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => 'El usuario ya no existe';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return 'Se renueva el $date';
+  }
+
+  @override
+  String get lkcSignInBrowser => 'Iniciar sesión en el navegador';
+
+  @override
+  String get lkcSignInTip =>
+      'Inicia sesión con tu cuenta de lollipopkit para ver tus planes y archivos.';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'Tienes una suscripción facturada por App Store o Google Play. Cancélala primero en la tienda: eliminar la cuenta no la detiene.';
+
+  @override
+  String get lkcSubscribe => 'Suscribirse';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used de $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

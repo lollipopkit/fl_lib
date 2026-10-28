@@ -137,6 +137,7 @@ export 'src/view/page/editor/plain.dart';
 export 'src/view/page/file.dart';
 export 'src/view/page/image.dart';
 export 'src/view/page/intro.dart';
+export 'src/view/page/lkc.dart';
 export 'src/view/page/local_auth.dart';
 export 'src/view/page/scan.dart';
 export 'src/view/page/search.dart';

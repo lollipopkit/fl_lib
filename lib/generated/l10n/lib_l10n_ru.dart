@@ -365,6 +365,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get license => 'Лицензия';
 
   @override
+  String get lkcAccount => 'Аккаунт LKC Cloud';
+
+  @override
   String lkcBenefitBackupAppBytes(String size) {
     return 'до $size на приложение';
   }
@@ -479,6 +482,69 @@ class LibLocalizationsRu extends LibLocalizations {
     );
     return 'Внешние проверки недоступности $_temp0, без ограничения числа целей';
   }
+
+  @override
+  String get lkcCurrentPlan => 'Текущий тариф';
+
+  @override
+  String get lkcDeleteAccount => 'Удалить аккаунт';
+
+  @override
+  String get lkcDeleteAccountTip =>
+      'Ваш аккаунт, файлы и веб-подписки будут удалены навсегда. Это действие нельзя отменить.';
+
+  @override
+  String lkcEndsOn(String date) {
+    return 'Заканчивается $date';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла',
+      many: '$count файлов',
+      few: '$count файла',
+      one: '$count файл',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'Файлы';
+
+  @override
+  String get lkcFreeTier => 'Бесплатный';
+
+  @override
+  String get lkcManageSubscriptions => 'Управление подписками';
+
+  @override
+  String get lkcPastDue => 'Платёж просрочен';
+
+  @override
+  String get lkcPasteToken => 'Вставить токен';
+
+  @override
+  String get lkcPasteTokenTip =>
+      'Если после входа приложение не открылось, скопируйте токен со страницы и вставьте его сюда.';
+
+  @override
+  String get lkcPaused => 'Приостановлена';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / месяц';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / год';
+  }
+
+  @override
+  String get lkcPlans => 'Тарифы';
 
   @override
   String get lkcReasonAlreadySubscribed => 'Подписка уже оформлена';
@@ -709,6 +775,30 @@ class LibLocalizationsRu extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => 'Пользователь больше не существует';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return 'Продление $date';
+  }
+
+  @override
+  String get lkcSignInBrowser => 'Войти в браузере';
+
+  @override
+  String get lkcSignInTip =>
+      'Войдите с аккаунтом lollipopkit, чтобы увидеть свои тарифы и файлы.';
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'У вас есть подписка, оплачиваемая через App Store или Google Play. Сначала отмените её в магазине: удаление аккаунта её не останавливает.';
+
+  @override
+  String get lkcSubscribe => 'Оформить подписку';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used из $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

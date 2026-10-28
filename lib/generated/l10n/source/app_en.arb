@@ -486,6 +486,10 @@
   "@license": {
     "description": "Label for license."
   },
+  "lkcAccount": "LKC Cloud account",
+  "@lkcAccount": {
+    "description": "LKC Cloud account page."
+  },
   "lkcBenefitBackupAppBytes": "up to {size} per app",
   "@lkcBenefitBackupAppBytes": {
     "description": "LKC Cloud paywall: a benefit of a plan.",
@@ -612,6 +616,86 @@
         "type": "int"
       }
     }
+  },
+  "lkcCurrentPlan": "Current plan",
+  "@lkcCurrentPlan": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcDeleteAccount": "Delete account",
+  "@lkcDeleteAccount": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcDeleteAccountTip": "Your account, your files and your web subscriptions are deleted for good. This can’t be undone.",
+  "@lkcDeleteAccountTip": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcEndsOn": "Ends on {date}",
+  "@lkcEndsOn": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcFileCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@lkcFileCount": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcFiles": "Files",
+  "@lkcFiles": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcFreeTier": "Free",
+  "@lkcFreeTier": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcManageSubscriptions": "Manage subscriptions",
+  "@lkcManageSubscriptions": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcPastDue": "Payment past due",
+  "@lkcPastDue": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcPasteToken": "Paste token",
+  "@lkcPasteToken": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcPasteTokenTip": "If the app doesn’t open after you sign in, copy the token shown on the page and paste it here.",
+  "@lkcPasteTokenTip": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcPaused": "Paused",
+  "@lkcPaused": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcPerMonth": "{price} / month",
+  "@lkcPerMonth": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcPerYear": "{price} / year",
+  "@lkcPerYear": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcPlans": "Plans",
+  "@lkcPlans": {
+    "description": "LKC Cloud account page."
   },
   "lkcReasonAlreadySubscribed": "Already subscribed",
   "@lkcReasonAlreadySubscribed": {
@@ -888,6 +972,43 @@
   "lkcReasonUserGone": "The user no longer exists",
   "@lkcReasonUserGone": {
     "description": "LKC Cloud rejection `user_gone`."
+  },
+  "lkcRenewsOn": "Renews on {date}",
+  "@lkcRenewsOn": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcSignInBrowser": "Sign in in the browser",
+  "@lkcSignInBrowser": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcSignInTip": "Sign in with your lollipopkit account to see your plans and files.",
+  "@lkcSignInTip": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcStoreSubscriptionTip": "You have a subscription billed by the App Store or Google Play. Cancel it in the store first: deleting the account doesn’t stop it.",
+  "@lkcStoreSubscriptionTip": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcSubscribe": "Subscribe",
+  "@lkcSubscribe": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcUsageOf": "{used} of {quota}",
+  "@lkcUsageOf": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "quota": {
+        "type": "String"
+      }
+    }
   },
   "loadingEllipsis": "...",
   "@loadingEllipsis": {
