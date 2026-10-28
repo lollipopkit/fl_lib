@@ -38,7 +38,7 @@ final class LkcAccountPage extends StatefulWidget {
 final class _LkcAccountPageState extends State<LkcAccountPage> {
   LkcClient get _client => widget.args.client;
 
-  LkcUsage? _usage;
+  LkcUsage? get _usage => _client.usage.value;
 
   /// A read in flight. What was read before, the cache's included, shows meanwhile.
   bool _loading = false;
@@ -47,8 +47,9 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   void initState() {
     super.initState();
     _client.user.addListener(_onUser);
-    // Signed out, the page is only a way in: nothing to read for it.
-    if (_client.signedIn) unawaited(_load());
+    // Signed out, the page is only a way in: nothing to read for it. Opened
+    // again within a minute, what it read is still what there is.
+    if (_client.signedIn && !_client.fresh) unawaited(_load());
   }
 
   @override
@@ -59,7 +60,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   /// Signed in by [LkcClient.init] while the page is open.
   void _onUser() {
-    if (_client.user.value != null && _usage == null && !_loading) {
+    if (_client.user.value != null && !_client.fresh && !_loading) {
       unawaited(_load());
     }
   }
@@ -87,8 +88,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   /// Shown with the Storage plan; the page is whole without it.
   Future<void> _loadUsage() async {
     try {
-      final usage = await _client.usage();
-      if (mounted) setState(() => _usage = usage);
+      await _client.refreshUsage();
     } catch (e) {
       debugPrint('LKC usage: ${e.runtimeType}');
     }
@@ -106,6 +106,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
           _client.entitlements,
           _client.benefits,
           _client.plans,
+          _client.usage,
         ]),
         builder: (_, _) {
           final user = _client.user.value;
@@ -526,7 +527,7 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
   Future<void> _load() async {
     try {
       final list = await _client.files();
-      final usage = await _client.usage();
+      final usage = await _client.refreshUsage();
       if (!mounted) return;
       setState(() {
         _files = list;
@@ -776,6 +777,37 @@ String lkcAccountSummary(LkcClient client) {
       _lineName(e.line),
   ];
   return [user.name, if (lines.isNotEmpty) lines.join(', ')].join(' · ');
+}
+
+/// [lkcAccountSummary], kept up to date.
+final class LkcAccountSummary extends StatefulWidget {
+  final LkcClient client;
+  final TextStyle? style;
+
+  const LkcAccountSummary({super.key, required this.client, this.style});
+
+  @override
+  State<LkcAccountSummary> createState() => _LkcAccountSummaryState();
+}
+
+final class _LkcAccountSummaryState extends State<LkcAccountSummary> {
+  late final _changes = Listenable.merge([
+    widget.client.user,
+    widget.client.entitlements,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _changes,
+      builder: (_, _) => Text(
+        lkcAccountSummary(widget.client),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: widget.style,
+      ),
+    );
+  }
 }
 
 String _initial(String? name) {

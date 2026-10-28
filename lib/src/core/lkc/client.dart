@@ -83,6 +83,9 @@ final class LkcClient {
   /// The plan catalog, null until read.
   final plans = ValueNotifier<List<LkcPlan>?>(null);
 
+  /// What the user's own files take, null until read.
+  final usage = ValueNotifier<LkcUsage?>(null);
+
   /// The last replies of the reads above, shown until the network answers.
   final LkcCache cache;
 
@@ -183,6 +186,16 @@ final class LkcClient {
   Future<void> refresh() async {
     await _refreshUser();
     await refreshEntitlements();
+    _refreshedAt = DateTime.now();
+  }
+
+  DateTime? _refreshedAt;
+
+  /// Whether [refresh] ran in the last minute: a page opened again needn't.
+  bool get fresh {
+    final at = _refreshedAt;
+    return at != null &&
+        DateTime.now().difference(at) < const Duration(minutes: 1);
   }
 
   Future<LkcUser> _refreshUser() async {
@@ -221,6 +234,8 @@ final class LkcClient {
 
   Future<void> _forget() async {
     _tokens = null;
+    _refreshedAt = null;
+    usage.value = null;
     user.value = null;
     entitlements.value = null;
     cache
@@ -290,7 +305,20 @@ final class LkcClient {
     required String token,
     required String appId,
     required bool sandbox,
-  }) async {
+  }) {
+    final registering = _registerDevice(token, appId, sandbox);
+    _registering = registering;
+    return registering;
+  }
+
+  /// A registration in flight, which a sign-out waits for to drop what it adds.
+  Future<LkcDevice>? _registering;
+
+  Future<LkcDevice> _registerDevice(
+    String token,
+    String appId,
+    bool sandbox,
+  ) async {
     final device = LkcDevice.fromJson(
       await _call(
         'POST',
@@ -320,6 +348,8 @@ final class LkcClient {
   /// fails stays with the account until APNs reports the token gone, or the
   /// same token is registered again by whoever signs in next.
   Future<void> _unregisterDevice() async {
+    await _registering?.then((_) {}, onError: (_) {});
+    _registering = null;
     final id = cache.read(_kDevice);
     if (id is! String || !signedIn) return;
     try {
@@ -432,10 +462,16 @@ final class LkcClient {
   );
 
   /// What the files of [dir] (the user's own by default) take, and its quota.
-  Future<LkcUsage> usage({String? dir}) async => LkcUsage.fromJson(
-    await _call('GET', '/file/usage', query: {'dir': ?dir})
-        as Map<String, dynamic>,
-  );
+  /// What the files of [dir] take, and its quota; the user's own, also kept
+  /// in [usage], by default.
+  Future<LkcUsage> refreshUsage({String? dir}) async {
+    final u = LkcUsage.fromJson(
+      await _call('GET', '/file/usage', query: {'dir': ?dir})
+          as Map<String, dynamic>,
+    );
+    if (dir == null) usage.value = u;
+    return u;
+  }
 
   /// Upload [size] bytes of [data] straight to the object store, up to 5 GB.
   /// Returns the stored name.
@@ -576,6 +612,7 @@ final class LkcClient {
   void dispose() {
     benefits.dispose();
     plans.dispose();
+    usage.dispose();
     _returnListener?.dispose();
     user.dispose();
     entitlements.dispose();
