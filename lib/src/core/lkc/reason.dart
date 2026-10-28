@@ -75,6 +75,8 @@ extension LkcExceptionL10n on LkcException {
     'code_grant_off' => l10n.lkcReasonCodeGrantOff,
     'code_grant_plan' => l10n.lkcReasonCodeGrantPlan,
     'code_grant_periods' => l10n.lkcReasonCodeGrantPeriods,
+    'file_name' => l10n.lkcReasonFileName,
+    'benefit_invalid' => l10n.lkcReasonBenefitInvalid,
     _ => null,
   };
 }

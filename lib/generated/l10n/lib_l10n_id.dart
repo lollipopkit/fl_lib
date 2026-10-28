@@ -365,6 +365,105 @@ class LibLocalizationsId extends LibLocalizations {
   String get license => 'Lisensi';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'hingga $size per aplikasi';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'yang terbaru per aplikasi';
+
+  @override
+  String get lkcBenefitBackupNoLimit => 'tanpa batas ukuran';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cadangan bergilir',
+      one: '1 cadangan bergilir',
+    );
+    return '$_temp0 per aplikasi';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited =>
+      'cadangan bergilir tanpa batas per aplikasi';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '$size bersama untuk semua aplikasi';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'Cadangan: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet, dan notifikasi push: lalu lintas tanpa batas, relay pada $rate, tanpa jaminan ketersediaan';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => 'Tautan berbagi dengan masa berlaku';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync =>
+      'Sinkronisasi real-time antarperangkat (terenkripsi end-to-end)';
+
+  @override
+  String get lkcBenefitUnlimited => 'tanpa batas';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes menit',
+      one: 'menit',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count target',
+      one: '1 target',
+    );
+    return 'Pemeriksaan downtime eksternal setiap $_temp0, hingga $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count target',
+      one: '1 target',
+    );
+    return 'Pemeriksaan downtime eksternal, hingga $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited =>
+      'Pemeriksaan downtime eksternal, target tanpa batas';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes menit',
+      one: 'menit',
+    );
+    return 'Pemeriksaan downtime eksternal setiap $_temp0, target tanpa batas';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => 'Sudah berlangganan';
 
   @override
@@ -381,6 +480,10 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => 'Transaksi tidak valid';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Sebuah manfaat tercantum dua kali, pada paket yang tidak memilikinya, atau tanpa pemilik';
 
   @override
   String get lkcReasonCodeCheckout =>
@@ -487,6 +590,9 @@ class LibLocalizationsId extends LibLocalizations {
 
   @override
   String get lkcReasonFileExists => 'File dengan nama ini sudah ada';
+
+  @override
+  String get lkcReasonFileName => 'Bukan nama file atau direktori yang valid';
 
   @override
   String get lkcReasonFileQuota => 'File akan melebihi kuota penyimpanan';

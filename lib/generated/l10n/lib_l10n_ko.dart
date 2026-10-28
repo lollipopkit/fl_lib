@@ -364,6 +364,97 @@ class LibLocalizationsKo extends LibLocalizations {
   String get license => '라이선스';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return '앱당 최대 $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => '앱당 최신 1개만';
+
+  @override
+  String get lkcBenefitBackupNoLimit => '용량 제한 없음';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개',
+    );
+    return '앱당 롤링 백업 $_temp0';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited => '앱당 롤링 백업 무제한';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '모든 앱 공유 최대 $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return '백업: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet, 푸시 알림: 트래픽 무제한, 릴레이 속도 $rate, 가용성 보장 없음';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => '만료 기한이 있는 공유 링크';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync => '기기 간 실시간 동기화(종단 간 암호화)';
+
+  @override
+  String get lkcBenefitUnlimited => '무제한';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes분',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개',
+    );
+    return '외부 다운타임 감지: $_temp0마다 외부에서 확인, 최대 $_temp1 대상';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개',
+    );
+    return '외부 다운타임 감지, 최대 $_temp0 대상';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => '외부 다운타임 감지, 대상 무제한';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes분',
+    );
+    return '외부 다운타임 감지: $_temp0마다 외부에서 확인, 대상 무제한';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => '이미 구독 중입니다.';
 
   @override
@@ -380,6 +471,10 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => '거래가 올바르지 않습니다.';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      '혜택이 중복되었거나, 해당 혜택이 없는 요금제에 속하거나, 소유자가 없습니다.';
 
   @override
   String get lkcReasonCodeCheckout => '이 결제에서는 사용할 수 없는 코드입니다.';
@@ -476,6 +571,9 @@ class LibLocalizationsKo extends LibLocalizations {
 
   @override
   String get lkcReasonFileExists => '같은 이름의 파일이 있습니다.';
+
+  @override
+  String get lkcReasonFileName => '올바른 파일 또는 디렉터리 이름이 아닙니다.';
 
   @override
   String get lkcReasonFileQuota => '저장 공간 할당량을 초과합니다.';

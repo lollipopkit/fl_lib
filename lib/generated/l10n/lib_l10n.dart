@@ -815,6 +815,102 @@ abstract class LibLocalizations {
   /// **'License'**
   String get license;
 
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'up to {size} per app'**
+  String lkcBenefitBackupAppBytes(String size);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'the latest one per app'**
+  String get lkcBenefitBackupLatest;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'no size limit'**
+  String get lkcBenefitBackupNoLimit;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 rolling backup} other{{count} rolling backups}} per app'**
+  String lkcBenefitBackupRolling(int count);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'unlimited rolling backups per app'**
+  String get lkcBenefitBackupRollingUnlimited;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} shared by all apps'**
+  String lkcBenefitBackupTotalBytes(String size);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups: {kept}, {limit}'**
+  String lkcBenefitBackups(String kept, String limit);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Monitor relay, tailnet and push notifications: unlimited traffic, relay at {rate}, no availability guarantee'**
+  String lkcBenefitRelay(String rate);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Share links with expiry'**
+  String get lkcBenefitShareLinks;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV {size}'**
+  String lkcBenefitStorage(String size);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Real-time sync across devices (end-to-end encrypted)'**
+  String get lkcBenefitSync;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'unlimited'**
+  String get lkcBenefitUnlimited;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}'**
+  String lkcBenefitUptime(int minutes, int count);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'External downtime checks, up to {count, plural, =1{1 target} other{{count} targets}}'**
+  String lkcBenefitUptimeTargets(int count);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'External downtime checks, unlimited targets'**
+  String get lkcBenefitUptimeTargetsUnlimited;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
+  String lkcBenefitUptimeUnlimited(int minutes);
+
   /// LKC Cloud rejection `already_subscribed`.
   ///
   /// In en, this message translates to:
@@ -850,6 +946,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Invalid transaction'**
   String get lkcReasonBadTransaction;
+
+  /// LKC Cloud rejection `benefit_invalid`.
+  ///
+  /// In en, this message translates to:
+  /// **'A benefit is listed twice, of a tier that doesn\'t have it, or of no owner'**
+  String get lkcReasonBenefitInvalid;
 
   /// LKC Cloud rejection `code_checkout`.
   ///
@@ -1042,6 +1144,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'A file of this name exists'**
   String get lkcReasonFileExists;
+
+  /// LKC Cloud rejection `file_name`.
+  ///
+  /// In en, this message translates to:
+  /// **'Not a valid file or directory name'**
+  String get lkcReasonFileName;
 
   /// LKC Cloud rejection `file_quota`.
   ///

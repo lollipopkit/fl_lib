@@ -364,6 +364,99 @@ class LibLocalizationsZh extends LibLocalizations {
   String get license => '许可证';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return '每个 app 合计最大 $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => '每个 app 只保留最新一次';
+
+  @override
+  String get lkcBenefitBackupNoLimit => '不限容量';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+    );
+    return '每个 app 保留最近 $_temp0 份滚动备份';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited => '每个 app 不限滚动备份份数';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '所有 app 共享最大 $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return '备份：$kept，$limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay、tailnet、通知推送：不限流量，中转速率 $rate，不保证可用';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => '文件分享链接（带有效期）';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync => '多设备实时同步（端到端加密）';
+
+  @override
+  String get lkcBenefitUnlimited => '不限';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '每 $minutes 分钟',
+      one: '每分钟',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+    );
+    return '外部宕机检测：$_temp0从外部检查，最多 $_temp1 个目标';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+    );
+    return '外部宕机检测，最多 $_temp0 个目标';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => '外部宕机检测，不限目标数';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '每 $minutes 分钟',
+      one: '每分钟',
+    );
+    return '外部宕机检测：$_temp0从外部检查，不限目标数';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => '这条产品线已有订阅，请在账单门户中更改。';
 
   @override
@@ -380,6 +473,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => '交易无效。';
+
+  @override
+  String get lkcReasonBenefitInvalid => '有权益重复，或不属于对应的计划。';
 
   @override
   String get lkcReasonCodeCheckout => '这种结账方式不能使用兑换码。';
@@ -476,6 +572,9 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get lkcReasonFileExists => '已有同名文件。';
+
+  @override
+  String get lkcReasonFileName => '文件名或目录名不合法。';
 
   @override
   String get lkcReasonFileQuota => '上传后会超出存储配额。';
@@ -1529,6 +1628,99 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get license => '授權';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return '每個 app 合計最大 $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => '每個 app 只保留最新一次';
+
+  @override
+  String get lkcBenefitBackupNoLimit => '不限容量';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+    );
+    return '每個 app 保留最近 $_temp0 份滾動備份';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited => '每個 app 不限滾動備份份數';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '所有 app 共用最大 $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return '備份：$kept，$limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay、tailnet、通知推播：不限流量，中繼速率 $rate，不保證可用';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => '檔案分享連結（附有效期限）';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync => '多裝置即時同步（端對端加密）';
+
+  @override
+  String get lkcBenefitUnlimited => '不限';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '每 $minutes 分鐘',
+      one: '每分鐘',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+    );
+    return '外部停機偵測：$_temp0從外部檢查，最多 $_temp1 個目標';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count',
+    );
+    return '外部停機偵測，最多 $_temp0 個目標';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => '外部停機偵測，不限目標數';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '每 $minutes 分鐘',
+      one: '每分鐘',
+    );
+    return '外部停機偵測：$_temp0從外部檢查，不限目標數';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => '這條產品線已有訂閱，請在帳單入口網站中變更。';
 
   @override
@@ -1545,6 +1737,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcReasonBadTransaction => '交易無效。';
+
+  @override
+  String get lkcReasonBenefitInvalid => '有權益重複，或不屬於對應的方案。';
 
   @override
   String get lkcReasonCodeCheckout => '這種結帳方式不能使用兌換碼。';
@@ -1641,6 +1836,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcReasonFileExists => '已有同名檔案。';
+
+  @override
+  String get lkcReasonFileName => '檔案名稱或目錄名稱不合法。';
 
   @override
   String get lkcReasonFileQuota => '上傳後會超出儲存空間配額。';

@@ -365,6 +365,116 @@ class LibLocalizationsUk extends LibLocalizations {
   String get license => 'Ліцензія';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'до $size на застосунок';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'остання для кожного застосунку';
+
+  @override
+  String get lkcBenefitBackupNoLimit => 'без обмеження розміру';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ротаційної копії',
+      many: '$count ротаційних копій',
+      few: '$count ротаційні копії',
+      one: '$count ротаційна копія',
+    );
+    return '$_temp0 на застосунок';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited =>
+      'необмежена кількість ротаційних копій на застосунок';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '$size на всі застосунки';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'Резервні копії: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet і push-сповіщення: необмежений трафік, relay зі швидкістю $rate, без гарантії доступності';
+  }
+
+  @override
+  String get lkcBenefitShareLinks =>
+      'Посилання для спільного доступу з терміном дії';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync =>
+      'Синхронізація між пристроями в реальному часі (наскрізне шифрування)';
+
+  @override
+  String get lkcBenefitUnlimited => 'без обмежень';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'кожні $minutes хвилини',
+      many: 'кожні $minutes хвилин',
+      few: 'кожні $minutes хвилини',
+      one: 'кожні $minutes хвилину',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count цілі',
+      many: '$count цілей',
+      few: '$count цілей',
+      one: '$count цілі',
+    );
+    return 'Зовнішні перевірки недоступності $_temp0, до $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count цілі',
+      many: '$count цілей',
+      few: '$count цілей',
+      one: '$count цілі',
+    );
+    return 'Зовнішні перевірки недоступності, до $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited =>
+      'Зовнішні перевірки недоступності, без обмеження кількості цілей';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'кожні $minutes хвилини',
+      many: 'кожні $minutes хвилин',
+      few: 'кожні $minutes хвилини',
+      one: 'кожні $minutes хвилину',
+    );
+    return 'Зовнішні перевірки недоступності $_temp0, без обмеження кількості цілей';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => 'Підписку вже оформлено';
 
   @override
@@ -381,6 +491,10 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => 'Недійсна транзакція';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Перевагу вказано двічі, для тарифу, у якому її немає, або без власника';
 
   @override
   String get lkcReasonCodeCheckout => 'Код не можна використати з цією оплатою';
@@ -488,6 +602,9 @@ class LibLocalizationsUk extends LibLocalizations {
 
   @override
   String get lkcReasonFileExists => 'Файл із такою назвою вже існує';
+
+  @override
+  String get lkcReasonFileName => 'Неприпустима назва файлу або каталогу';
 
   @override
   String get lkcReasonFileQuota => 'Файли перевищать квоту сховища';

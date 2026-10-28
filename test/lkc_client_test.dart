@@ -113,6 +113,84 @@ void main() {
     });
   });
 
+  group('benefits', () {
+    final l10n = LibLocalizationsEn();
+    final benefits = LkcBenefits.fromJson([
+      {'tier': 'free', 'benefit': 'backup.count', 'value': 1},
+      {'tier': 'free', 'benefit': 'backup.app_bytes', 'value': 10000000},
+      {'tier': 'free', 'benefit': 'file.bytes', 'value': 0},
+      {'tier': 'basic', 'benefit': 'backup.count', 'value': null},
+      {'tier': 'basic', 'benefit': 'backup.total_bytes', 'value': 1000000000},
+      {'tier': 'basic', 'benefit': 'relay.bytes_per_sec', 'value': 2500000},
+      {'tier': 'basic', 'benefit': 'uptime.targets', 'value': 10},
+      {'tier': 'basic', 'benefit': 'uptime.interval_secs', 'value': 60},
+      {'tier': 'basic', 'benefit': 'sync', 'value': 1},
+      {'tier': 'basic', 'benefit': 'future.thing', 'value': 3},
+      {'tier': 'storage.plus', 'benefit': 'file.bytes', 'value': 50000000000},
+    ]);
+
+    test('a missing row grants nothing, null is unlimited', () {
+      expect(benefits.amount('free', LkcBenefit.backupCount), 1);
+      expect(benefits.amount('free', LkcBenefit.sync), 0);
+      expect(benefits.amount('basic', LkcBenefit.backupCount), isNull);
+      expect(benefits.amount('conduit.pro', LkcBenefit.sync), 0);
+    });
+
+    test('lines from the amounts', () {
+      expect(benefits.lines(l10n, LkcBenefits.free, LkcLine.basic), [
+        'Backups: the latest one per app, up to 10 MB per app',
+      ]);
+      expect(benefits.lines(l10n, LkcBenefits.free, LkcLine.storage), isEmpty);
+      expect(benefits.lines(l10n, 'basic', LkcLine.basic), [
+        'Backups: unlimited rolling backups per app, 1 GB shared by all apps',
+        'Monitor relay, tailnet and push notifications: unlimited traffic, relay at 2.5 MB/s, no availability guarantee',
+        'External downtime checks every minute, up to 10 targets',
+        'Real-time sync across devices (end-to-end encrypted)',
+      ]);
+      expect(benefits.lines(l10n, 'storage.plus', LkcLine.storage), [
+        'WebDAV 50 GB',
+        'Share links with expiry',
+      ]);
+    });
+
+    test('sizes in powers of 1000', () {
+      expect(lkcBytes(999), '999 B');
+      expect(lkcBytes(9500000), '9.5 MB');
+      expect(lkcBytes(12300000), '12 MB');
+      expect(lkcBytes(5000000000), '5 GB');
+    });
+  });
+
+  test('usage and its quota', () {
+    final u = LkcUsage.fromJson({
+      'files': 3,
+      'bytes': 1200,
+      'quota': {'bytes': 5000000000, 'files': null},
+    });
+    expect(
+      (u.files, u.bytes, u.quotaBytes, u.quotaFiles),
+      (3, 1200, 5000000000, null),
+    );
+  });
+
+  test('the line of an entitlement is the server\'s', () {
+    final e = LkcEntitlement.fromJson({
+      'plan': 'storage.plus',
+      'line': 'storage',
+      'source': 'manual',
+      'status': 'active',
+      'cancel_scheduled': false,
+    });
+    expect(e.line, LkcLine.storage);
+    final old = LkcEntitlement.fromJson({
+      'plan': 'conduit.pro',
+      'source': 'stripe',
+      'status': 'active',
+      'cancel_scheduled': false,
+    });
+    expect(old.line, LkcLine.conduit);
+  });
+
   test('only this app\'s callback gives a token', () {
     Uri link(String s) => Uri.parse(s);
     expect(

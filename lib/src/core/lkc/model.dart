@@ -11,6 +11,7 @@ enum LkcLine {
   unknown;
 
   /// The line of a plan id: `basic`, `storage.plus`, `conduit.pro`, …
+  // TODO: rm once no homebase older than its `line` field is served.
   static LkcLine ofPlan(String plan) =>
       _byName(values, plan.split('.').first) ?? unknown;
 }
@@ -97,9 +98,11 @@ final class LkcEntitlement {
   /// It ends at [periodEnd] instead of renewing.
   final bool cancelScheduled;
   final LkcGrant? grant;
+  final LkcLine line;
 
   const LkcEntitlement({
     required this.plan,
+    required this.line,
     required this.source,
     required this.status,
     required this.cancelScheduled,
@@ -108,10 +111,11 @@ final class LkcEntitlement {
     this.grant,
   });
 
-  LkcLine get line => LkcLine.ofPlan(plan);
-
   factory LkcEntitlement.fromJson(Map<String, dynamic> json) => LkcEntitlement(
     plan: json['plan'] as String,
+    line: json.containsKey('line')
+        ? _byName(LkcLine.values, json['line']) ?? LkcLine.unknown
+        : LkcLine.ofPlan(json['plan'] as String),
     source: _byName(LkcSource.values, json['source']) ?? LkcSource.unknown,
     status: _byName(LkcStatus.values, json['status']) ?? LkcStatus.unknown,
     periodStart: _date(json['period_start']),
@@ -209,6 +213,107 @@ final class LkcPlan {
       _ => null,
     },
   );
+}
+
+/// Something a plan grants an amount of.
+enum LkcBenefit {
+  /// Bytes of files a directory holds.
+  fileBytes('file.bytes'),
+
+  /// Files a directory holds.
+  fileCount('file.count'),
+
+  /// Backups kept per app.
+  backupCount('backup.count'),
+
+  /// Bytes of one app's backups.
+  backupAppBytes('backup.app_bytes'),
+
+  /// Bytes of all apps' backups.
+  backupTotalBytes('backup.total_bytes'),
+
+  /// Targets checked from outside.
+  uptimeTargets('uptime.targets'),
+
+  /// Seconds between two checks of a target.
+  uptimeIntervalSecs('uptime.interval_secs'),
+
+  /// Relay bandwidth, bytes per second.
+  relayBytesPerSec('relay.bytes_per_sec'),
+
+  /// Real-time sync across devices: 1 on, 0 off.
+  sync('sync');
+
+  /// How homebase names it.
+  final String key;
+
+  const LkcBenefit(this.key);
+
+  /// The line whose plan grants it.
+  LkcLine get line => switch (this) {
+    fileBytes || fileCount => LkcLine.storage,
+    _ => LkcLine.basic,
+  };
+
+  static LkcBenefit? of(String key) =>
+      values.where((b) => b.key == key).firstOrNull;
+}
+
+/// What every plan grants, and having none: GET /v2/billing/benefits.
+final class LkcBenefits {
+  /// The tier of a line without a plan.
+  static const free = 'free';
+
+  /// Amounts by tier (`free` or a plan id), null being unlimited.
+  final Map<String, Map<LkcBenefit, int?>> _tiers;
+
+  const LkcBenefits(this._tiers);
+
+  factory LkcBenefits.fromJson(List<dynamic> json) {
+    final tiers = <String, Map<LkcBenefit, int?>>{};
+    for (final row in json.cast<Map<String, dynamic>>()) {
+      // One this build doesn't know grants nothing it can tell of.
+      final benefit = LkcBenefit.of(row['benefit'] as String);
+      if (benefit == null) continue;
+      tiers.putIfAbsent(row['tier'] as String, () => {})[benefit] =
+          (row['value'] as num?)?.toInt();
+    }
+    return LkcBenefits(tiers);
+  }
+
+  /// What [tier] grants of [benefit]: null is unlimited, 0 is not granted.
+  int? amount(String tier, LkcBenefit benefit) {
+    final amounts = _tiers[tier];
+    if (amounts == null || !amounts.containsKey(benefit)) return 0;
+    return amounts[benefit];
+  }
+}
+
+/// What a directory's files take, and what it may hold: GET /file/usage.
+final class LkcUsage {
+  final int files;
+  final int bytes;
+
+  /// Null is unlimited.
+  final int? quotaFiles;
+  final int? quotaBytes;
+
+  const LkcUsage({
+    required this.files,
+    required this.bytes,
+    this.quotaFiles,
+    this.quotaBytes,
+  });
+
+  factory LkcUsage.fromJson(Map<String, dynamic> json) {
+    final quota = json['quota'] as Map<String, dynamic>? ?? const {};
+    return LkcUsage(
+      files: (json['files'] as num).toInt(),
+      bytes: (json['bytes'] as num).toInt(),
+      quotaFiles: (quota['files'] as num?)?.toInt(),
+      quotaBytes: (quota['bytes'] as num?)?.toInt(),
+    );
+  }
 }
 
 /// A stored file.

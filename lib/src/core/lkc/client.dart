@@ -215,6 +215,12 @@ final class LkcClient {
     LkcEntitlement.fromJson,
   );
 
+  /// What every plan grants, and having none. Public: no sign-in needed.
+  Future<LkcBenefits> benefits() async => LkcBenefits.fromJson(
+    await _call('GET', '/v2/billing/benefits', auth: false) as List? ??
+        const [],
+  );
+
   /// The plan catalog. Public: no sign-in needed.
   Future<List<LkcPlan>> plans() async => _list(
     await _call('GET', '/v2/billing/plans', auth: false),
@@ -282,6 +288,12 @@ final class LkcClient {
   Future<List<LkcFile>> files({String? dir}) async => _list(
     await _call('GET', '/file/meta', query: {'dir': ?dir}),
     LkcFile.fromJson,
+  );
+
+  /// What the files of [dir] (the user's own by default) take, and its quota.
+  Future<LkcUsage> usage({String? dir}) async => LkcUsage.fromJson(
+    await _call('GET', '/file/usage', query: {'dir': ?dir})
+        as Map<String, dynamic>,
   );
 
   /// Upload [size] bytes of [data] straight to the object store, up to 5 GB.

@@ -486,6 +486,121 @@
   "@license": {
     "description": "Label for license."
   },
+  "lkcBenefitBackupAppBytes": "up to {size} per app",
+  "@lkcBenefitBackupAppBytes": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitBackupLatest": "the latest one per app",
+  "@lkcBenefitBackupLatest": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitBackupNoLimit": "no size limit",
+  "@lkcBenefitBackupNoLimit": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitBackupRolling": "{count, plural, =1{1 rolling backup} other{{count} rolling backups}} per app",
+  "@lkcBenefitBackupRolling": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitBackupRollingUnlimited": "unlimited rolling backups per app",
+  "@lkcBenefitBackupRollingUnlimited": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitBackupTotalBytes": "{size} shared by all apps",
+  "@lkcBenefitBackupTotalBytes": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitBackups": "Backups: {kept}, {limit}",
+  "@lkcBenefitBackups": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "kept": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitRelay": "Monitor relay, tailnet and push notifications: unlimited traffic, relay at {rate}, no availability guarantee",
+  "@lkcBenefitRelay": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitShareLinks": "Share links with expiry",
+  "@lkcBenefitShareLinks": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitStorage": "WebDAV {size}",
+  "@lkcBenefitStorage": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitSync": "Real-time sync across devices (end-to-end encrypted)",
+  "@lkcBenefitSync": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitUnlimited": "unlimited",
+  "@lkcBenefitUnlimited": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitUptime": "External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}",
+  "@lkcBenefitUptime": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitUptimeTargets": "External downtime checks, up to {count, plural, =1{1 target} other{{count} targets}}",
+  "@lkcBenefitUptimeTargets": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitUptimeTargetsUnlimited": "External downtime checks, unlimited targets",
+  "@lkcBenefitUptimeTargetsUnlimited": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
+  "lkcBenefitUptimeUnlimited": "External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets",
+  "@lkcBenefitUptimeUnlimited": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "lkcReasonAlreadySubscribed": "Already subscribed",
   "@lkcReasonAlreadySubscribed": {
     "description": "LKC Cloud rejection `already_subscribed`."
@@ -509,6 +624,10 @@
   "lkcReasonBadTransaction": "Invalid transaction",
   "@lkcReasonBadTransaction": {
     "description": "LKC Cloud rejection `bad_transaction`."
+  },
+  "lkcReasonBenefitInvalid": "A benefit is listed twice, of a tier that doesn't have it, or of no owner",
+  "@lkcReasonBenefitInvalid": {
+    "description": "LKC Cloud rejection `benefit_invalid`."
   },
   "lkcReasonCodeCheckout": "The code can't be used with this checkout",
   "@lkcReasonCodeCheckout": {
@@ -637,6 +756,10 @@
   "lkcReasonFileExists": "A file of this name exists",
   "@lkcReasonFileExists": {
     "description": "LKC Cloud rejection `file_exists`."
+  },
+  "lkcReasonFileName": "Not a valid file or directory name",
+  "@lkcReasonFileName": {
+    "description": "LKC Cloud rejection `file_name`."
   },
   "lkcReasonFileQuota": "The files would exceed the storage quota",
   "@lkcReasonFileQuota": {

@@ -365,6 +365,105 @@ class LibLocalizationsTr extends LibLocalizations {
   String get license => 'Lisans';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'uygulama başına en fazla $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'uygulama başına en sonuncusu';
+
+  @override
+  String get lkcBenefitBackupNoLimit => 'boyut sınırı yok';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dönüşümlü yedek',
+      one: '1 dönüşümlü yedek',
+    );
+    return 'uygulama başına $_temp0';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited =>
+      'uygulama başına sınırsız dönüşümlü yedek';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return 'tüm uygulamalar için ortak $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'Yedekler: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet ve push bildirimleri: sınırsız trafik, $rate hızında relay, erişilebilirlik garantisi yok';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => 'Süreli paylaşım bağlantıları';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync =>
+      'Cihazlar arasında gerçek zamanlı senkronizasyon (uçtan uca şifreli)';
+
+  @override
+  String get lkcBenefitUnlimited => 'sınırsız';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Her $minutes dakikada bir',
+      one: 'Her dakika',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hedef',
+      one: '1 hedef',
+    );
+    return '$_temp0 harici kesinti kontrolü, en fazla $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hedef',
+      one: '1 hedef',
+    );
+    return 'Harici kesinti kontrolü, en fazla $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited =>
+      'Harici kesinti kontrolü, sınırsız hedef';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Her $minutes dakikada bir',
+      one: 'Her dakika',
+    );
+    return '$_temp0 harici kesinti kontrolü, sınırsız hedef';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => 'Zaten abonesiniz';
 
   @override
@@ -381,6 +480,10 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => 'Geçersiz işlem';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Bir avantaj iki kez, onu içermeyen bir planda veya sahipsiz listelenmiş';
 
   @override
   String get lkcReasonCodeCheckout => 'Kod bu ödeme işleminde kullanılamaz';
@@ -485,6 +588,9 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get lkcReasonFileExists => 'Bu adda bir dosya zaten var';
+
+  @override
+  String get lkcReasonFileName => 'Geçerli bir dosya veya dizin adı değil';
 
   @override
   String get lkcReasonFileQuota => 'Dosyalar depolama kotasını aşar';

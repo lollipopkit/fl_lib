@@ -364,6 +364,97 @@ class LibLocalizationsJa extends LibLocalizations {
   String get license => 'ライセンス';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'アプリごとに最大 $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'アプリごとに最新の 1 件のみ';
+
+  @override
+  String get lkcBenefitBackupNoLimit => '容量無制限';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 世代',
+    );
+    return 'アプリごとにローリングバックアップ $_temp0';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited => 'アプリごとにローリングバックアップ無制限';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '全アプリ共有で最大 $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'バックアップ：$kept、$limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay、tailnet、プッシュ通知：トラフィック無制限、中継速度 $rate、可用性の保証なし';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => '有効期限付きの共有リンク';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync => 'デバイス間のリアルタイム同期（エンドツーエンド暗号化）';
+
+  @override
+  String get lkcBenefitUnlimited => '無制限';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes 分',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件',
+    );
+    return '外部ダウンタイム監視：$_temp0ごとに外部からチェック、最大 $_temp1の対象';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件',
+    );
+    return '外部ダウンタイム監視、最大 $_temp0の対象';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => '外部ダウンタイム監視、対象数無制限';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes 分',
+    );
+    return '外部ダウンタイム監視：$_temp0ごとに外部からチェック、対象数無制限';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => 'すでに購読しています。';
 
   @override
@@ -380,6 +471,10 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => '取引が無効です。';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      '特典が重複しているか、その特典を含まないプランに属しているか、所属先がありません。';
 
   @override
   String get lkcReasonCodeCheckout => 'このチェックアウトではこのコードを使えません。';
@@ -476,6 +571,9 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get lkcReasonFileExists => '同じ名前のファイルがすでにあります。';
+
+  @override
+  String get lkcReasonFileName => '有効なファイル名またはディレクトリ名ではありません。';
 
   @override
   String get lkcReasonFileQuota => 'ストレージの容量を超えます。';

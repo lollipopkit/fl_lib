@@ -82,6 +82,7 @@ export 'src/core/sync/base.dart';
 
 // --- LKC Cloud ---
 // Client of LKC Cloud: sign-in, account, subscriptions, files
+export 'src/core/lkc/benefit.dart';
 export 'src/core/lkc/client.dart';
 export 'src/core/lkc/model.dart';
 export 'src/core/lkc/reason.dart';

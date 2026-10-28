@@ -365,6 +365,105 @@ class LibLocalizationsDe extends LibLocalizations {
   String get license => 'Lizenz';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'bis zu $size pro App';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'das neueste pro App';
+
+  @override
+  String get lkcBenefitBackupNoLimit => 'keine Größenbeschränkung';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rollierende Backups',
+      one: '1 rollierendes Backup',
+    );
+    return '$_temp0 pro App';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited =>
+      'unbegrenzt viele rollierende Backups pro App';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return '$size für alle Apps gemeinsam';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'Backups: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet und Push-Benachrichtigungen: unbegrenzter Traffic, Relay mit $rate, keine Verfügbarkeitsgarantie';
+  }
+
+  @override
+  String get lkcBenefitShareLinks => 'Freigabelinks mit Ablaufdatum';
+
+  @override
+  String lkcBenefitStorage(String size) {
+    return 'WebDAV $size';
+  }
+
+  @override
+  String get lkcBenefitSync =>
+      'Echtzeit-Synchronisierung zwischen Geräten (Ende-zu-Ende-verschlüsselt)';
+
+  @override
+  String get lkcBenefitUnlimited => 'unbegrenzt';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'alle $minutes Minuten',
+      one: 'jede Minute',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Ziele',
+      one: '1 Ziel',
+    );
+    return 'Externe Ausfallprüfung $_temp0, bis zu $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Ziele',
+      one: '1 Ziel',
+    );
+    return 'Externe Ausfallprüfung, bis zu $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited =>
+      'Externe Ausfallprüfung, unbegrenzt viele Ziele';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'alle $minutes Minuten',
+      one: 'jede Minute',
+    );
+    return 'Externe Ausfallprüfung $_temp0, unbegrenzt viele Ziele';
+  }
+
+  @override
   String get lkcReasonAlreadySubscribed => 'Bereits abonniert';
 
   @override
@@ -381,6 +480,10 @@ class LibLocalizationsDe extends LibLocalizations {
 
   @override
   String get lkcReasonBadTransaction => 'Ungültige Transaktion';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Ein Vorteil ist doppelt aufgeführt, gehört zu einem Plan, der ihn nicht enthält, oder hat keinen Besitzer';
 
   @override
   String get lkcReasonCodeCheckout =>
@@ -497,6 +600,9 @@ class LibLocalizationsDe extends LibLocalizations {
   @override
   String get lkcReasonFileExists =>
       'Eine Datei mit diesem Namen existiert bereits';
+
+  @override
+  String get lkcReasonFileName => 'Kein gültiger Datei- oder Verzeichnisname';
 
   @override
   String get lkcReasonFileQuota =>
