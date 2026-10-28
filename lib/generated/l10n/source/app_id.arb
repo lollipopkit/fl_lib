@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Pemeriksaan downtime eksternal, hingga {count, plural, =1{1 target} other{{count} target}}",
   "lkcBenefitUptimeTargetsUnlimited": "Pemeriksaan downtime eksternal, target tanpa batas",
   "lkcBenefitUptimeUnlimited": "Pemeriksaan downtime eksternal setiap {minutes, plural, =1{menit} other{{minutes} menit}}, target tanpa batas",
+  "lkcCancelsOn": "Dibatalkan pada {date}",
   "lkcCurrentPlan": "Paket saat ini",
   "lkcDeleteAccount": "Hapus akun",
   "lkcDeleteAccountTip": "Akun, file, dan langganan web Anda akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.",

@@ -473,6 +473,11 @@ class LibLocalizationsTr extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return '$date tarihinde iptal edilir';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Mevcut plan';
 
   @override

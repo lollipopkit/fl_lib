@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "外部停機偵測，最多 {count, plural, other{{count}}} 個目標",
   "lkcBenefitUptimeTargetsUnlimited": "外部停機偵測，不限目標數",
   "lkcBenefitUptimeUnlimited": "外部停機偵測：{minutes, plural, =1{每分鐘} other{每 {minutes} 分鐘}}從外部檢查，不限目標數",
+  "lkcCancelsOn": "將於 {date} 取消",
   "lkcCurrentPlan": "目前方案",
   "lkcDeleteAccount": "刪除帳號",
   "lkcDeleteAccountTip": "你的帳號、檔案和網頁訂閱將被永久刪除，且無法復原。",

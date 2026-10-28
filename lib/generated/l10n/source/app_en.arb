@@ -617,6 +617,15 @@
       }
     }
   },
+  "lkcCancelsOn": "Cancels on {date}",
+  "@lkcCancelsOn": {
+    "description": "LKC Cloud account page: a paid plan the user canceled.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "lkcCurrentPlan": "Current plan",
   "@lkcCurrentPlan": {
     "description": "LKC Cloud account page."

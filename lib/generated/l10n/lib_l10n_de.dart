@@ -473,6 +473,11 @@ class LibLocalizationsDe extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return 'Wird am $date gekündigt';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Aktueller Plan';
 
   @override

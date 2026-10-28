@@ -484,6 +484,11 @@ class LibLocalizationsUk extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return 'Скасовується $date';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Поточний тариф';
 
   @override

@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "외부 다운타임 감지, 최대 {count, plural, other{{count}개}} 대상",
   "lkcBenefitUptimeTargetsUnlimited": "외부 다운타임 감지, 대상 무제한",
   "lkcBenefitUptimeUnlimited": "외부 다운타임 감지: {minutes, plural, other{{minutes}분}}마다 외부에서 확인, 대상 무제한",
+  "lkcCancelsOn": "{date}에 취소 예정",
   "lkcCurrentPlan": "현재 요금제",
   "lkcDeleteAccount": "계정 삭제",
   "lkcDeleteAccountTip": "계정, 파일, 웹 구독이 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",

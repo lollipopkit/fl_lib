@@ -353,7 +353,11 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     final end = e.periodEnd;
     if (end == null) return l10n.lkcNoEndDate;
     final date = _lkcDate(context, end);
-    return e.cancelScheduled ? l10n.lkcEndsOn(date) : l10n.lkcRenewsOn(date);
+    if (!e.cancelScheduled) return l10n.lkcRenewsOn(date);
+    // A grant runs out; a paid plan set not to renew was canceled by the user.
+    return e.source == LkcSource.manual
+        ? l10n.lkcEndsOn(date)
+        : l10n.lkcCancelsOn(date);
   }
 
   String _formatPrice(LkcPrice price) {

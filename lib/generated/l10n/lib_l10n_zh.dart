@@ -466,6 +466,11 @@ class LibLocalizationsZh extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return '将于 $date 取消';
+  }
+
+  @override
   String get lkcCurrentPlan => '当前计划';
 
   @override
@@ -1814,6 +1819,11 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
       one: '每分鐘',
     );
     return '外部停機偵測：$_temp0從外部檢查，不限目標數';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return '將於 $date 取消';
   }
 
   @override

@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Harici kesinti kontrolü, en fazla {count, plural, =1{1 hedef} other{{count} hedef}}",
   "lkcBenefitUptimeTargetsUnlimited": "Harici kesinti kontrolü, sınırsız hedef",
   "lkcBenefitUptimeUnlimited": "{minutes, plural, =1{Her dakika} other{Her {minutes} dakikada bir}} harici kesinti kontrolü, sınırsız hedef",
+  "lkcCancelsOn": "{date} tarihinde iptal edilir",
   "lkcCurrentPlan": "Mevcut plan",
   "lkcDeleteAccount": "Hesabı sil",
   "lkcDeleteAccountTip": "Hesabınız, dosyalarınız ve web abonelikleriniz kalıcı olarak silinir. Bu işlem geri alınamaz.",

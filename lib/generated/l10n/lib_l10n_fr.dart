@@ -473,6 +473,11 @@ class LibLocalizationsFr extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return 'Résilié le $date';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Forfait actuel';
 
   @override

@@ -470,6 +470,11 @@ class LibLocalizationsAz extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return '$date tarixində ləğv edilir';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Cari plan';
 
   @override

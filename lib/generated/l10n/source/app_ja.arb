@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "外部ダウンタイム監視、最大 {count, plural, other{{count} 件}}の対象",
   "lkcBenefitUptimeTargetsUnlimited": "外部ダウンタイム監視、対象数無制限",
   "lkcBenefitUptimeUnlimited": "外部ダウンタイム監視：{minutes, plural, other{{minutes} 分}}ごとに外部からチェック、対象数無制限",
+  "lkcCancelsOn": "{date} にキャンセル",
   "lkcCurrentPlan": "現在のプラン",
   "lkcDeleteAccount": "アカウントを削除",
   "lkcDeleteAccountTip": "アカウント、ファイル、Web サブスクリプションは完全に削除されます。この操作は取り消せません。",

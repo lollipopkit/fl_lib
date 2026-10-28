@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Зовнішні перевірки недоступності, до {count, plural, one{{count} цілі} few{{count} цілей} many{{count} цілей} other{{count} цілі}}",
   "lkcBenefitUptimeTargetsUnlimited": "Зовнішні перевірки недоступності, без обмеження кількості цілей",
   "lkcBenefitUptimeUnlimited": "Зовнішні перевірки недоступності {minutes, plural, one{кожні {minutes} хвилину} few{кожні {minutes} хвилини} many{кожні {minutes} хвилин} other{кожні {minutes} хвилини}}, без обмеження кількості цілей",
+  "lkcCancelsOn": "Скасовується {date}",
   "lkcCurrentPlan": "Поточний тариф",
   "lkcDeleteAccount": "Видалити обліковий запис",
   "lkcDeleteAccountTip": "Ваш обліковий запис, файли та вебпідписки буде видалено назавжди. Цю дію не можна скасувати.",

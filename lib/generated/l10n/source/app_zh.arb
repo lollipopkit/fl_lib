@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "外部宕机检测，最多 {count, plural, other{{count}}} 个目标",
   "lkcBenefitUptimeTargetsUnlimited": "外部宕机检测，不限目标数",
   "lkcBenefitUptimeUnlimited": "外部宕机检测：{minutes, plural, =1{每分钟} other{每 {minutes} 分钟}}从外部检查，不限目标数",
+  "lkcCancelsOn": "将于 {date} 取消",
   "lkcCurrentPlan": "当前计划",
   "lkcDeleteAccount": "删除账号",
   "lkcDeleteAccountTip": "你的账号、文件和网页订阅将被永久删除，且无法撤销。",

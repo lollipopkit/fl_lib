@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Xarici dayanma yoxlamaları, ən çox {count, plural, other{{count} hədəf}}",
   "lkcBenefitUptimeTargetsUnlimited": "Xarici dayanma yoxlamaları, limitsiz hədəf",
   "lkcBenefitUptimeUnlimited": "Xarici dayanma yoxlamaları: {minutes, plural, =1{hər dəqiqə} other{hər {minutes} dəqiqədən bir}}, limitsiz hədəf",
+  "lkcCancelsOn": "{date} tarixində ləğv edilir",
   "lkcCurrentPlan": "Cari plan",
   "lkcDeleteAccount": "Hesabı sil",
   "lkcDeleteAccountTip": "Hesabınız, fayllarınız və veb abunələriniz həmişəlik silinir. Bunu geri qaytarmaq olmaz.",

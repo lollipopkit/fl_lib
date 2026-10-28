@@ -473,6 +473,11 @@ class LibLocalizationsNl extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return 'Wordt opgezegd op $date';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Huidig plan';
 
   @override

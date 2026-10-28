@@ -923,6 +923,12 @@ abstract class LibLocalizations {
   /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
   String lkcBenefitUptimeUnlimited(int minutes);
 
+  /// LKC Cloud account page: a paid plan the user canceled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancels on {date}'**
+  String lkcCancelsOn(String date);
+
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:

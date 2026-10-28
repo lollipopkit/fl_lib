@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Comprobación externa de caídas, hasta {count, plural, =1{1 destino} other{{count} destinos}}",
   "lkcBenefitUptimeTargetsUnlimited": "Comprobación externa de caídas, destinos ilimitados",
   "lkcBenefitUptimeUnlimited": "Comprobación externa de caídas {minutes, plural, =1{cada minuto} other{cada {minutes} minutos}}, destinos ilimitados",
+  "lkcCancelsOn": "Se cancela el {date}",
   "lkcCurrentPlan": "Plan actual",
   "lkcDeleteAccount": "Eliminar cuenta",
   "lkcDeleteAccountTip": "Tu cuenta, tus archivos y tus suscripciones web se eliminan para siempre. No se puede deshacer.",

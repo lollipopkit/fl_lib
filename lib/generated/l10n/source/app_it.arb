@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Controllo esterno dei disservizi, fino a {count, plural, =1{1 destinazione} other{{count} destinazioni}}",
   "lkcBenefitUptimeTargetsUnlimited": "Controllo esterno dei disservizi, destinazioni illimitate",
   "lkcBenefitUptimeUnlimited": "Controllo esterno dei disservizi {minutes, plural, =1{ogni minuto} other{ogni {minutes} minuti}}, destinazioni illimitate",
+  "lkcCancelsOn": "Si annulla il {date}",
   "lkcCurrentPlan": "Piano attuale",
   "lkcDeleteAccount": "Elimina account",
   "lkcDeleteAccountTip": "Il tuo account, i tuoi file e i tuoi abbonamenti web vengono eliminati definitivamente. L’operazione non può essere annullata.",

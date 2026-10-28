@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Externe Ausfallprüfung, bis zu {count, plural, =1{1 Ziel} other{{count} Ziele}}",
   "lkcBenefitUptimeTargetsUnlimited": "Externe Ausfallprüfung, unbegrenzt viele Ziele",
   "lkcBenefitUptimeUnlimited": "Externe Ausfallprüfung {minutes, plural, =1{jede Minute} other{alle {minutes} Minuten}}, unbegrenzt viele Ziele",
+  "lkcCancelsOn": "Wird am {date} gekündigt",
   "lkcCurrentPlan": "Aktueller Plan",
   "lkcDeleteAccount": "Konto löschen",
   "lkcDeleteAccountTip": "Ihr Konto, Ihre Dateien und Ihre Web-Abonnements werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",

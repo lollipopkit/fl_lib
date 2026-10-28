@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Внешние проверки недоступности, до {count, plural, one{{count} цели} few{{count} целей} many{{count} целей} other{{count} цели}}",
   "lkcBenefitUptimeTargetsUnlimited": "Внешние проверки недоступности, без ограничения числа целей",
   "lkcBenefitUptimeUnlimited": "Внешние проверки недоступности {minutes, plural, one{каждые {minutes} минуту} few{каждые {minutes} минуты} many{каждые {minutes} минут} other{каждые {minutes} минуты}}, без ограничения числа целей",
+  "lkcCancelsOn": "Отменяется {date}",
   "lkcCurrentPlan": "Текущий тариф",
   "lkcDeleteAccount": "Удалить аккаунт",
   "lkcDeleteAccountTip": "Ваш аккаунт, файлы и веб-подписки будут удалены навсегда. Это действие нельзя отменить.",

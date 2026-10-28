@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Externe controle op uitval, tot {count, plural, =1{1 doel} other{{count} doelen}}",
   "lkcBenefitUptimeTargetsUnlimited": "Externe controle op uitval, onbeperkt aantal doelen",
   "lkcBenefitUptimeUnlimited": "Externe controle op uitval {minutes, plural, =1{elke minuut} other{elke {minutes} minuten}}, onbeperkt aantal doelen",
+  "lkcCancelsOn": "Wordt opgezegd op {date}",
   "lkcCurrentPlan": "Huidig plan",
   "lkcDeleteAccount": "Account verwijderen",
   "lkcDeleteAccountTip": "Je account, je bestanden en je webabonnementen worden definitief verwijderd. Dit kan niet ongedaan worden gemaakt.",

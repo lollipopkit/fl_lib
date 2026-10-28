@@ -473,6 +473,11 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return 'Dibatalkan pada $date';
+  }
+
+  @override
   String get lkcCurrentPlan => 'Paket saat ini';
 
   @override

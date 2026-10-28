@@ -464,6 +464,11 @@ class LibLocalizationsKo extends LibLocalizations {
   }
 
   @override
+  String lkcCancelsOn(String date) {
+    return '$date에 취소 예정';
+  }
+
+  @override
   String get lkcCurrentPlan => '현재 요금제';
 
   @override

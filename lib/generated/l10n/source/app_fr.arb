@@ -133,6 +133,7 @@
   "lkcBenefitUptimeTargets": "Vérification externe des pannes, jusqu’à {count, plural, =1{1 cible} other{{count} cibles}}",
   "lkcBenefitUptimeTargetsUnlimited": "Vérification externe des pannes, cibles illimitées",
   "lkcBenefitUptimeUnlimited": "Vérification externe des pannes {minutes, plural, =1{chaque minute} other{toutes les {minutes} minutes}}, cibles illimitées",
+  "lkcCancelsOn": "Résilié le {date}",
   "lkcCurrentPlan": "Forfait actuel",
   "lkcDeleteAccount": "Supprimer le compte",
   "lkcDeleteAccountTip": "Votre compte, vos fichiers et vos abonnements web sont supprimés définitivement. Cette action est irréversible.",
