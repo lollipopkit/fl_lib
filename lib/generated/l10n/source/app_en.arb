@@ -490,48 +490,22 @@
   "@lkcAccount": {
     "description": "LKC Cloud account page."
   },
-  "lkcBenefitBackupAppBytes": "up to {size} per app",
-  "@lkcBenefitBackupAppBytes": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
-    "placeholders": {
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "lkcBenefitBackupLatest": "the latest one per app",
-  "@lkcBenefitBackupLatest": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
-  },
-  "lkcBenefitBackupNoLimit": "no size limit",
-  "@lkcBenefitBackupNoLimit": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
-  },
-  "lkcBenefitBackupRolling": "{count, plural, =1{1 rolling backup} other{{count} rolling backups}} per app",
-  "@lkcBenefitBackupRolling": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "lkcBenefitBackupRollingUnlimited": "unlimited rolling backups per app",
-  "@lkcBenefitBackupRollingUnlimited": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
-  },
-  "lkcBenefitBackupTotalBytes": "{size} shared by all apps",
-  "@lkcBenefitBackupTotalBytes": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
-    "placeholders": {
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "lkcBenefitBackups": "Backups: {kept}, {limit}",
+  "lkcBenefitBackups": "Backups",
   "@lkcBenefitBackups": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitBackupsAppBytes": "up to {size} per app",
+  "@lkcBenefitBackupsAppBytes": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitBackupsDetail": "{kept}, {limit}",
+  "@lkcBenefitBackupsDetail": {
+    "description": "LKC Cloud account page.",
     "placeholders": {
       "kept": {
         "type": "String"
@@ -541,51 +515,85 @@
       }
     }
   },
-  "lkcBenefitRelay": "Monitor relay, tailnet and push notifications: unlimited traffic, relay at {rate}, no availability guarantee",
+  "lkcBenefitBackupsLatest": "Latest one per app",
+  "@lkcBenefitBackupsLatest": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitBackupsNoLimit": "no size limit",
+  "@lkcBenefitBackupsNoLimit": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitBackupsRolling": "{count, plural, =1{1 rolling} other{{count} rolling}} per app",
+  "@lkcBenefitBackupsRolling": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitBackupsRollingUnlimited": "Unlimited rolling per app",
+  "@lkcBenefitBackupsRollingUnlimited": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitBackupsTotalBytes": "{size} shared by all apps",
+  "@lkcBenefitBackupsTotalBytes": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitRelay": "Relay, tailnet and push",
   "@lkcBenefitRelay": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitRelayDetail": "Unlimited traffic, {rate}, no availability guarantee",
+  "@lkcBenefitRelayDetail": {
+    "description": "LKC Cloud account page.",
     "placeholders": {
       "rate": {
         "type": "String"
       }
     }
   },
-  "lkcBenefitRelayUnlimited": "Monitor relay, tailnet and push notifications: unlimited traffic and speed, no availability guarantee",
+  "lkcBenefitRelayUnlimited": "Unlimited traffic and speed, no availability guarantee",
   "@lkcBenefitRelayUnlimited": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
+    "description": "LKC Cloud account page."
   },
-  "lkcBenefitShareLinks": "Share links with expiry",
+  "lkcBenefitShareLinks": "Share links",
   "@lkcBenefitShareLinks": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
+    "description": "LKC Cloud account page."
   },
-  "lkcBenefitStorage": "WebDAV {size}, files up to {file} each",
-  "@lkcBenefitStorage": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
-    "placeholders": {
-      "size": {
-        "type": "String"
-      },
-      "file": {
-        "type": "String"
-      }
-    }
+  "lkcBenefitShareLinksDetail": "With expiry",
+  "@lkcBenefitShareLinksDetail": {
+    "description": "LKC Cloud account page."
   },
-  "lkcBenefitStorageUnlimited": "WebDAV without a size limit, files up to {file} each",
-  "@lkcBenefitStorageUnlimited": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
+  "lkcBenefitStorageDetail": "Files up to {file} each",
+  "@lkcBenefitStorageDetail": {
+    "description": "LKC Cloud account page.",
     "placeholders": {
       "file": {
         "type": "String"
       }
     }
   },
-  "lkcBenefitSync": "Real-time sync across devices (end-to-end encrypted)",
+  "lkcBenefitSync": "Sync",
   "@lkcBenefitSync": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
+    "description": "LKC Cloud account page."
   },
-  "lkcBenefitUptime": "External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}",
+  "lkcBenefitSyncDetail": "Real-time, end-to-end encrypted",
+  "@lkcBenefitSyncDetail": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitUptime": "Downtime checks",
   "@lkcBenefitUptime": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "description": "LKC Cloud account page."
+  },
+  "lkcBenefitUptimeDetail": "Every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}",
+  "@lkcBenefitUptimeDetail": {
+    "description": "LKC Cloud account page.",
     "placeholders": {
       "minutes": {
         "type": "int"
@@ -595,22 +603,22 @@
       }
     }
   },
-  "lkcBenefitUptimeTargets": "External downtime checks, up to {count, plural, =1{1 target} other{{count} targets}}",
+  "lkcBenefitUptimeTargets": "Up to {count, plural, =1{1 target} other{{count} targets}}",
   "@lkcBenefitUptimeTargets": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "description": "LKC Cloud account page.",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "lkcBenefitUptimeTargetsUnlimited": "External downtime checks, unlimited targets",
+  "lkcBenefitUptimeTargetsUnlimited": "Unlimited targets",
   "@lkcBenefitUptimeTargetsUnlimited": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
+    "description": "LKC Cloud account page."
   },
-  "lkcBenefitUptimeUnlimited": "External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets",
+  "lkcBenefitUptimeUnlimited": "Every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets",
   "@lkcBenefitUptimeUnlimited": {
-    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "description": "LKC Cloud account page.",
     "placeholders": {
       "minutes": {
         "type": "int"
@@ -626,17 +634,53 @@
       }
     }
   },
-  "lkcCurrentPlan": "Current plan",
-  "@lkcCurrentPlan": {
+  "lkcConduitConcurrency": "Concurrency",
+  "@lkcConduitConcurrency": {
     "description": "LKC Cloud account page."
+  },
+  "lkcConduitConcurrencyDetail": "{count, plural, =1{1 request} other{{count} requests}} in flight",
+  "@lkcConduitConcurrencyDetail": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcConduitCredit": "Credit",
+  "@lkcConduitCredit": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcConduitCreditMonthly": "{credit} per month",
+  "@lkcConduitCreditMonthly": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "credit": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcConduitCreditWeekly": "{credit} per week",
+  "@lkcConduitCreditWeekly": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "credit": {
+        "type": "String"
+      }
+    }
   },
   "lkcDeleteAccount": "Delete account",
   "@lkcDeleteAccount": {
     "description": "LKC Cloud account page."
   },
-  "lkcDeleteAccountTip": "Your account, your files and your web subscriptions are deleted for good. This can’t be undone.",
-  "@lkcDeleteAccountTip": {
-    "description": "LKC Cloud account page."
+  "lkcDeleteAccountConfirm": "{name} and its subscriptions are removed. This can’t be undone.",
+  "@lkcDeleteAccountConfirm": {
+    "description": "LKC Cloud account page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "lkcEndsOn": "Ends on {date}",
   "@lkcEndsOn": {
@@ -672,6 +716,10 @@
   "@lkcNoEndDate": {
     "description": "LKC Cloud account page."
   },
+  "lkcNotSignedIn": "Not logged in",
+  "@lkcNotSignedIn": {
+    "description": "LKC Cloud account page."
+  },
   "lkcPastDue": "Payment past due",
   "@lkcPastDue": {
     "description": "LKC Cloud account page."
@@ -697,10 +745,6 @@
         "type": "String"
       }
     }
-  },
-  "lkcPlans": "Plans",
-  "@lkcPlans": {
-    "description": "LKC Cloud account page."
   },
   "lkcReasonAlreadySubscribed": "Already subscribed",
   "@lkcReasonAlreadySubscribed": {
@@ -987,20 +1031,16 @@
       }
     }
   },
-  "lkcSignInBrowser": "Sign in in the browser",
-  "@lkcSignInBrowser": {
-    "description": "LKC Cloud account page."
-  },
-  "lkcSignInTip": "Sign in with your lollipopkit account to see your plans and files.",
-  "@lkcSignInTip": {
-    "description": "LKC Cloud account page."
-  },
   "lkcStoreSubscriptionTip": "You have a subscription billed by the App Store or Google Play. Cancel it in the store first: deleting the account doesn’t stop it.",
   "@lkcStoreSubscriptionTip": {
     "description": "LKC Cloud account page."
   },
   "lkcSubscribe": "Subscribe",
   "@lkcSubscribe": {
+    "description": "LKC Cloud account page."
+  },
+  "lkcUnlimited": "Unlimited",
+  "@lkcUnlimited": {
     "description": "LKC Cloud account page."
   },
   "lkcUsageOf": "{used} of {quota}",

@@ -368,18 +368,26 @@ class LibLocalizationsRu extends LibLocalizations {
   String get lkcAccount => 'Аккаунт LKC Cloud';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
+  String get lkcBenefitBackups => 'Резервные копии';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
     return 'до $size на приложение';
   }
 
   @override
-  String get lkcBenefitBackupLatest => 'последняя для каждого приложения';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept, $limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => 'без ограничения размера';
+  String get lkcBenefitBackupsLatest => 'Последняя для каждого приложения';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => 'без ограничения размера';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -392,55 +400,55 @@ class LibLocalizationsRu extends LibLocalizations {
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited =>
-      'неограниченное число ротируемых копий на приложение';
+  String get lkcBenefitBackupsRollingUnlimited =>
+      'Неограниченное число ротируемых копий на приложение';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
+  String lkcBenefitBackupsTotalBytes(String size) {
     return '$size на все приложения';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return 'Резервные копии: $kept, $limit';
-  }
+  String get lkcBenefitRelay => 'Relay, tailnet и push';
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay, tailnet и push-уведомления: безлимитный трафик, relay на скорости $rate, без гарантии доступности';
+  String lkcBenefitRelayDetail(String rate) {
+    return 'Безлимитный трафик, $rate, без гарантии доступности';
   }
 
   @override
   String get lkcBenefitRelayUnlimited =>
-      'Monitor relay, tailnet и push-уведомления: безлимитный трафик и скорость, без гарантии доступности';
+      'Безлимитный трафик и скорость, без гарантии доступности';
 
   @override
-  String get lkcBenefitShareLinks =>
-      'Ссылки для общего доступа со сроком действия';
+  String get lkcBenefitShareLinks => 'Ссылки для доступа';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size, файлы до $file каждый';
+  String get lkcBenefitShareLinksDetail => 'Со сроком действия';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return 'Файлы до $file каждый';
   }
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'WebDAV без ограничения объёма, файлы до $file каждый';
-  }
+  String get lkcBenefitSync => 'Синхронизация';
 
   @override
-  String get lkcBenefitSync =>
-      'Синхронизация между устройствами в реальном времени (сквозное шифрование)';
+  String get lkcBenefitSyncDetail => 'В реальном времени, сквозное шифрование';
 
   @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String get lkcBenefitUptime => 'Проверки недоступности';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
-      other: 'каждые $minutes минуты',
-      many: 'каждые $minutes минут',
-      few: 'каждые $minutes минуты',
-      one: 'каждые $minutes минуту',
+      other: 'Каждые $minutes минуты',
+      many: 'Каждые $minutes минут',
+      few: 'Каждые $minutes минуты',
+      one: 'Каждые $minutes минуту',
     );
     String _temp1 = intl.Intl.pluralLogic(
       count,
@@ -450,7 +458,7 @@ class LibLocalizationsRu extends LibLocalizations {
       few: '$count целей',
       one: '$count цели',
     );
-    return 'Внешние проверки недоступности $_temp0, до $_temp1';
+    return '$_temp0, до $_temp1';
   }
 
   @override
@@ -463,24 +471,23 @@ class LibLocalizationsRu extends LibLocalizations {
       few: '$count целей',
       one: '$count цели',
     );
-    return 'Внешние проверки недоступности, до $_temp0';
+    return 'До $_temp0';
   }
 
   @override
-  String get lkcBenefitUptimeTargetsUnlimited =>
-      'Внешние проверки недоступности, без ограничения числа целей';
+  String get lkcBenefitUptimeTargetsUnlimited => 'Без ограничения числа целей';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
-      other: 'каждые $minutes минуты',
-      many: 'каждые $minutes минут',
-      few: 'каждые $minutes минуты',
-      one: 'каждые $minutes минуту',
+      other: 'Каждые $minutes минуты',
+      many: 'Каждые $minutes минут',
+      few: 'Каждые $minutes минуты',
+      one: 'Каждые $minutes минуту',
     );
-    return 'Внешние проверки недоступности $_temp0, без ограничения числа целей';
+    return '$_temp0, без ограничения числа целей';
   }
 
   @override
@@ -489,14 +496,41 @@ class LibLocalizationsRu extends LibLocalizations {
   }
 
   @override
-  String get lkcCurrentPlan => 'Текущий тариф';
+  String get lkcConduitConcurrency => 'Параллельные запросы';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count одновременного запроса',
+      many: '$count одновременных запросов',
+      few: '$count одновременных запроса',
+      one: '$count одновременный запрос',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => 'Лимит';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '$credit в месяц';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '$credit в неделю';
+  }
 
   @override
   String get lkcDeleteAccount => 'Удалить аккаунт';
 
   @override
-  String get lkcDeleteAccountTip =>
-      'Ваш аккаунт, файлы и веб-подписки будут удалены навсегда. Это действие нельзя отменить.';
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name и его подписки будут удалены. Это действие нельзя отменить.';
+  }
 
   @override
   String lkcEndsOn(String date) {
@@ -529,6 +563,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get lkcNoEndDate => 'Без даты окончания';
 
   @override
+  String get lkcNotSignedIn => 'Вход не выполнен';
+
+  @override
   String get lkcPastDue => 'Платёж просрочен';
 
   @override
@@ -543,9 +580,6 @@ class LibLocalizationsRu extends LibLocalizations {
   String lkcPerYear(String price) {
     return '$price / год';
   }
-
-  @override
-  String get lkcPlans => 'Тарифы';
 
   @override
   String get lkcReasonAlreadySubscribed => 'Подписка уже оформлена';
@@ -783,18 +817,14 @@ class LibLocalizationsRu extends LibLocalizations {
   }
 
   @override
-  String get lkcSignInBrowser => 'Войти в браузере';
-
-  @override
-  String get lkcSignInTip =>
-      'Войдите с аккаунтом lollipopkit, чтобы увидеть свои тарифы и файлы.';
-
-  @override
   String get lkcStoreSubscriptionTip =>
       'У вас есть подписка, оплачиваемая через App Store или Google Play. Сначала отмените её в магазине: удаление аккаунта её не останавливает.';
 
   @override
   String get lkcSubscribe => 'Оформить подписку';
+
+  @override
+  String get lkcUnlimited => 'Без ограничений';
 
   @override
   String lkcUsageOf(String used, String quota) {

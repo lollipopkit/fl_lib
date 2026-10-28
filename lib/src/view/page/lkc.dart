@@ -40,6 +40,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   List<LkcPlan>? _plans;
   LkcBenefits? _benefits;
+  LkcUsage? _usage;
 
   @override
   void initState() {
@@ -54,7 +55,6 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     super.dispose();
   }
 
-  /// A sign-in from the deep link lands while the page is open.
   void _onUser() {
     if (mounted) setState(() {});
   }
@@ -62,20 +62,36 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   Future<void> _load() async {
     try {
       // One after another: a future failing while another is awaited is an
-      // unhandled error. Without the benefits the plans still show, unworded.
+      // unhandled error. The benefits and the catalog only word the page.
       final b = await _client.benefits().then<LkcBenefits?>(
         (b) => b,
         onError: (_) => null,
       );
-      final p = _client.webCheckout ? await _client.plans() : const <LkcPlan>[];
-      if (_client.signedIn) await _client.refresh();
+      final p = await _client.plans().then<List<LkcPlan>?>(
+        (p) => p,
+        onError: (_) => null,
+      );
+      if (_client.signedIn) {
+        await _client.refresh();
+        await _loadUsage();
+      }
       if (!mounted) return;
       setState(() {
         _benefits = b ?? _benefits;
-        _plans = p;
+        _plans = p ?? _plans;
       });
     } catch (e) {
       if (mounted) context._showLkcErr(e);
+    }
+  }
+
+  /// Shown with the Storage plan; the page is whole without it.
+  Future<void> _loadUsage() async {
+    try {
+      final usage = await _client.usage();
+      if (mounted) setState(() => _usage = usage);
+    } catch (e) {
+      debugPrint('LKC usage: ${e.runtimeType}');
     }
   }
 
@@ -85,58 +101,47 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     return Scaffold(
       appBar: widget.args.embedded
           ? null
-          : CustomAppBar(
-              title: Text(l10n.lkcAccount),
-              actions: [
-                Btn.icon(
-                  text: l10n.refresh,
-                  icon: const Icon(Icons.refresh),
-                  onTap: () => context._runLkc(_load),
-                ),
-              ],
-            ),
+          : CustomAppBar(title: Text(l10n.lkcAccount)),
       body: ValBuilder(
         listenable: _client.entitlements,
         builder: (_) => RefreshIndicator(
           onRefresh: _load,
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-            children: [
-              if (user == null) _buildSignIn() else _buildUser(user),
-              for (final line in const [
-                LkcLine.basic,
-                LkcLine.storage,
-                LkcLine.conduit,
-              ])
-                _buildLine(line),
-              if (user != null) _buildActions(),
-            ],
-          ),
+          child: user == null ? _buildSignedOut() : _buildSignedIn(user),
         ),
       ),
     );
   }
 
-  Widget _buildSignIn() {
-    return CardX(
-      child: Padding(
-        padding: const EdgeInsets.all(17),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(l10n.lkcSignInTip),
-            UIs.height13,
-            if (_signingIn)
-              SizedLoading.small
-            else
-              Btn.elevated(
-                text: l10n.lkcSignInBrowser,
-                icon: const Icon(Icons.open_in_browser),
-                onTap: _signIn,
-              ),
-          ],
+  Widget _buildSignedOut() {
+    final scheme = Theme.of(context).colorScheme;
+    return _Column(
+      children: [
+        _LkcCard(
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.account_circle,
+                  size: 40,
+                  color: scheme.outlineVariant,
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Text(
+                    l10n.lkcNotSignedIn,
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                ),
+                if (_signingIn)
+                  const SizedLoading(23)
+                else
+                  FilledButton(onPressed: _signIn, child: Text(l10n.login)),
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -154,163 +159,223 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     }
   }
 
-  Widget _buildUser(LkcUser user) {
-    final avatar = user.avatar;
-    return CardX(
-      child: ListTile(
-        leading: CircleAvatar(
-          foregroundImage: avatar == null ? null : NetworkImage(avatar),
-          child: Text(user.name.characters.firstOrNull ?? '?'),
-        ),
-        title: Text(user.name),
-        subtitle: Text(
-          user.id,
-          style: UIs.text12Grey,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: const Icon(Icons.edit, size: 19),
-        onTap: () => _editName(user),
-      ),
+  Widget _buildSignedIn(LkcUser user) {
+    final first = [
+      _LkcProfileCard(user: user, client: _client),
+      ?_buildLine(LkcLine.basic),
+    ];
+    final second = [
+      ?_buildLine(LkcLine.storage),
+      ?_buildLine(LkcLine.conduit),
+      _buildActions(),
+    ];
+    return LayoutBuilder(
+      builder: (context, box) {
+        // Two columns once both fit at 330, as the settings pages do.
+        if (box.maxWidth < 2 * 330 + 9 + 26) {
+          return _Column(children: [...first, ...second]);
+        }
+        return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 695),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _Stack(children: first)),
+                      const SizedBox(width: 9),
+                      Expanded(child: _Stack(children: second)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Future<void> _editName(LkcUser user) async {
-    final ctrl = TextEditingController(text: user.name);
-    final ok = await context.showRoundDialog<bool>(
-      title: l10n.name,
-      child: Input(
-        controller: ctrl,
-        autoFocus: true,
-        onSubmitted: (_) => context.popDialog(true),
-      ),
-      actions: Btnx.cancelOk,
-    );
-    final name = ctrl.text.trim();
-    ctrl.dispose();
-    if (ok != true || name.isEmpty || name == user.name || !mounted) return;
-    await context._runLkc(() => _client.updateUser(name: name));
-  }
-
-  Widget _buildLine(LkcLine line) {
+  /// A line's section: what its plan grants, or nothing for a line neither
+  /// held nor granting anything for free.
+  Widget? _buildLine(LkcLine line) {
     final held = _client.entitlementOf(line);
     final tier = held?.plan ?? LkcBenefits.free;
-    final benefits = _benefits?.lines(l10n, tier, line) ?? const <String>[];
+    final items = line == LkcLine.conduit
+        ? switch (_planOf(held?.plan)?.limits) {
+            final LkcConduitLimits limits => lkcConduitItems(l10n, limits),
+            null => const <LkcBenefitItem>[],
+          }
+        : _benefits?.items(l10n, tier, line) ?? const <LkcBenefitItem>[];
     final onSale = [
-      for (final plan in _plans ?? const <LkcPlan>[])
-        if (plan.line == line && plan.stripe != null) plan,
+      if (_client.webCheckout)
+        for (final plan in _plans ?? const <LkcPlan>[])
+          if (plan.line == line && plan.stripe != null && plan.id != held?.plan)
+            plan,
     ];
-    final signedIn = _client.signedIn;
-    if (held == null && benefits.isEmpty && onSale.isEmpty) {
-      return UIs.placeholder;
-    }
+    if (held == null && items.isEmpty && onSale.isEmpty) return null;
 
-    final status = held == null ? null : _statusOf(held);
-    final summary = [
-      if (signedIn) held == null ? l10n.lkcFreeTier : _planName(held.plan),
-      ?status,
-    ].join(' · ');
-    return CardX(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ListTile(
-              title: Text(_lineName(line), style: UIs.text15Bold),
-              subtitle: summary.isEmpty ? null : Text(summary),
-            ),
-            if (signedIn) ..._benefitTexts(benefits),
-            for (final plan in onSale)
-              if (plan.id != held?.plan) _buildPlan(plan, signedIn),
-          ],
+    final rows = <Widget>[
+      for (final item in items)
+        item.kind == LkcBenefitKind.storage
+            ? _buildStorage(item, tier)
+            : _LkcTile(
+                icon: _benefitIcon(item.kind),
+                title: item.title,
+                detail: item.detail,
+              ),
+      if (line == LkcLine.storage)
+        _LkcTile(
+          icon: Icons.folder_open,
+          title: l10n.lkcFiles,
+          trailing: const _Chevron(),
+          onTap: _openFiles,
         ),
-      ),
-    );
-  }
-
-  Iterable<Widget> _benefitTexts(List<String> lines) => lines.map(
-    (text) => Padding(
-      padding: const EdgeInsets.fromLTRB(17, 0, 17, 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 3),
-            child: Icon(Icons.check, size: 15),
-          ),
-          const SizedBox(width: 7),
-          Expanded(child: Text(text, style: UIs.text13)),
-        ],
-      ),
-    ),
-  );
-
-  Widget _buildPlan(LkcPlan plan, bool signedIn) {
-    final price = plan.stripe!;
-    final formatted = _formatPrice(price);
-    final lines =
-        _benefits?.lines(l10n, plan.id, plan.line) ?? const <String>[];
+      for (final plan in onSale) _buildPlan(plan),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Divider(height: 13),
-        ListTile(
-          title: Text(_planName(plan.id)),
-          subtitle: Text(switch (plan.period) {
-            LkcPeriod.year => l10n.lkcPerYear(formatted),
-            _ => l10n.lkcPerMonth(formatted),
-          }),
-          trailing: signedIn
-              ? Btn.text(
-                  text: l10n.lkcSubscribe,
-                  onTap: () =>
-                      context._runLkc(() => _client.openCheckout(plan.id)),
-                )
-              : null,
-        ),
-        ..._benefitTexts(lines),
+        _GroupTitle(_lineName(line), _summaryOf(held)),
+        if (rows.isNotEmpty) _LkcCard(child: _Rows(rows)),
       ],
     );
   }
 
-  Widget _buildActions() {
-    final ents = _client.entitlements.value ?? const <LkcEntitlement>[];
-    final webSubscribed = ents.any((e) => e.source == LkcSource.stripe);
-    return CardX(
-      child: Column(
+  LkcPlan? _planOf(String? id) =>
+      id == null ? null : _plans?.where((p) => p.id == id).firstOrNull;
+
+  /// What the group title says of the plan held: its name past the line's,
+  /// and when it renews or ends.
+  String _summaryOf(LkcEntitlement? e) {
+    if (e == null) return l10n.lkcFreeTier;
+    final status = switch (e.status) {
+      LkcStatus.pastDue => l10n.lkcPastDue,
+      LkcStatus.paused => l10n.lkcPaused,
+      _ => _dateOf(e),
+    };
+    final tier = e.plan.split('.').skip(1).map(_title).join(' ');
+    return [if (tier.isNotEmpty) tier, ?status].join(' · ');
+  }
+
+  Widget _buildStorage(LkcBenefitItem item, String tier) {
+    final theme = Theme.of(context);
+    final muted = TextStyle(fontSize: 13, color: theme.colorScheme.outline);
+    final usage = _usage;
+    final quota = usage == null
+        ? _benefits?.amount(tier, LkcBenefit.fileBytes)
+        : usage.quotaBytes;
+    final total = quota == null ? l10n.lkcUnlimited : lkcBytes(quota);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_client.webCheckout && webSubscribed)
-            ListTile(
-              leading: const Icon(Icons.credit_card),
-              title: Text(l10n.lkcManageSubscriptions),
-              trailing: const Icon(Icons.open_in_new, size: 19),
-              onTap: () => context._runLkc(_client.openPortal),
-            ),
-          ListTile(
-            leading: const Icon(Icons.folder),
-            title: Text(l10n.lkcFiles),
-            trailing: const Icon(Icons.chevron_right),
-            // Over the whole window from a page embedded in another: in its
-            // pane it would draw a second title bar under the host's.
-            onTap: () => LkcFilesPage.route.go(
-              context,
-              LkcPageArgs(_client),
-              target: widget.args.embedded ? NavTarget.root : NavTarget.nearest,
-            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: _LeadIcon(_benefitIcon(item.kind)),
           ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: Text(l10n.logout),
-            onTap: _signOut,
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: Text(l10n.lkcDeleteAccount, style: UIs.textRed),
-            onTap: _deleteAccount,
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                    ),
+                    Text(
+                      usage == null
+                          ? total
+                          : '${lkcBytes(usage.bytes)} / $total',
+                      style: muted.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                if (usage != null && quota != null && quota > 0) ...[
+                  const SizedBox(height: 5),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
+                      value: (usage.bytes / quota).clamp(0, 1).toDouble(),
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 5),
+                Text(item.detail, style: muted),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPlan(LkcPlan plan) {
+    final formatted = _formatPrice(plan.stripe!);
+    return _LkcTile(
+      icon: Icons.upgrade,
+      title: _planName(plan.id),
+      detail: switch (plan.period) {
+        LkcPeriod.year => l10n.lkcPerYear(formatted),
+        _ => l10n.lkcPerMonth(formatted),
+      },
+      trailing: FilledButton.tonal(
+        onPressed: () => context._runLkc(() => _client.openCheckout(plan.id)),
+        child: Text(l10n.lkcSubscribe),
+      ),
+    );
+  }
+
+  void _openFiles() {
+    // Over the whole window from a page embedded in another: in its pane it
+    // would draw a second title bar under the host's.
+    LkcFilesPage.route
+        .go(
+          context,
+          LkcPageArgs(_client),
+          target: widget.args.embedded ? NavTarget.root : NavTarget.nearest,
+        )
+        .then((_) => _loadUsage());
+  }
+
+  Widget _buildActions() {
+    final error = Theme.of(context).colorScheme.error;
+    final manageable =
+        _client.webCheckout &&
+        (_client.entitlements.value ?? const <LkcEntitlement>[]).any(
+          (e) => e.source == LkcSource.stripe,
+        );
+    return _LkcCard(
+      child: _Rows([
+        if (manageable)
+          _LkcTile(
+            icon: Icons.credit_card,
+            title: l10n.lkcManageSubscriptions,
+            trailing: const _Chevron(icon: Icons.open_in_new),
+            onTap: () => context._runLkc(_client.openPortal),
+          ),
+        _LkcTile(icon: Icons.logout, title: l10n.logout, onTap: _signOut),
+        _LkcTile(
+          icon: Icons.delete_forever,
+          title: l10n.lkcDeleteAccount,
+          color: error,
+          onTap: _deleteAccount,
+        ),
+      ]),
     );
   }
 
@@ -324,27 +389,27 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   Future<void> _deleteAccount() async {
     final store = await context._runLkc(_client.hasStoreSubscription);
-    if (store == null || !mounted) return;
+    final name = _client.user.value?.name;
+    if (store == null || name == null || !mounted) return;
     final ok = await context.showRoundDialog<bool>(
-      title: '${l10n.lkcDeleteAccount}?',
+      title: l10n.lkcDeleteAccount,
       child: Text(
         [
           if (store) l10n.lkcStoreSubscriptionTip,
-          l10n.lkcDeleteAccountTip,
+          l10n.lkcDeleteAccountConfirm(name),
         ].join('\n\n'),
       ),
-      actions: Btnx.cancelRedOk,
+      actions: [
+        Btn.cancel(),
+        Btn.text(
+          text: l10n.delete,
+          textStyle: TextStyle(color: Theme.of(context).colorScheme.error),
+          onTap: () => context.popDialog(true),
+        ),
+      ],
     );
     if (ok != true || !mounted) return;
     await context._runLkc(_client.deleteAccount);
-  }
-
-  String? _statusOf(LkcEntitlement e) {
-    return switch (e.status) {
-      LkcStatus.pastDue => l10n.lkcPastDue,
-      LkcStatus.paused => l10n.lkcPaused,
-      _ => _dateOf(e),
-    };
   }
 
   /// When the plan renews or ends, as the web's `statusView` says it: a
@@ -612,6 +677,398 @@ String _lkcDate(BuildContext context, DateTime d) {
     return DateFormat.yMMMd().format(d.toLocal());
   }
 }
+
+/// The account's initial in a circle, for the row that leads to [LkcAccountPage].
+final class LkcAvatar extends StatelessWidget {
+  final LkcClient client;
+  final double size;
+
+  const LkcAvatar({super.key, required this.client, this.size = 32});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ValBuilder(
+      listenable: client.user,
+      builder: (user) => Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          shape: BoxShape.circle,
+        ),
+        child: Text(
+          _initial(user?.name),
+          style: TextStyle(
+            fontSize: size * 0.4,
+            fontWeight: FontWeight.w500,
+            color: scheme.onPrimaryContainer,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Who is signed in and the lines they hold, for the row that leads to [LkcAccountPage].
+String lkcAccountSummary(LkcClient client) {
+  final user = client.user.value;
+  if (user == null) return l10n.lkcNotSignedIn;
+  final lines = [
+    for (final e in client.entitlements.value ?? const <LkcEntitlement>[])
+      _lineName(e.line),
+  ];
+  return [user.name, if (lines.isNotEmpty) lines.join(', ')].join(' · ');
+}
+
+String _initial(String? name) {
+  final c = name?.trim().characters.firstOrNull;
+  return c == null ? '?' : c.toUpperCase();
+}
+
+/// The user's name, editable in place, and their id to copy.
+final class _LkcProfileCard extends StatefulWidget {
+  final LkcUser user;
+  final LkcClient client;
+
+  const _LkcProfileCard({required this.user, required this.client});
+
+  @override
+  State<_LkcProfileCard> createState() => _LkcProfileCardState();
+}
+
+final class _LkcProfileCardState extends State<_LkcProfileCard> {
+  TextEditingController? _draft;
+  bool _copied = false;
+
+  @override
+  void dispose() {
+    _draft?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _draft?.text.trim() ?? '';
+    if (name.isNotEmpty && name != widget.user.name) {
+      await context._runLkc(() => widget.client.updateUser(name: name));
+    }
+    if (!mounted) return;
+    setState(() {
+      _draft?.dispose();
+      _draft = null;
+    });
+  }
+
+  void _copy() {
+    Pfs.copy(widget.user.id);
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final draft = _draft;
+    final muted = scheme.outline;
+    return _LkcCard(
+      child: Padding(
+        padding: const EdgeInsets.all(13),
+        child: Row(
+          children: [
+            LkcAvatar(client: widget.client, size: 48),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (draft == null)
+                    Text(
+                      widget.user.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    TextField(
+                      controller: draft,
+                      autofocus: true,
+                      onSubmitted: (_) => _save(),
+                      style: const TextStyle(fontSize: 15),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: scheme.surfaceContainerHigh,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 5,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(7),
+                          borderSide: BorderSide(color: scheme.outlineVariant),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 3),
+                  InkWell(
+                    onTap: _copy,
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.user.id,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              color: muted,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Icon(
+                          _copied ? Icons.check : Icons.copy,
+                          size: 14,
+                          color: muted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (draft == null)
+              Btn.icon(
+                text: l10n.name,
+                icon: const Icon(Icons.edit, size: 20),
+                onTap: () => setState(
+                  () => _draft = TextEditingController(text: widget.user.name),
+                ),
+              )
+            else
+              Btn.icon(
+                text: l10n.ok,
+                icon: Icon(Icons.check, size: 20, color: scheme.primary),
+                onTap: _save,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The page's single column, centered and no wider than the settings pages.
+final class _Column extends StatelessWidget {
+  final List<Widget> children;
+
+  const _Column({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 13),
+      children: [
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 695),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 13),
+              child: _Stack(children: children),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Sections one under another, 13 apart.
+final class _Stack extends StatelessWidget {
+  final List<Widget> children;
+
+  const _Stack({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, child) in children.indexed) ...[
+          if (i > 0) const SizedBox(height: 13),
+          child,
+        ],
+      ],
+    );
+  }
+}
+
+final class _LkcCard extends StatelessWidget {
+  final Widget child;
+
+  const _LkcCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) =>
+      CardX(margin: EdgeInsets.zero, child: child);
+}
+
+/// Rows of a card, a hairline between each two.
+final class _Rows extends StatelessWidget {
+  final List<Widget> rows;
+
+  const _Rows(this.rows);
+
+  @override
+  Widget build(BuildContext context) {
+    final hairline = Theme.of(context).colorScheme.outlineVariant
+        .withValues(alpha: 0.35);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, row) in rows.indexed) ...[
+          if (i > 0) Container(height: 1, color: hairline),
+          row,
+        ],
+      ],
+    );
+  }
+}
+
+/// A section's name, a rule, and what it says of the plan held.
+final class _GroupTitle extends StatelessWidget {
+  final String title;
+  final String trailing;
+
+  const _GroupTitle(this.title, this.trailing);
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final muted = TextStyle(fontSize: 11, color: scheme.outline);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(3, 4, 3, 7),
+      child: Row(
+        children: [
+          Text(
+            title.toUpperCase(),
+            style: muted.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.9,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(child: Container(height: 1, color: scheme.outlineVariant)),
+          const SizedBox(width: 9),
+          Text(trailing, style: muted),
+        ],
+      ),
+    );
+  }
+}
+
+final class _LkcTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? detail;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final Color? color;
+
+  const _LkcTile({
+    required this.icon,
+    required this.title,
+    this.detail,
+    this.trailing,
+    this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final detail = this.detail;
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 40),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        child: Row(
+          children: [
+            _LeadIcon(icon, color: color),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: TextStyle(fontSize: 15, color: color)),
+                  if (detail != null)
+                    Text(
+                      detail,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.outline,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            ?trailing,
+          ],
+        ),
+      ),
+    );
+    return onTap == null ? row : InkWell(onTap: onTap, child: row);
+  }
+}
+
+final class _LeadIcon extends StatelessWidget {
+  final IconData icon;
+  final Color? color;
+
+  const _LeadIcon(this.icon, {this.color});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 24,
+    child: Icon(
+      icon,
+      size: 22,
+      color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
+  );
+}
+
+final class _Chevron extends StatelessWidget {
+  final IconData icon;
+
+  const _Chevron({this.icon = Icons.chevron_right});
+
+  @override
+  Widget build(BuildContext context) => Icon(
+    icon,
+    size: 18,
+    color: Theme.of(context).colorScheme.onSurfaceVariant,
+  );
+}
+
+IconData _benefitIcon(LkcBenefitKind kind) => switch (kind) {
+  LkcBenefitKind.backups => Icons.backup,
+  LkcBenefitKind.relay => Icons.swap_calls,
+  LkcBenefitKind.uptime => Icons.monitor_heart,
+  LkcBenefitKind.sync => Icons.sync,
+  LkcBenefitKind.storage => Icons.cloud,
+  LkcBenefitKind.shareLinks => Icons.link,
+  LkcBenefitKind.credit => Icons.toll,
+  LkcBenefitKind.concurrency => Icons.layers,
+};
 
 String _lineName(LkcLine line) => _title(line.name);
 

@@ -821,106 +821,130 @@ abstract class LibLocalizations {
   /// **'LKC Cloud account'**
   String get lkcAccount;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups'**
+  String get lkcBenefitBackups;
+
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
   /// **'up to {size} per app'**
-  String lkcBenefitBackupAppBytes(String size);
+  String lkcBenefitBackupsAppBytes(String size);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'the latest one per app'**
-  String get lkcBenefitBackupLatest;
+  /// **'{kept}, {limit}'**
+  String lkcBenefitBackupsDetail(String kept, String limit);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest one per app'**
+  String get lkcBenefitBackupsLatest;
+
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
   /// **'no size limit'**
-  String get lkcBenefitBackupNoLimit;
+  String get lkcBenefitBackupsNoLimit;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 rolling backup} other{{count} rolling backups}} per app'**
-  String lkcBenefitBackupRolling(int count);
+  /// **'{count, plural, =1{1 rolling} other{{count} rolling}} per app'**
+  String lkcBenefitBackupsRolling(int count);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'unlimited rolling backups per app'**
-  String get lkcBenefitBackupRollingUnlimited;
+  /// **'Unlimited rolling per app'**
+  String get lkcBenefitBackupsRollingUnlimited;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
   /// **'{size} shared by all apps'**
-  String lkcBenefitBackupTotalBytes(String size);
+  String lkcBenefitBackupsTotalBytes(String size);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Backups: {kept}, {limit}'**
-  String lkcBenefitBackups(String kept, String limit);
+  /// **'Relay, tailnet and push'**
+  String get lkcBenefitRelay;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Monitor relay, tailnet and push notifications: unlimited traffic, relay at {rate}, no availability guarantee'**
-  String lkcBenefitRelay(String rate);
+  /// **'Unlimited traffic, {rate}, no availability guarantee'**
+  String lkcBenefitRelayDetail(String rate);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Monitor relay, tailnet and push notifications: unlimited traffic and speed, no availability guarantee'**
+  /// **'Unlimited traffic and speed, no availability guarantee'**
   String get lkcBenefitRelayUnlimited;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Share links with expiry'**
+  /// **'Share links'**
   String get lkcBenefitShareLinks;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'WebDAV {size}, files up to {file} each'**
-  String lkcBenefitStorage(String size, String file);
+  /// **'With expiry'**
+  String get lkcBenefitShareLinksDetail;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'WebDAV without a size limit, files up to {file} each'**
-  String lkcBenefitStorageUnlimited(String file);
+  /// **'Files up to {file} each'**
+  String lkcBenefitStorageDetail(String file);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Real-time sync across devices (end-to-end encrypted)'**
+  /// **'Sync'**
   String get lkcBenefitSync;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}'**
-  String lkcBenefitUptime(int minutes, int count);
+  /// **'Real-time, end-to-end encrypted'**
+  String get lkcBenefitSyncDetail;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks, up to {count, plural, =1{1 target} other{{count} targets}}'**
+  /// **'Downtime checks'**
+  String get lkcBenefitUptime;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}'**
+  String lkcBenefitUptimeDetail(int minutes, int count);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to {count, plural, =1{1 target} other{{count} targets}}'**
   String lkcBenefitUptimeTargets(int count);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks, unlimited targets'**
+  /// **'Unlimited targets'**
   String get lkcBenefitUptimeTargetsUnlimited;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
+  /// **'Every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
   String lkcBenefitUptimeUnlimited(int minutes);
 
   /// LKC Cloud account page: a paid plan the user canceled.
@@ -932,8 +956,32 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Current plan'**
-  String get lkcCurrentPlan;
+  /// **'Concurrency'**
+  String get lkcConduitConcurrency;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 request} other{{count} requests}} in flight'**
+  String lkcConduitConcurrencyDetail(int count);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit'**
+  String get lkcConduitCredit;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{credit} per month'**
+  String lkcConduitCreditMonthly(String credit);
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{credit} per week'**
+  String lkcConduitCreditWeekly(String credit);
 
   /// LKC Cloud account page.
   ///
@@ -944,8 +992,8 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Your account, your files and your web subscriptions are deleted for good. This can’t be undone.'**
-  String get lkcDeleteAccountTip;
+  /// **'{name} and its subscriptions are removed. This can’t be undone.'**
+  String lkcDeleteAccountConfirm(String name);
 
   /// LKC Cloud account page.
   ///
@@ -986,6 +1034,12 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
+  /// **'Not logged in'**
+  String get lkcNotSignedIn;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
   /// **'Payment past due'**
   String get lkcPastDue;
 
@@ -1006,12 +1060,6 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'{price} / year'**
   String lkcPerYear(String price);
-
-  /// LKC Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Plans'**
-  String get lkcPlans;
 
   /// LKC Cloud rejection `already_subscribed`.
   ///
@@ -1436,18 +1484,6 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Sign in in the browser'**
-  String get lkcSignInBrowser;
-
-  /// LKC Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Sign in with your lollipopkit account to see your plans and files.'**
-  String get lkcSignInTip;
-
-  /// LKC Cloud account page.
-  ///
-  /// In en, this message translates to:
   /// **'You have a subscription billed by the App Store or Google Play. Cancel it in the store first: deleting the account doesn’t stop it.'**
   String get lkcStoreSubscriptionTip;
 
@@ -1456,6 +1492,12 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Subscribe'**
   String get lkcSubscribe;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get lkcUnlimited;
 
   /// LKC Cloud account page.
   ///

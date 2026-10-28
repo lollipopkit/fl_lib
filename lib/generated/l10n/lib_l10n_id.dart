@@ -368,18 +368,26 @@ class LibLocalizationsId extends LibLocalizations {
   String get lkcAccount => 'Akun LKC Cloud';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
+  String get lkcBenefitBackups => 'Cadangan';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
     return 'hingga $size per aplikasi';
   }
 
   @override
-  String get lkcBenefitBackupLatest => 'yang terbaru per aplikasi';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept, $limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => 'tanpa batas ukuran';
+  String get lkcBenefitBackupsLatest => 'Yang terbaru per aplikasi';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => 'tanpa batas ukuran';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -390,47 +398,48 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited =>
-      'cadangan bergilir tanpa batas per aplikasi';
+  String get lkcBenefitBackupsRollingUnlimited =>
+      'Cadangan bergilir tanpa batas per aplikasi';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
+  String lkcBenefitBackupsTotalBytes(String size) {
     return '$size bersama untuk semua aplikasi';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return 'Cadangan: $kept, $limit';
-  }
+  String get lkcBenefitRelay => 'Relay, tailnet, dan push';
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay, tailnet, dan notifikasi push: lalu lintas tanpa batas, relay pada $rate, tanpa jaminan ketersediaan';
+  String lkcBenefitRelayDetail(String rate) {
+    return 'Lalu lintas tanpa batas, $rate, tanpa jaminan ketersediaan';
   }
 
   @override
   String get lkcBenefitRelayUnlimited =>
-      'Monitor relay, tailnet, dan notifikasi push: lalu lintas dan kecepatan tanpa batas, tanpa jaminan ketersediaan';
+      'Lalu lintas dan kecepatan tanpa batas, tanpa jaminan ketersediaan';
 
   @override
-  String get lkcBenefitShareLinks => 'Tautan berbagi dengan masa berlaku';
+  String get lkcBenefitShareLinks => 'Tautan berbagi';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size, file hingga $file per file';
+  String get lkcBenefitShareLinksDetail => 'Dengan masa berlaku';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return 'File hingga $file per file';
   }
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'WebDAV tanpa batas ukuran, file hingga $file per file';
-  }
+  String get lkcBenefitSync => 'Sinkronisasi';
 
   @override
-  String get lkcBenefitSync =>
-      'Sinkronisasi real-time antarperangkat (terenkripsi end-to-end)';
+  String get lkcBenefitSyncDetail => 'Real-time, terenkripsi end-to-end';
 
   @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String get lkcBenefitUptime => 'Pemeriksaan downtime';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
@@ -443,7 +452,7 @@ class LibLocalizationsId extends LibLocalizations {
       other: '$count target',
       one: '1 target',
     );
-    return 'Pemeriksaan downtime eksternal setiap $_temp0, hingga $_temp1';
+    return 'Setiap $_temp0, hingga $_temp1';
   }
 
   @override
@@ -454,12 +463,11 @@ class LibLocalizationsId extends LibLocalizations {
       other: '$count target',
       one: '1 target',
     );
-    return 'Pemeriksaan downtime eksternal, hingga $_temp0';
+    return 'Hingga $_temp0';
   }
 
   @override
-  String get lkcBenefitUptimeTargetsUnlimited =>
-      'Pemeriksaan downtime eksternal, target tanpa batas';
+  String get lkcBenefitUptimeTargetsUnlimited => 'Target tanpa batas';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
@@ -469,7 +477,7 @@ class LibLocalizationsId extends LibLocalizations {
       other: '$minutes menit',
       one: 'menit',
     );
-    return 'Pemeriksaan downtime eksternal setiap $_temp0, target tanpa batas';
+    return 'Setiap $_temp0, target tanpa batas';
   }
 
   @override
@@ -478,14 +486,39 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
-  String get lkcCurrentPlan => 'Paket saat ini';
+  String get lkcConduitConcurrency => 'Konkurensi';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count permintaan bersamaan',
+      one: '1 permintaan bersamaan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => 'Kredit';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '$credit per bulan';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '$credit per minggu';
+  }
 
   @override
   String get lkcDeleteAccount => 'Hapus akun';
 
   @override
-  String get lkcDeleteAccountTip =>
-      'Akun, file, dan langganan web Anda akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.';
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name dan langganannya akan dihapus. Tindakan ini tidak dapat dibatalkan.';
+  }
 
   @override
   String lkcEndsOn(String date) {
@@ -516,6 +549,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get lkcNoEndDate => 'Tanpa tanggal berakhir';
 
   @override
+  String get lkcNotSignedIn => 'Belum masuk';
+
+  @override
   String get lkcPastDue => 'Pembayaran terlambat';
 
   @override
@@ -530,9 +566,6 @@ class LibLocalizationsId extends LibLocalizations {
   String lkcPerYear(String price) {
     return '$price / tahun';
   }
-
-  @override
-  String get lkcPlans => 'Paket';
 
   @override
   String get lkcReasonAlreadySubscribed => 'Sudah berlangganan';
@@ -767,18 +800,14 @@ class LibLocalizationsId extends LibLocalizations {
   }
 
   @override
-  String get lkcSignInBrowser => 'Masuk di browser';
-
-  @override
-  String get lkcSignInTip =>
-      'Masuk dengan akun lollipopkit Anda untuk melihat paket dan file Anda.';
-
-  @override
   String get lkcStoreSubscriptionTip =>
       'Anda memiliki langganan yang ditagih melalui App Store atau Google Play. Batalkan dulu di toko: menghapus akun tidak menghentikannya.';
 
   @override
   String get lkcSubscribe => 'Berlangganan';
+
+  @override
+  String get lkcUnlimited => 'Tanpa batas';
 
   @override
   String lkcUsageOf(String used, String quota) {

@@ -174,24 +174,44 @@ void main() {
       expect(benefits.amount('conduit.pro', LkcBenefit.sync), 0);
     });
 
-    test('lines from the amounts', () {
-      expect(benefits.lines(l10n, LkcBenefits.free, LkcLine.basic), [
-        'Backups: the latest one per app, up to 10 MB per app',
+    test('items from the amounts', () {
+      List<String> items(String tier, LkcLine line) => [
+        for (final i in benefits.items(l10n, tier, line)) '$i',
+      ];
+      expect(items(LkcBenefits.free, LkcLine.basic), [
+        'Backups: Latest one per app, up to 10 MB per app',
       ]);
-      expect(benefits.lines(l10n, LkcBenefits.free, LkcLine.storage), isEmpty);
-      expect(benefits.lines(l10n, 'basic', LkcLine.basic), [
-        'Backups: unlimited rolling backups per app, 1 GB shared by all apps',
-        'Monitor relay, tailnet and push notifications: unlimited traffic, relay at 2.5 MB/s, no availability guarantee',
-        'External downtime checks every minute, up to 10 targets',
-        'Real-time sync across devices (end-to-end encrypted)',
+      expect(items(LkcBenefits.free, LkcLine.storage), isEmpty);
+      expect(items('basic', LkcLine.basic), [
+        'Backups: Unlimited rolling per app, 1 GB shared by all apps',
+        'Relay, tailnet and push: Unlimited traffic, 2.5 MB/s, no availability guarantee',
+        'Downtime checks: Every minute, up to 10 targets',
+        'Sync: Real-time, end-to-end encrypted',
       ]);
-      expect(benefits.lines(l10n, 'storage.plus', LkcLine.storage), [
-        'WebDAV 50 GB, files up to 2 GB each',
-        'Share links with expiry',
+      expect(items('storage.plus', LkcLine.storage), [
+        'WebDAV: Files up to 2 GB each',
+        'Share links: With expiry',
       ]);
       expect(
-        benefits.lines(l10n, 'storage.pro', LkcLine.storage).first,
-        'WebDAV without a size limit, files up to 5 GB each',
+        items('storage.pro', LkcLine.storage).first,
+        'WebDAV: Files up to 5 GB each',
+      );
+    });
+
+    test('a Conduit plan by its limits', () {
+      expect(
+        [
+          for (final i in lkcConduitItems(
+            l10n,
+            const LkcConduitLimits(
+              period: 'monthly',
+              creditNanoUsd: 5000000000,
+              concurrency: 4,
+            ),
+          ))
+            '$i',
+        ],
+        ['Credit: \$5.00 per month', 'Concurrency: 4 requests in flight'],
       );
     });
 

@@ -368,18 +368,26 @@ class LibLocalizationsUk extends LibLocalizations {
   String get lkcAccount => 'Обліковий запис LKC Cloud';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
+  String get lkcBenefitBackups => 'Резервні копії';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
     return 'до $size на застосунок';
   }
 
   @override
-  String get lkcBenefitBackupLatest => 'остання для кожного застосунку';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept, $limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => 'без обмеження розміру';
+  String get lkcBenefitBackupsLatest => 'Остання для кожного застосунку';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => 'без обмеження розміру';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
@@ -392,55 +400,55 @@ class LibLocalizationsUk extends LibLocalizations {
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited =>
-      'необмежена кількість ротаційних копій на застосунок';
+  String get lkcBenefitBackupsRollingUnlimited =>
+      'Необмежена кількість ротаційних копій на застосунок';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
+  String lkcBenefitBackupsTotalBytes(String size) {
     return '$size на всі застосунки';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return 'Резервні копії: $kept, $limit';
-  }
+  String get lkcBenefitRelay => 'Relay, tailnet і push';
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay, tailnet і push-сповіщення: необмежений трафік, relay зі швидкістю $rate, без гарантії доступності';
+  String lkcBenefitRelayDetail(String rate) {
+    return 'Необмежений трафік, $rate, без гарантії доступності';
   }
 
   @override
   String get lkcBenefitRelayUnlimited =>
-      'Monitor relay, tailnet і push-сповіщення: необмежений трафік і швидкість, без гарантії доступності';
+      'Необмежений трафік і швидкість, без гарантії доступності';
 
   @override
-  String get lkcBenefitShareLinks =>
-      'Посилання для спільного доступу з терміном дії';
+  String get lkcBenefitShareLinks => 'Посилання для доступу';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size, файли до $file кожен';
+  String get lkcBenefitShareLinksDetail => 'З терміном дії';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return 'Файли до $file кожен';
   }
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'WebDAV без обмеження обсягу, файли до $file кожен';
-  }
+  String get lkcBenefitSync => 'Синхронізація';
 
   @override
-  String get lkcBenefitSync =>
-      'Синхронізація між пристроями в реальному часі (наскрізне шифрування)';
+  String get lkcBenefitSyncDetail => 'У реальному часі, наскрізне шифрування';
 
   @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String get lkcBenefitUptime => 'Перевірки недоступності';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
-      other: 'кожні $minutes хвилини',
-      many: 'кожні $minutes хвилин',
-      few: 'кожні $minutes хвилини',
-      one: 'кожні $minutes хвилину',
+      other: 'Кожні $minutes хвилини',
+      many: 'Кожні $minutes хвилин',
+      few: 'Кожні $minutes хвилини',
+      one: 'Кожні $minutes хвилину',
     );
     String _temp1 = intl.Intl.pluralLogic(
       count,
@@ -450,7 +458,7 @@ class LibLocalizationsUk extends LibLocalizations {
       few: '$count цілей',
       one: '$count цілі',
     );
-    return 'Зовнішні перевірки недоступності $_temp0, до $_temp1';
+    return '$_temp0, до $_temp1';
   }
 
   @override
@@ -463,24 +471,24 @@ class LibLocalizationsUk extends LibLocalizations {
       few: '$count цілей',
       one: '$count цілі',
     );
-    return 'Зовнішні перевірки недоступності, до $_temp0';
+    return 'До $_temp0';
   }
 
   @override
   String get lkcBenefitUptimeTargetsUnlimited =>
-      'Зовнішні перевірки недоступності, без обмеження кількості цілей';
+      'Без обмеження кількості цілей';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
-      other: 'кожні $minutes хвилини',
-      many: 'кожні $minutes хвилин',
-      few: 'кожні $minutes хвилини',
-      one: 'кожні $minutes хвилину',
+      other: 'Кожні $minutes хвилини',
+      many: 'Кожні $minutes хвилин',
+      few: 'Кожні $minutes хвилини',
+      one: 'Кожні $minutes хвилину',
     );
-    return 'Зовнішні перевірки недоступності $_temp0, без обмеження кількості цілей';
+    return '$_temp0, без обмеження кількості цілей';
   }
 
   @override
@@ -489,14 +497,41 @@ class LibLocalizationsUk extends LibLocalizations {
   }
 
   @override
-  String get lkcCurrentPlan => 'Поточний тариф';
+  String get lkcConduitConcurrency => 'Паралельні запити';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count одночасного запиту',
+      many: '$count одночасних запитів',
+      few: '$count одночасні запити',
+      one: '$count одночасний запит',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => 'Ліміт';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '$credit на місяць';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '$credit на тиждень';
+  }
 
   @override
   String get lkcDeleteAccount => 'Видалити обліковий запис';
 
   @override
-  String get lkcDeleteAccountTip =>
-      'Ваш обліковий запис, файли та вебпідписки буде видалено назавжди. Цю дію не можна скасувати.';
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name і його підписки буде видалено. Цю дію не можна скасувати.';
+  }
 
   @override
   String lkcEndsOn(String date) {
@@ -529,6 +564,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get lkcNoEndDate => 'Без дати завершення';
 
   @override
+  String get lkcNotSignedIn => 'Вхід не виконано';
+
+  @override
   String get lkcPastDue => 'Платіж прострочено';
 
   @override
@@ -543,9 +581,6 @@ class LibLocalizationsUk extends LibLocalizations {
   String lkcPerYear(String price) {
     return '$price / рік';
   }
-
-  @override
-  String get lkcPlans => 'Тарифи';
 
   @override
   String get lkcReasonAlreadySubscribed => 'Підписку вже оформлено';
@@ -783,18 +818,14 @@ class LibLocalizationsUk extends LibLocalizations {
   }
 
   @override
-  String get lkcSignInBrowser => 'Увійти в браузері';
-
-  @override
-  String get lkcSignInTip =>
-      'Увійдіть з обліковим записом lollipopkit, щоб побачити свої тарифи й файли.';
-
-  @override
   String get lkcStoreSubscriptionTip =>
       'У вас є підписка, що оплачується через App Store або Google Play. Спершу скасуйте її в магазині: видалення облікового запису її не зупиняє.';
 
   @override
   String get lkcSubscribe => 'Оформити підписку';
+
+  @override
+  String get lkcUnlimited => 'Без обмежень';
 
   @override
   String lkcUsageOf(String used, String quota) {
