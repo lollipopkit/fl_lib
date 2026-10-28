@@ -77,17 +77,6 @@ final class LkcUser {
   );
 }
 
-/// Who granted a manual subscription, and until when it renews (for good when null).
-final class LkcGrant {
-  final String by;
-  final DateTime? endsAt;
-
-  const LkcGrant({required this.by, this.endsAt});
-
-  factory LkcGrant.fromJson(Map<String, dynamic> json) =>
-      LkcGrant(by: json['by'] as String, endsAt: _date(json['ends_at']));
-}
-
 /// A subscription of the user.
 final class LkcEntitlement {
   /// The plan id, such as `storage.plus`.
@@ -99,7 +88,6 @@ final class LkcEntitlement {
 
   /// It ends at [periodEnd] instead of renewing.
   final bool cancelScheduled;
-  final LkcGrant? grant;
   final LkcLine line;
 
   const LkcEntitlement({
@@ -110,7 +98,6 @@ final class LkcEntitlement {
     required this.cancelScheduled,
     this.periodStart,
     this.periodEnd,
-    this.grant,
   });
 
   factory LkcEntitlement.fromJson(Map<String, dynamic> json) => LkcEntitlement(
@@ -123,10 +110,6 @@ final class LkcEntitlement {
     periodStart: _date(json['period_start']),
     periodEnd: _date(json['period_end']),
     cancelScheduled: json['cancel_scheduled'] as bool? ?? false,
-    grant: switch (json['grant']) {
-      final Map<String, dynamic> g => LkcGrant.fromJson(g),
-      _ => null,
-    },
   );
 }
 

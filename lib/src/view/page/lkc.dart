@@ -347,16 +347,11 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     };
   }
 
-  /// When the plan renews or ends: a grant by its end, a subscription by its period.
+  /// When the plan renews or ends, as the web's `statusView` says it: a
+  /// manual plan ending is a grant running out, nothing to warn of.
   String? _dateOf(LkcEntitlement e) {
-    if (e.source == LkcSource.manual) {
-      final end = e.grant?.endsAt;
-      return end == null
-          ? l10n.lkcNoEndDate
-          : l10n.lkcEndsOn(_lkcDate(context, end));
-    }
     final end = e.periodEnd;
-    if (end == null) return null;
+    if (end == null) return l10n.lkcNoEndDate;
     final date = _lkcDate(context, end);
     return e.cancelScheduled ? l10n.lkcEndsOn(date) : l10n.lkcRenewsOn(date);
   }
