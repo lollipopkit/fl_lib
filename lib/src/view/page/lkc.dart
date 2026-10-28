@@ -1116,20 +1116,42 @@ final class _GroupTitle extends StatelessWidget {
     final muted = TextStyle(fontSize: 11, color: scheme.outline);
     return Padding(
       padding: const EdgeInsets.fromLTRB(3, 4, 3, 7),
-      child: Row(
-        children: [
-          Text(
-            title.toUpperCase(),
-            style: muted.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.9,
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(child: Container(height: 1, color: scheme.outlineVariant)),
-          const SizedBox(width: 9),
-          Text(trailing, style: muted),
-        ],
+      // On a narrow screen the name and the status share the line, each up
+      // to their half before they shorten; the rule takes what is left.
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final half = BoxConstraints(maxWidth: (box.maxWidth - 18) / 2);
+          return Row(
+            children: [
+              ConstrainedBox(
+                constraints: half,
+                child: Text(
+                  title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Container(height: 1, color: scheme.outlineVariant),
+              ),
+              const SizedBox(width: 9),
+              ConstrainedBox(
+                constraints: half,
+                child: Text(
+                  trailing,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
