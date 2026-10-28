@@ -46,7 +46,8 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   void initState() {
     super.initState();
     _client.user.addListener(_onUser);
-    unawaited(_load());
+    // Signed out, the page is only a way in: nothing to read for it.
+    if (_client.signedIn) unawaited(_load());
   }
 
   @override
@@ -55,11 +56,19 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     super.dispose();
   }
 
+  /// Signed in by [LkcClient.init] while the page is open, or out.
   void _onUser() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    if (_client.user.value != null && _benefits == null && !_loading) {
+      unawaited(_load());
+    }
   }
 
+  bool _loading = false;
+
   Future<void> _load() async {
+    _loading = true;
     try {
       // One after another: a future failing while another is awaited is an
       // unhandled error. The benefits and the catalog only word the page.
@@ -82,6 +91,8 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
       });
     } catch (e) {
       if (mounted) context._showLkcErr(e);
+    } finally {
+      _loading = false;
     }
   }
 
