@@ -866,26 +866,32 @@ abstract class LibLocalizations {
   /// LKC Cloud paywall: a benefit of a plan.
   ///
   /// In en, this message translates to:
+  /// **'Monitor relay, tailnet and push notifications: unlimited traffic and speed, no availability guarantee'**
+  String get lkcBenefitRelayUnlimited;
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
   /// **'Share links with expiry'**
   String get lkcBenefitShareLinks;
 
   /// LKC Cloud paywall: a benefit of a plan.
   ///
   /// In en, this message translates to:
-  /// **'WebDAV {size}'**
-  String lkcBenefitStorage(String size);
+  /// **'WebDAV {size}, files up to {file} each'**
+  String lkcBenefitStorage(String size, String file);
+
+  /// LKC Cloud paywall: a benefit of a plan.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV without a size limit, files up to {file} each'**
+  String lkcBenefitStorageUnlimited(String file);
 
   /// LKC Cloud paywall: a benefit of a plan.
   ///
   /// In en, this message translates to:
   /// **'Real-time sync across devices (end-to-end encrypted)'**
   String get lkcBenefitSync;
-
-  /// LKC Cloud paywall: a benefit of a plan.
-  ///
-  /// In en, this message translates to:
-  /// **'unlimited'**
-  String get lkcBenefitUnlimited;
 
   /// LKC Cloud paywall: a benefit of a plan.
   ///

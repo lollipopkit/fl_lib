@@ -1,6 +1,8 @@
 /// What LKC Cloud (homebase) answers with.
 library;
 
+import 'dart:math' as math;
+
 /// A product line: a user holds at most one effective plan in each.
 enum LkcLine {
   basic,
@@ -215,6 +217,9 @@ final class LkcPlan {
   );
 }
 
+/// The largest file one upload sends: the object store's limit, no plan's.
+const lkcStoreMaxFileBytes = 5000000000;
+
 /// Something a plan grants an amount of.
 enum LkcBenefit {
   /// Bytes of files a directory holds.
@@ -222,6 +227,9 @@ enum LkcBenefit {
 
   /// Files a directory holds.
   fileCount('file.count'),
+
+  /// Bytes of one file, at most [lkcStoreMaxFileBytes].
+  fileMaxBytes('file.max_bytes'),
 
   /// Backups kept per app.
   backupCount('backup.count'),
@@ -251,7 +259,7 @@ enum LkcBenefit {
 
   /// The line whose plan grants it.
   LkcLine get line => switch (this) {
-    fileBytes || fileCount => LkcLine.storage,
+    fileBytes || fileCount || fileMaxBytes => LkcLine.storage,
     _ => LkcLine.basic,
   };
 
@@ -289,6 +297,11 @@ final class LkcBenefits {
   }
 }
 
+/// The largest file of a `file.max_bytes` amount: the store caps it.
+int lkcMaxFileBytes(int? amount) => amount == null
+    ? lkcStoreMaxFileBytes
+    : math.min(amount, lkcStoreMaxFileBytes);
+
 /// What a directory's files take, and what it may hold: GET /file/usage.
 final class LkcUsage {
   final int files;
@@ -298,12 +311,19 @@ final class LkcUsage {
   final int? quotaFiles;
   final int? quotaBytes;
 
+  /// Bytes of one file, null being [lkcStoreMaxFileBytes].
+  final int? quotaMaxFileBytes;
+
   const LkcUsage({
     required this.files,
     required this.bytes,
     this.quotaFiles,
     this.quotaBytes,
+    this.quotaMaxFileBytes,
   });
+
+  /// The largest file the directory takes.
+  int get maxFileBytes => lkcMaxFileBytes(quotaMaxFileBytes);
 
   factory LkcUsage.fromJson(Map<String, dynamic> json) {
     final quota = json['quota'] as Map<String, dynamic>? ?? const {};
@@ -312,6 +332,7 @@ final class LkcUsage {
       bytes: (json['bytes'] as num).toInt(),
       quotaFiles: (quota['files'] as num?)?.toInt(),
       quotaBytes: (quota['bytes'] as num?)?.toInt(),
+      quotaMaxFileBytes: (quota['max_file_bytes'] as num?)?.toInt(),
     );
   }
 }

@@ -25,14 +25,18 @@ extension LkcBenefitLines on LkcBenefits {
   /// benefit not granted has none.
   List<String> lines(LibLocalizations l10n, String tier, LkcLine line) {
     int? of(LkcBenefit b) => amount(tier, b);
-    String size(int? v) => v == null ? l10n.lkcBenefitUnlimited : lkcBytes(v);
 
     final lines = <String>[];
     switch (line) {
       case LkcLine.storage:
         final bytes = of(LkcBenefit.fileBytes);
         if (bytes != 0) {
-          lines.add(l10n.lkcBenefitStorage(size(bytes)));
+          final file = lkcBytes(lkcMaxFileBytes(of(LkcBenefit.fileMaxBytes)));
+          lines.add(
+            bytes == null
+                ? l10n.lkcBenefitStorageUnlimited(file)
+                : l10n.lkcBenefitStorage(lkcBytes(bytes), file),
+          );
           lines.add(l10n.lkcBenefitShareLinks);
         }
       case LkcLine.basic:
@@ -63,9 +67,9 @@ extension LkcBenefitLines on LkcBenefits {
         final rate = of(LkcBenefit.relayBytesPerSec);
         if (rate != 0) {
           lines.add(
-            l10n.lkcBenefitRelay(
-              rate == null ? l10n.lkcBenefitUnlimited : '${lkcBytes(rate)}/s',
-            ),
+            rate == null
+                ? l10n.lkcBenefitRelayUnlimited
+                : l10n.lkcBenefitRelay('${lkcBytes(rate)}/s'),
           );
         }
         final targets = of(LkcBenefit.uptimeTargets);

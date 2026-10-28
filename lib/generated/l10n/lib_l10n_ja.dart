@@ -403,18 +403,24 @@ class LibLocalizationsJa extends LibLocalizations {
   }
 
   @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay、tailnet、プッシュ通知：トラフィック・速度無制限、可用性の保証なし';
+
+  @override
   String get lkcBenefitShareLinks => '有効期限付きの共有リンク';
 
   @override
-  String lkcBenefitStorage(String size) {
-    return 'WebDAV $size';
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size、1 ファイルあたり最大 $file';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'WebDAV 容量無制限、1 ファイルあたり最大 $file';
   }
 
   @override
   String get lkcBenefitSync => 'デバイス間のリアルタイム同期（エンドツーエンド暗号化）';
-
-  @override
-  String get lkcBenefitUnlimited => '無制限';
 
   @override
   String lkcBenefitUptime(int minutes, int count) {

@@ -403,18 +403,24 @@ class LibLocalizationsZh extends LibLocalizations {
   }
 
   @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay、tailnet、通知推送：不限流量和速率，不保证可用';
+
+  @override
   String get lkcBenefitShareLinks => '文件分享链接（带有效期）';
 
   @override
-  String lkcBenefitStorage(String size) {
-    return 'WebDAV $size';
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size，单个文件最大 $file';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'WebDAV 不限容量，单个文件最大 $file';
   }
 
   @override
   String get lkcBenefitSync => '多设备实时同步（端到端加密）';
-
-  @override
-  String get lkcBenefitUnlimited => '不限';
 
   @override
   String lkcBenefitUptime(int minutes, int count) {
@@ -1667,18 +1673,24 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   }
 
   @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay、tailnet、通知推播：不限流量與速率，不保證可用';
+
+  @override
   String get lkcBenefitShareLinks => '檔案分享連結（附有效期限）';
 
   @override
-  String lkcBenefitStorage(String size) {
-    return 'WebDAV $size';
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size，單一檔案最大 $file';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'WebDAV 不限容量，單一檔案最大 $file';
   }
 
   @override
   String get lkcBenefitSync => '多裝置即時同步（端對端加密）';
-
-  @override
-  String get lkcBenefitUnlimited => '不限';
 
   @override
   String lkcBenefitUptime(int minutes, int count) {

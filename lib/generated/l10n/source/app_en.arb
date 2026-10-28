@@ -546,25 +546,37 @@
       }
     }
   },
+  "lkcBenefitRelayUnlimited": "Monitor relay, tailnet and push notifications: unlimited traffic and speed, no availability guarantee",
+  "@lkcBenefitRelayUnlimited": {
+    "description": "LKC Cloud paywall: a benefit of a plan."
+  },
   "lkcBenefitShareLinks": "Share links with expiry",
   "@lkcBenefitShareLinks": {
     "description": "LKC Cloud paywall: a benefit of a plan."
   },
-  "lkcBenefitStorage": "WebDAV {size}",
+  "lkcBenefitStorage": "WebDAV {size}, files up to {file} each",
   "@lkcBenefitStorage": {
     "description": "LKC Cloud paywall: a benefit of a plan.",
     "placeholders": {
       "size": {
+        "type": "String"
+      },
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitStorageUnlimited": "WebDAV without a size limit, files up to {file} each",
+  "@lkcBenefitStorageUnlimited": {
+    "description": "LKC Cloud paywall: a benefit of a plan.",
+    "placeholders": {
+      "file": {
         "type": "String"
       }
     }
   },
   "lkcBenefitSync": "Real-time sync across devices (end-to-end encrypted)",
   "@lkcBenefitSync": {
-    "description": "LKC Cloud paywall: a benefit of a plan."
-  },
-  "lkcBenefitUnlimited": "unlimited",
-  "@lkcBenefitUnlimited": {
     "description": "LKC Cloud paywall: a benefit of a plan."
   },
   "lkcBenefitUptime": "External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}",

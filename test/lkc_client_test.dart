@@ -127,6 +127,13 @@ void main() {
       {'tier': 'basic', 'benefit': 'sync', 'value': 1},
       {'tier': 'basic', 'benefit': 'future.thing', 'value': 3},
       {'tier': 'storage.plus', 'benefit': 'file.bytes', 'value': 50000000000},
+      {
+        'tier': 'storage.plus',
+        'benefit': 'file.max_bytes',
+        'value': 2000000000,
+      },
+      {'tier': 'storage.pro', 'benefit': 'file.bytes', 'value': null},
+      {'tier': 'storage.pro', 'benefit': 'file.max_bytes', 'value': null},
     ]);
 
     test('a missing row grants nothing, null is unlimited', () {
@@ -148,9 +155,13 @@ void main() {
         'Real-time sync across devices (end-to-end encrypted)',
       ]);
       expect(benefits.lines(l10n, 'storage.plus', LkcLine.storage), [
-        'WebDAV 50 GB',
+        'WebDAV 50 GB, files up to 2 GB each',
         'Share links with expiry',
       ]);
+      expect(
+        benefits.lines(l10n, 'storage.pro', LkcLine.storage).first,
+        'WebDAV without a size limit, files up to 5 GB each',
+      );
     });
 
     test('sizes in powers of 1000', () {
@@ -165,8 +176,13 @@ void main() {
     final u = LkcUsage.fromJson({
       'files': 3,
       'bytes': 1200,
-      'quota': {'bytes': 5000000000, 'files': null},
+      'quota': {
+        'bytes': 5000000000,
+        'files': null,
+        'max_file_bytes': 8000000000,
+      },
     });
+    expect(u.maxFileBytes, lkcStoreMaxFileBytes);
     expect(
       (u.files, u.bytes, u.quotaBytes, u.quotaFiles),
       (3, 1200, 5000000000, null),

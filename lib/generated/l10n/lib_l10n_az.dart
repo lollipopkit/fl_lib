@@ -405,19 +405,25 @@ class LibLocalizationsAz extends LibLocalizations {
   }
 
   @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay, tailnet və push bildirişləri: limitsiz trafik və sürət, əlçatanlıq zəmanəti yoxdur';
+
+  @override
   String get lkcBenefitShareLinks => 'Müddəti olan paylaşım linkləri';
 
   @override
-  String lkcBenefitStorage(String size) {
-    return 'WebDAV $size';
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size, hər fayl ən çox $file';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'Limitsiz həcmli WebDAV, hər fayl ən çox $file';
   }
 
   @override
   String get lkcBenefitSync =>
       'Cihazlar arasında real vaxtda sinxronizasiya (uçdan-uca şifrələnmiş)';
-
-  @override
-  String get lkcBenefitUnlimited => 'limitsiz';
 
   @override
   String lkcBenefitUptime(int minutes, int count) {

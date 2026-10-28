@@ -408,20 +408,26 @@ class LibLocalizationsRu extends LibLocalizations {
   }
 
   @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay, tailnet и push-уведомления: безлимитный трафик и скорость, без гарантии доступности';
+
+  @override
   String get lkcBenefitShareLinks =>
       'Ссылки для общего доступа со сроком действия';
 
   @override
-  String lkcBenefitStorage(String size) {
-    return 'WebDAV $size';
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size, файлы до $file каждый';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'WebDAV без ограничения объёма, файлы до $file каждый';
   }
 
   @override
   String get lkcBenefitSync =>
       'Синхронизация между устройствами в реальном времени (сквозное шифрование)';
-
-  @override
-  String get lkcBenefitUnlimited => 'без ограничений';
 
   @override
   String lkcBenefitUptime(int minutes, int count) {
