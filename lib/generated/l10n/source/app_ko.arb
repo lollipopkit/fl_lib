@@ -115,7 +115,7 @@
   "key": "키",
   "language": "언어",
   "license": "라이선스",
-  "lkcAccount": "LKC Cloud 계정",
+  "lkcAccount": "계정",
   "lkcBenefitBackups": "백업",
   "lkcBenefitBackupsAppBytes": "앱당 최대 {size}",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

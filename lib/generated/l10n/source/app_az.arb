@@ -115,7 +115,7 @@
   "key": "Açar",
   "language": "Dil",
   "license": "Lisenziya",
-  "lkcAccount": "LKC Cloud hesabı",
+  "lkcAccount": "Hesab",
   "lkcBenefitBackups": "Ehtiyat nüsxələr",
   "lkcBenefitBackupsAppBytes": "hər tətbiq üçün maksimum {size}",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

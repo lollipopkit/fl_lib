@@ -365,7 +365,7 @@ class LibLocalizationsAz extends LibLocalizations {
   String get license => 'Lisenziya';
 
   @override
-  String get lkcAccount => 'LKC Cloud hesabı';
+  String get lkcAccount => 'Hesab';
 
   @override
   String get lkcBenefitBackups => 'Ehtiyat nüsxələr';

@@ -364,7 +364,7 @@ class LibLocalizationsZh extends LibLocalizations {
   String get license => '许可证';
 
   @override
-  String get lkcAccount => 'LKC Cloud 账号';
+  String get lkcAccount => '账号';
 
   @override
   String get lkcBenefitBackups => '备份';
@@ -1751,7 +1751,7 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get license => '授權';
 
   @override
-  String get lkcAccount => 'LKC Cloud 帳號';
+  String get lkcAccount => '帳號';
 
   @override
   String get lkcBenefitBackups => '備份';

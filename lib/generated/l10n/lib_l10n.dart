@@ -818,7 +818,7 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'LKC Cloud account'**
+  /// **'Account'**
   String get lkcAccount;
 
   /// LKC Cloud account page.

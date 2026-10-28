@@ -115,7 +115,7 @@
   "key": "Ключ",
   "language": "Мова",
   "license": "Ліцензія",
-  "lkcAccount": "Обліковий запис LKC Cloud",
+  "lkcAccount": "Обліковий запис",
   "lkcBenefitBackups": "Резервні копії",
   "lkcBenefitBackupsAppBytes": "до {size} на застосунок",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

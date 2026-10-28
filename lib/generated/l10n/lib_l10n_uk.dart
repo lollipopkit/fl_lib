@@ -365,7 +365,7 @@ class LibLocalizationsUk extends LibLocalizations {
   String get license => 'Ліцензія';
 
   @override
-  String get lkcAccount => 'Обліковий запис LKC Cloud';
+  String get lkcAccount => 'Обліковий запис';
 
   @override
   String get lkcBenefitBackups => 'Резервні копії';

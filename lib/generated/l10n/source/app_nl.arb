@@ -115,7 +115,7 @@
   "key": "Sleutel",
   "language": "Taal",
   "license": "Licentie",
-  "lkcAccount": "LKC Cloud-account",
+  "lkcAccount": "Account",
   "lkcBenefitBackups": "Back-ups",
   "lkcBenefitBackupsAppBytes": "tot {size} per app",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

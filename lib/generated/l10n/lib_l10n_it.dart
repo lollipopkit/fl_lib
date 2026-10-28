@@ -365,7 +365,7 @@ class LibLocalizationsIt extends LibLocalizations {
   String get license => 'Licenza';
 
   @override
-  String get lkcAccount => 'Account LKC Cloud';
+  String get lkcAccount => 'Account';
 
   @override
   String get lkcBenefitBackups => 'Backup';

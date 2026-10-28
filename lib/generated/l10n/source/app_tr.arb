@@ -115,7 +115,7 @@
   "key": "Anahtar",
   "language": "Dil",
   "license": "Lisans",
-  "lkcAccount": "LKC Cloud hesabı",
+  "lkcAccount": "Hesap",
   "lkcBenefitBackups": "Yedekler",
   "lkcBenefitBackupsAppBytes": "uygulama başına en fazla {size}",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

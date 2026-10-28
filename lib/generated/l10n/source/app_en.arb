@@ -486,7 +486,7 @@
   "@license": {
     "description": "Label for license."
   },
-  "lkcAccount": "LKC Cloud account",
+  "lkcAccount": "Account",
   "@lkcAccount": {
     "description": "LKC Cloud account page."
   },

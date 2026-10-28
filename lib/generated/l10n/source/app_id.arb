@@ -115,7 +115,7 @@
   "key": "Kunci",
   "language": "Bahasa",
   "license": "Lisensi",
-  "lkcAccount": "Akun LKC Cloud",
+  "lkcAccount": "Akun",
   "lkcBenefitBackups": "Cadangan",
   "lkcBenefitBackupsAppBytes": "hingga {size} per aplikasi",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

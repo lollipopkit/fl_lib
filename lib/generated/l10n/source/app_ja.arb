@@ -115,7 +115,7 @@
   "key": "キー",
   "language": "言語",
   "license": "ライセンス",
-  "lkcAccount": "LKC Cloud アカウント",
+  "lkcAccount": "アカウント",
   "lkcBenefitBackups": "バックアップ",
   "lkcBenefitBackupsAppBytes": "アプリごとに最大 {size}",
   "lkcBenefitBackupsDetail": "{kept}、{limit}",

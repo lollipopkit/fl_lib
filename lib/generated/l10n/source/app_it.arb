@@ -115,7 +115,7 @@
   "key": "Chiave",
   "language": "Lingua",
   "license": "Licenza",
-  "lkcAccount": "Account LKC Cloud",
+  "lkcAccount": "Account",
   "lkcBenefitBackups": "Backup",
   "lkcBenefitBackupsAppBytes": "fino a {size} per app",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",

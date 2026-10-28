@@ -115,7 +115,7 @@
   "key": "键",
   "language": "语言",
   "license": "许可证",
-  "lkcAccount": "LKC Cloud 账号",
+  "lkcAccount": "账号",
   "lkcBenefitBackups": "备份",
   "lkcBenefitBackupsAppBytes": "每个 app 最大 {size}",
   "lkcBenefitBackupsDetail": "{kept}，{limit}",

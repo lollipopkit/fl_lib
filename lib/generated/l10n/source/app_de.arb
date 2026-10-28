@@ -115,7 +115,7 @@
   "key": "Schlüssel",
   "language": "Sprache",
   "license": "Lizenz",
-  "lkcAccount": "LKC Cloud-Konto",
+  "lkcAccount": "Konto",
   "lkcBenefitBackups": "Backups",
   "lkcBenefitBackupsAppBytes": "bis zu {size} pro App",
   "lkcBenefitBackupsDetail": "{kept}, {limit}",
