@@ -80,6 +80,13 @@ export 'src/core/store/secure.dart';
 // Cloud sync base classes and implementations (iCloud, WebDAV)
 export 'src/core/sync/base.dart';
 
+// --- LKC Cloud ---
+// Client of LKC Cloud: sign-in, account, subscriptions, files
+export 'src/core/lkc/benefit.dart';
+export 'src/core/lkc/client.dart';
+export 'src/core/lkc/model.dart';
+export 'src/core/lkc/reason.dart';
+
 // --- Other Core ---
 // Logging, app links, HTTP overrides, and other core functionality
 export 'src/core/app_link.dart';

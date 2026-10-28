@@ -365,6 +365,336 @@ class LibLocalizationsTr extends LibLocalizations {
   String get license => 'Lisans';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'uygulama başına en fazla $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'uygulama başına en sonuncusu';
+
+  @override
+  String get lkcBenefitBackupNoLimit => 'boyut sınırı yok';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dönüşümlü yedek',
+      one: '1 dönüşümlü yedek',
+    );
+    return 'uygulama başına $_temp0';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited =>
+      'uygulama başına sınırsız dönüşümlü yedek';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return 'tüm uygulamalar için ortak $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'Yedekler: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet ve push bildirimleri: sınırsız trafik, $rate hızında relay, erişilebilirlik garantisi yok';
+  }
+
+  @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay, tailnet ve push bildirimleri: sınırsız trafik ve hız, erişilebilirlik garantisi yok';
+
+  @override
+  String get lkcBenefitShareLinks => 'Süreli paylaşım bağlantıları';
+
+  @override
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size, dosya başına en fazla $file';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'Boyut sınırı olmayan WebDAV, dosya başına en fazla $file';
+  }
+
+  @override
+  String get lkcBenefitSync =>
+      'Cihazlar arasında gerçek zamanlı senkronizasyon (uçtan uca şifreli)';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Her $minutes dakikada bir',
+      one: 'Her dakika',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hedef',
+      one: '1 hedef',
+    );
+    return '$_temp0 harici kesinti kontrolü, en fazla $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hedef',
+      one: '1 hedef',
+    );
+    return 'Harici kesinti kontrolü, en fazla $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited =>
+      'Harici kesinti kontrolü, sınırsız hedef';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Her $minutes dakikada bir',
+      one: 'Her dakika',
+    );
+    return '$_temp0 harici kesinti kontrolü, sınırsız hedef';
+  }
+
+  @override
+  String get lkcReasonAlreadySubscribed => 'Zaten abonesiniz';
+
+  @override
+  String get lkcReasonBadPurchaseToken => 'Geçersiz satın alma belirteci';
+
+  @override
+  String get lkcReasonBadPushToken => 'Geçersiz push belirteci';
+
+  @override
+  String get lkcReasonBadQuery => 'Geçersiz sorgu';
+
+  @override
+  String get lkcReasonBadSignature => 'Geçersiz imza';
+
+  @override
+  String get lkcReasonBadTransaction => 'Geçersiz işlem';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Bir avantaj iki kez, onu içermeyen bir planda veya sahipsiz listelenmiş';
+
+  @override
+  String get lkcReasonCodeCheckout => 'Kod bu ödeme işleminde kullanılamaz';
+
+  @override
+  String get lkcReasonCodeCurrency => 'Kodun para birimi fiyatla eşleşmiyor';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded =>
+      'Sabit tutar için para birimi gerekir';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => 'İndirim dönem tanımlamaz';
+
+  @override
+  String get lkcReasonCodeDuration =>
+      'İndirimin hangi ödemeleri kapsadığını seçin';
+
+  @override
+  String get lkcReasonCodeExpired => 'Kodun süresi doldu';
+
+  @override
+  String get lkcReasonCodeFormat =>
+      'Bir kod 4 ila 32 harf, rakam veya tireden oluşur';
+
+  @override
+  String get lkcReasonCodeGrantOff => 'Tahsiste indirim olmaz';
+
+  @override
+  String get lkcReasonCodeGrantPeriods => 'Tahsis 1 ila 120 dönem sürer';
+
+  @override
+  String get lkcReasonCodeGrantPlan => 'Tahsis tek bir plan içindir';
+
+  @override
+  String get lkcReasonCodeInactive => 'Kod artık geçerli değil';
+
+  @override
+  String get lkcReasonCodeIsDiscount =>
+      'Bu bir indirim kodu, abone olurken girin';
+
+  @override
+  String get lkcReasonCodeIsGrant => 'Bu kod bir plan tanımlar, onu kullanın';
+
+  @override
+  String get lkcReasonCodeKind => 'Bir kodun türü değiştirilemez';
+
+  @override
+  String get lkcReasonCodeLimit => 'Kullanım sınırı pozitif olmalıdır';
+
+  @override
+  String get lkcReasonCodeLineHeld => 'Bu seride zaten bir aboneliğiniz var';
+
+  @override
+  String get lkcReasonCodeMonths => 'Tekrarlayan indirim 1 ila 36 ay sürer';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'Kod yalnızca yeni aboneler içindir';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'Kod henüz geçerli değil';
+
+  @override
+  String get lkcReasonCodeOff =>
+      'İndirim bir yüzde (1 ila 100) veya sabit bir tutardır';
+
+  @override
+  String get lkcReasonCodePlan => 'Kod bu plan için geçerli değil';
+
+  @override
+  String get lkcReasonCodePlans => 'Kodun geçerli olduğu planları seçin';
+
+  @override
+  String get lkcReasonCodeRedeemed =>
+      'Kod kullanılmış, bunun yerine devre dışı bırakın';
+
+  @override
+  String get lkcReasonCodeTaken => 'Bu kod zaten var';
+
+  @override
+  String get lkcReasonCodeTries =>
+      'Çok fazla deneme, daha sonra tekrar deneyin';
+
+  @override
+  String get lkcReasonCodeUnknown => 'Böyle bir kod yok';
+
+  @override
+  String get lkcReasonCodeUsed => 'Bu kodu zaten kullandınız';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'Kodun kullanım hakkı tükendi';
+
+  @override
+  String get lkcReasonCodeWindow => 'Kod, süresi dolmadan önce başlamalıdır';
+
+  @override
+  String get lkcReasonDeleteAdmin =>
+      'Bir yöneticiyi silmeden önce IdP’de yönetici rolünü kaldırın';
+
+  @override
+  String get lkcReasonDeleteSelf => 'Kendi hesabınızı hesap sayfasından silin';
+
+  @override
+  String get lkcReasonFileExists => 'Bu adda bir dosya zaten var';
+
+  @override
+  String get lkcReasonFileName => 'Geçerli bir dosya veya dizin adı değil';
+
+  @override
+  String get lkcReasonFileQuota => 'Dosyalar depolama kotasını aşar';
+
+  @override
+  String get lkcReasonFileTooLarge => 'Dosya çok büyük';
+
+  @override
+  String get lkcReasonForeignTransaction =>
+      'Başka bir uygulamaya veya ortama ait işlem';
+
+  @override
+  String get lkcReasonGrantGone => 'Böyle bir aktif manuel abonelik yok';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'Kullanıcının bu seride manuel aboneliği var, onu değiştirin';
+
+  @override
+  String get lkcReasonGrantInPast => 'Tahsis gelecekte sona ermelidir';
+
+  @override
+  String get lkcReasonManualProvider => 'Manual bir sağlayıcı değildir';
+
+  @override
+  String get lkcReasonNoCustomer => 'Yönetilecek abonelik yok';
+
+  @override
+  String get lkcReasonNoSwitch => 'Bu seride değiştirilecek web aboneliği yok';
+
+  @override
+  String get lkcReasonNoUser => 'Böyle bir kullanıcı yok';
+
+  @override
+  String get lkcReasonPriceArchived =>
+      'Satılan bir fiyat sağlayıcısında arşivlenmiş';
+
+  @override
+  String get lkcReasonPriceMissing =>
+      'Satılan bir fiyat sağlayıcısında mevcut değil';
+
+  @override
+  String get lkcReasonPriceNotFixed => 'Satılan bir fiyatın sabit tutarı yok';
+
+  @override
+  String get lkcReasonPricePeriod =>
+      'Satılan bir fiyat, planının dönemine göre faturalandırmıyor';
+
+  @override
+  String get lkcReasonProductId => 'Ürün kimliği boş veya boşluk içeriyor';
+
+  @override
+  String get lkcReasonProductInUse =>
+      'Aktif abonelikleri olan bir ürün planını korur';
+
+  @override
+  String get lkcReasonProductPlans => 'Bir ürün yalnızca bir plana eşlenir';
+
+  @override
+  String get lkcReasonPurchaseAccount => 'Satın alım başka bir hesaba ait';
+
+  @override
+  String get lkcReasonPushAccount => 'Beklenmeyen push hesabı';
+
+  @override
+  String get lkcReasonSamePlan => 'Zaten bu plandasınız';
+
+  @override
+  String get lkcReasonSoldTwice => 'Plan ve sağlayıcı başına bir satılan fiyat';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      'Kaydedildi, ancak Stripe’ın plan değiştirme ayarı güncellenemedi; tekrar kaydedin';
+
+  @override
+  String get lkcReasonTestPurchase => 'Test satın alımları kabul edilmez';
+
+  @override
+  String get lkcReasonTransactionAccount => 'İşlem başka bir hesaba ait';
+
+  @override
+  String get lkcReasonUnavailable => 'Kullanılamıyor';
+
+  @override
+  String get lkcReasonUnknownPackage => 'Bilinmeyen paket';
+
+  @override
+  String get lkcReasonUploadSize =>
+      'Yüklenen dosya eksik veya bildirilen boyutta değil';
+
+  @override
+  String get lkcReasonUploadUnknown =>
+      'Böyle bir yükleme yok veya süresi doldu';
+
+  @override
+  String get lkcReasonUserGone => 'Kullanıcı artık mevcut değil';
+
+  @override
   String get loadingEllipsis => '...';
 
   @override

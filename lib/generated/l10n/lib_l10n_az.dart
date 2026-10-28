@@ -365,6 +365,333 @@ class LibLocalizationsAz extends LibLocalizations {
   String get license => 'Lisenziya';
 
   @override
+  String lkcBenefitBackupAppBytes(String size) {
+    return 'hər tətbiq üçün maksimum $size';
+  }
+
+  @override
+  String get lkcBenefitBackupLatest => 'hər tətbiq üçün yalnız sonuncu';
+
+  @override
+  String get lkcBenefitBackupNoLimit => 'ölçü limiti yoxdur';
+
+  @override
+  String lkcBenefitBackupRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count növbəli ehtiyat nüsxə',
+    );
+    return 'hər tətbiq üçün $_temp0';
+  }
+
+  @override
+  String get lkcBenefitBackupRollingUnlimited =>
+      'hər tətbiq üçün limitsiz növbəli ehtiyat nüsxə';
+
+  @override
+  String lkcBenefitBackupTotalBytes(String size) {
+    return 'bütün tətbiqlər üçün ümumi $size';
+  }
+
+  @override
+  String lkcBenefitBackups(String kept, String limit) {
+    return 'Ehtiyat nüsxələr: $kept, $limit';
+  }
+
+  @override
+  String lkcBenefitRelay(String rate) {
+    return 'Monitor relay, tailnet və push bildirişləri: limitsiz trafik, relay sürəti $rate, əlçatanlıq zəmanəti yoxdur';
+  }
+
+  @override
+  String get lkcBenefitRelayUnlimited =>
+      'Monitor relay, tailnet və push bildirişləri: limitsiz trafik və sürət, əlçatanlıq zəmanəti yoxdur';
+
+  @override
+  String get lkcBenefitShareLinks => 'Müddəti olan paylaşım linkləri';
+
+  @override
+  String lkcBenefitStorage(String size, String file) {
+    return 'WebDAV $size, hər fayl ən çox $file';
+  }
+
+  @override
+  String lkcBenefitStorageUnlimited(String file) {
+    return 'Limitsiz həcmli WebDAV, hər fayl ən çox $file';
+  }
+
+  @override
+  String get lkcBenefitSync =>
+      'Cihazlar arasında real vaxtda sinxronizasiya (uçdan-uca şifrələnmiş)';
+
+  @override
+  String lkcBenefitUptime(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'hər $minutes dəqiqədən bir',
+      one: 'hər dəqiqə',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hədəf',
+    );
+    return 'Xarici dayanma yoxlamaları: $_temp0, ən çox $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hədəf',
+    );
+    return 'Xarici dayanma yoxlamaları, ən çox $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited =>
+      'Xarici dayanma yoxlamaları, limitsiz hədəf';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'hər $minutes dəqiqədən bir',
+      one: 'hər dəqiqə',
+    );
+    return 'Xarici dayanma yoxlamaları: $_temp0, limitsiz hədəf';
+  }
+
+  @override
+  String get lkcReasonAlreadySubscribed => 'Artıq abunəsiniz.';
+
+  @override
+  String get lkcReasonBadPurchaseToken => 'Alış tokeni etibarsızdır.';
+
+  @override
+  String get lkcReasonBadPushToken => 'Push tokeni etibarsızdır.';
+
+  @override
+  String get lkcReasonBadQuery => 'Sorğu etibarsızdır.';
+
+  @override
+  String get lkcReasonBadSignature => 'İmza etibarsızdır.';
+
+  @override
+  String get lkcReasonBadTransaction => 'Əməliyyat etibarsızdır.';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Üstünlük təkrarlanır, onu daxil etməyən plana aiddir və ya sahibi yoxdur.';
+
+  @override
+  String get lkcReasonCodeCheckout =>
+      'Kod bu ödəniş üsulu ilə istifadə edilə bilməz.';
+
+  @override
+  String get lkcReasonCodeCurrency => 'Kodun valyutası qiymətə uyğun deyil.';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded =>
+      'Sabit məbləğ üçün valyuta lazımdır.';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => 'Endirim dövr hədiyyə etmir.';
+
+  @override
+  String get lkcReasonCodeDuration =>
+      'Endirimin hansı ödənişlərə aid olduğunu seçin.';
+
+  @override
+  String get lkcReasonCodeExpired => 'Kodun vaxtı bitib.';
+
+  @override
+  String get lkcReasonCodeFormat =>
+      'Kod 4–32 hərf, rəqəm və ya tiredən ibarətdir.';
+
+  @override
+  String get lkcReasonCodeGrantOff => 'Hədiyyədə endirim olmur.';
+
+  @override
+  String get lkcReasonCodeGrantPeriods => 'Hədiyyə 1–120 dövr davam edir.';
+
+  @override
+  String get lkcReasonCodeGrantPlan => 'Hədiyyə yalnız bir plan üçündür.';
+
+  @override
+  String get lkcReasonCodeInactive => 'Kod artıq etibarlı deyil.';
+
+  @override
+  String get lkcReasonCodeIsDiscount =>
+      'Bu endirim kodudur, abunə olarkən daxil edin.';
+
+  @override
+  String get lkcReasonCodeIsGrant =>
+      'Kod plan hədiyyə edir, əvəzinə onu aktivləşdirin.';
+
+  @override
+  String get lkcReasonCodeKind => 'Kodun növü dəyişdirilə bilməz.';
+
+  @override
+  String get lkcReasonCodeLimit => 'İstifadə limiti müsbət olmalıdır.';
+
+  @override
+  String get lkcReasonCodeLineHeld => 'Bu xətdə artıq abunəniz var.';
+
+  @override
+  String get lkcReasonCodeMonths => 'Təkrarlanan endirim 1–36 ay davam edir.';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'Kod yalnız yeni abunəçilər üçündür.';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'Kod hələ etibarlı deyil.';
+
+  @override
+  String get lkcReasonCodeOff => 'Endirim faiz (1–100) və ya sabit məbləğdir.';
+
+  @override
+  String get lkcReasonCodePlan => 'Kod bu plana aid deyil.';
+
+  @override
+  String get lkcReasonCodePlans => 'Kodun aid olduğu planları seçin.';
+
+  @override
+  String get lkcReasonCodeRedeemed =>
+      'Kod artıq istifadə olunub, əvəzinə onu deaktiv edin.';
+
+  @override
+  String get lkcReasonCodeTaken => 'Kod artıq mövcuddur.';
+
+  @override
+  String get lkcReasonCodeTries => 'Həddən çox cəhd, sonra yenidən cəhd edin.';
+
+  @override
+  String get lkcReasonCodeUnknown => 'Belə kod yoxdur.';
+
+  @override
+  String get lkcReasonCodeUsed => 'Bu koddan artıq istifadə etmisiniz.';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'Kodun istifadə limiti dolub.';
+
+  @override
+  String get lkcReasonCodeWindow => 'Kod bitmədən əvvəl başlamalıdır.';
+
+  @override
+  String get lkcReasonDeleteAdmin =>
+      'Admini silməzdən əvvəl IdP-də admin rolunu götürün.';
+
+  @override
+  String get lkcReasonDeleteSelf => 'Öz hesabınızı hesab səhifəsindən silin.';
+
+  @override
+  String get lkcReasonFileExists => 'Bu adda fayl artıq var.';
+
+  @override
+  String get lkcReasonFileName => 'Etibarlı fayl və ya qovluq adı deyil.';
+
+  @override
+  String get lkcReasonFileQuota => 'Fayllar yaddaş kvotasını aşar.';
+
+  @override
+  String get lkcReasonFileTooLarge => 'Fayl çox böyükdür.';
+
+  @override
+  String get lkcReasonForeignTransaction =>
+      'Əməliyyat başqa tətbiqə və ya mühitə aiddir.';
+
+  @override
+  String get lkcReasonGrantGone => 'Belə aktiv manual abunə yoxdur.';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'İstifadəçinin bu xətdə manual abunəsi var, onu dəyişdirin.';
+
+  @override
+  String get lkcReasonGrantInPast => 'Hədiyyə gələcəkdə bitməlidir.';
+
+  @override
+  String get lkcReasonManualProvider => 'Manual provayder deyil.';
+
+  @override
+  String get lkcReasonNoCustomer => 'İdarə ediləcək abunə yoxdur.';
+
+  @override
+  String get lkcReasonNoSwitch => 'Bu xətdə dəyişdiriləcək veb abunə yoxdur.';
+
+  @override
+  String get lkcReasonNoUser => 'Belə istifadəçi yoxdur.';
+
+  @override
+  String get lkcReasonPriceArchived => 'Satılan qiymət provayderdə arxivlənib.';
+
+  @override
+  String get lkcReasonPriceMissing =>
+      'Satılan qiymət provayderdə mövcud deyil.';
+
+  @override
+  String get lkcReasonPriceNotFixed => 'Satılan qiymətin sabit məbləği yoxdur.';
+
+  @override
+  String get lkcReasonPricePeriod =>
+      'Satılan qiymət planın dövrü ilə ödənilmir.';
+
+  @override
+  String get lkcReasonProductId =>
+      'Məhsul ID-si boşdur və ya kənarlarında boşluq var.';
+
+  @override
+  String get lkcReasonProductInUse =>
+      'Aktiv abunələri olan məhsulun planı dəyişdirilə bilməz.';
+
+  @override
+  String get lkcReasonProductPlans => 'Məhsul yalnız bir plana bağlana bilər.';
+
+  @override
+  String get lkcReasonPurchaseAccount => 'Alış başqa hesaba aiddir.';
+
+  @override
+  String get lkcReasonPushAccount => 'Gözlənilməz push hesabı.';
+
+  @override
+  String get lkcReasonSamePlan => 'Artıq bu plandasınız.';
+
+  @override
+  String get lkcReasonSoldTwice =>
+      'Hər plan və provayder üçün bir satılan qiymət olmalıdır.';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      'Yadda saxlanıldı, lakin Stripe-da plan dəyişməsi yenilənmədi; yenidən yadda saxlayın.';
+
+  @override
+  String get lkcReasonTestPurchase => 'Test alışları qəbul edilmir.';
+
+  @override
+  String get lkcReasonTransactionAccount => 'Əməliyyat başqa hesaba aiddir.';
+
+  @override
+  String get lkcReasonUnavailable => 'Mövcud deyil.';
+
+  @override
+  String get lkcReasonUnknownPackage => 'Naməlum paket.';
+
+  @override
+  String get lkcReasonUploadSize =>
+      'Yüklənmiş fayl yoxdur və ya bildirilən ölçüdə deyil.';
+
+  @override
+  String get lkcReasonUploadUnknown => 'Belə yükləmə yoxdur və ya vaxtı bitib.';
+
+  @override
+  String get lkcReasonUserGone => 'İstifadəçi artıq mövcud deyil.';
+
+  @override
   String get loadingEllipsis => '...';
 
   @override
