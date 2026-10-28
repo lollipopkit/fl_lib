@@ -141,6 +141,7 @@
   "lkcFiles": "Файлы",
   "lkcFreeTier": "Бесплатный",
   "lkcManageSubscriptions": "Управление подписками",
+  "lkcNoEndDate": "Без даты окончания",
   "lkcPastDue": "Платёж просрочен",
   "lkcPaused": "Приостановлена",
   "lkcPerMonth": "{price} / месяц",

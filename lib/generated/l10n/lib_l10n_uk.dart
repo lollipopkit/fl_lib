@@ -521,6 +521,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get lkcManageSubscriptions => 'Керування підписками';
 
   @override
+  String get lkcNoEndDate => 'Без дати завершення';
+
+  @override
   String get lkcPastDue => 'Платіж прострочено';
 
   @override

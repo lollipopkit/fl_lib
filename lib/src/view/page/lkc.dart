@@ -340,19 +340,25 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   }
 
   String? _statusOf(LkcEntitlement e) {
-    final end = e.periodEnd ?? e.grant?.endsAt;
-    String date(DateTime d) =>
-        MaterialLocalizations.of(context).formatMediumDate(d.toLocal());
     return switch (e.status) {
       LkcStatus.pastDue => l10n.lkcPastDue,
       LkcStatus.paused => l10n.lkcPaused,
-      _ when end == null => null,
-      _
-          when e.cancelScheduled ||
-              (e.grant != null && e.grant!.endsAt != null) =>
-        l10n.lkcEndsOn(date(end)),
-      _ => l10n.lkcRenewsOn(date(end)),
+      _ => _dateOf(e),
     };
+  }
+
+  /// When the plan renews or ends: a grant by its end, a subscription by its period.
+  String? _dateOf(LkcEntitlement e) {
+    if (e.source == LkcSource.manual) {
+      final end = e.grant?.endsAt;
+      return end == null
+          ? l10n.lkcNoEndDate
+          : l10n.lkcEndsOn(_lkcDate(context, end));
+    }
+    final end = e.periodEnd;
+    if (end == null) return null;
+    final date = _lkcDate(context, end);
+    return e.cancelScheduled ? l10n.lkcEndsOn(date) : l10n.lkcRenewsOn(date);
   }
 
   String _formatPrice(LkcPrice price) {
@@ -482,8 +488,7 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
   }
 
   Widget _buildFile(LkcFile file) {
-    final date = MaterialLocalizations.of(context)
-        .formatMediumDate(file.createdAt.toLocal());
+    final date = _lkcDate(context, file.createdAt);
     return ListTile(
       title: Text(
         file.displayName,
@@ -596,6 +601,16 @@ extension on BuildContext {
       _ => '$e',
     };
     showRoundDialog(title: l10n.fail, child: Text(text), actions: Btnx.oks);
+  }
+}
+
+/// With its year: a plan's end is often a year or more away.
+String _lkcDate(BuildContext context, DateTime d) {
+  final locale = Localizations.localeOf(context).toString();
+  try {
+    return DateFormat.yMMMd(locale).format(d.toLocal());
+  } catch (_) {
+    return DateFormat.yMMMd().format(d.toLocal());
   }
 }
 

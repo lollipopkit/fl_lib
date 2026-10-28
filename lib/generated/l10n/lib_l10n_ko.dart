@@ -498,6 +498,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get lkcManageSubscriptions => '구독 관리';
 
   @override
+  String get lkcNoEndDate => '종료일 없음';
+
+  @override
   String get lkcPastDue => '결제 연체';
 
   @override

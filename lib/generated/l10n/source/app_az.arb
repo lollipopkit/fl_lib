@@ -141,6 +141,7 @@
   "lkcFiles": "Fayllar",
   "lkcFreeTier": "Pulsuz",
   "lkcManageSubscriptions": "Abunələri idarə et",
+  "lkcNoEndDate": "Bitmə tarixi yoxdur",
   "lkcPastDue": "Ödəniş gecikib",
   "lkcPaused": "Dayandırılıb",
   "lkcPerMonth": "{price} / ay",

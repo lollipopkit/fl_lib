@@ -141,6 +141,7 @@
   "lkcFiles": "Dateien",
   "lkcFreeTier": "Kostenlos",
   "lkcManageSubscriptions": "Abonnements verwalten",
+  "lkcNoEndDate": "Kein Enddatum",
   "lkcPastDue": "Zahlung überfällig",
   "lkcPaused": "Pausiert",
   "lkcPerMonth": "{price} / Monat",

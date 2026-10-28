@@ -141,6 +141,7 @@
   "lkcFiles": "ファイル",
   "lkcFreeTier": "無料",
   "lkcManageSubscriptions": "サブスクリプションを管理",
+  "lkcNoEndDate": "終了日なし",
   "lkcPastDue": "支払い期限超過",
   "lkcPaused": "一時停止中",
   "lkcPerMonth": "{price} / 月",

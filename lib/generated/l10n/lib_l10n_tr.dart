@@ -508,6 +508,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get lkcManageSubscriptions => 'Abonelikleri yönet';
 
   @override
+  String get lkcNoEndDate => 'Bitiş tarihi yok';
+
+  @override
   String get lkcPastDue => 'Ödeme gecikti';
 
   @override

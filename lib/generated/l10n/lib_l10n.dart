@@ -974,6 +974,12 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
+  /// **'No end date'**
+  String get lkcNoEndDate;
+
+  /// LKC Cloud account page.
+  ///
+  /// In en, this message translates to:
   /// **'Payment past due'**
   String get lkcPastDue;
 

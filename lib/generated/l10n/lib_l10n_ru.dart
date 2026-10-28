@@ -521,6 +521,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get lkcManageSubscriptions => 'Управление подписками';
 
   @override
+  String get lkcNoEndDate => 'Без даты окончания';
+
+  @override
   String get lkcPastDue => 'Платёж просрочен';
 
   @override

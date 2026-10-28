@@ -499,6 +499,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get lkcManageSubscriptions => '管理订阅';
 
   @override
+  String get lkcNoEndDate => '无结束日期';
+
+  @override
   String get lkcPastDue => '付款逾期';
 
   @override
@@ -1845,6 +1848,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcManageSubscriptions => '管理訂閱';
+
+  @override
+  String get lkcNoEndDate => '無結束日期';
 
   @override
   String get lkcPastDue => '付款逾期';

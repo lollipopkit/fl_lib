@@ -141,6 +141,7 @@
   "lkcFiles": "Bestanden",
   "lkcFreeTier": "Gratis",
   "lkcManageSubscriptions": "Abonnementen beheren",
+  "lkcNoEndDate": "Geen einddatum",
   "lkcPastDue": "Betaling achterstallig",
   "lkcPaused": "Gepauzeerd",
   "lkcPerMonth": "{price} / maand",

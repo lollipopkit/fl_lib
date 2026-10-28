@@ -508,6 +508,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get lkcManageSubscriptions => 'Kelola langganan';
 
   @override
+  String get lkcNoEndDate => 'Tanpa tanggal berakhir';
+
+  @override
   String get lkcPastDue => 'Pembayaran terlambat';
 
   @override

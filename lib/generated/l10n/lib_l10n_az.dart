@@ -505,6 +505,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get lkcManageSubscriptions => 'Abunələri idarə et';
 
   @override
+  String get lkcNoEndDate => 'Bitmə tarixi yoxdur';
+
+  @override
   String get lkcPastDue => 'Ödəniş gecikib';
 
   @override

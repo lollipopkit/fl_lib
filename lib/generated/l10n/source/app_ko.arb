@@ -141,6 +141,7 @@
   "lkcFiles": "파일",
   "lkcFreeTier": "무료",
   "lkcManageSubscriptions": "구독 관리",
+  "lkcNoEndDate": "종료일 없음",
   "lkcPastDue": "결제 연체",
   "lkcPaused": "일시 중지됨",
   "lkcPerMonth": "{price} / 월",

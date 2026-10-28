@@ -141,6 +141,7 @@
   "lkcFiles": "Dosyalar",
   "lkcFreeTier": "Ücretsiz",
   "lkcManageSubscriptions": "Abonelikleri yönet",
+  "lkcNoEndDate": "Bitiş tarihi yok",
   "lkcPastDue": "Ödeme gecikti",
   "lkcPaused": "Duraklatıldı",
   "lkcPerMonth": "{price} / ay",

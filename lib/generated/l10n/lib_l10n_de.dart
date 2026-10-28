@@ -508,6 +508,9 @@ class LibLocalizationsDe extends LibLocalizations {
   String get lkcManageSubscriptions => 'Abonnements verwalten';
 
   @override
+  String get lkcNoEndDate => 'Kein Enddatum';
+
+  @override
   String get lkcPastDue => 'Zahlung überfällig';
 
   @override

@@ -498,6 +498,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get lkcManageSubscriptions => 'サブスクリプションを管理';
 
   @override
+  String get lkcNoEndDate => '終了日なし';
+
+  @override
   String get lkcPastDue => '支払い期限超過';
 
   @override

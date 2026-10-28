@@ -141,6 +141,7 @@
   "lkcFiles": "File",
   "lkcFreeTier": "Gratis",
   "lkcManageSubscriptions": "Kelola langganan",
+  "lkcNoEndDate": "Tanpa tanggal berakhir",
   "lkcPastDue": "Pembayaran terlambat",
   "lkcPaused": "Dijeda",
   "lkcPerMonth": "{price} / bulan",
