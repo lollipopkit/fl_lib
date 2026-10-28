@@ -511,13 +511,6 @@ class LibLocalizationsFr extends LibLocalizations {
   String get lkcPastDue => 'Paiement en retard';
 
   @override
-  String get lkcPasteToken => 'Coller le jeton';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'Si l’app ne s’ouvre pas après la connexion, copiez le jeton affiché sur la page et collez-le ici.';
-
-  @override
   String get lkcPaused => 'En pause';
 
   @override

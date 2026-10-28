@@ -502,12 +502,6 @@ class LibLocalizationsZh extends LibLocalizations {
   String get lkcPastDue => '付款逾期';
 
   @override
-  String get lkcPasteToken => '粘贴令牌';
-
-  @override
-  String get lkcPasteTokenTip => '如果登录后 app 没有打开，请复制页面上显示的令牌，粘贴到这里。';
-
-  @override
   String get lkcPaused => '已暂停';
 
   @override
@@ -1854,12 +1848,6 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcPastDue => '付款逾期';
-
-  @override
-  String get lkcPasteToken => '貼上權杖';
-
-  @override
-  String get lkcPasteTokenTip => '如果登入後 app 沒有開啟，請複製頁面上顯示的權杖，貼到這裡。';
 
   @override
   String get lkcPaused => '已暫停';

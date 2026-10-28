@@ -142,8 +142,6 @@
   "lkcFreeTier": "Kostenlos",
   "lkcManageSubscriptions": "Abonnements verwalten",
   "lkcPastDue": "Zahlung überfällig",
-  "lkcPasteToken": "Token einfügen",
-  "lkcPasteTokenTip": "Wenn sich die App nach der Anmeldung nicht öffnet, kopieren Sie das auf der Seite angezeigte Token und fügen Sie es hier ein.",
   "lkcPaused": "Pausiert",
   "lkcPerMonth": "{price} / Monat",
   "lkcPerYear": "{price} / Jahr",

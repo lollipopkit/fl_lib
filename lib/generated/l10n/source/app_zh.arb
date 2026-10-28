@@ -142,8 +142,6 @@
   "lkcFreeTier": "免费",
   "lkcManageSubscriptions": "管理订阅",
   "lkcPastDue": "付款逾期",
-  "lkcPasteToken": "粘贴令牌",
-  "lkcPasteTokenTip": "如果登录后 app 没有打开，请复制页面上显示的令牌，粘贴到这里。",
   "lkcPaused": "已暂停",
   "lkcPerMonth": "{price} / 月",
   "lkcPerYear": "{price} / 年",

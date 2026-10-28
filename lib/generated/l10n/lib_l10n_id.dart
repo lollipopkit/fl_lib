@@ -511,13 +511,6 @@ class LibLocalizationsId extends LibLocalizations {
   String get lkcPastDue => 'Pembayaran terlambat';
 
   @override
-  String get lkcPasteToken => 'Tempel token';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'Jika aplikasi tidak terbuka setelah Anda masuk, salin token yang ditampilkan di halaman dan tempel di sini.';
-
-  @override
   String get lkcPaused => 'Dijeda';
 
   @override

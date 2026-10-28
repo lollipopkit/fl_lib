@@ -142,8 +142,6 @@
   "lkcFreeTier": "Gratis",
   "lkcManageSubscriptions": "Kelola langganan",
   "lkcPastDue": "Pembayaran terlambat",
-  "lkcPasteToken": "Tempel token",
-  "lkcPasteTokenTip": "Jika aplikasi tidak terbuka setelah Anda masuk, salin token yang ditampilkan di halaman dan tempel di sini.",
   "lkcPaused": "Dijeda",
   "lkcPerMonth": "{price} / bulan",
   "lkcPerYear": "{price} / tahun",

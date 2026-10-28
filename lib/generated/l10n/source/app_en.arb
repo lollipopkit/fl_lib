@@ -663,14 +663,6 @@
   "@lkcPastDue": {
     "description": "LKC Cloud account page."
   },
-  "lkcPasteToken": "Paste token",
-  "@lkcPasteToken": {
-    "description": "LKC Cloud account page."
-  },
-  "lkcPasteTokenTip": "If the app doesn’t open after you sign in, copy the token shown on the page and paste it here.",
-  "@lkcPasteTokenTip": {
-    "description": "LKC Cloud account page."
-  },
   "lkcPaused": "Paused",
   "@lkcPaused": {
     "description": "LKC Cloud account page."

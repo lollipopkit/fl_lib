@@ -511,13 +511,6 @@ class LibLocalizationsIt extends LibLocalizations {
   String get lkcPastDue => 'Pagamento scaduto';
 
   @override
-  String get lkcPasteToken => 'Incolla token';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'Se l’app non si apre dopo l’accesso, copia il token mostrato nella pagina e incollalo qui.';
-
-  @override
   String get lkcPaused => 'In pausa';
 
   @override

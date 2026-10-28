@@ -142,8 +142,6 @@
   "lkcFreeTier": "免費",
   "lkcManageSubscriptions": "管理訂閱",
   "lkcPastDue": "付款逾期",
-  "lkcPasteToken": "貼上權杖",
-  "lkcPasteTokenTip": "如果登入後 app 沒有開啟，請複製頁面上顯示的權杖，貼到這裡。",
   "lkcPaused": "已暫停",
   "lkcPerMonth": "{price} / 月",
   "lkcPerYear": "{price} / 年",

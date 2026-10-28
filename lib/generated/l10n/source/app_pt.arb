@@ -142,8 +142,6 @@
   "lkcFreeTier": "Grátis",
   "lkcManageSubscriptions": "Gerenciar assinaturas",
   "lkcPastDue": "Pagamento em atraso",
-  "lkcPasteToken": "Colar token",
-  "lkcPasteTokenTip": "Se o app não abrir depois que você entrar, copie o token exibido na página e cole-o aqui.",
   "lkcPaused": "Pausada",
   "lkcPerMonth": "{price} / mês",
   "lkcPerYear": "{price} / ano",

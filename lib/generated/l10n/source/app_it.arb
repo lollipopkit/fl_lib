@@ -142,8 +142,6 @@
   "lkcFreeTier": "Gratuito",
   "lkcManageSubscriptions": "Gestisci abbonamenti",
   "lkcPastDue": "Pagamento scaduto",
-  "lkcPasteToken": "Incolla token",
-  "lkcPasteTokenTip": "Se l’app non si apre dopo l’accesso, copia il token mostrato nella pagina e incollalo qui.",
   "lkcPaused": "In pausa",
   "lkcPerMonth": "{price} / mese",
   "lkcPerYear": "{price} / anno",

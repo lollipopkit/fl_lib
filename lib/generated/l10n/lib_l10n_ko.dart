@@ -501,13 +501,6 @@ class LibLocalizationsKo extends LibLocalizations {
   String get lkcPastDue => '결제 연체';
 
   @override
-  String get lkcPasteToken => '토큰 붙여넣기';
-
-  @override
-  String get lkcPasteTokenTip =>
-      '로그인한 뒤 앱이 열리지 않으면 페이지에 표시된 토큰을 복사해 여기에 붙여넣으세요.';
-
-  @override
   String get lkcPaused => '일시 중지됨';
 
   @override

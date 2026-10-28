@@ -28,7 +28,7 @@ const _benefits = [
 ];
 
 LkcClient _client({required bool webCheckout}) => LkcClient(
-  appId: 'test',
+  oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://cb'),
   webCheckout: webCheckout,
   api: Dio()
     ..httpClientAdapter = _Adapter({

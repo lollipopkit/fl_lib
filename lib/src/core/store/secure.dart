@@ -69,7 +69,7 @@ abstract final class SecureStoreProps {
   /// GitHub token used for Gist access.
   static const githubToken = SecureProp('githubToken');
 
-  /// LKC Cloud token, see [LkcClient].
+  /// LKC Cloud's IdP tokens, see [LkcClient].
   static const lkcToken = SecureProp('lkcToken');
 
   /// Moves secrets written by older builds out of SharedPreferences.

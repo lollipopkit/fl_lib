@@ -508,13 +508,6 @@ class LibLocalizationsAz extends LibLocalizations {
   String get lkcPastDue => 'Ödəniş gecikib';
 
   @override
-  String get lkcPasteToken => 'Tokeni yapışdırın';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'Daxil olduqdan sonra tətbiq açılmasa, səhifədə göstərilən tokeni kopyalayıb bura yapışdırın.';
-
-  @override
   String get lkcPaused => 'Dayandırılıb';
 
   @override

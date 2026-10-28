@@ -142,8 +142,6 @@
   "lkcFreeTier": "Бесплатный",
   "lkcManageSubscriptions": "Управление подписками",
   "lkcPastDue": "Платёж просрочен",
-  "lkcPasteToken": "Вставить токен",
-  "lkcPasteTokenTip": "Если после входа приложение не открылось, скопируйте токен со страницы и вставьте его сюда.",
   "lkcPaused": "Приостановлена",
   "lkcPerMonth": "{price} / месяц",
   "lkcPerYear": "{price} / год",

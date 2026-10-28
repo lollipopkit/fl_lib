@@ -142,8 +142,6 @@
   "lkcFreeTier": "Ücretsiz",
   "lkcManageSubscriptions": "Abonelikleri yönet",
   "lkcPastDue": "Ödeme gecikti",
-  "lkcPasteToken": "Belirteci yapıştır",
-  "lkcPasteTokenTip": "Giriş yaptıktan sonra uygulama açılmazsa, sayfada gösterilen belirteci kopyalayıp buraya yapıştırın.",
   "lkcPaused": "Duraklatıldı",
   "lkcPerMonth": "{price} / ay",
   "lkcPerYear": "{price} / yıl",

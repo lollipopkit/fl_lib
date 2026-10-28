@@ -11,7 +11,10 @@ import 'package:url_launcher/url_launcher.dart';
 final class LkcPageArgs {
   final LkcClient client;
 
-  const LkcPageArgs(this.client);
+  /// Shown inside a page that has a title bar of its own: no second one.
+  final bool embedded;
+
+  const LkcPageArgs(this.client, {this.embedded = false});
 }
 
 /// The LKC Cloud account: sign-in, the plans held and on sale, and the account itself.
@@ -80,30 +83,35 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   Widget build(BuildContext context) {
     final user = _client.user.value;
     return Scaffold(
-      appBar: CustomAppBar(
-        title: Text(l10n.lkcAccount),
-        actions: [
-          Btn.icon(
-            text: l10n.refresh,
-            icon: const Icon(Icons.refresh),
-            onTap: () => context._runLkc(_load),
-          ),
-        ],
-      ),
+      appBar: widget.args.embedded
+          ? null
+          : CustomAppBar(
+              title: Text(l10n.lkcAccount),
+              actions: [
+                Btn.icon(
+                  text: l10n.refresh,
+                  icon: const Icon(Icons.refresh),
+                  onTap: () => context._runLkc(_load),
+                ),
+              ],
+            ),
       body: ValBuilder(
         listenable: _client.entitlements,
-        builder: (_) => ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          children: [
-            if (user == null) _buildSignIn() else _buildUser(user),
-            for (final line in const [
-              LkcLine.basic,
-              LkcLine.storage,
-              LkcLine.conduit,
-            ])
-              _buildLine(line),
-            if (user != null) _buildActions(),
-          ],
+        builder: (_) => RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            children: [
+              if (user == null) _buildSignIn() else _buildUser(user),
+              for (final line in const [
+                LkcLine.basic,
+                LkcLine.storage,
+                LkcLine.conduit,
+              ])
+                _buildLine(line),
+              if (user != null) _buildActions(),
+            ],
+          ),
         ),
       ),
     );
@@ -118,47 +126,32 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
           children: [
             Text(l10n.lkcSignInTip),
             UIs.height13,
-            Btn.elevated(
-              text: l10n.lkcSignInBrowser,
-              icon: const Icon(Icons.open_in_browser),
-              onTap: () => unawaited(_client.openLogin()),
-            ),
-            UIs.height7,
-            Btn.text(text: l10n.lkcPasteToken, onTap: _pasteToken),
+            if (_signingIn)
+              SizedLoading.small
+            else
+              Btn.elevated(
+                text: l10n.lkcSignInBrowser,
+                icon: const Icon(Icons.open_in_browser),
+                onTap: _signIn,
+              ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _pasteToken() async {
-    final ctrl = TextEditingController();
-    final ok = await context.showRoundDialog<bool>(
-      title: l10n.lkcPasteToken,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(l10n.lkcPasteTokenTip, style: UIs.textGrey),
-          UIs.height13,
-          Input(
-            controller: ctrl,
-            autoFocus: true,
-            maxLines: 3,
-            icon: Icons.key,
-            suggestion: false,
-            onSubmitted: (_) => context.popDialog(true),
-          ),
-        ],
-      ),
-      actions: Btnx.cancelOk,
-    );
-    final token = ctrl.text.trim();
-    ctrl.dispose();
-    if (ok != true || token.isEmpty || !mounted) return;
-    await context._runLkc(() async {
-      await _client.signIn(token);
-      await _load();
-    });
+  /// Not behind a dialog: the browser may take minutes, and leaving it is the way to cancel.
+  bool _signingIn = false;
+
+  Future<void> _signIn() async {
+    setState(() => _signingIn = true);
+    try {
+      if (await _client.signIn() != null) await _load();
+    } catch (e) {
+      if (mounted) context._showLkcErr(e);
+    } finally {
+      if (mounted) setState(() => _signingIn = false);
+    }
   }
 
   Widget _buildUser(LkcUser user) {
@@ -298,7 +291,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
             leading: const Icon(Icons.folder),
             title: Text(l10n.lkcFiles),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => LkcFilesPage.route.go(context, widget.args),
+            onTap: () => LkcFilesPage.route.go(context, LkcPageArgs(_client)),
           ),
           ListTile(
             leading: const Icon(Icons.logout),

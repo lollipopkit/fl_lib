@@ -142,8 +142,6 @@
   "lkcFreeTier": "Gratis",
   "lkcManageSubscriptions": "Abonnementen beheren",
   "lkcPastDue": "Betaling achterstallig",
-  "lkcPasteToken": "Token plakken",
-  "lkcPasteTokenTip": "Als de app na het inloggen niet opent, kopieer dan het token dat op de pagina staat en plak het hier.",
   "lkcPaused": "Gepauzeerd",
   "lkcPerMonth": "{price} / maand",
   "lkcPerYear": "{price} / jaar",

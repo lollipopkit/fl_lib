@@ -524,13 +524,6 @@ class LibLocalizationsUk extends LibLocalizations {
   String get lkcPastDue => 'Платіж прострочено';
 
   @override
-  String get lkcPasteToken => 'Вставити токен';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'Якщо після входу застосунок не відкрився, скопіюйте токен зі сторінки та вставте його сюди.';
-
-  @override
   String get lkcPaused => 'Призупинено';
 
   @override

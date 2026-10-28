@@ -83,6 +83,7 @@ dependencies:
   flutter_rust_bridge: 2.13.0
   flutter_rust_bridge_hooks: 2.13.0
   hooks: ^2.0.2
+  flutter_appauth: ^12.1.0
 
 dependency_overrides:
   flutter_math_fork: ^0.7.4

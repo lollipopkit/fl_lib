@@ -142,8 +142,6 @@
   "lkcFreeTier": "Безкоштовний",
   "lkcManageSubscriptions": "Керування підписками",
   "lkcPastDue": "Платіж прострочено",
-  "lkcPasteToken": "Вставити токен",
-  "lkcPasteTokenTip": "Якщо після входу застосунок не відкрився, скопіюйте токен зі сторінки та вставте його сюди.",
   "lkcPaused": "Призупинено",
   "lkcPerMonth": "{price} / місяць",
   "lkcPerYear": "{price} / рік",

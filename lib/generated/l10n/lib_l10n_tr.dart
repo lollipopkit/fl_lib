@@ -511,13 +511,6 @@ class LibLocalizationsTr extends LibLocalizations {
   String get lkcPastDue => 'Ödeme gecikti';
 
   @override
-  String get lkcPasteToken => 'Belirteci yapıştır';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'Giriş yaptıktan sonra uygulama açılmazsa, sayfada gösterilen belirteci kopyalayıp buraya yapıştırın.';
-
-  @override
   String get lkcPaused => 'Duraklatıldı';
 
   @override

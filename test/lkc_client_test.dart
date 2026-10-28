@@ -1,7 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
-import 'dart:io';
+import 'package:crypto/crypto.dart';
 
 import 'package:dio/dio.dart';
 import 'package:fl_lib/fl_lib.dart';
@@ -17,30 +18,60 @@ const _user = {
   'updated_at': '2026-01-02T00:00:00Z',
 };
 
-/// A JWT whose payload expires at [exp]; the signature isn't checked here.
-String _jwt(DateTime exp) {
-  String part(Object o) =>
-      base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
-  return '${part({'alg': 'HS256'})}.${part({'sub': 'u1', 'exp': exp.millisecondsSinceEpoch ~/ 1000})}.sig';
-}
+const _issuer = 'https://idp.example.com/auth/v1/';
+
+const _discovery = {
+  'authorization_endpoint': 'https://idp.example.com/auth/v1/oidc/authorize',
+  'token_endpoint': 'https://idp.example.com/auth/v1/oidc/token',
+  'revocation_endpoint': 'https://idp.example.com/auth/v1/oidc/token/revoke',
+};
+
+/// Saved tokens whose access token ends in [left].
+String _saved(Duration left, {String access = 'a1', String refresh = 'r1'}) =>
+    jsonEncode(
+      LkcTokens(
+        access: access,
+        refresh: refresh,
+        expiresAt: DateTime.now().add(left),
+      ).toJson(),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _Adapter api;
   late _Adapter store;
+  late _Adapter idp;
   late LkcClient client;
+  Future<bool> Function(Uri url) browser = (_) async => false;
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
-    api = _Adapter();
+    api = _Adapter()
+      ..on('GET /auth/user', {'data': _user})
+      ..on('GET /v2/entitlements', {'data': []});
     store = _Adapter();
+    idp = _Adapter()
+      ..on('GET /auth/v1/.well-known/openid-configuration', _discovery);
     client = LkcClient(
-      appId: 'com.lollipopkit.Test',
+      oidc: LkcOidc(
+        clientId: 'test',
+        redirectUrl: 'test://auth/callback',
+        issuer: Uri.parse(_issuer),
+      ),
       api: Dio()..httpClientAdapter = api,
       store: Dio()..httpClientAdapter = store,
+      idp: Dio()..httpClientAdapter = idp,
+      openBrowser: (url) => browser(url),
+      loopback: true,
     );
   });
+
+  /// Signed in with saved tokens whose access token ends in [left].
+  Future<void> signedIn([Duration left = const Duration(minutes: 5)]) async {
+    FlutterSecureStorage.setMockInitialValues({'lkcToken': _saved(left)});
+    await client.init();
+  }
 
   group('unwrap', () {
     test('an Ok reply leaves the code out', () {
@@ -207,88 +238,182 @@ void main() {
     expect(old.line, LkcLine.conduit);
   });
 
-  test('only this app\'s callback gives a token', () {
-    Uri link(String s) => Uri.parse(s);
-    expect(
-      client.tokenOf(
-        link('lpkt.cn://com.lollipopkit.Test/oauth-callback?token=t'),
-      ),
-      't',
-    );
-    for (final s in [
-      'lpkt.cn://com.lollipopkit.other/oauth-callback?token=t',
-      'lpkt.cn://com.lollipopkit.Test/other?token=t',
-      'https://com.lollipopkit.Test/oauth-callback?token=t',
-      'lpkt.cn://com.lollipopkit.Test/oauth-callback?token=',
-      'lpkt.cn://com.lollipopkit.Test/oauth-callback',
-    ]) {
-      expect(client.tokenOf(link(s)), isNull, reason: s);
-    }
-  });
-
-  test('the login page names the app', () {
-    expect(
-      client.loginUrl.toString(),
-      'https://api.lollipopkit.com/auth/oauth?app_id=com.lollipopkit.Test',
-    );
-  });
-
   group('sign-in', () {
-    final token = _jwt(DateTime.now().add(const Duration(days: 365)));
-
-    test('saves a token the server accepts', () async {
-      api.on('GET /auth/user', {'data': _user});
-      api.on('GET /v2/entitlements', {
-        'data': [
+    test('a loopback redirect, with S256 PKCE', () async {
+      late Uri asked;
+      browser = (url) async {
+        asked = url;
+        // The browser, sent back by the IdP: an icon first, then the code.
+        // The test binding answers every request 400; this is the browser's own.
+        final http = HttpOverrides.runWithHttpOverrides(
+          HttpClient.new,
+          _RealHttp(),
+        );
+        final redirect = Uri.parse(url.queryParameters['redirect_uri']!);
+        await (await http.getUrl(redirect.replace(path: '/favicon.ico')))
+            .close();
+        final res = await (await http.getUrl(
+          redirect.replace(
+            queryParameters: {
+              'code': 'c1',
+              'state': url.queryParameters['state'],
+            },
+          ),
+        )).close();
+        expect(res.statusCode, 200);
+        http.close();
+        return true;
+      };
+      idp.onFn(
+        'POST /auth/v1/oidc/token',
+        (_) => (
+          200,
           {
-            'plan': 'storage.plus',
-            'source': 'stripe',
-            'status': 'past_due',
-            'cancel_scheduled': false,
+            'access_token': 'a1',
+            'refresh_token': 'r1',
+            'expires_in': 300,
+            'id_token':
+                'x.${base64Url.encode(utf8.encode(jsonEncode({'name': 'Lk'}))).replaceAll('=', '')}.y',
           },
-        ],
-      });
-      final user = await client.signIn(' $token\n');
-      expect(user.id, 'u1');
-      expect(api.requests.first.headers['Authorization'], 'Bearer $token');
-      expect(await SecureStoreProps.lkcToken.read(), token);
-      final storage = client.entitlementOf(LkcLine.storage)!;
-      expect(storage.status, LkcStatus.pastDue);
-      expect(storage.status.grants, isTrue);
+        ),
+      );
+
+      final user = await client.signIn();
+
+      expect(user?.id, 'u1');
+      expect(asked.path, '/auth/v1/oidc/authorize');
+      expect(asked.queryParameters['code_challenge_method'], 'S256');
+      expect(asked.queryParameters['scope'], 'openid profile');
+      expect(
+        asked.queryParameters['redirect_uri'],
+        startsWith('http://127.0.0.1:'),
+      );
+      expect(
+        Uri.parse(asked.queryParameters['redirect_uri']!).path,
+        '/oauth-callback',
+      );
+      final exchange = Uri.splitQueryString(idp.bodyOf('/auth/v1/oidc/token'));
+      expect(exchange['grant_type'], 'authorization_code');
+      expect(exchange['code'], 'c1');
+      expect(exchange['redirect_uri'], asked.queryParameters['redirect_uri']);
+      expect(
+        base64Url
+            .encode(
+              sha256.convert(ascii.encode(exchange['code_verifier']!)).bytes,
+            )
+            .replaceAll('=', ''),
+        asked.queryParameters['code_challenge'],
+      );
+      expect(api.requests.first.headers['Authorization'], 'Bearer a1');
+      final saved =
+          jsonDecode((await SecureStoreProps.lkcToken.read())!) as Map;
+      expect(saved['refresh'], 'r1');
     });
 
-    test('keeps no token the server refuses', () async {
-      api.on('GET /auth/user', {'code': 2, 'msg': 'No perm'});
-      await expectLater(client.signIn(token), throwsA(isA<LkcException>()));
+    test('declined at the IdP', () async {
+      browser = (url) async {
+        // The test binding answers every request 400; this is the browser's own.
+        final http = HttpOverrides.runWithHttpOverrides(
+          HttpClient.new,
+          _RealHttp(),
+        );
+        final redirect = Uri.parse(url.queryParameters['redirect_uri']!);
+        await (await http.getUrl(
+          redirect.replace(
+            queryParameters: {
+              'error': 'access_denied',
+              'state': url.queryParameters['state'],
+            },
+          ),
+        )).close();
+        http.close();
+        return true;
+      };
+      expect(await client.signIn(), isNull);
       expect(client.signedIn, isFalse);
       expect(await SecureStoreProps.lkcToken.read(), isNull);
     });
 
-    test('an expired token is not sent', () async {
-      final old = _jwt(DateTime.now().subtract(const Duration(days: 1)));
-      await expectLater(client.signIn(old), throwsA(isA<LkcException>()));
-      FlutterSecureStorage.setMockInitialValues({'lkcToken': old});
-      await client.init();
-      expect(api.requests, isEmpty);
+    test('a fresh access token is never refreshed', () async {
+      await signedIn();
+      await client.refreshEntitlements();
+      expect(idp.requests.where((r) => r.uri.path.endsWith('/token')), isEmpty);
+      expect(api.requests.last.headers['Authorization'], 'Bearer a1');
+    });
+
+    test('a due one is refreshed once, however many ask', () async {
+      var refreshes = 0;
+      idp.onFn('POST /auth/v1/oidc/token', (_) {
+        refreshes++;
+        return (200, {'access_token': 'a2', 'expires_in': 300});
+      });
+      await signedIn(const Duration(seconds: 30));
+      await Future.wait([
+        for (var i = 0; i < 3; i++) client.refreshEntitlements(),
+      ]);
+      expect(refreshes, 1);
+      expect(
+        Uri.splitQueryString(idp.bodyOf('/auth/v1/oidc/token'))['grant_type'],
+        'refresh_token',
+      );
+      expect(api.requests.last.headers['Authorization'], 'Bearer a2');
+      // A refresh token not rotated is kept.
+      final saved =
+          jsonDecode((await SecureStoreProps.lkcToken.read())!) as Map;
+      expect((saved['access'], saved['refresh']), ('a2', 'r1'));
+    });
+
+    test('a refused refresh token signs out', () async {
+      idp.onFn(
+        'POST /auth/v1/oidc/token',
+        (_) => (400, {'error': 'invalid_grant'}),
+      );
+      FlutterSecureStorage.setMockInitialValues({
+        'lkcToken': _saved(Duration.zero),
+      });
+      await expectLater(client.init(), throwsA(isA<LkcException>()));
+      expect(client.signedIn, isFalse);
       expect(await SecureStoreProps.lkcToken.read(), isNull);
     });
 
-    test('a deleted account takes the token with it', () async {
-      api.on('GET /auth/user', {'data': _user});
-      api.on('GET /v2/entitlements', {'data': []});
+    test('a token homebase refuses signs out', () async {
+      api.on('GET /auth/user', {'code': 2, 'msg': 'No perm'});
+      await expectLater(signedIn(), throwsA(isA<LkcException>()));
+      expect(client.signedIn, isFalse);
+    });
+
+    test('a token saved by the hand-off sign-in is dropped', () async {
+      FlutterSecureStorage.setMockInitialValues({'lkcToken': 'eyJ.old.jwt'});
+      await client.init();
+      expect(client.signedIn, isFalse);
+      expect(api.requests, isEmpty);
+    });
+
+    test('signing out revokes the refresh token', () async {
+      await signedIn();
+      await client.signOut();
+      expect(client.signedIn, isFalse);
+      final revoke = Uri.splitQueryString(
+        idp.bodyOf('/auth/v1/oidc/token/revoke'),
+      );
+      expect(
+        (revoke['token'], revoke['token_type_hint']),
+        ('r1', 'refresh_token'),
+      );
+    });
+
+    test('a deleted account takes the tokens with it', () async {
       api.on('DELETE /auth/user', {'code': 0, 'msg': 'Ok'});
-      await client.signIn(token);
+      await signedIn();
       await client.deleteAccount();
       expect(client.signedIn, isFalse);
       expect(client.user.value, isNull);
       expect(await SecureStoreProps.lkcToken.read(), isNull);
+      expect(idp.requests.any((r) => r.uri.path.endsWith('/revoke')), isTrue);
     });
   });
 
   test('uploads straight to the store, without the token', () async {
-    final token = _jwt(DateTime.now().add(const Duration(days: 1)));
-    api.on('GET /auth/user', {'data': _user});
-    api.on('GET /v2/entitlements', {'data': []});
     api.on('POST /file/uploads', {
       'data': {
         'id': 'up1',
@@ -298,7 +423,7 @@ void main() {
       },
     });
     api.on('POST /file/uploads/up1/complete', {'data': 'abc.txt'});
-    await client.signIn(token);
+    await signedIn();
 
     final bytes = utf8.encode('hello');
     final name = await client.upload(
@@ -322,9 +447,6 @@ void main() {
   });
 
   test('a failed PUT is not completed', () async {
-    final token = _jwt(DateTime.now().add(const Duration(days: 1)));
-    api.on('GET /auth/user', {'data': _user});
-    api.on('GET /v2/entitlements', {'data': []});
     api.on('POST /file/uploads', {
       'data': {
         'id': 'up1',
@@ -334,7 +456,7 @@ void main() {
       },
     });
     store.status = 403;
-    await client.signIn(token);
+    await signedIn();
 
     final e = await client
         .upload(data: Stream.value([1]), size: 1, originalName: 'a')
@@ -345,7 +467,7 @@ void main() {
 
   test('no web checkout where it is off', () async {
     final ios = LkcClient(
-      appId: 'a',
+      oidc: LkcOidc(clientId: 'a', redirectUrl: 'a://cb'),
       webCheckout: false,
       api: Dio()..httpClientAdapter = api,
     );
@@ -398,7 +520,16 @@ final class _Adapter implements HttpClientAdapter {
   final bodies = <List<int>>[];
   int status = 200;
 
+  final _handlers = <String, (int, Object) Function(String body)>{};
+  final _sent = <String, String>{};
+
   void on(String route, Object reply) => _replies[route] = reply;
+
+  void onFn(String route, (int, Object) Function(String body) handler) =>
+      _handlers[route] = handler;
+
+  /// The last body sent to [path], as text.
+  String bodyOf(String path) => _sent[path]!;
 
   @override
   Future<ResponseBody> fetch(
@@ -410,7 +541,26 @@ final class _Adapter implements HttpClientAdapter {
     if (requestStream != null) {
       bodies.add([for (final chunk in await requestStream.toList()) ...chunk]);
     }
-    final reply = _replies['${options.method} ${options.uri.path}'];
+    final route = '${options.method} ${options.uri.path}';
+    final data = options.data;
+    if (data != null && requestStream == null) {
+      _sent[options.uri.path] = data is Map
+          ? Transformer.urlEncodeMap(data.cast<String, dynamic>())
+          : '$data';
+    } else if (requestStream != null) {
+      _sent[options.uri.path] = utf8.decode(bodies.last, allowMalformed: true);
+    }
+    if (_handlers[route] case final handler?) {
+      final (code, body) = handler(_sent[options.uri.path] ?? '');
+      return ResponseBody.fromString(
+        jsonEncode(body),
+        code,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      );
+    }
+    final reply = _replies[route];
     return ResponseBody.fromString(
       reply == null ? '' : jsonEncode(reply),
       reply == null && status == 200 ? 200 : status,
@@ -423,3 +573,5 @@ final class _Adapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+final class _RealHttp extends HttpOverrides {}

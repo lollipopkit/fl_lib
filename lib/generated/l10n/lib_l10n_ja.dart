@@ -501,13 +501,6 @@ class LibLocalizationsJa extends LibLocalizations {
   String get lkcPastDue => '支払い期限超過';
 
   @override
-  String get lkcPasteToken => 'トークンを貼り付け';
-
-  @override
-  String get lkcPasteTokenTip =>
-      'サインイン後にアプリが開かない場合は、ページに表示されたトークンをコピーしてここに貼り付けてください。';
-
-  @override
   String get lkcPaused => '一時停止中';
 
   @override

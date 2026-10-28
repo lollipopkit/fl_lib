@@ -142,8 +142,6 @@
   "lkcFreeTier": "無料",
   "lkcManageSubscriptions": "サブスクリプションを管理",
   "lkcPastDue": "支払い期限超過",
-  "lkcPasteToken": "トークンを貼り付け",
-  "lkcPasteTokenTip": "サインイン後にアプリが開かない場合は、ページに表示されたトークンをコピーしてここに貼り付けてください。",
   "lkcPaused": "一時停止中",
   "lkcPerMonth": "{price} / 月",
   "lkcPerYear": "{price} / 年",

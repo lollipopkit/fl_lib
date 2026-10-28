@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:fl_lib/src/core/lkc/auth.dart';
 import 'package:fl_lib/src/core/lkc/model.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
@@ -37,14 +38,12 @@ final class LkcException implements Exception {
 
 /// A client of LKC Cloud (homebase): sign-in, account, subscriptions and files.
 ///
-/// Sign-in hands the token over through the browser: [openLogin], then
-/// [onDeepLink] receives `lpkt.cn://<appId>/oauth-callback?token=…`. Where the
-/// app has no deep link (desktop), the page shows the token for [signIn].
+/// The user signs in at the IdP with the app's public client ([LkcOidc]);
+/// homebase is sent the IdP's access token, refreshed when it is about to end.
 final class LkcClient {
   static const defaultBaseUrl = 'https://api.lollipopkit.com';
 
-  /// Identifies the app to the login page, which opens `lpkt.cn://<appId>/…`.
-  final String appId;
+  final LkcOidc oidc;
   final Uri baseUrl;
 
   /// Whether this app may sell plans by the web checkout.
@@ -54,14 +53,18 @@ final class LkcClient {
   /// The Stripe portal can switch plans, so it is held to this too.
   final bool webCheckout;
 
-  /// Where the token is kept.
+  /// Where the tokens are kept.
   final SecureProp tokenProp;
   final Dio _api;
 
   /// Talks to the object store: never sends the token.
   final Dio _store;
+  final LkcIdp _idp;
 
-  String? _token;
+  LkcTokens? _tokens;
+
+  /// The refresh in flight: one at a time, as the IdP takes a refresh token once.
+  Future<LkcTokens>? _refreshing;
 
   /// The signed-in user, null when signed out.
   final user = ValueNotifier<LkcUser?>(null);
@@ -70,38 +73,52 @@ final class LkcClient {
   final entitlements = ValueNotifier<List<LkcEntitlement>?>(null);
 
   LkcClient({
-    required this.appId,
+    required this.oidc,
     Uri? baseUrl,
     bool? webCheckout,
     this.tokenProp = SecureStoreProps.lkcToken,
     Dio? api,
     Dio? store,
+    Dio? idp,
+    @visibleForTesting Future<bool> Function(Uri url)? openBrowser,
+    @visibleForTesting bool? loopback,
   }) : baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
        webCheckout = webCheckout ?? (!isIOS && !isMacOS),
        _api = api ?? Dio(),
-       _store = store ?? Dio() {
+       _store = store ?? Dio(),
+       _idp = LkcIdp(
+         oidc,
+         (idp ?? Dio())..options.validateStatus = (_) => true,
+         openBrowser:
+             openBrowser ??
+             (url) => launchUrl(url, mode: LaunchMode.externalApplication),
+         loopback: loopback,
+       ) {
     _api.options
       ..baseUrl = this.baseUrl.toString()
       ..validateStatus = (_) => true;
     _store.options.validateStatus = (_) => true;
   }
 
-  bool get signedIn => _token != null;
+  bool get signedIn => _tokens != null;
 
-  /// Load the saved token and its user. A token the server refuses is dropped;
-  /// on any other error it is kept, and the error thrown.
+  /// Load the saved tokens and their user. Tokens the IdP or homebase refuse
+  /// are dropped; on any other error they are kept, and the error thrown.
   Future<void> init() async {
-    final token = await tokenProp.read();
-    if (token == null) return;
-    if (_expired(token)) {
+    final saved = await tokenProp.read();
+    if (saved == null) return;
+    try {
+      _tokens = LkcTokens.fromJson(jsonDecode(saved) as Map<String, dynamic>);
+    } catch (_) {
+      // TODO: rm once no build that kept a homebase token here is around.
       await tokenProp.write(null);
       return;
     }
-    _token = token;
     try {
       await refresh();
     } on LkcException catch (e) {
       if (e.isPerm) await _forget();
+      rethrow;
     }
   }
 
@@ -111,65 +128,74 @@ final class LkcClient {
     await refreshEntitlements();
   }
 
-  Uri get loginUrl =>
-      baseUrl.replace(path: '/auth/oauth', queryParameters: {'app_id': appId});
-
-  /// Open the login page in the system browser.
-  Future<bool> openLogin() =>
-      launchUrl(loginUrl, mode: LaunchMode.externalApplication);
-
-  /// A [DeepLinkHandler] for `DeepLinks.register`: signs in with the token of
-  /// this app's login callback and ignores every other link.
-  void onDeepLink(Uri uri, [BuildContext? context]) {
-    final token = tokenOf(uri);
-    if (token == null) return;
-    signIn(token).then(
-      (_) {},
-      onError: (Object e) {
-        // Never the token: the error says what the server refused.
-        debugPrint('LKC sign-in from the callback failed: $e');
-      },
-    );
-  }
-
-  /// The token of this app's `lpkt.cn://<appId>/oauth-callback`, null for any other link.
-  @visibleForTesting
-  String? tokenOf(Uri uri) {
-    if (uri.scheme != 'lpkt.cn') return null;
-    // The host of a URI is case-insensitive, and parsed in lower case.
-    if (uri.host != appId.toLowerCase()) return null;
-    if (uri.path != '/oauth-callback') return null;
-    final token = uri.queryParameters['token']?.trim();
-    return token == null || token.isEmpty ? null : token;
-  }
-
-  /// Sign in with [token]: a callback's, or one pasted from the login page.
-  /// It is saved only once the server accepts it.
-  Future<LkcUser> signIn(String token) async {
-    token = token.trim();
-    if (_expired(token)) {
-      throw const LkcException(code: LkcCode.perm);
+  /// Sign in at the IdP: AppAuth where the app has a URL scheme, a loopback
+  /// redirect elsewhere. Null when the user cancels.
+  Future<LkcUser?> signIn() async {
+    final tokens = await _idp.signIn();
+    if (tokens == null) return null;
+    _tokens = tokens;
+    try {
+      var u = await _getUser();
+      // homebase makes the account of a new IdP user from the token's subject
+      // alone, so its name is the id until it is set.
+      final name = tokens.name;
+      if (u.name == u.id && name != null) {
+        await _call('POST', '/auth/user', body: {'name': name});
+        u = await _getUser();
+      }
+      await _save(tokens);
+      user.value = u;
+      await refreshEntitlements();
+      return u;
+    } catch (_) {
+      if (user.value == null) _tokens = null;
+      rethrow;
     }
-    final u = await _getUser(token: token);
-    await tokenProp.write(token);
-    _token = token;
-    user.value = u;
-    await refreshEntitlements();
-    return u;
   }
 
-  /// Forget the token here. It stays valid at the server until it expires.
-  Future<void> signOut() => _forget();
+  /// Sign out here and end the session at the IdP.
+  Future<void> signOut() async {
+    final tokens = _tokens;
+    await _forget();
+    if (tokens != null) await _idp.revoke(tokens);
+  }
 
   Future<void> _forget() async {
-    _token = null;
+    _tokens = null;
     user.value = null;
     entitlements.value = null;
     await tokenProp.write(null);
   }
 
-  Future<LkcUser> _getUser({String? token}) async => LkcUser.fromJson(
-    await _call('GET', '/auth/user', token: token) as Map<String, dynamic>,
+  Future<void> _save(LkcTokens tokens) =>
+      tokenProp.write(jsonEncode(tokens.toJson()));
+
+  /// The access token to send, refreshed once due.
+  Future<String> _accessToken() async {
+    final tokens = _tokens;
+    if (tokens == null) throw const LkcException(code: LkcCode.perm);
+    if (!tokens.due) return tokens.access;
+    final refreshing = _refreshing ??= _refresh(tokens)
+        .whenComplete(() => _refreshing = null);
+    return (await refreshing).access;
+  }
+
+  Future<LkcTokens> _refresh(LkcTokens tokens) async {
+    final LkcTokens fresh;
+    try {
+      fresh = await _idp.refresh(tokens);
+    } on LkcException catch (e) {
+      // The refresh token is spent or revoked: the session is over.
+      if (e.isPerm) await _forget();
+      rethrow;
+    }
+    _tokens = fresh;
+    await _save(fresh);
+    return fresh;
+  }
+
+  Future<LkcUser> _getUser() async => LkcUser.fromJson(
+    await _call('GET', '/auth/user') as Map<String, dynamic>,
   );
 
   Future<void> updateUser({String? name, String? avatar}) async {
@@ -187,11 +213,11 @@ final class LkcClient {
 
   /// Delete the account and its files; web subscriptions are canceled.
   ///
-  /// The token is dropped too: the IdP identity stays, and a valid token would
-  /// make an empty account again.
+  /// The tokens are revoked and dropped too: the IdP identity stays, and a
+  /// valid token would make an empty account again.
   Future<void> deleteAccount() async {
     await _call('DELETE', '/auth/user');
-    await _forget();
+    await signOut();
   }
 
   // Subscriptions
@@ -382,11 +408,9 @@ final class LkcClient {
     String path, {
     Map<String, dynamic>? query,
     Object? body,
-    String? token,
     bool auth = true,
   }) async {
-    token ??= _token;
-    if (auth && token == null) throw const LkcException(code: LkcCode.perm);
+    final token = auth ? await _accessToken() : null;
     final res = await _api.request<Object?>(
       path,
       queryParameters: query,
@@ -433,23 +457,6 @@ final class LkcClient {
     for (final e in data as List? ?? const [])
       fromJson(e as Map<String, dynamic>),
   ];
-
-  /// Whether the JWT [token] has expired. Not verified: the server does that.
-  static bool _expired(String token) {
-    final parts = token.split('.');
-    if (parts.length != 3) return false;
-    try {
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      final exp = payload is Map ? payload['exp'] : null;
-      if (exp is! int) return false;
-      return DateTime.fromMillisecondsSinceEpoch(exp * 1000)
-          .isBefore(DateTime.now());
-    } on FormatException {
-      return false;
-    }
-  }
 
   void dispose() {
     _returnListener?.dispose();

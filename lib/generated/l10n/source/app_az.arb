@@ -142,8 +142,6 @@
   "lkcFreeTier": "Pulsuz",
   "lkcManageSubscriptions": "Abunələri idarə et",
   "lkcPastDue": "Ödəniş gecikib",
-  "lkcPasteToken": "Tokeni yapışdırın",
-  "lkcPasteTokenTip": "Daxil olduqdan sonra tətbiq açılmasa, səhifədə göstərilən tokeni kopyalayıb bura yapışdırın.",
   "lkcPaused": "Dayandırılıb",
   "lkcPerMonth": "{price} / ay",
   "lkcPerYear": "{price} / il",

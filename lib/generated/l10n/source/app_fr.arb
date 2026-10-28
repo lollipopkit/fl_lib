@@ -142,8 +142,6 @@
   "lkcFreeTier": "Gratuit",
   "lkcManageSubscriptions": "Gérer les abonnements",
   "lkcPastDue": "Paiement en retard",
-  "lkcPasteToken": "Coller le jeton",
-  "lkcPasteTokenTip": "Si l’app ne s’ouvre pas après la connexion, copiez le jeton affiché sur la page et collez-le ici.",
   "lkcPaused": "En pause",
   "lkcPerMonth": "{price} / mois",
   "lkcPerYear": "{price} / an",

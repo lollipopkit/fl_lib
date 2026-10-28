@@ -142,8 +142,6 @@
   "lkcFreeTier": "무료",
   "lkcManageSubscriptions": "구독 관리",
   "lkcPastDue": "결제 연체",
-  "lkcPasteToken": "토큰 붙여넣기",
-  "lkcPasteTokenTip": "로그인한 뒤 앱이 열리지 않으면 페이지에 표시된 토큰을 복사해 여기에 붙여넣으세요.",
   "lkcPaused": "일시 중지됨",
   "lkcPerMonth": "{price} / 월",
   "lkcPerYear": "{price} / 년",

@@ -980,18 +980,6 @@ abstract class LibLocalizations {
   /// LKC Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Paste token'**
-  String get lkcPasteToken;
-
-  /// LKC Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'If the app doesn’t open after you sign in, copy the token shown on the page and paste it here.'**
-  String get lkcPasteTokenTip;
-
-  /// LKC Cloud account page.
-  ///
-  /// In en, this message translates to:
   /// **'Paused'**
   String get lkcPaused;
 
