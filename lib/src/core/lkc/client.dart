@@ -43,6 +43,10 @@ final class LkcException implements Exception {
 final class LkcClient {
   static const defaultBaseUrl = 'https://api.lollipopkit.com';
 
+  // Not on the object store: an upload of 5 GB takes as long as it takes.
+  static const _connectTimeout = Duration(seconds: 15);
+  static const _receiveTimeout = Duration(seconds: 30);
+
   final LkcOidc oidc;
   final Uri baseUrl;
 
@@ -88,16 +92,23 @@ final class LkcClient {
        _store = store ?? Dio(),
        _idp = LkcIdp(
          oidc,
-         (idp ?? Dio())..options.validateStatus = (_) => true,
+         _timed(idp ?? Dio()),
          openBrowser:
              openBrowser ??
              (url) => launchUrl(url, mode: LaunchMode.externalApplication),
          loopback: loopback,
        ) {
-    _api.options
-      ..baseUrl = this.baseUrl.toString()
-      ..validateStatus = (_) => true;
+    _timed(_api).options.baseUrl = this.baseUrl.toString();
     _store.options.validateStatus = (_) => true;
+  }
+
+  /// Replies of every status for the caller, and no request left hanging.
+  static Dio _timed(Dio dio) {
+    dio.options
+      ..validateStatus = ((_) => true)
+      ..connectTimeout = _connectTimeout
+      ..receiveTimeout = _receiveTimeout;
+    return dio;
   }
 
   bool get signedIn => _tokens != null;

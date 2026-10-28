@@ -199,7 +199,7 @@ final class LkcIdp {
       }
       final code = await answer.timeout(const Duration(minutes: 10));
       if (code == null) return null;
-      final res = await _dio.postUri<Map<String, dynamic>>(
+      final res = await _dio.postUri<Object>(
         endpoints.token,
         data: {
           'grant_type': 'authorization_code',
@@ -249,7 +249,7 @@ final class LkcIdp {
     final refresh = tokens.refresh;
     if (refresh == null) throw const LkcException(code: LkcCode.perm);
     final endpoints = await this.endpoints();
-    final res = await _dio.postUri<Map<String, dynamic>>(
+    final res = await _dio.postUri<Object>(
       endpoints.token,
       data: {
         'grant_type': 'refresh_token',
@@ -284,23 +284,24 @@ final class LkcIdp {
 
   static final _form = Options(contentType: Headers.formUrlEncodedContentType);
 
-  /// The body of a token reply, or the refusal: 4xx is the grant's end.
-  static Map<String, dynamic> _tokenResponse(
-    Response<Map<String, dynamic>> res,
-  ) {
+  /// The body of a token reply, or the refusal. Only the IdP's own
+  /// `invalid_grant` ends the session: a proxy's page in front of it (a
+  /// challenge, a 403) is no word on the grant.
+  static Map<String, dynamic> _tokenResponse(Response<Object> res) {
     final status = res.statusCode ?? 0;
     final body = res.data;
-    if (status >= 200 &&
-        status < 300 &&
-        body != null &&
-        body['access_token'] is String) {
-      return body;
+    if (body is Map<String, dynamic>) {
+      if (status >= 200 && status < 300 && body['access_token'] is String) {
+        return body;
+      }
+      final error = body['error'] as String?;
+      throw LkcException(
+        code: error == 'invalid_grant' ? LkcCode.perm : null,
+        reason: error,
+        status: status,
+      );
     }
-    throw LkcException(
-      code: status >= 400 && status < 500 ? LkcCode.perm : null,
-      reason: body?['error'] as String?,
-      status: status,
-    );
+    throw LkcException(status: status);
   }
 
   static final _rng = Random.secure();

@@ -376,6 +376,20 @@ void main() {
       expect(await SecureStoreProps.lkcToken.read(), isNull);
     });
 
+    test('a proxy in front of the IdP is no word on the grant', () async {
+      // Cloudflare's challenge: a page, not the IdP's `invalid_grant`.
+      idp.onFn(
+        'POST /auth/v1/oidc/token',
+        (_) => (403, '<html>challenge</html>'),
+      );
+      await expectLater(
+        signedIn(const Duration(seconds: 30)),
+        throwsA(isA<LkcException>()),
+      );
+      expect(client.signedIn, isTrue);
+      expect(await SecureStoreProps.lkcToken.read(), isNotNull);
+    });
+
     test('a token homebase refuses signs out', () async {
       api.on('GET /auth/user', {'code': 2, 'msg': 'No perm'});
       await expectLater(signedIn(), throwsA(isA<LkcException>()));

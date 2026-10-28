@@ -291,7 +291,13 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
             leading: const Icon(Icons.folder),
             title: Text(l10n.lkcFiles),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => LkcFilesPage.route.go(context, LkcPageArgs(_client)),
+            // Over the whole window from a page embedded in another: in its
+            // pane it would draw a second title bar under the host's.
+            onTap: () => LkcFilesPage.route.go(
+              context,
+              LkcPageArgs(_client),
+              target: widget.args.embedded ? NavTarget.root : NavTarget.nearest,
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.logout),
@@ -425,7 +431,7 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
         ],
       ),
       body: files == null
-          ? SizedLoading.medium
+          ? const Center(child: SizedLoading.medium)
           : ListView(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
               children: [
