@@ -365,6 +365,242 @@ class LibLocalizationsDe extends LibLocalizations {
   String get license => 'Lizenz';
 
   @override
+  String get lkcReasonAlreadySubscribed => 'Bereits abonniert';
+
+  @override
+  String get lkcReasonBadPurchaseToken => 'Ungültiges Kauf-Token';
+
+  @override
+  String get lkcReasonBadPushToken => 'Ungültiges Push-Token';
+
+  @override
+  String get lkcReasonBadQuery => 'Ungültige Abfrage';
+
+  @override
+  String get lkcReasonBadSignature => 'Ungültige Signatur';
+
+  @override
+  String get lkcReasonBadTransaction => 'Ungültige Transaktion';
+
+  @override
+  String get lkcReasonCodeCheckout =>
+      'Der Code kann bei diesem Checkout nicht verwendet werden';
+
+  @override
+  String get lkcReasonCodeCurrency =>
+      'Die Währung des Codes passt nicht zum Preis';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded =>
+      'Ein fester Betrag braucht eine Währung';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods =>
+      'Ein Rabatt gewährt keine Zeiträume';
+
+  @override
+  String get lkcReasonCodeDuration =>
+      'Wählen Sie, welche Zahlungen der Rabatt abdeckt';
+
+  @override
+  String get lkcReasonCodeExpired => 'Der Code ist abgelaufen';
+
+  @override
+  String get lkcReasonCodeFormat =>
+      'Ein Code besteht aus 4 bis 32 Buchstaben, Ziffern oder Bindestrichen';
+
+  @override
+  String get lkcReasonCodeGrantOff => 'Eine Freischaltung hat keinen Rabatt';
+
+  @override
+  String get lkcReasonCodeGrantPeriods =>
+      'Eine Freischaltung dauert 1 bis 120 Zeiträume';
+
+  @override
+  String get lkcReasonCodeGrantPlan =>
+      'Eine Freischaltung gilt für genau einen Plan';
+
+  @override
+  String get lkcReasonCodeInactive => 'Der Code ist nicht mehr gültig';
+
+  @override
+  String get lkcReasonCodeIsDiscount =>
+      'Der Code ist ein Rabatt; geben Sie ihn beim Abschließen des Abonnements ein';
+
+  @override
+  String get lkcReasonCodeIsGrant =>
+      'Der Code schaltet einen Plan frei; lösen Sie ihn stattdessen ein';
+
+  @override
+  String get lkcReasonCodeKind =>
+      'Die Art eines Codes kann nicht geändert werden';
+
+  @override
+  String get lkcReasonCodeLimit => 'Das Einlöselimit muss positiv sein';
+
+  @override
+  String get lkcReasonCodeLineHeld =>
+      'Sie haben bereits ein Abonnement in dieser Produktlinie';
+
+  @override
+  String get lkcReasonCodeMonths =>
+      'Ein wiederkehrender Rabatt gilt 1 bis 36 Monate';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'Der Code gilt nur für Neukunden';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'Der Code ist noch nicht gültig';
+
+  @override
+  String get lkcReasonCodeOff =>
+      'Ein Rabatt ist ein Prozentsatz (1 bis 100) oder ein fester Betrag';
+
+  @override
+  String get lkcReasonCodePlan => 'Der Code gilt nicht für diesen Plan';
+
+  @override
+  String get lkcReasonCodePlans =>
+      'Wählen Sie die Pläne, für die der Code gilt';
+
+  @override
+  String get lkcReasonCodeRedeemed =>
+      'Der Code wurde bereits eingelöst; deaktivieren Sie ihn stattdessen';
+
+  @override
+  String get lkcReasonCodeTaken => 'Der Code existiert bereits';
+
+  @override
+  String get lkcReasonCodeTries =>
+      'Zu viele Versuche, bitte später erneut versuchen';
+
+  @override
+  String get lkcReasonCodeUnknown => 'Code nicht gefunden';
+
+  @override
+  String get lkcReasonCodeUsed => 'Sie haben diesen Code bereits verwendet';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'Der Code ist aufgebraucht';
+
+  @override
+  String get lkcReasonCodeWindow => 'Der Code muss beginnen, bevor er abläuft';
+
+  @override
+  String get lkcReasonDeleteAdmin =>
+      'Entfernen Sie die Admin-Rolle im IdP, bevor Sie einen Admin löschen';
+
+  @override
+  String get lkcReasonDeleteSelf =>
+      'Löschen Sie Ihr eigenes Konto auf der Kontoseite';
+
+  @override
+  String get lkcReasonFileExists =>
+      'Eine Datei mit diesem Namen existiert bereits';
+
+  @override
+  String get lkcReasonFileQuota =>
+      'Die Dateien würden das Speicherkontingent überschreiten';
+
+  @override
+  String get lkcReasonFileTooLarge => 'Die Datei ist zu groß';
+
+  @override
+  String get lkcReasonForeignTransaction =>
+      'Transaktion einer anderen App oder Umgebung';
+
+  @override
+  String get lkcReasonGrantGone => 'Kein solches aktives manuelles Abonnement';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'Der Benutzer hat ein manuelles Abonnement in dieser Produktlinie; ändern Sie stattdessen dieses';
+
+  @override
+  String get lkcReasonGrantInPast =>
+      'Die Freischaltung muss in der Zukunft enden';
+
+  @override
+  String get lkcReasonManualProvider => '„Manuell“ ist kein Anbieter';
+
+  @override
+  String get lkcReasonNoCustomer => 'Kein Abonnement zu verwalten';
+
+  @override
+  String get lkcReasonNoSwitch =>
+      'Kein Web-Abonnement in dieser Produktlinie zum Wechseln';
+
+  @override
+  String get lkcReasonNoUser => 'Benutzer nicht gefunden';
+
+  @override
+  String get lkcReasonPriceArchived =>
+      'Ein verkaufter Preis ist beim Anbieter archiviert';
+
+  @override
+  String get lkcReasonPriceMissing =>
+      'Ein verkaufter Preis existiert beim Anbieter nicht';
+
+  @override
+  String get lkcReasonPriceNotFixed =>
+      'Ein verkaufter Preis hat keinen festen Betrag';
+
+  @override
+  String get lkcReasonPricePeriod =>
+      'Ein verkaufter Preis rechnet nicht im Zeitraum seines Plans ab';
+
+  @override
+  String get lkcReasonProductId =>
+      'Produkt-ID ist leer oder hat Leerzeichen am Rand';
+
+  @override
+  String get lkcReasonProductInUse =>
+      'Ein Produkt mit aktiven Abonnements behält seinen Plan';
+
+  @override
+  String get lkcReasonProductPlans => 'Ein Produkt gehört zu genau einem Plan';
+
+  @override
+  String get lkcReasonPurchaseAccount =>
+      'Der Kauf gehört zu einem anderen Konto';
+
+  @override
+  String get lkcReasonPushAccount => 'Unerwartetes Push-Konto';
+
+  @override
+  String get lkcReasonSamePlan => 'Bereits in diesem Plan';
+
+  @override
+  String get lkcReasonSoldTwice => 'Ein verkaufter Preis pro Plan und Anbieter';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      'Gespeichert, aber der Planwechsel bei Stripe konnte nicht aktualisiert werden; bitte erneut speichern';
+
+  @override
+  String get lkcReasonTestPurchase => 'Testkäufe werden nicht akzeptiert';
+
+  @override
+  String get lkcReasonTransactionAccount =>
+      'Die Transaktion gehört zu einem anderen Konto';
+
+  @override
+  String get lkcReasonUnavailable => 'Nicht verfügbar';
+
+  @override
+  String get lkcReasonUnknownPackage => 'Unbekanntes Paket';
+
+  @override
+  String get lkcReasonUploadSize =>
+      'Die hochgeladene Datei fehlt oder hat nicht die angekündigte Größe';
+
+  @override
+  String get lkcReasonUploadUnknown => 'Upload nicht gefunden oder abgelaufen';
+
+  @override
+  String get lkcReasonUserGone => 'Der Benutzer existiert nicht mehr';
+
+  @override
   String get loadingEllipsis => '...';
 
   @override

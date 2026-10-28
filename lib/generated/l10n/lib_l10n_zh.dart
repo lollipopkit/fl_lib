@@ -364,6 +364,207 @@ class LibLocalizationsZh extends LibLocalizations {
   String get license => '许可证';
 
   @override
+  String get lkcReasonAlreadySubscribed => '这条产品线已有订阅，请在账单门户中更改。';
+
+  @override
+  String get lkcReasonBadPurchaseToken => '购买凭证无效。';
+
+  @override
+  String get lkcReasonBadPushToken => '推送令牌无效。';
+
+  @override
+  String get lkcReasonBadQuery => '查询参数无效。';
+
+  @override
+  String get lkcReasonBadSignature => '签名无效。';
+
+  @override
+  String get lkcReasonBadTransaction => '交易无效。';
+
+  @override
+  String get lkcReasonCodeCheckout => '这种结账方式不能使用兑换码。';
+
+  @override
+  String get lkcReasonCodeCurrency => '兑换码的货币与价格不一致。';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded => '固定金额需要填写货币。';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => '折扣不赠送周期。';
+
+  @override
+  String get lkcReasonCodeDuration => '请选择折扣适用的付款。';
+
+  @override
+  String get lkcReasonCodeExpired => '兑换码已过期。';
+
+  @override
+  String get lkcReasonCodeFormat => '兑换码须为 4 到 32 个字母、数字或短横线。';
+
+  @override
+  String get lkcReasonCodeGrantOff => '赠送计划不能带折扣。';
+
+  @override
+  String get lkcReasonCodeGrantPeriods => '赠送持续 1 到 120 个周期。';
+
+  @override
+  String get lkcReasonCodeGrantPlan => '赠送只能是一个计划。';
+
+  @override
+  String get lkcReasonCodeInactive => '兑换码已失效。';
+
+  @override
+  String get lkcReasonCodeIsDiscount => '这是折扣码，请在订阅时使用。';
+
+  @override
+  String get lkcReasonCodeIsGrant => '这个兑换码赠送计划，请直接兑换。';
+
+  @override
+  String get lkcReasonCodeKind => '兑换码的类型不能更改。';
+
+  @override
+  String get lkcReasonCodeLimit => '兑换次数上限必须是正整数。';
+
+  @override
+  String get lkcReasonCodeLineHeld => '这条产品线已有订阅，无法兑换。';
+
+  @override
+  String get lkcReasonCodeMonths => '循环折扣持续 1 到 36 个月。';
+
+  @override
+  String get lkcReasonCodeNewOnly => '兑换码仅限新订阅用户使用。';
+
+  @override
+  String get lkcReasonCodeNotStarted => '兑换码尚未生效。';
+
+  @override
+  String get lkcReasonCodeOff => '折扣须为 1 到 100 的百分比，或大于零的固定金额。';
+
+  @override
+  String get lkcReasonCodePlan => '兑换码不适用于这个计划。';
+
+  @override
+  String get lkcReasonCodePlans => '请选择兑换码适用的计划。';
+
+  @override
+  String get lkcReasonCodeRedeemed => '兑换码已被使用，请改为停用。';
+
+  @override
+  String get lkcReasonCodeTaken => '兑换码已存在。';
+
+  @override
+  String get lkcReasonCodeTries => '尝试次数过多，请稍后再试。';
+
+  @override
+  String get lkcReasonCodeUnknown => '兑换码不存在。';
+
+  @override
+  String get lkcReasonCodeUsed => '你已经用过这个兑换码。';
+
+  @override
+  String get lkcReasonCodeUsedUp => '兑换码已被用完。';
+
+  @override
+  String get lkcReasonCodeWindow => '开始时间必须早于过期时间。';
+
+  @override
+  String get lkcReasonDeleteAdmin => '删除管理员前，请先在 IdP 移除其管理员角色。';
+
+  @override
+  String get lkcReasonDeleteSelf => '请在账号页面删除你自己的账号。';
+
+  @override
+  String get lkcReasonFileExists => '已有同名文件。';
+
+  @override
+  String get lkcReasonFileQuota => '上传后会超出存储配额。';
+
+  @override
+  String get lkcReasonFileTooLarge => '文件过大。';
+
+  @override
+  String get lkcReasonForeignTransaction => '交易属于其他应用或环境。';
+
+  @override
+  String get lkcReasonGrantGone => '这项赠送的计划已经结束。';
+
+  @override
+  String get lkcReasonGrantHeld => '该用户在这条产品线已有赠送的计划，请更改那一项。';
+
+  @override
+  String get lkcReasonGrantInPast => '结束时间必须在未来。';
+
+  @override
+  String get lkcReasonManualProvider => '手动不是支付渠道。';
+
+  @override
+  String get lkcReasonNoCustomer => '没有可管理的网页订阅。';
+
+  @override
+  String get lkcReasonNoSwitch => '这个产品线没有可切换的网页订阅。';
+
+  @override
+  String get lkcReasonNoUser => '用户不存在。';
+
+  @override
+  String get lkcReasonPriceArchived => '在售价格在其支付渠道中已归档。';
+
+  @override
+  String get lkcReasonPriceMissing => '在售价格在其支付渠道中不存在。';
+
+  @override
+  String get lkcReasonPriceNotFixed => '在售价格没有固定金额。';
+
+  @override
+  String get lkcReasonPricePeriod => '在售价格的计费周期与计划不一致。';
+
+  @override
+  String get lkcReasonProductId => '产品 ID 为空或包含首尾空格。';
+
+  @override
+  String get lkcReasonProductInUse => '有生效订阅的产品不能更改计划。';
+
+  @override
+  String get lkcReasonProductPlans => '一个产品只能对应一个计划。';
+
+  @override
+  String get lkcReasonPurchaseAccount => '购买属于其他账号。';
+
+  @override
+  String get lkcReasonPushAccount => '推送账号不符。';
+
+  @override
+  String get lkcReasonSamePlan => '你已经在使用这个套餐。';
+
+  @override
+  String get lkcReasonSoldTwice => '每个计划在每个支付渠道只能有一个在售价格。';
+
+  @override
+  String get lkcReasonSwitchSync => '已保存，但 Stripe 的套餐切换设置没有更新成功，请再保存一次。';
+
+  @override
+  String get lkcReasonTestPurchase => '不接受测试购买。';
+
+  @override
+  String get lkcReasonTransactionAccount => '交易属于其他账号。';
+
+  @override
+  String get lkcReasonUnavailable => '暂不可用。';
+
+  @override
+  String get lkcReasonUnknownPackage => '未知的应用包。';
+
+  @override
+  String get lkcReasonUploadSize => '文件没有完整上传，请重新上传。';
+
+  @override
+  String get lkcReasonUploadUnknown => '上传已过期，请重新上传。';
+
+  @override
+  String get lkcReasonUserGone => '该用户已不存在。';
+
+  @override
   String get loadingEllipsis => '...';
 
   @override
@@ -1326,6 +1527,207 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get license => '授權';
+
+  @override
+  String get lkcReasonAlreadySubscribed => '這條產品線已有訂閱，請在帳單入口網站中變更。';
+
+  @override
+  String get lkcReasonBadPurchaseToken => '購買憑證無效。';
+
+  @override
+  String get lkcReasonBadPushToken => '推播權杖無效。';
+
+  @override
+  String get lkcReasonBadQuery => '查詢參數無效。';
+
+  @override
+  String get lkcReasonBadSignature => '簽章無效。';
+
+  @override
+  String get lkcReasonBadTransaction => '交易無效。';
+
+  @override
+  String get lkcReasonCodeCheckout => '這種結帳方式不能使用兌換碼。';
+
+  @override
+  String get lkcReasonCodeCurrency => '兌換碼的幣別與價格不一致。';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded => '固定金額需要填寫幣別。';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => '折扣不贈送週期。';
+
+  @override
+  String get lkcReasonCodeDuration => '請選擇折扣適用的付款。';
+
+  @override
+  String get lkcReasonCodeExpired => '兌換碼已過期。';
+
+  @override
+  String get lkcReasonCodeFormat => '兌換碼須為 4 到 32 個字母、數字或連字號。';
+
+  @override
+  String get lkcReasonCodeGrantOff => '贈送方案不能附帶折扣。';
+
+  @override
+  String get lkcReasonCodeGrantPeriods => '贈送持續 1 到 120 個週期。';
+
+  @override
+  String get lkcReasonCodeGrantPlan => '贈送只能是一個方案。';
+
+  @override
+  String get lkcReasonCodeInactive => '兌換碼已失效。';
+
+  @override
+  String get lkcReasonCodeIsDiscount => '這是折扣碼，請在訂閱時使用。';
+
+  @override
+  String get lkcReasonCodeIsGrant => '這個兌換碼贈送方案，請直接兌換。';
+
+  @override
+  String get lkcReasonCodeKind => '兌換碼的類型不能變更。';
+
+  @override
+  String get lkcReasonCodeLimit => '兌換次數上限必須是正整數。';
+
+  @override
+  String get lkcReasonCodeLineHeld => '這條產品線已有訂閱，無法兌換。';
+
+  @override
+  String get lkcReasonCodeMonths => '循環折扣持續 1 到 36 個月。';
+
+  @override
+  String get lkcReasonCodeNewOnly => '兌換碼僅限新訂閱者使用。';
+
+  @override
+  String get lkcReasonCodeNotStarted => '兌換碼尚未生效。';
+
+  @override
+  String get lkcReasonCodeOff => '折扣須為 1 到 100 的百分比，或大於零的固定金額。';
+
+  @override
+  String get lkcReasonCodePlan => '兌換碼不適用於這個方案。';
+
+  @override
+  String get lkcReasonCodePlans => '請選擇兌換碼適用的方案。';
+
+  @override
+  String get lkcReasonCodeRedeemed => '兌換碼已被使用，請改為停用。';
+
+  @override
+  String get lkcReasonCodeTaken => '兌換碼已存在。';
+
+  @override
+  String get lkcReasonCodeTries => '嘗試次數過多，請稍後再試。';
+
+  @override
+  String get lkcReasonCodeUnknown => '兌換碼不存在。';
+
+  @override
+  String get lkcReasonCodeUsed => '你已經用過這個兌換碼。';
+
+  @override
+  String get lkcReasonCodeUsedUp => '兌換碼已被用完。';
+
+  @override
+  String get lkcReasonCodeWindow => '開始時間必須早於到期時間。';
+
+  @override
+  String get lkcReasonDeleteAdmin => '刪除管理員前，請先在 IdP 移除其管理員角色。';
+
+  @override
+  String get lkcReasonDeleteSelf => '請在帳號頁面刪除你自己的帳號。';
+
+  @override
+  String get lkcReasonFileExists => '已有同名檔案。';
+
+  @override
+  String get lkcReasonFileQuota => '上傳後會超出儲存空間配額。';
+
+  @override
+  String get lkcReasonFileTooLarge => '檔案過大。';
+
+  @override
+  String get lkcReasonForeignTransaction => '交易屬於其他應用程式或環境。';
+
+  @override
+  String get lkcReasonGrantGone => '這項贈送的方案已經結束。';
+
+  @override
+  String get lkcReasonGrantHeld => '該使用者在這條產品線已有贈送的方案，請變更那一項。';
+
+  @override
+  String get lkcReasonGrantInPast => '結束時間必須在未來。';
+
+  @override
+  String get lkcReasonManualProvider => '手動不是付款管道。';
+
+  @override
+  String get lkcReasonNoCustomer => '沒有可管理的網頁訂閱。';
+
+  @override
+  String get lkcReasonNoSwitch => '這條產品線沒有可切換的網頁訂閱。';
+
+  @override
+  String get lkcReasonNoUser => '使用者不存在。';
+
+  @override
+  String get lkcReasonPriceArchived => '販售中的價格在其付款管道中已封存。';
+
+  @override
+  String get lkcReasonPriceMissing => '販售中的價格在其付款管道中不存在。';
+
+  @override
+  String get lkcReasonPriceNotFixed => '販售中的價格沒有固定金額。';
+
+  @override
+  String get lkcReasonPricePeriod => '販售中的價格計費週期與方案不一致。';
+
+  @override
+  String get lkcReasonProductId => '產品 ID 為空或包含前後空白。';
+
+  @override
+  String get lkcReasonProductInUse => '有生效訂閱的產品不能變更方案。';
+
+  @override
+  String get lkcReasonProductPlans => '一個產品只能對應一個方案。';
+
+  @override
+  String get lkcReasonPurchaseAccount => '購買屬於其他帳號。';
+
+  @override
+  String get lkcReasonPushAccount => '推播帳號不符。';
+
+  @override
+  String get lkcReasonSamePlan => '你已經在使用這個方案。';
+
+  @override
+  String get lkcReasonSoldTwice => '每個方案在每個付款管道只能有一個販售中的價格。';
+
+  @override
+  String get lkcReasonSwitchSync => '已儲存，但 Stripe 的方案切換設定未能更新，請再儲存一次。';
+
+  @override
+  String get lkcReasonTestPurchase => '不接受測試購買。';
+
+  @override
+  String get lkcReasonTransactionAccount => '交易屬於其他帳號。';
+
+  @override
+  String get lkcReasonUnavailable => '暫時無法使用。';
+
+  @override
+  String get lkcReasonUnknownPackage => '未知的應用程式套件。';
+
+  @override
+  String get lkcReasonUploadSize => '檔案未完整上傳，請重新上傳。';
+
+  @override
+  String get lkcReasonUploadUnknown => '上傳已過期，請重新上傳。';
+
+  @override
+  String get lkcReasonUserGone => '該使用者已不存在。';
 
   @override
   String get loadingEllipsis => '...';

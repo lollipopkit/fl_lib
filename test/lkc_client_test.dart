@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:fl_lib/fl_lib.dart';
+import 'package:fl_lib/generated/l10n/lib_l10n_en.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -73,6 +76,40 @@ void main() {
       expect(e.code, isNull);
       expect(e.status, 502);
       expect(_thrown(() => LkcClient.unwrap(200, '[]')).code, isNull);
+    });
+  });
+
+  group('reason text', () {
+    final l10n = LibLocalizationsEn();
+
+    test('every translated reason is looked up', () {
+      final arb = jsonDecode(
+        File('lib/generated/l10n/source/app_en.arb').readAsStringSync(),
+      ) as Map;
+      final keys = arb.keys
+          .whereType<String>()
+          .where((k) => k.startsWith('lkcReason'))
+          .toList();
+      expect(keys, isNotEmpty);
+      for (final k in keys) {
+        final reason = k
+            .substring('lkcReason'.length)
+            .replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}')
+            .substring(1);
+        final e = LkcException(reason: reason, message: 'server text');
+        expect(e.text(l10n), arb[k], reason: reason);
+      }
+    });
+
+    test('an unknown reason shows the server\'s text', () {
+      expect(
+        const LkcException(
+          reason: 'new_reason',
+          message: 'server text',
+        ).text(l10n),
+        'server text',
+      );
+      expect(const LkcException(code: LkcCode.internal).text(l10n), l10n.fail);
     });
   });
 

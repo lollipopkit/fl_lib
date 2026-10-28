@@ -84,6 +84,7 @@ export 'src/core/sync/base.dart';
 // Client of LKC Cloud: sign-in, account, subscriptions, files
 export 'src/core/lkc/client.dart';
 export 'src/core/lkc/model.dart';
+export 'src/core/lkc/reason.dart';
 
 // --- Other Core ---
 // Logging, app links, HTTP overrides, and other core functionality

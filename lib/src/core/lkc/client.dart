@@ -49,8 +49,8 @@ final class LkcClient {
 
   /// Whether this app may sell plans by the web checkout.
   ///
-  /// Off on iOS: an app there may neither sell digital content outside of
-  /// in-app purchase nor link to such a purchase (App Store 3.1.1, 3.1.3(b)).
+  /// Off on iOS and macOS: an App Store app may neither sell digital content
+  /// outside of in-app purchase nor link to such a purchase (3.1.1, 3.1.3(b)).
   /// The Stripe portal can switch plans, so it is held to this too.
   final bool webCheckout;
 
@@ -77,7 +77,7 @@ final class LkcClient {
     Dio? api,
     Dio? store,
   }) : baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
-       webCheckout = webCheckout ?? !isIOS,
+       webCheckout = webCheckout ?? (!isIOS && !isMacOS),
        _api = api ?? Dio(),
        _store = store ?? Dio() {
     _api.options

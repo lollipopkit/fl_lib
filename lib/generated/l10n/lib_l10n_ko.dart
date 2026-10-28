@@ -364,6 +364,208 @@ class LibLocalizationsKo extends LibLocalizations {
   String get license => '라이선스';
 
   @override
+  String get lkcReasonAlreadySubscribed => '이미 구독 중입니다.';
+
+  @override
+  String get lkcReasonBadPurchaseToken => '구매 토큰이 올바르지 않습니다.';
+
+  @override
+  String get lkcReasonBadPushToken => '푸시 토큰이 올바르지 않습니다.';
+
+  @override
+  String get lkcReasonBadQuery => '쿼리가 올바르지 않습니다.';
+
+  @override
+  String get lkcReasonBadSignature => '서명이 올바르지 않습니다.';
+
+  @override
+  String get lkcReasonBadTransaction => '거래가 올바르지 않습니다.';
+
+  @override
+  String get lkcReasonCodeCheckout => '이 결제에서는 사용할 수 없는 코드입니다.';
+
+  @override
+  String get lkcReasonCodeCurrency => '코드의 통화가 가격과 맞지 않습니다.';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded => '고정 금액에는 통화가 필요합니다.';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => '할인은 기간을 제공하지 않습니다.';
+
+  @override
+  String get lkcReasonCodeDuration => '할인을 적용할 결제를 선택하세요.';
+
+  @override
+  String get lkcReasonCodeExpired => '만료된 코드입니다.';
+
+  @override
+  String get lkcReasonCodeFormat => '코드는 4~32자의 영문, 숫자 또는 하이픈입니다.';
+
+  @override
+  String get lkcReasonCodeGrantOff => '제공 코드에는 할인이 없습니다.';
+
+  @override
+  String get lkcReasonCodeGrantPeriods => '제공 기간은 1~120 주기입니다.';
+
+  @override
+  String get lkcReasonCodeGrantPlan => '제공은 하나의 요금제만 가능합니다.';
+
+  @override
+  String get lkcReasonCodeInactive => '더 이상 유효하지 않은 코드입니다.';
+
+  @override
+  String get lkcReasonCodeIsDiscount => '할인 코드입니다. 구독할 때 입력하세요.';
+
+  @override
+  String get lkcReasonCodeIsGrant => '요금제를 제공하는 코드입니다. 대신 사용 처리하세요.';
+
+  @override
+  String get lkcReasonCodeKind => '코드 종류는 바꿀 수 없습니다.';
+
+  @override
+  String get lkcReasonCodeLimit => '사용 한도는 양수여야 합니다.';
+
+  @override
+  String get lkcReasonCodeLineHeld => '이 라인에 이미 구독이 있습니다.';
+
+  @override
+  String get lkcReasonCodeMonths => '반복 할인 기간은 1~36개월입니다.';
+
+  @override
+  String get lkcReasonCodeNewOnly => '신규 구독자 전용 코드입니다.';
+
+  @override
+  String get lkcReasonCodeNotStarted => '아직 유효하지 않은 코드입니다.';
+
+  @override
+  String get lkcReasonCodeOff => '할인은 1~100 퍼센트 또는 고정 금액입니다.';
+
+  @override
+  String get lkcReasonCodePlan => '이 요금제에는 적용되지 않는 코드입니다.';
+
+  @override
+  String get lkcReasonCodePlans => '코드를 적용할 요금제를 선택하세요.';
+
+  @override
+  String get lkcReasonCodeRedeemed => '이미 사용된 코드입니다. 대신 비활성화하세요.';
+
+  @override
+  String get lkcReasonCodeTaken => '이미 있는 코드입니다.';
+
+  @override
+  String get lkcReasonCodeTries => '시도 횟수가 너무 많습니다. 잠시 후 다시 시도하세요.';
+
+  @override
+  String get lkcReasonCodeUnknown => '없는 코드입니다.';
+
+  @override
+  String get lkcReasonCodeUsed => '이미 사용한 코드입니다.';
+
+  @override
+  String get lkcReasonCodeUsedUp => '사용 한도에 도달한 코드입니다.';
+
+  @override
+  String get lkcReasonCodeWindow => '코드 시작 시점은 만료 시점보다 앞서야 합니다.';
+
+  @override
+  String get lkcReasonDeleteAdmin => '관리자를 삭제하려면 먼저 IdP에서 관리자 역할을 제거하세요.';
+
+  @override
+  String get lkcReasonDeleteSelf => '내 계정은 계정 페이지에서 삭제하세요.';
+
+  @override
+  String get lkcReasonFileExists => '같은 이름의 파일이 있습니다.';
+
+  @override
+  String get lkcReasonFileQuota => '저장 공간 할당량을 초과합니다.';
+
+  @override
+  String get lkcReasonFileTooLarge => '파일이 너무 큽니다.';
+
+  @override
+  String get lkcReasonForeignTransaction => '다른 앱 또는 환경의 거래입니다.';
+
+  @override
+  String get lkcReasonGrantGone => '활성 상태인 수동 구독이 없습니다.';
+
+  @override
+  String get lkcReasonGrantHeld => '이 사용자는 이 라인에 수동 구독이 있습니다. 그 구독을 변경하세요.';
+
+  @override
+  String get lkcReasonGrantInPast => '종료 시점은 미래여야 합니다.';
+
+  @override
+  String get lkcReasonManualProvider => '수동은 결제 제공업체가 아닙니다.';
+
+  @override
+  String get lkcReasonNoCustomer => '관리할 구독이 없습니다.';
+
+  @override
+  String get lkcReasonNoSwitch => '이 라인에 전환할 웹 구독이 없습니다.';
+
+  @override
+  String get lkcReasonNoUser => '사용자가 없습니다.';
+
+  @override
+  String get lkcReasonPriceArchived => '판매 중인 가격이 제공업체에서 보관 처리되었습니다.';
+
+  @override
+  String get lkcReasonPriceMissing => '판매 중인 가격이 제공업체에 없습니다.';
+
+  @override
+  String get lkcReasonPriceNotFixed => '판매 중인 가격에 고정 금액이 없습니다.';
+
+  @override
+  String get lkcReasonPricePeriod => '판매 중인 가격의 결제 주기가 요금제와 맞지 않습니다.';
+
+  @override
+  String get lkcReasonProductId => '제품 ID가 비어 있거나 앞뒤에 공백이 있습니다.';
+
+  @override
+  String get lkcReasonProductInUse => '활성 구독이 있는 제품은 요금제를 바꿀 수 없습니다.';
+
+  @override
+  String get lkcReasonProductPlans => '하나의 제품은 하나의 요금제에만 연결됩니다.';
+
+  @override
+  String get lkcReasonPurchaseAccount => '다른 계정의 구매입니다.';
+
+  @override
+  String get lkcReasonPushAccount => '예상하지 못한 푸시 계정입니다.';
+
+  @override
+  String get lkcReasonSamePlan => '이미 이 요금제를 사용 중입니다.';
+
+  @override
+  String get lkcReasonSoldTwice => '판매 가격은 요금제와 제공업체마다 하나입니다.';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      '저장했지만 Stripe의 요금제 전환을 업데이트하지 못했습니다. 다시 저장하세요.';
+
+  @override
+  String get lkcReasonTestPurchase => '테스트 구매는 허용되지 않습니다.';
+
+  @override
+  String get lkcReasonTransactionAccount => '다른 계정의 거래입니다.';
+
+  @override
+  String get lkcReasonUnavailable => '사용할 수 없습니다.';
+
+  @override
+  String get lkcReasonUnknownPackage => '알 수 없는 패키지입니다.';
+
+  @override
+  String get lkcReasonUploadSize => '업로드된 파일이 없거나 알린 크기와 다릅니다.';
+
+  @override
+  String get lkcReasonUploadUnknown => '업로드가 없거나 만료되었습니다.';
+
+  @override
+  String get lkcReasonUserGone => '더 이상 존재하지 않는 사용자입니다.';
+
+  @override
   String get loadingEllipsis => '...';
 
   @override

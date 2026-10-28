@@ -365,6 +365,229 @@ class LibLocalizationsRu extends LibLocalizations {
   String get license => 'Лицензия';
 
   @override
+  String get lkcReasonAlreadySubscribed => 'Подписка уже оформлена';
+
+  @override
+  String get lkcReasonBadPurchaseToken => 'Недействительный токен покупки';
+
+  @override
+  String get lkcReasonBadPushToken => 'Недействительный push-токен';
+
+  @override
+  String get lkcReasonBadQuery => 'Недопустимый запрос';
+
+  @override
+  String get lkcReasonBadSignature => 'Недействительная подпись';
+
+  @override
+  String get lkcReasonBadTransaction => 'Недействительная транзакция';
+
+  @override
+  String get lkcReasonCodeCheckout => 'Код нельзя использовать с этой оплатой';
+
+  @override
+  String get lkcReasonCodeCurrency => 'Валюта кода не совпадает с валютой цены';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded =>
+      'Для фиксированной суммы нужна валюта';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => 'Скидка не предоставляет периоды';
+
+  @override
+  String get lkcReasonCodeDuration =>
+      'Выберите, на какие платежи распространяется скидка';
+
+  @override
+  String get lkcReasonCodeExpired => 'Срок действия кода истёк';
+
+  @override
+  String get lkcReasonCodeFormat =>
+      'Код состоит из 4–32 букв, цифр или дефисов';
+
+  @override
+  String get lkcReasonCodeGrantOff => 'Выдача не предполагает скидку';
+
+  @override
+  String get lkcReasonCodeGrantPeriods =>
+      'Выдача действует от 1 до 120 периодов';
+
+  @override
+  String get lkcReasonCodeGrantPlan => 'Выдача относится к одному тарифу';
+
+  @override
+  String get lkcReasonCodeInactive => 'Код больше не действителен';
+
+  @override
+  String get lkcReasonCodeIsDiscount =>
+      'Это код скидки, введите его при оформлении подписки';
+
+  @override
+  String get lkcReasonCodeIsGrant => 'Этот код выдаёт тариф, активируйте его';
+
+  @override
+  String get lkcReasonCodeKind => 'Тип кода нельзя изменить';
+
+  @override
+  String get lkcReasonCodeLimit => 'Лимит активаций должен быть положительным';
+
+  @override
+  String get lkcReasonCodeLineHeld => 'У вас уже есть подписка в этой линейке';
+
+  @override
+  String get lkcReasonCodeMonths =>
+      'Повторяющаяся скидка действует от 1 до 36 месяцев';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'Код только для новых подписчиков';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'Код ещё не действует';
+
+  @override
+  String get lkcReasonCodeOff =>
+      'Скидка — это процент (от 1 до 100) или фиксированная сумма';
+
+  @override
+  String get lkcReasonCodePlan => 'Код не применяется к этому тарифу';
+
+  @override
+  String get lkcReasonCodePlans => 'Выберите тарифы, к которым применяется код';
+
+  @override
+  String get lkcReasonCodeRedeemed => 'Код уже активирован, деактивируйте его';
+
+  @override
+  String get lkcReasonCodeTaken => 'Такой код уже существует';
+
+  @override
+  String get lkcReasonCodeTries => 'Слишком много попыток, повторите позже';
+
+  @override
+  String get lkcReasonCodeUnknown => 'Код не найден';
+
+  @override
+  String get lkcReasonCodeUsed => 'Вы уже использовали этот код';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'Лимит использований кода исчерпан';
+
+  @override
+  String get lkcReasonCodeWindow =>
+      'Код должен начинать действовать до истечения срока';
+
+  @override
+  String get lkcReasonDeleteAdmin =>
+      'Снимите роль администратора в IdP перед удалением администратора';
+
+  @override
+  String get lkcReasonDeleteSelf => 'Удалите свой аккаунт на странице аккаунта';
+
+  @override
+  String get lkcReasonFileExists => 'Файл с таким именем уже существует';
+
+  @override
+  String get lkcReasonFileQuota => 'Файлы превысят квоту хранилища';
+
+  @override
+  String get lkcReasonFileTooLarge => 'Файл слишком большой';
+
+  @override
+  String get lkcReasonForeignTransaction =>
+      'Транзакция другого приложения или окружения';
+
+  @override
+  String get lkcReasonGrantGone => 'Активная ручная подписка не найдена';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'У пользователя уже есть ручная подписка в этой линейке, измените её';
+
+  @override
+  String get lkcReasonGrantInPast =>
+      'Срок выдачи должен заканчиваться в будущем';
+
+  @override
+  String get lkcReasonManualProvider => 'Manual не является провайдером';
+
+  @override
+  String get lkcReasonNoCustomer => 'Нет подписки для управления';
+
+  @override
+  String get lkcReasonNoSwitch => 'В этой линейке нет веб-подписки для смены';
+
+  @override
+  String get lkcReasonNoUser => 'Пользователь не найден';
+
+  @override
+  String get lkcReasonPriceArchived =>
+      'Продаваемая цена архивирована у провайдера';
+
+  @override
+  String get lkcReasonPriceMissing =>
+      'Продаваемая цена отсутствует у провайдера';
+
+  @override
+  String get lkcReasonPriceNotFixed =>
+      'У продаваемой цены нет фиксированной суммы';
+
+  @override
+  String get lkcReasonPricePeriod =>
+      'Продаваемая цена не соответствует периоду тарифа';
+
+  @override
+  String get lkcReasonProductId => 'ID продукта пуст или содержит пробелы';
+
+  @override
+  String get lkcReasonProductInUse =>
+      'Продукт с активными подписками сохраняет свой тариф';
+
+  @override
+  String get lkcReasonProductPlans =>
+      'Продукт привязывается только к одному тарифу';
+
+  @override
+  String get lkcReasonPurchaseAccount => 'Покупка принадлежит другому аккаунту';
+
+  @override
+  String get lkcReasonPushAccount => 'Неожиданный push-аккаунт';
+
+  @override
+  String get lkcReasonSamePlan => 'Этот тариф уже активен';
+
+  @override
+  String get lkcReasonSoldTwice =>
+      'Одна продаваемая цена на тариф и провайдера';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      'Сохранено, но смену тарифа в Stripe обновить не удалось; сохраните ещё раз';
+
+  @override
+  String get lkcReasonTestPurchase => 'Тестовые покупки не принимаются';
+
+  @override
+  String get lkcReasonTransactionAccount =>
+      'Транзакция принадлежит другому аккаунту';
+
+  @override
+  String get lkcReasonUnavailable => 'Недоступно';
+
+  @override
+  String get lkcReasonUnknownPackage => 'Неизвестный пакет';
+
+  @override
+  String get lkcReasonUploadSize =>
+      'Загруженный файл отсутствует или не соответствует заявленному размеру';
+
+  @override
+  String get lkcReasonUploadUnknown => 'Загрузка не найдена или истекла';
+
+  @override
+  String get lkcReasonUserGone => 'Пользователь больше не существует';
+
+  @override
   String get loadingEllipsis => '...';
 
   @override

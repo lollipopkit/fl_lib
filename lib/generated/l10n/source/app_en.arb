@@ -486,6 +486,274 @@
   "@license": {
     "description": "Label for license."
   },
+  "lkcReasonAlreadySubscribed": "Already subscribed",
+  "@lkcReasonAlreadySubscribed": {
+    "description": "LKC Cloud rejection `already_subscribed`."
+  },
+  "lkcReasonBadPurchaseToken": "Invalid purchase token",
+  "@lkcReasonBadPurchaseToken": {
+    "description": "LKC Cloud rejection `bad_purchase_token`."
+  },
+  "lkcReasonBadPushToken": "Invalid push token",
+  "@lkcReasonBadPushToken": {
+    "description": "LKC Cloud rejection `bad_push_token`."
+  },
+  "lkcReasonBadQuery": "Invalid query",
+  "@lkcReasonBadQuery": {
+    "description": "LKC Cloud rejection `bad_query`."
+  },
+  "lkcReasonBadSignature": "Invalid signature",
+  "@lkcReasonBadSignature": {
+    "description": "LKC Cloud rejection `bad_signature`."
+  },
+  "lkcReasonBadTransaction": "Invalid transaction",
+  "@lkcReasonBadTransaction": {
+    "description": "LKC Cloud rejection `bad_transaction`."
+  },
+  "lkcReasonCodeCheckout": "The code can't be used with this checkout",
+  "@lkcReasonCodeCheckout": {
+    "description": "LKC Cloud rejection `code_checkout`."
+  },
+  "lkcReasonCodeCurrency": "The code's currency doesn't match the price",
+  "@lkcReasonCodeCurrency": {
+    "description": "LKC Cloud rejection `code_currency`."
+  },
+  "lkcReasonCodeCurrencyNeeded": "A fixed amount needs its currency",
+  "@lkcReasonCodeCurrencyNeeded": {
+    "description": "LKC Cloud rejection `code_currency_needed`."
+  },
+  "lkcReasonCodeDiscountPeriods": "A discount grants no periods",
+  "@lkcReasonCodeDiscountPeriods": {
+    "description": "LKC Cloud rejection `code_discount_periods`."
+  },
+  "lkcReasonCodeDuration": "Pick which payments the discount covers",
+  "@lkcReasonCodeDuration": {
+    "description": "LKC Cloud rejection `code_duration`."
+  },
+  "lkcReasonCodeExpired": "The code has expired",
+  "@lkcReasonCodeExpired": {
+    "description": "LKC Cloud rejection `code_expired`."
+  },
+  "lkcReasonCodeFormat": "A code is 4 to 32 letters, digits or dashes",
+  "@lkcReasonCodeFormat": {
+    "description": "LKC Cloud rejection `code_format`."
+  },
+  "lkcReasonCodeGrantOff": "A grant has no discount",
+  "@lkcReasonCodeGrantOff": {
+    "description": "LKC Cloud rejection `code_grant_off`."
+  },
+  "lkcReasonCodeGrantPeriods": "A grant lasts 1 to 120 periods",
+  "@lkcReasonCodeGrantPeriods": {
+    "description": "LKC Cloud rejection `code_grant_periods`."
+  },
+  "lkcReasonCodeGrantPlan": "A grant is of one plan",
+  "@lkcReasonCodeGrantPlan": {
+    "description": "LKC Cloud rejection `code_grant_plan`."
+  },
+  "lkcReasonCodeInactive": "The code is no longer valid",
+  "@lkcReasonCodeInactive": {
+    "description": "LKC Cloud rejection `code_inactive`."
+  },
+  "lkcReasonCodeIsDiscount": "The code is a discount, enter it when subscribing",
+  "@lkcReasonCodeIsDiscount": {
+    "description": "LKC Cloud rejection `code_is_discount`."
+  },
+  "lkcReasonCodeIsGrant": "The code grants a plan, redeem it instead",
+  "@lkcReasonCodeIsGrant": {
+    "description": "LKC Cloud rejection `code_is_grant`."
+  },
+  "lkcReasonCodeKind": "A code's kind can't change",
+  "@lkcReasonCodeKind": {
+    "description": "LKC Cloud rejection `code_kind`."
+  },
+  "lkcReasonCodeLimit": "The redemption limit must be positive",
+  "@lkcReasonCodeLimit": {
+    "description": "LKC Cloud rejection `code_limit`."
+  },
+  "lkcReasonCodeLineHeld": "You already have a subscription in this line",
+  "@lkcReasonCodeLineHeld": {
+    "description": "LKC Cloud rejection `code_line_held`."
+  },
+  "lkcReasonCodeMonths": "A repeating discount lasts 1 to 36 months",
+  "@lkcReasonCodeMonths": {
+    "description": "LKC Cloud rejection `code_months`."
+  },
+  "lkcReasonCodeNewOnly": "The code is for new subscribers only",
+  "@lkcReasonCodeNewOnly": {
+    "description": "LKC Cloud rejection `code_new_only`."
+  },
+  "lkcReasonCodeNotStarted": "The code is not valid yet",
+  "@lkcReasonCodeNotStarted": {
+    "description": "LKC Cloud rejection `code_not_started`."
+  },
+  "lkcReasonCodeOff": "A discount is a percentage (1 to 100) or a fixed amount",
+  "@lkcReasonCodeOff": {
+    "description": "LKC Cloud rejection `code_off`."
+  },
+  "lkcReasonCodePlan": "The code doesn't apply to this plan",
+  "@lkcReasonCodePlan": {
+    "description": "LKC Cloud rejection `code_plan`."
+  },
+  "lkcReasonCodePlans": "Pick the plans the code applies to",
+  "@lkcReasonCodePlans": {
+    "description": "LKC Cloud rejection `code_plans`."
+  },
+  "lkcReasonCodeRedeemed": "The code has been redeemed, deactivate it instead",
+  "@lkcReasonCodeRedeemed": {
+    "description": "LKC Cloud rejection `code_redeemed`."
+  },
+  "lkcReasonCodeTaken": "The code exists already",
+  "@lkcReasonCodeTaken": {
+    "description": "LKC Cloud rejection `code_taken`."
+  },
+  "lkcReasonCodeTries": "Too many tries, try again later",
+  "@lkcReasonCodeTries": {
+    "description": "LKC Cloud rejection `code_tries`."
+  },
+  "lkcReasonCodeUnknown": "No such code",
+  "@lkcReasonCodeUnknown": {
+    "description": "LKC Cloud rejection `code_unknown`."
+  },
+  "lkcReasonCodeUsed": "You have used this code",
+  "@lkcReasonCodeUsed": {
+    "description": "LKC Cloud rejection `code_used`."
+  },
+  "lkcReasonCodeUsedUp": "The code has been used up",
+  "@lkcReasonCodeUsedUp": {
+    "description": "LKC Cloud rejection `code_used_up`."
+  },
+  "lkcReasonCodeWindow": "The code must start before it expires",
+  "@lkcReasonCodeWindow": {
+    "description": "LKC Cloud rejection `code_window`."
+  },
+  "lkcReasonDeleteAdmin": "Remove the admin role at the IdP before deleting an admin",
+  "@lkcReasonDeleteAdmin": {
+    "description": "LKC Cloud rejection `delete_admin`."
+  },
+  "lkcReasonDeleteSelf": "Delete your own account from the account page",
+  "@lkcReasonDeleteSelf": {
+    "description": "LKC Cloud rejection `delete_self`."
+  },
+  "lkcReasonFileExists": "A file of this name exists",
+  "@lkcReasonFileExists": {
+    "description": "LKC Cloud rejection `file_exists`."
+  },
+  "lkcReasonFileQuota": "The files would exceed the storage quota",
+  "@lkcReasonFileQuota": {
+    "description": "LKC Cloud rejection `file_quota`."
+  },
+  "lkcReasonFileTooLarge": "The file is too large",
+  "@lkcReasonFileTooLarge": {
+    "description": "LKC Cloud rejection `file_too_large`."
+  },
+  "lkcReasonForeignTransaction": "Transaction of another app or environment",
+  "@lkcReasonForeignTransaction": {
+    "description": "LKC Cloud rejection `foreign_transaction`."
+  },
+  "lkcReasonGrantGone": "No such live manual subscription",
+  "@lkcReasonGrantGone": {
+    "description": "LKC Cloud rejection `grant_gone`."
+  },
+  "lkcReasonGrantHeld": "The user has a manual subscription in this line, change it instead",
+  "@lkcReasonGrantHeld": {
+    "description": "LKC Cloud rejection `grant_held`."
+  },
+  "lkcReasonGrantInPast": "The grant must end in the future",
+  "@lkcReasonGrantInPast": {
+    "description": "LKC Cloud rejection `grant_in_past`."
+  },
+  "lkcReasonManualProvider": "Manual is not a provider",
+  "@lkcReasonManualProvider": {
+    "description": "LKC Cloud rejection `manual_provider`."
+  },
+  "lkcReasonNoCustomer": "No subscription to manage",
+  "@lkcReasonNoCustomer": {
+    "description": "LKC Cloud rejection `no_customer`."
+  },
+  "lkcReasonNoSwitch": "No web subscription in this line to switch",
+  "@lkcReasonNoSwitch": {
+    "description": "LKC Cloud rejection `no_switch`."
+  },
+  "lkcReasonNoUser": "No such user",
+  "@lkcReasonNoUser": {
+    "description": "LKC Cloud rejection `no_user`."
+  },
+  "lkcReasonPriceArchived": "A sold price is archived at its provider",
+  "@lkcReasonPriceArchived": {
+    "description": "LKC Cloud rejection `price_archived`."
+  },
+  "lkcReasonPriceMissing": "A sold price doesn't exist at its provider",
+  "@lkcReasonPriceMissing": {
+    "description": "LKC Cloud rejection `price_missing`."
+  },
+  "lkcReasonPriceNotFixed": "A sold price has no fixed amount",
+  "@lkcReasonPriceNotFixed": {
+    "description": "LKC Cloud rejection `price_not_fixed`."
+  },
+  "lkcReasonPricePeriod": "A sold price doesn't bill its plan's period",
+  "@lkcReasonPricePeriod": {
+    "description": "LKC Cloud rejection `price_period`."
+  },
+  "lkcReasonProductId": "Empty or padded product id",
+  "@lkcReasonProductId": {
+    "description": "LKC Cloud rejection `product_id`."
+  },
+  "lkcReasonProductInUse": "A product of live subscriptions keeps its plan",
+  "@lkcReasonProductInUse": {
+    "description": "LKC Cloud rejection `product_in_use`."
+  },
+  "lkcReasonProductPlans": "A product maps to one plan only",
+  "@lkcReasonProductPlans": {
+    "description": "LKC Cloud rejection `product_plans`."
+  },
+  "lkcReasonPurchaseAccount": "Purchase belongs to another account",
+  "@lkcReasonPurchaseAccount": {
+    "description": "LKC Cloud rejection `purchase_account`."
+  },
+  "lkcReasonPushAccount": "Unexpected push account",
+  "@lkcReasonPushAccount": {
+    "description": "LKC Cloud rejection `push_account`."
+  },
+  "lkcReasonSamePlan": "Already on this plan",
+  "@lkcReasonSamePlan": {
+    "description": "LKC Cloud rejection `same_plan`."
+  },
+  "lkcReasonSoldTwice": "One sold price per plan and provider",
+  "@lkcReasonSoldTwice": {
+    "description": "LKC Cloud rejection `sold_twice`."
+  },
+  "lkcReasonSwitchSync": "Saved, but Stripe's plan switching couldn't be updated; save again",
+  "@lkcReasonSwitchSync": {
+    "description": "LKC Cloud rejection `switch_sync`."
+  },
+  "lkcReasonTestPurchase": "Test purchases are not accepted",
+  "@lkcReasonTestPurchase": {
+    "description": "LKC Cloud rejection `test_purchase`."
+  },
+  "lkcReasonTransactionAccount": "Transaction belongs to another account",
+  "@lkcReasonTransactionAccount": {
+    "description": "LKC Cloud rejection `transaction_account`."
+  },
+  "lkcReasonUnavailable": "Not available",
+  "@lkcReasonUnavailable": {
+    "description": "LKC Cloud rejection `unavailable`."
+  },
+  "lkcReasonUnknownPackage": "Unknown package",
+  "@lkcReasonUnknownPackage": {
+    "description": "LKC Cloud rejection `unknown_package`."
+  },
+  "lkcReasonUploadSize": "The uploaded file is missing or not of the announced size",
+  "@lkcReasonUploadSize": {
+    "description": "LKC Cloud rejection `upload_size`."
+  },
+  "lkcReasonUploadUnknown": "No such upload, or it expired",
+  "@lkcReasonUploadUnknown": {
+    "description": "LKC Cloud rejection `upload_unknown`."
+  },
+  "lkcReasonUserGone": "The user no longer exists",
+  "@lkcReasonUserGone": {
+    "description": "LKC Cloud rejection `user_gone`."
+  },
   "loadingEllipsis": "...",
   "@loadingEllipsis": {
     "description": "Abbreviated text for loading ellipsis."
