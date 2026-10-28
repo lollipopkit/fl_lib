@@ -1232,9 +1232,14 @@ IconData _benefitIcon(LkcBenefitKind kind) => switch (kind) {
   LkcBenefitKind.concurrency => Icons.layers,
 };
 
-String _lineName(LkcLine line) => _title(line.name);
+/// The product name of the Basic line and plan, whichever app shows it.
+const _basicName = 'ServerBox Basic';
 
-String _planName(String plan) => plan.split('.').map(_title).join(' ');
+String _lineName(LkcLine line) =>
+    line == LkcLine.basic ? _basicName : _title(line.name);
+
+String _planName(String plan) =>
+    plan == 'basic' ? _basicName : plan.split('.').map(_title).join(' ');
 
 String _title(String s) =>
     s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';

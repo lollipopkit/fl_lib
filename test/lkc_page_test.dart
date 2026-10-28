@@ -100,13 +100,13 @@ void main() {
     await _pump(tester, _client(webCheckout: true));
     expect(find.text(_l10n.lkcNotSignedIn), findsOneWidget);
     expect(find.text(_l10n.login), findsOneWidget);
-    expect(find.text('BASIC'), findsNothing);
+    expect(find.text('SERVERBOX BASIC'), findsNothing);
   });
 
   testWidgets('signed in: each line by what it grants', (tester) async {
     await _pump(tester, _client(webCheckout: true), signedIn: true);
     expect(find.text('lollipopkit'), findsOneWidget);
-    expect(find.text('BASIC'), findsOneWidget);
+    expect(find.text('SERVERBOX BASIC'), findsOneWidget);
     expect(find.text(_l10n.lkcEndsOn('Oct 28, 2027')), findsOneWidget);
     expect(find.text(_l10n.lkcBenefitBackups), findsOneWidget);
     expect(find.text('12 MB / 100 MB'), findsOneWidget);
@@ -119,7 +119,7 @@ void main() {
 
   testWidgets('no plans or prices where web checkout is off', (tester) async {
     await _pump(tester, _client(webCheckout: false), signedIn: true);
-    expect(find.text('BASIC'), findsOneWidget);
+    expect(find.text('SERVERBOX BASIC'), findsOneWidget);
     expect(find.text('Storage Plus'), findsNothing);
     expect(find.text(_l10n.lkcSubscribe), findsNothing);
   });
