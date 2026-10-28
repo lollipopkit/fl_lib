@@ -535,6 +535,43 @@ void main() {
     expect(cache.read('benefits'), isNotNull);
   });
 
+  test('a device registered for push is dropped on signing out', () async {
+    api.on('POST /v2/devices', {
+      'data': {
+        'id': 'd1',
+        'platform': 'ios',
+        'app_id': 'com.lollipopkit.toolbox',
+        'sandbox': true,
+        'created_at': '2026-10-29T00:00:00Z',
+        'last_seen_at': '2026-10-29T00:00:00Z',
+      },
+    });
+    api.on('DELETE /v2/devices/d1', {'code': 0, 'msg': 'Ok'});
+    await signedIn();
+    final d = await client.registerDevice(
+      token: 'ab12',
+      appId: 'com.lollipopkit.toolbox',
+      sandbox: true,
+    );
+    expect(d.id, 'd1');
+    final sent = api.requests.lastWhere((r) => r.path == '/v2/devices');
+    expect(sent.data, {
+      'platform': 'ios',
+      'app_id': 'com.lollipopkit.toolbox',
+      'token': 'ab12',
+      'sandbox': true,
+    });
+
+    await client.signOut();
+    expect(
+      api.requests.any(
+        (r) => r.method == 'DELETE' && r.path == '/v2/devices/d1',
+      ),
+      isTrue,
+    );
+    expect(cache.read('device'), isNull);
+  });
+
   test('plans need no sign-in', () async {
     api.on('GET /v2/billing/plans', {
       'data': [

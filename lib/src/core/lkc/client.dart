@@ -124,6 +124,9 @@ final class LkcClient {
   static const _kUser = 'user';
   static const _kEntitlements = 'entitlements';
 
+  /// This install's push registration, to drop it on the way out.
+  static const _kDevice = 'device';
+
   /// [key]'s cached reply, parsed; null when there is none or it no longer parses.
   T? _cached<T>(String key, T Function(Object? data) parse) {
     final data = cache.read(key);
@@ -210,6 +213,7 @@ final class LkcClient {
 
   /// Sign out here and end the session at the IdP.
   Future<void> signOut() async {
+    await _unregisterDevice();
     final tokens = _tokens;
     await _forget();
     if (tokens != null) await _idp.revoke(tokens);
@@ -270,8 +274,59 @@ final class LkcClient {
   /// The tokens are revoked and dropped too: the IdP identity stays, and a
   /// valid token would make an empty account again.
   Future<void> deleteAccount() async {
+    await _unregisterDevice();
     await _call('DELETE', '/auth/user');
     await signOut();
+  }
+
+  // Push devices
+
+  /// Register this device's APNs [token] for push to the signed-in user,
+  /// after signing in and whenever the app has a token (it may change).
+  ///
+  /// [appId] is the APNs topic, the app's bundle id; [sandbox] is APNs'
+  /// development environment, a debug or profile build's.
+  Future<LkcDevice> registerDevice({
+    required String token,
+    required String appId,
+    required bool sandbox,
+  }) async {
+    final device = LkcDevice.fromJson(
+      await _call(
+        'POST',
+        '/v2/devices',
+        body: {
+          'platform': 'ios',
+          'app_id': appId,
+          'token': token,
+          'sandbox': sandbox,
+        },
+      ) as Map<String, dynamic>,
+    );
+    cache.write(_kDevice, device.id);
+    return device;
+  }
+
+  /// Every device registered for push to the user.
+  Future<List<LkcDevice>> devices() async =>
+      _list(await _call('GET', '/v2/devices'), LkcDevice.fromJson);
+
+  Future<void> deleteDevice(String id) async {
+    await _call('DELETE', '/v2/devices/${Uri.encodeComponent(id)}');
+    if (cache.read(_kDevice) == id) cache.remove(_kDevice);
+  }
+
+  /// No more push here for the user who is leaving. Best effort: one that
+  /// fails stays with the account until APNs reports the token gone, or the
+  /// same token is registered again by whoever signs in next.
+  Future<void> _unregisterDevice() async {
+    final id = cache.read(_kDevice);
+    if (id is! String || !signedIn) return;
+    try {
+      await deleteDevice(id);
+    } catch (e) {
+      debugPrint('LKC device unregister: ${e.runtimeType}');
+    }
   }
 
   // Subscriptions

@@ -404,3 +404,37 @@ T? _byName<T extends Enum>(List<T> values, Object? name) {
   );
   return values.where((v) => v.name == camel).firstOrNull;
 }
+
+/// A device registered for push notifications.
+final class LkcDevice {
+  final String id;
+
+  /// `ios`.
+  final String platform;
+
+  /// The APNs topic: the app's bundle id.
+  final String appId;
+
+  /// Registered with APNs' development environment.
+  final bool sandbox;
+  final DateTime createdAt;
+  final DateTime lastSeenAt;
+
+  const LkcDevice({
+    required this.id,
+    required this.platform,
+    required this.appId,
+    required this.sandbox,
+    required this.createdAt,
+    required this.lastSeenAt,
+  });
+
+  factory LkcDevice.fromJson(Map<String, dynamic> json) => LkcDevice(
+    id: '${json['id']}',
+    platform: json['platform'] as String,
+    appId: json['app_id'] as String,
+    sandbox: json['sandbox'] as bool? ?? false,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    lastSeenAt: DateTime.parse(json['last_seen_at'] as String),
+  );
+}
