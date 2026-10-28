@@ -17,7 +17,7 @@ final class LkcPageArgs {
   const LkcPageArgs(this.client, {this.embedded = false});
 }
 
-/// The LKC Cloud account: sign-in, the plans held and on sale, and the account itself.
+/// The LK Cloud account: sign-in, the plans held and on sale, and the account itself.
 ///
 /// Plans and prices are listed only where [LkcClient.webCheckout] is on: an
 /// App Store app shows what the user holds and nothing it would sell.
@@ -497,7 +497,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   }
 }
 
-/// The files stored in LKC Cloud, and how much of the quota they take.
+/// The files stored in LK Cloud, and how much of the quota they take.
 final class LkcFilesPage extends StatefulWidget {
   final LkcPageArgs args;
 

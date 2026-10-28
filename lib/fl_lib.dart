@@ -80,8 +80,8 @@ export 'src/core/store/secure.dart';
 // Cloud sync base classes and implementations (iCloud, WebDAV)
 export 'src/core/sync/base.dart';
 
-// --- LKC Cloud ---
-// Client of LKC Cloud: sign-in, account, subscriptions, files
+// --- LK Cloud ---
+// Client of LK Cloud: sign-in, account, subscriptions, files
 export 'src/core/lkc/auth.dart' hide LkcIdp;
 export 'src/core/lkc/benefit.dart';
 export 'src/core/lkc/client.dart';

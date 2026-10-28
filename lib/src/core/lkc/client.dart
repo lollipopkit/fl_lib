@@ -14,7 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// The `code` of a homebase reply.
 enum LkcCode { ok, internal, perm, notFound, param, quota }
 
-/// A request LKC Cloud refused, or a reply that isn't its.
+/// A request LK Cloud refused, or a reply that isn't its.
 final class LkcException implements Exception {
   /// Null when the reply isn't the API's: a proxy's error page, the object store.
   final LkcCode? code;
@@ -37,7 +37,7 @@ final class LkcException implements Exception {
       'LkcException(${code?.name ?? 'status $status'}${reason == null ? '' : ', $reason'})';
 }
 
-/// A client of LKC Cloud (homebase): sign-in, account, subscriptions and files.
+/// A client of LK Cloud (homebase): sign-in, account, subscriptions and files.
 ///
 /// The user signs in at the IdP with the app's public client ([LkcOidc]);
 /// homebase is sent the IdP's access token, refreshed when it is about to end.

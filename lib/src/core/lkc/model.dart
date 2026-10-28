@@ -1,4 +1,4 @@
-/// What LKC Cloud (homebase) answers with.
+/// What LK Cloud (homebase) answers with.
 library;
 
 import 'dart:math' as math;
@@ -29,7 +29,7 @@ enum LkcSource {
   manual,
   unknown;
 
-  /// Billed by an app store: only the store can cancel it, not LKC Cloud.
+  /// Billed by an app store: only the store can cancel it, not LK Cloud.
   bool get isStore => this == apple || this == google;
 }
 

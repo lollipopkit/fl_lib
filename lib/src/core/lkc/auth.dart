@@ -9,7 +9,7 @@ import 'package:fl_lib/src/core/lkc/client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 
-/// How an app signs in to LKC Cloud: its public client at the IdP, with S256 PKCE.
+/// How an app signs in to LK Cloud: its public client at the IdP, with S256 PKCE.
 final class LkcOidc {
   static final defaultIssuer = Uri.parse(
     'https://auth.lollipopkit.com/auth/v1/',
