@@ -815,521 +815,695 @@ abstract class LibLocalizations {
   /// **'License'**
   String get license;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get lkcAccount;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups'**
+  String get lkcBenefitBackups;
+
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
   /// **'up to {size} per app'**
-  String lkcBenefitBackupAppBytes(String size);
+  String lkcBenefitBackupsAppBytes(String size);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'the latest one per app'**
-  String get lkcBenefitBackupLatest;
+  /// **'{kept}, {limit}'**
+  String lkcBenefitBackupsDetail(String kept, String limit);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest one per app'**
+  String get lkcBenefitBackupsLatest;
+
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
   /// **'no size limit'**
-  String get lkcBenefitBackupNoLimit;
+  String get lkcBenefitBackupsNoLimit;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 rolling backup} other{{count} rolling backups}} per app'**
-  String lkcBenefitBackupRolling(int count);
+  /// **'{count, plural, =1{1 rolling} other{{count} rolling}} per app'**
+  String lkcBenefitBackupsRolling(int count);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'unlimited rolling backups per app'**
-  String get lkcBenefitBackupRollingUnlimited;
+  /// **'Unlimited rolling per app'**
+  String get lkcBenefitBackupsRollingUnlimited;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
   /// **'{size} shared by all apps'**
-  String lkcBenefitBackupTotalBytes(String size);
+  String lkcBenefitBackupsTotalBytes(String size);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Backups: {kept}, {limit}'**
-  String lkcBenefitBackups(String kept, String limit);
+  /// **'Relay, tailnet and push'**
+  String get lkcBenefitRelay;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Monitor relay, tailnet and push notifications: unlimited traffic, relay at {rate}, no availability guarantee'**
-  String lkcBenefitRelay(String rate);
+  /// **'Unlimited traffic, {rate}, no availability guarantee'**
+  String lkcBenefitRelayDetail(String rate);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Monitor relay, tailnet and push notifications: unlimited traffic and speed, no availability guarantee'**
+  /// **'Unlimited traffic and speed, no availability guarantee'**
   String get lkcBenefitRelayUnlimited;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Share links with expiry'**
+  /// **'Share links'**
   String get lkcBenefitShareLinks;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'WebDAV {size}, files up to {file} each'**
-  String lkcBenefitStorage(String size, String file);
+  /// **'With expiry'**
+  String get lkcBenefitShareLinksDetail;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'WebDAV without a size limit, files up to {file} each'**
-  String lkcBenefitStorageUnlimited(String file);
+  /// **'Files up to {file} each'**
+  String lkcBenefitStorageDetail(String file);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'Real-time sync across devices (end-to-end encrypted)'**
+  /// **'Sync'**
   String get lkcBenefitSync;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}'**
-  String lkcBenefitUptime(int minutes, int count);
+  /// **'Real-time, end-to-end encrypted'**
+  String get lkcBenefitSyncDetail;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks, up to {count, plural, =1{1 target} other{{count} targets}}'**
+  /// **'Downtime checks'**
+  String get lkcBenefitUptime;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}'**
+  String lkcBenefitUptimeDetail(int minutes, int count);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to {count, plural, =1{1 target} other{{count} targets}}'**
   String lkcBenefitUptimeTargets(int count);
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks, unlimited targets'**
+  /// **'Unlimited targets'**
   String get lkcBenefitUptimeTargetsUnlimited;
 
-  /// LKC Cloud paywall: a benefit of a plan.
+  /// LK Cloud account page.
   ///
   /// In en, this message translates to:
-  /// **'External downtime checks every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
+  /// **'Every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
   String lkcBenefitUptimeUnlimited(int minutes);
 
-  /// LKC Cloud rejection `already_subscribed`.
+  /// LK Cloud account page: a paid plan the user canceled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancels on {date}'**
+  String lkcCancelsOn(String date);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Concurrency'**
+  String get lkcConduitConcurrency;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 request} other{{count} requests}} in flight'**
+  String lkcConduitConcurrencyDetail(int count);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit'**
+  String get lkcConduitCredit;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{credit} per month'**
+  String lkcConduitCreditMonthly(String credit);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{credit} per week'**
+  String lkcConduitCreditWeekly(String credit);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get lkcDeleteAccount;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} and its subscriptions are removed. This can’t be undone.'**
+  String lkcDeleteAccountConfirm(String name);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Ends on {date}'**
+  String lkcEndsOn(String date);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}'**
+  String lkcFileCount(int count);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get lkcFiles;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get lkcFreeTier;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscriptions'**
+  String get lkcManageSubscriptions;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'No end date'**
+  String get lkcNoEndDate;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Not logged in'**
+  String get lkcNotSignedIn;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment past due'**
+  String get lkcPastDue;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get lkcPaused;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{price} / month'**
+  String lkcPerMonth(String price);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{price} / year'**
+  String lkcPerYear(String price);
+
+  /// LK Cloud rejection `already_subscribed`.
   ///
   /// In en, this message translates to:
   /// **'Already subscribed'**
   String get lkcReasonAlreadySubscribed;
 
-  /// LKC Cloud rejection `bad_purchase_token`.
+  /// LK Cloud rejection `bad_purchase_token`.
   ///
   /// In en, this message translates to:
   /// **'Invalid purchase token'**
   String get lkcReasonBadPurchaseToken;
 
-  /// LKC Cloud rejection `bad_push_token`.
+  /// LK Cloud rejection `bad_push_token`.
   ///
   /// In en, this message translates to:
   /// **'Invalid push token'**
   String get lkcReasonBadPushToken;
 
-  /// LKC Cloud rejection `bad_query`.
+  /// LK Cloud rejection `bad_query`.
   ///
   /// In en, this message translates to:
   /// **'Invalid query'**
   String get lkcReasonBadQuery;
 
-  /// LKC Cloud rejection `bad_signature`.
+  /// LK Cloud rejection `bad_signature`.
   ///
   /// In en, this message translates to:
   /// **'Invalid signature'**
   String get lkcReasonBadSignature;
 
-  /// LKC Cloud rejection `bad_transaction`.
+  /// LK Cloud rejection `bad_transaction`.
   ///
   /// In en, this message translates to:
   /// **'Invalid transaction'**
   String get lkcReasonBadTransaction;
 
-  /// LKC Cloud rejection `benefit_invalid`.
+  /// LK Cloud rejection `benefit_invalid`.
   ///
   /// In en, this message translates to:
   /// **'A benefit is listed twice, of a tier that doesn\'t have it, or of no owner'**
   String get lkcReasonBenefitInvalid;
 
-  /// LKC Cloud rejection `code_checkout`.
+  /// LK Cloud rejection `code_checkout`.
   ///
   /// In en, this message translates to:
   /// **'The code can\'t be used with this checkout'**
   String get lkcReasonCodeCheckout;
 
-  /// LKC Cloud rejection `code_currency`.
+  /// LK Cloud rejection `code_currency`.
   ///
   /// In en, this message translates to:
   /// **'The code\'s currency doesn\'t match the price'**
   String get lkcReasonCodeCurrency;
 
-  /// LKC Cloud rejection `code_currency_needed`.
+  /// LK Cloud rejection `code_currency_needed`.
   ///
   /// In en, this message translates to:
   /// **'A fixed amount needs its currency'**
   String get lkcReasonCodeCurrencyNeeded;
 
-  /// LKC Cloud rejection `code_discount_periods`.
+  /// LK Cloud rejection `code_discount_periods`.
   ///
   /// In en, this message translates to:
   /// **'A discount grants no periods'**
   String get lkcReasonCodeDiscountPeriods;
 
-  /// LKC Cloud rejection `code_duration`.
+  /// LK Cloud rejection `code_duration`.
   ///
   /// In en, this message translates to:
   /// **'Pick which payments the discount covers'**
   String get lkcReasonCodeDuration;
 
-  /// LKC Cloud rejection `code_expired`.
+  /// LK Cloud rejection `code_expired`.
   ///
   /// In en, this message translates to:
   /// **'The code has expired'**
   String get lkcReasonCodeExpired;
 
-  /// LKC Cloud rejection `code_format`.
+  /// LK Cloud rejection `code_format`.
   ///
   /// In en, this message translates to:
   /// **'A code is 4 to 32 letters, digits or dashes'**
   String get lkcReasonCodeFormat;
 
-  /// LKC Cloud rejection `code_grant_off`.
+  /// LK Cloud rejection `code_grant_off`.
   ///
   /// In en, this message translates to:
   /// **'A grant has no discount'**
   String get lkcReasonCodeGrantOff;
 
-  /// LKC Cloud rejection `code_grant_periods`.
+  /// LK Cloud rejection `code_grant_periods`.
   ///
   /// In en, this message translates to:
   /// **'A grant lasts 1 to 120 periods'**
   String get lkcReasonCodeGrantPeriods;
 
-  /// LKC Cloud rejection `code_grant_plan`.
+  /// LK Cloud rejection `code_grant_plan`.
   ///
   /// In en, this message translates to:
   /// **'A grant is of one plan'**
   String get lkcReasonCodeGrantPlan;
 
-  /// LKC Cloud rejection `code_inactive`.
+  /// LK Cloud rejection `code_inactive`.
   ///
   /// In en, this message translates to:
   /// **'The code is no longer valid'**
   String get lkcReasonCodeInactive;
 
-  /// LKC Cloud rejection `code_is_discount`.
+  /// LK Cloud rejection `code_is_discount`.
   ///
   /// In en, this message translates to:
   /// **'The code is a discount, enter it when subscribing'**
   String get lkcReasonCodeIsDiscount;
 
-  /// LKC Cloud rejection `code_is_grant`.
+  /// LK Cloud rejection `code_is_grant`.
   ///
   /// In en, this message translates to:
   /// **'The code grants a plan, redeem it instead'**
   String get lkcReasonCodeIsGrant;
 
-  /// LKC Cloud rejection `code_kind`.
+  /// LK Cloud rejection `code_kind`.
   ///
   /// In en, this message translates to:
   /// **'A code\'s kind can\'t change'**
   String get lkcReasonCodeKind;
 
-  /// LKC Cloud rejection `code_limit`.
+  /// LK Cloud rejection `code_limit`.
   ///
   /// In en, this message translates to:
   /// **'The redemption limit must be positive'**
   String get lkcReasonCodeLimit;
 
-  /// LKC Cloud rejection `code_line_held`.
+  /// LK Cloud rejection `code_line_held`.
   ///
   /// In en, this message translates to:
   /// **'You already have a subscription in this line'**
   String get lkcReasonCodeLineHeld;
 
-  /// LKC Cloud rejection `code_months`.
+  /// LK Cloud rejection `code_months`.
   ///
   /// In en, this message translates to:
   /// **'A repeating discount lasts 1 to 36 months'**
   String get lkcReasonCodeMonths;
 
-  /// LKC Cloud rejection `code_new_only`.
+  /// LK Cloud rejection `code_new_only`.
   ///
   /// In en, this message translates to:
   /// **'The code is for new subscribers only'**
   String get lkcReasonCodeNewOnly;
 
-  /// LKC Cloud rejection `code_not_started`.
+  /// LK Cloud rejection `code_not_started`.
   ///
   /// In en, this message translates to:
   /// **'The code is not valid yet'**
   String get lkcReasonCodeNotStarted;
 
-  /// LKC Cloud rejection `code_off`.
+  /// LK Cloud rejection `code_off`.
   ///
   /// In en, this message translates to:
   /// **'A discount is a percentage (1 to 100) or a fixed amount'**
   String get lkcReasonCodeOff;
 
-  /// LKC Cloud rejection `code_plan`.
+  /// LK Cloud rejection `code_plan`.
   ///
   /// In en, this message translates to:
   /// **'The code doesn\'t apply to this plan'**
   String get lkcReasonCodePlan;
 
-  /// LKC Cloud rejection `code_plans`.
+  /// LK Cloud rejection `code_plans`.
   ///
   /// In en, this message translates to:
   /// **'Pick the plans the code applies to'**
   String get lkcReasonCodePlans;
 
-  /// LKC Cloud rejection `code_redeemed`.
+  /// LK Cloud rejection `code_redeemed`.
   ///
   /// In en, this message translates to:
   /// **'The code has been redeemed, deactivate it instead'**
   String get lkcReasonCodeRedeemed;
 
-  /// LKC Cloud rejection `code_taken`.
+  /// LK Cloud rejection `code_taken`.
   ///
   /// In en, this message translates to:
   /// **'The code exists already'**
   String get lkcReasonCodeTaken;
 
-  /// LKC Cloud rejection `code_tries`.
+  /// LK Cloud rejection `code_tries`.
   ///
   /// In en, this message translates to:
   /// **'Too many tries, try again later'**
   String get lkcReasonCodeTries;
 
-  /// LKC Cloud rejection `code_unknown`.
+  /// LK Cloud rejection `code_unknown`.
   ///
   /// In en, this message translates to:
   /// **'No such code'**
   String get lkcReasonCodeUnknown;
 
-  /// LKC Cloud rejection `code_used`.
+  /// LK Cloud rejection `code_used`.
   ///
   /// In en, this message translates to:
   /// **'You have used this code'**
   String get lkcReasonCodeUsed;
 
-  /// LKC Cloud rejection `code_used_up`.
+  /// LK Cloud rejection `code_used_up`.
   ///
   /// In en, this message translates to:
   /// **'The code has been used up'**
   String get lkcReasonCodeUsedUp;
 
-  /// LKC Cloud rejection `code_window`.
+  /// LK Cloud rejection `code_window`.
   ///
   /// In en, this message translates to:
   /// **'The code must start before it expires'**
   String get lkcReasonCodeWindow;
 
-  /// LKC Cloud rejection `delete_admin`.
+  /// LK Cloud rejection `delete_admin`.
   ///
   /// In en, this message translates to:
   /// **'Remove the admin role at the IdP before deleting an admin'**
   String get lkcReasonDeleteAdmin;
 
-  /// LKC Cloud rejection `delete_self`.
+  /// LK Cloud rejection `delete_self`.
   ///
   /// In en, this message translates to:
   /// **'Delete your own account from the account page'**
   String get lkcReasonDeleteSelf;
 
-  /// LKC Cloud rejection `file_exists`.
+  /// LK Cloud rejection `file_exists`.
   ///
   /// In en, this message translates to:
   /// **'A file of this name exists'**
   String get lkcReasonFileExists;
 
-  /// LKC Cloud rejection `file_name`.
+  /// LK Cloud rejection `file_name`.
   ///
   /// In en, this message translates to:
   /// **'Not a valid file or directory name'**
   String get lkcReasonFileName;
 
-  /// LKC Cloud rejection `file_quota`.
+  /// LK Cloud rejection `file_quota`.
   ///
   /// In en, this message translates to:
   /// **'The files would exceed the storage quota'**
   String get lkcReasonFileQuota;
 
-  /// LKC Cloud rejection `file_too_large`.
+  /// LK Cloud rejection `file_too_large`.
   ///
   /// In en, this message translates to:
   /// **'The file is too large'**
   String get lkcReasonFileTooLarge;
 
-  /// LKC Cloud rejection `foreign_transaction`.
+  /// LK Cloud rejection `foreign_transaction`.
   ///
   /// In en, this message translates to:
   /// **'Transaction of another app or environment'**
   String get lkcReasonForeignTransaction;
 
-  /// LKC Cloud rejection `grant_gone`.
+  /// LK Cloud rejection `grant_gone`.
   ///
   /// In en, this message translates to:
   /// **'No such live manual subscription'**
   String get lkcReasonGrantGone;
 
-  /// LKC Cloud rejection `grant_held`.
+  /// LK Cloud rejection `grant_held`.
   ///
   /// In en, this message translates to:
   /// **'The user has a manual subscription in this line, change it instead'**
   String get lkcReasonGrantHeld;
 
-  /// LKC Cloud rejection `grant_in_past`.
+  /// LK Cloud rejection `grant_in_past`.
   ///
   /// In en, this message translates to:
   /// **'The grant must end in the future'**
   String get lkcReasonGrantInPast;
 
-  /// LKC Cloud rejection `manual_provider`.
+  /// LK Cloud rejection `manual_provider`.
   ///
   /// In en, this message translates to:
   /// **'Manual is not a provider'**
   String get lkcReasonManualProvider;
 
-  /// LKC Cloud rejection `no_customer`.
+  /// LK Cloud rejection `no_customer`.
   ///
   /// In en, this message translates to:
   /// **'No subscription to manage'**
   String get lkcReasonNoCustomer;
 
-  /// LKC Cloud rejection `no_switch`.
+  /// LK Cloud rejection `no_switch`.
   ///
   /// In en, this message translates to:
   /// **'No web subscription in this line to switch'**
   String get lkcReasonNoSwitch;
 
-  /// LKC Cloud rejection `no_user`.
+  /// LK Cloud rejection `no_user`.
   ///
   /// In en, this message translates to:
   /// **'No such user'**
   String get lkcReasonNoUser;
 
-  /// LKC Cloud rejection `price_archived`.
+  /// LK Cloud rejection `price_archived`.
   ///
   /// In en, this message translates to:
   /// **'A sold price is archived at its provider'**
   String get lkcReasonPriceArchived;
 
-  /// LKC Cloud rejection `price_missing`.
+  /// LK Cloud rejection `price_missing`.
   ///
   /// In en, this message translates to:
   /// **'A sold price doesn\'t exist at its provider'**
   String get lkcReasonPriceMissing;
 
-  /// LKC Cloud rejection `price_not_fixed`.
+  /// LK Cloud rejection `price_not_fixed`.
   ///
   /// In en, this message translates to:
   /// **'A sold price has no fixed amount'**
   String get lkcReasonPriceNotFixed;
 
-  /// LKC Cloud rejection `price_period`.
+  /// LK Cloud rejection `price_period`.
   ///
   /// In en, this message translates to:
   /// **'A sold price doesn\'t bill its plan\'s period'**
   String get lkcReasonPricePeriod;
 
-  /// LKC Cloud rejection `product_id`.
+  /// LK Cloud rejection `product_id`.
   ///
   /// In en, this message translates to:
   /// **'Empty or padded product id'**
   String get lkcReasonProductId;
 
-  /// LKC Cloud rejection `product_in_use`.
+  /// LK Cloud rejection `product_in_use`.
   ///
   /// In en, this message translates to:
   /// **'A product of live subscriptions keeps its plan'**
   String get lkcReasonProductInUse;
 
-  /// LKC Cloud rejection `product_plans`.
+  /// LK Cloud rejection `product_plans`.
   ///
   /// In en, this message translates to:
   /// **'A product maps to one plan only'**
   String get lkcReasonProductPlans;
 
-  /// LKC Cloud rejection `purchase_account`.
+  /// LK Cloud rejection `purchase_account`.
   ///
   /// In en, this message translates to:
   /// **'Purchase belongs to another account'**
   String get lkcReasonPurchaseAccount;
 
-  /// LKC Cloud rejection `push_account`.
+  /// LK Cloud rejection `push_account`.
   ///
   /// In en, this message translates to:
   /// **'Unexpected push account'**
   String get lkcReasonPushAccount;
 
-  /// LKC Cloud rejection `same_plan`.
+  /// LK Cloud rejection `same_plan`.
   ///
   /// In en, this message translates to:
   /// **'Already on this plan'**
   String get lkcReasonSamePlan;
 
-  /// LKC Cloud rejection `sold_twice`.
+  /// LK Cloud rejection `sold_twice`.
   ///
   /// In en, this message translates to:
   /// **'One sold price per plan and provider'**
   String get lkcReasonSoldTwice;
 
-  /// LKC Cloud rejection `switch_sync`.
+  /// LK Cloud rejection `switch_sync`.
   ///
   /// In en, this message translates to:
   /// **'Saved, but Stripe\'s plan switching couldn\'t be updated; save again'**
   String get lkcReasonSwitchSync;
 
-  /// LKC Cloud rejection `test_purchase`.
+  /// LK Cloud rejection `test_purchase`.
   ///
   /// In en, this message translates to:
   /// **'Test purchases are not accepted'**
   String get lkcReasonTestPurchase;
 
-  /// LKC Cloud rejection `transaction_account`.
+  /// LK Cloud rejection `transaction_account`.
   ///
   /// In en, this message translates to:
   /// **'Transaction belongs to another account'**
   String get lkcReasonTransactionAccount;
 
-  /// LKC Cloud rejection `unavailable`.
+  /// LK Cloud rejection `unavailable`.
   ///
   /// In en, this message translates to:
   /// **'Not available'**
   String get lkcReasonUnavailable;
 
-  /// LKC Cloud rejection `unknown_package`.
+  /// LK Cloud rejection `unknown_package`.
   ///
   /// In en, this message translates to:
   /// **'Unknown package'**
   String get lkcReasonUnknownPackage;
 
-  /// LKC Cloud rejection `upload_size`.
+  /// LK Cloud rejection `upload_size`.
   ///
   /// In en, this message translates to:
   /// **'The uploaded file is missing or not of the announced size'**
   String get lkcReasonUploadSize;
 
-  /// LKC Cloud rejection `upload_unknown`.
+  /// LK Cloud rejection `upload_unknown`.
   ///
   /// In en, this message translates to:
   /// **'No such upload, or it expired'**
   String get lkcReasonUploadUnknown;
 
-  /// LKC Cloud rejection `user_gone`.
+  /// LK Cloud rejection `user_gone`.
   ///
   /// In en, this message translates to:
   /// **'The user no longer exists'**
   String get lkcReasonUserGone;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Renews on {date}'**
+  String lkcRenewsOn(String date);
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'You have a subscription billed by the App Store or Google Play. Cancel it in the store first: deleting the account doesn’t stop it.'**
+  String get lkcStoreSubscriptionTip;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe'**
+  String get lkcSubscribe;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get lkcUnlimited;
+
+  /// LK Cloud account page.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {quota}'**
+  String lkcUsageOf(String used, String quota);
 
   /// Abbreviated text for loading ellipsis.
   ///

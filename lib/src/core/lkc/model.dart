@@ -1,4 +1,4 @@
-/// What LKC Cloud (homebase) answers with.
+/// What LK Cloud (homebase) answers with.
 library;
 
 import 'dart:math' as math;
@@ -29,7 +29,7 @@ enum LkcSource {
   manual,
   unknown;
 
-  /// Billed by an app store: only the store can cancel it, not LKC Cloud.
+  /// Billed by an app store: only the store can cancel it, not LK Cloud.
   bool get isStore => this == apple || this == google;
 }
 
@@ -77,17 +77,6 @@ final class LkcUser {
   );
 }
 
-/// Who granted a manual subscription, and until when it renews (for good when null).
-final class LkcGrant {
-  final String by;
-  final DateTime? endsAt;
-
-  const LkcGrant({required this.by, this.endsAt});
-
-  factory LkcGrant.fromJson(Map<String, dynamic> json) =>
-      LkcGrant(by: json['by'] as String, endsAt: _date(json['ends_at']));
-}
-
 /// A subscription of the user.
 final class LkcEntitlement {
   /// The plan id, such as `storage.plus`.
@@ -99,7 +88,6 @@ final class LkcEntitlement {
 
   /// It ends at [periodEnd] instead of renewing.
   final bool cancelScheduled;
-  final LkcGrant? grant;
   final LkcLine line;
 
   const LkcEntitlement({
@@ -110,7 +98,6 @@ final class LkcEntitlement {
     required this.cancelScheduled,
     this.periodStart,
     this.periodEnd,
-    this.grant,
   });
 
   factory LkcEntitlement.fromJson(Map<String, dynamic> json) => LkcEntitlement(
@@ -123,10 +110,6 @@ final class LkcEntitlement {
     periodStart: _date(json['period_start']),
     periodEnd: _date(json['period_end']),
     cancelScheduled: json['cancel_scheduled'] as bool? ?? false,
-    grant: switch (json['grant']) {
-      final Map<String, dynamic> g => LkcGrant.fromJson(g),
-      _ => null,
-    },
   );
 }
 
@@ -182,7 +165,13 @@ final class LkcConduitLimits {
 final class LkcPlan {
   final String id;
   final LkcLine line;
+
+  /// Its place among the plans of [line], the higher the more it grants.
+  final int rank;
   final LkcPeriod period;
+
+  /// A brand name, shown untranslated.
+  final String? name;
 
   /// Web checkouts available for the plan, in order of preference.
   final List<LkcPrice> web;
@@ -193,7 +182,9 @@ final class LkcPlan {
   const LkcPlan({
     required this.id,
     required this.line,
+    this.rank = 0,
     required this.period,
+    this.name,
     required this.web,
     this.limits,
   });
@@ -205,7 +196,9 @@ final class LkcPlan {
   factory LkcPlan.fromJson(Map<String, dynamic> json) => LkcPlan(
     id: json['id'] as String,
     line: _byName(LkcLine.values, json['line']) ?? LkcLine.unknown,
+    rank: (json['rank'] as num?)?.toInt() ?? 0,
     period: _byName(LkcPeriod.values, json['period']) ?? LkcPeriod.unknown,
+    name: json['name'] as String?,
     web: [
       for (final p in json['web'] as List? ?? const [])
         LkcPrice.fromJson(p as Map<String, dynamic>),
@@ -215,6 +208,47 @@ final class LkcPlan {
       _ => null,
     },
   );
+}
+
+/// The plans on sale and the names of the lines: GET /v2/billing/plans.
+final class LkcCatalog {
+  /// In display order.
+  final List<LkcPlan> plans;
+
+  /// Brand names by line id, in display order.
+  final Map<String, String> lines;
+
+  /// The name of having no plan.
+  final String? freeName;
+
+  const LkcCatalog({required this.plans, this.lines = const {}, this.freeName});
+
+  factory LkcCatalog.fromJson(Object? json) => switch (json) {
+    // TODO: rm once no homebase answering a bare plan list is served.
+    final List<Object?> plans => LkcCatalog(plans: _plans(plans)),
+    final Map<String, dynamic> json => LkcCatalog(
+      plans: _plans(json['plans'] as List? ?? const []),
+      lines: {
+        for (final l in json['lines'] as List? ?? const [])
+          (l as Map<String, dynamic>)['id'] as String: l['name'] as String,
+      },
+      freeName: (json['free'] as Map<String, dynamic>?)?['name'] as String?,
+    ),
+    _ => throw FormatException('Not a catalog: ${json.runtimeType}'),
+  };
+
+  static List<LkcPlan> _plans(List<Object?> list) => [
+    for (final p in list) LkcPlan.fromJson(p as Map<String, dynamic>),
+  ];
+
+  LkcPlan? plan(String id) => plans.where((p) => p.id == id).firstOrNull;
+}
+
+/// Names from the catalog; the ids while it hasn't been read.
+extension LkcCatalogNames on LkcCatalog? {
+  String lineName(LkcLine line) => this?.lines[line.name] ?? line.name;
+
+  String planName(String plan) => this?.plan(plan)?.name ?? plan;
 }
 
 /// The largest file one upload sends: the object store's limit, no plan's.
@@ -420,4 +454,38 @@ T? _byName<T extends Enum>(List<T> values, Object? name) {
     (m) => m[1]!.toUpperCase(),
   );
   return values.where((v) => v.name == camel).firstOrNull;
+}
+
+/// A device registered for push notifications.
+final class LkcDevice {
+  final String id;
+
+  /// `ios`.
+  final String platform;
+
+  /// The APNs topic: the app's bundle id.
+  final String appId;
+
+  /// Registered with APNs' development environment.
+  final bool sandbox;
+  final DateTime createdAt;
+  final DateTime lastSeenAt;
+
+  const LkcDevice({
+    required this.id,
+    required this.platform,
+    required this.appId,
+    required this.sandbox,
+    required this.createdAt,
+    required this.lastSeenAt,
+  });
+
+  factory LkcDevice.fromJson(Map<String, dynamic> json) => LkcDevice(
+    id: '${json['id']}',
+    platform: json['platform'] as String,
+    appId: json['app_id'] as String,
+    sandbox: json['sandbox'] as bool? ?? false,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    lastSeenAt: DateTime.parse(json['last_seen_at'] as String),
+  );
 }

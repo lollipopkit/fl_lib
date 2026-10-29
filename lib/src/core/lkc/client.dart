@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:fl_lib/src/core/lkc/auth.dart';
 import 'package:fl_lib/src/core/lkc/model.dart';
+import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
 import 'package:flutter/widgets.dart';
@@ -12,7 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// The `code` of a homebase reply.
 enum LkcCode { ok, internal, perm, notFound, param, quota }
 
-/// A request LKC Cloud refused, or a reply that isn't its.
+/// A request LK Cloud refused, or a reply that isn't its.
 final class LkcException implements Exception {
   /// Null when the reply isn't the API's: a proxy's error page, the object store.
   final LkcCode? code;
@@ -35,16 +37,18 @@ final class LkcException implements Exception {
       'LkcException(${code?.name ?? 'status $status'}${reason == null ? '' : ', $reason'})';
 }
 
-/// A client of LKC Cloud (homebase): sign-in, account, subscriptions and files.
+/// A client of LK Cloud (homebase): sign-in, account, subscriptions and files.
 ///
-/// Sign-in hands the token over through the browser: [openLogin], then
-/// [onDeepLink] receives `lpkt.cn://<appId>/oauth-callback?token=…`. Where the
-/// app has no deep link (desktop), the page shows the token for [signIn].
+/// The user signs in at the IdP with the app's public client ([LkcOidc]);
+/// homebase is sent the IdP's access token, refreshed when it is about to end.
 final class LkcClient {
   static const defaultBaseUrl = 'https://api.lollipopkit.com';
 
-  /// Identifies the app to the login page, which opens `lpkt.cn://<appId>/…`.
-  final String appId;
+  // Not on the object store: an upload of 5 GB takes as long as it takes.
+  static const _connectTimeout = Duration(seconds: 15);
+  static const _receiveTimeout = Duration(seconds: 30);
+
+  final LkcOidc oidc;
   final Uri baseUrl;
 
   /// Whether this app may sell plans by the web checkout.
@@ -54,14 +58,18 @@ final class LkcClient {
   /// The Stripe portal can switch plans, so it is held to this too.
   final bool webCheckout;
 
-  /// Where the token is kept.
+  /// Where the tokens are kept.
   final SecureProp tokenProp;
   final Dio _api;
 
   /// Talks to the object store: never sends the token.
   final Dio _store;
+  final LkcIdp _idp;
 
-  String? _token;
+  LkcTokens? _tokens;
+
+  /// The refresh in flight: one at a time, as the IdP takes a refresh token once.
+  Future<LkcTokens>? _refreshing;
 
   /// The signed-in user, null when signed out.
   final user = ValueNotifier<LkcUser?>(null);
@@ -69,112 +77,210 @@ final class LkcClient {
   /// The effective plan of each line the user holds one in, null until read.
   final entitlements = ValueNotifier<List<LkcEntitlement>?>(null);
 
+  /// What every plan grants, null until read. Public, as is [catalog].
+  final benefits = ValueNotifier<LkcBenefits?>(null);
+
+  /// The plan catalog, null until read.
+  final catalog = ValueNotifier<LkcCatalog?>(null);
+
+  /// What the user's own files take, null until read.
+  final usage = ValueNotifier<LkcUsage?>(null);
+
+  /// The last replies of the reads above, shown until the network answers.
+  final LkcCache cache;
+
   LkcClient({
-    required this.appId,
+    required this.oidc,
     Uri? baseUrl,
     bool? webCheckout,
     this.tokenProp = SecureStoreProps.lkcToken,
     Dio? api,
     Dio? store,
-  }) : baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
+    Dio? idp,
+    @visibleForTesting Future<bool> Function(Uri url)? openBrowser,
+    @visibleForTesting bool? loopback,
+    LkcCache? cache,
+  }) : cache = cache ?? LkcCache(),
+       baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
        webCheckout = webCheckout ?? (!isIOS && !isMacOS),
        _api = api ?? Dio(),
-       _store = store ?? Dio() {
-    _api.options
-      ..baseUrl = this.baseUrl.toString()
-      ..validateStatus = (_) => true;
+       _store = store ?? Dio(),
+       _idp = LkcIdp(
+         oidc,
+         _timed(idp ?? Dio()),
+         openBrowser:
+             openBrowser ??
+             (url) => launchUrl(url, mode: LaunchMode.externalApplication),
+         loopback: loopback,
+       ) {
+    _timed(_api).options.baseUrl = this.baseUrl.toString();
     _store.options.validateStatus = (_) => true;
+    benefits.value = _cached(
+      _kBenefits,
+      (d) => LkcBenefits.fromJson(_Tagged.of(d)!.data as List),
+    );
+    catalog.value = _cached(
+      _kCatalog,
+      (d) => LkcCatalog.fromJson(_Tagged.of(d)!.data),
+    );
   }
 
-  bool get signedIn => _token != null;
+  static const _kBenefits = 'benefits';
+  static const _kCatalog = 'plans';
+  static const _kUser = 'user';
+  static const _kEntitlements = 'entitlements';
 
-  /// Load the saved token and its user. A token the server refuses is dropped;
-  /// on any other error it is kept, and the error thrown.
+  /// This install's push registration, to drop it on the way out.
+  static const _kDevice = 'device';
+
+  /// [key]'s cached reply, parsed; null when there is none or it no longer parses.
+  T? _cached<T>(String key, T Function(Object? data) parse) {
+    final data = cache.read(key);
+    if (data == null) return null;
+    try {
+      return parse(data);
+    } catch (_) {
+      cache.remove(key);
+      return null;
+    }
+  }
+
+  /// Replies of every status for the caller, and no request left hanging.
+  static Dio _timed(Dio dio) {
+    dio.options
+      ..validateStatus = ((_) => true)
+      ..connectTimeout = _connectTimeout
+      ..receiveTimeout = _receiveTimeout;
+    return dio;
+  }
+
+  bool get signedIn => _tokens != null;
+
+  /// Load the saved tokens and their user. Tokens the IdP or homebase refuse
+  /// are dropped; on any other error they are kept, and the error thrown.
   Future<void> init() async {
-    final token = await tokenProp.read();
-    if (token == null) return;
-    if (_expired(token)) {
+    // The names of the lines the account row shows; the page reads it again.
+    if (catalog.value == null) {
+      unawaited(refreshCatalog().then((_) {}, onError: (_) {}));
+    }
+    final saved = await tokenProp.read();
+    if (saved == null) return;
+    try {
+      _tokens = LkcTokens.fromJson(jsonDecode(saved) as Map<String, dynamic>);
+    } catch (_) {
+      // TODO: rm once no build that kept a homebase token here is around.
       await tokenProp.write(null);
       return;
     }
-    _token = token;
+    // The account as last read, until homebase says it again.
+    user.value ??= _cached(
+      _kUser,
+      (d) => LkcUser.fromJson(d as Map<String, dynamic>),
+    );
+    entitlements.value ??= _cached(
+      _kEntitlements,
+      (d) => _list(d, LkcEntitlement.fromJson),
+    );
     try {
       await refresh();
     } on LkcException catch (e) {
       if (e.isPerm) await _forget();
+      rethrow;
     }
   }
 
   /// Re-read the user and the entitlements.
   Future<void> refresh() async {
-    user.value = await _getUser();
+    await _refreshUser();
     await refreshEntitlements();
+    _refreshedAt = DateTime.now();
   }
 
-  Uri get loginUrl =>
-      baseUrl.replace(path: '/auth/oauth', queryParameters: {'app_id': appId});
+  DateTime? _refreshedAt;
 
-  /// Open the login page in the system browser.
-  Future<bool> openLogin() =>
-      launchUrl(loginUrl, mode: LaunchMode.externalApplication);
-
-  /// A [DeepLinkHandler] for `DeepLinks.register`: signs in with the token of
-  /// this app's login callback and ignores every other link.
-  void onDeepLink(Uri uri, [BuildContext? context]) {
-    final token = tokenOf(uri);
-    if (token == null) return;
-    signIn(token).then(
-      (_) {},
-      onError: (Object e) {
-        // Never the token: the error says what the server refused.
-        debugPrint('LKC sign-in from the callback failed: $e');
-      },
-    );
+  /// Whether [refresh] ran in the last minute: a page opened again needn't.
+  bool get fresh {
+    final at = _refreshedAt;
+    return at != null &&
+        DateTime.now().difference(at) < const Duration(minutes: 1);
   }
 
-  /// The token of this app's `lpkt.cn://<appId>/oauth-callback`, null for any other link.
-  @visibleForTesting
-  String? tokenOf(Uri uri) {
-    if (uri.scheme != 'lpkt.cn') return null;
-    // The host of a URI is case-insensitive, and parsed in lower case.
-    if (uri.host != appId.toLowerCase()) return null;
-    if (uri.path != '/oauth-callback') return null;
-    final token = uri.queryParameters['token']?.trim();
-    return token == null || token.isEmpty ? null : token;
-  }
-
-  /// Sign in with [token]: a callback's, or one pasted from the login page.
-  /// It is saved only once the server accepts it.
-  Future<LkcUser> signIn(String token) async {
-    token = token.trim();
-    if (_expired(token)) {
-      throw const LkcException(code: LkcCode.perm);
-    }
-    final u = await _getUser(token: token);
-    await tokenProp.write(token);
-    _token = token;
+  Future<LkcUser> _refreshUser() async {
+    final data = await _call('GET', '/auth/user');
+    final u = LkcUser.fromJson(data as Map<String, dynamic>);
     user.value = u;
-    await refreshEntitlements();
+    cache.write(_kUser, data);
     return u;
   }
 
-  /// Forget the token here. It stays valid at the server until it expires.
-  Future<void> signOut() => _forget();
+  /// Sign in at the IdP: AppAuth where the app has a URL scheme, a loopback
+  /// redirect elsewhere. Null when the user cancels.
+  Future<LkcUser?> signIn() async {
+    final tokens = await _idp.signIn();
+    if (tokens == null) return null;
+    _tokens = tokens;
+    try {
+      final u = await _refreshUser();
+      await _save(tokens);
+      user.value = u;
+      await refreshEntitlements();
+      return u;
+    } catch (_) {
+      if (user.value == null) _tokens = null;
+      rethrow;
+    }
+  }
+
+  /// Sign out here and end the session at the IdP.
+  Future<void> signOut() async {
+    await _unregisterDevice();
+    final tokens = _tokens;
+    await _forget();
+    if (tokens != null) await _idp.revoke(tokens);
+  }
 
   Future<void> _forget() async {
-    _token = null;
+    _tokens = null;
+    _refreshedAt = null;
+    usage.value = null;
     user.value = null;
     entitlements.value = null;
+    cache
+      ..remove(_kUser)
+      ..remove(_kEntitlements);
     await tokenProp.write(null);
   }
 
-  Future<LkcUser> _getUser({String? token}) async => LkcUser.fromJson(
-    await _call('GET', '/auth/user', token: token) as Map<String, dynamic>,
-  );
+  Future<void> _save(LkcTokens tokens) =>
+      tokenProp.write(jsonEncode(tokens.toJson()));
+
+  /// The access token to send, refreshed once due.
+  Future<String> _accessToken() async {
+    final tokens = _tokens;
+    if (tokens == null) throw const LkcException(code: LkcCode.perm);
+    if (!tokens.due) return tokens.access;
+    final refreshing = _refreshing ??= _refresh(tokens)
+        .whenComplete(() => _refreshing = null);
+    return (await refreshing).access;
+  }
+
+  Future<LkcTokens> _refresh(LkcTokens tokens) async {
+    final LkcTokens fresh;
+    try {
+      fresh = await _idp.refresh(tokens);
+    } on LkcException catch (e) {
+      // The refresh token is spent or revoked: the session is over.
+      if (e.isPerm) await _forget();
+      rethrow;
+    }
+    _tokens = fresh;
+    await _save(fresh);
+    return fresh;
+  }
 
   Future<void> updateUser({String? name, String? avatar}) async {
     await _call('POST', '/auth/user', body: {'name': ?name, 'avatar': ?avatar});
-    user.value = await _getUser();
+    user.value = await _refreshUser();
   }
 
   /// Whether the user has a subscription only its app store can cancel. Ask
@@ -187,21 +293,86 @@ final class LkcClient {
 
   /// Delete the account and its files; web subscriptions are canceled.
   ///
-  /// The token is dropped too: the IdP identity stays, and a valid token would
-  /// make an empty account again.
+  /// The tokens are revoked and dropped too: the IdP identity stays, and a
+  /// valid token would make an empty account again.
   Future<void> deleteAccount() async {
+    await _unregisterDevice();
     await _call('DELETE', '/auth/user');
-    await _forget();
+    await signOut();
+  }
+
+  // Push devices
+
+  /// Register this device's APNs [token] for push to the signed-in user,
+  /// after signing in and whenever the app has a token (it may change).
+  ///
+  /// [appId] is the APNs topic, the app's bundle id; [sandbox] is APNs'
+  /// development environment, a debug or profile build's.
+  Future<LkcDevice> registerDevice({
+    required String token,
+    required String appId,
+    required bool sandbox,
+  }) {
+    final registering = _registerDevice(token, appId, sandbox);
+    _registering = registering;
+    return registering;
+  }
+
+  /// A registration in flight, which a sign-out waits for to drop what it adds.
+  Future<LkcDevice>? _registering;
+
+  Future<LkcDevice> _registerDevice(
+    String token,
+    String appId,
+    bool sandbox,
+  ) async {
+    final device = LkcDevice.fromJson(
+      await _call(
+        'POST',
+        '/v2/devices',
+        body: {
+          'platform': 'ios',
+          'app_id': appId,
+          'token': token,
+          'sandbox': sandbox,
+        },
+      ) as Map<String, dynamic>,
+    );
+    cache.write(_kDevice, device.id);
+    return device;
+  }
+
+  /// Every device registered for push to the user.
+  Future<List<LkcDevice>> devices() async =>
+      _list(await _call('GET', '/v2/devices'), LkcDevice.fromJson);
+
+  Future<void> deleteDevice(String id) async {
+    await _call('DELETE', '/v2/devices/${Uri.encodeComponent(id)}');
+    if (cache.read(_kDevice) == id) cache.remove(_kDevice);
+  }
+
+  /// No more push here for the user who is leaving. Best effort: one that
+  /// fails stays with the account until APNs reports the token gone, or the
+  /// same token is registered again by whoever signs in next.
+  Future<void> _unregisterDevice() async {
+    await _registering?.then((_) {}, onError: (_) {});
+    _registering = null;
+    final id = cache.read(_kDevice);
+    if (id is! String || !signedIn) return;
+    try {
+      await deleteDevice(id);
+    } catch (e) {
+      debugPrint('LKC device unregister: ${e.runtimeType}');
+    }
   }
 
   // Subscriptions
 
   Future<List<LkcEntitlement>> refreshEntitlements() async {
-    final list = _list(
-      await _call('GET', '/v2/entitlements'),
-      LkcEntitlement.fromJson,
-    );
+    final data = await _call('GET', '/v2/entitlements');
+    final list = _list(data, LkcEntitlement.fromJson);
     entitlements.value = list;
+    cache.write(_kEntitlements, data);
     return list;
   }
 
@@ -215,17 +386,36 @@ final class LkcClient {
     LkcEntitlement.fromJson,
   );
 
-  /// What every plan grants, and having none. Public: no sign-in needed.
-  Future<LkcBenefits> benefits() async => LkcBenefits.fromJson(
-    await _call('GET', '/v2/billing/benefits', auth: false) as List? ??
-        const [],
-  );
+  /// Read [benefits] again. Public: no sign-in needed.
+  Future<LkcBenefits> refreshBenefits() async {
+    final data = await _public('/v2/billing/benefits', _kBenefits);
+    return benefits.value = LkcBenefits.fromJson(data as List? ?? const []);
+  }
 
-  /// The plan catalog. Public: no sign-in needed.
-  Future<List<LkcPlan>> plans() async => _list(
-    await _call('GET', '/v2/billing/plans', auth: false),
-    LkcPlan.fromJson,
-  );
+  /// Read [catalog] again. Public: no sign-in needed.
+  Future<LkcCatalog> refreshCatalog() async {
+    final data = await _public('/v2/billing/plans', _kCatalog);
+    return catalog.value = LkcCatalog.fromJson(data);
+  }
+
+  /// The `data` of a public reply, kept under [key] with its ETag: the copy
+  /// kept is sent for again, and a 304 confirms it.
+  Future<Object?> _public(String path, String key) async {
+    final kept = _Tagged.of(cache.read(key));
+    final res = await _api.get<Object?>(
+      path,
+      options: Options(headers: {HttpHeaders.ifNoneMatchHeader: ?kept?.etag}),
+    );
+    if (res.statusCode == HttpStatus.notModified && kept != null) {
+      return kept.data;
+    }
+    final data = unwrap(res.statusCode, res.data);
+    cache.write(key, {
+      'etag': ?res.headers.value(HttpHeaders.etagHeader),
+      'data': data,
+    });
+    return data;
+  }
 
   /// Open the Stripe checkout of [plan] in the browser, with a discount [code].
   /// The entitlements are read again when the app comes back.
@@ -291,10 +481,16 @@ final class LkcClient {
   );
 
   /// What the files of [dir] (the user's own by default) take, and its quota.
-  Future<LkcUsage> usage({String? dir}) async => LkcUsage.fromJson(
-    await _call('GET', '/file/usage', query: {'dir': ?dir})
-        as Map<String, dynamic>,
-  );
+  /// What the files of [dir] take, and its quota; the user's own, also kept
+  /// in [usage], by default.
+  Future<LkcUsage> refreshUsage({String? dir}) async {
+    final u = LkcUsage.fromJson(
+      await _call('GET', '/file/usage', query: {'dir': ?dir})
+          as Map<String, dynamic>,
+    );
+    if (dir == null) usage.value = u;
+    return u;
+  }
 
   /// Upload [size] bytes of [data] straight to the object store, up to 5 GB.
   /// Returns the stored name.
@@ -382,11 +578,9 @@ final class LkcClient {
     String path, {
     Map<String, dynamic>? query,
     Object? body,
-    String? token,
     bool auth = true,
   }) async {
-    token ??= _token;
-    if (auth && token == null) throw const LkcException(code: LkcCode.perm);
+    final token = auth ? await _accessToken() : null;
     final res = await _api.request<Object?>(
       path,
       queryParameters: query,
@@ -434,28 +628,74 @@ final class LkcClient {
       fromJson(e as Map<String, dynamic>),
   ];
 
-  /// Whether the JWT [token] has expired. Not verified: the server does that.
-  static bool _expired(String token) {
-    final parts = token.split('.');
-    if (parts.length != 3) return false;
-    try {
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      final exp = payload is Map ? payload['exp'] : null;
-      if (exp is! int) return false;
-      return DateTime.fromMillisecondsSinceEpoch(exp * 1000)
-          .isBefore(DateTime.now());
-    } on FormatException {
-      return false;
-    }
-  }
-
   void dispose() {
+    benefits.dispose();
+    catalog.dispose();
+    usage.dispose();
     _returnListener?.dispose();
     user.dispose();
     entitlements.dispose();
     _api.close();
     _store.close();
   }
+}
+
+/// A public reply kept with its ETag.
+extension type const _Tagged(Map<String, dynamic> _json) {
+  /// Null for none, or a copy kept before ETags were.
+  static _Tagged? of(Object? json) =>
+      json is Map<String, dynamic> ? _Tagged(json) : null;
+
+  String? get etag => _json['etag'] as String?;
+  Object? get data => _json['data'];
+}
+
+/// Replies kept in the app's preferences: nothing secret, the tokens are elsewhere.
+class LkcCache {
+  final String prefix;
+
+  LkcCache({this.prefix = 'lkc_cache_'});
+
+  Object? read(String key) {
+    final raw = PrefStore.shared.get<String>('$prefix$key');
+    if (raw == null) return null;
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  void write(String key, Object? data) {
+    // Not a setting: no backup or sync is due for it.
+    unawaited(
+      PrefStore.shared.set(
+        '$prefix$key',
+        jsonEncode(data),
+        updateLastUpdateTsOnSet: false,
+      ),
+    );
+  }
+
+  void remove(String key) {
+    unawaited(
+      PrefStore.shared.remove('$prefix$key', updateLastUpdateTsOnRemove: false),
+    );
+  }
+}
+
+/// A cache held in memory only, for tests and for apps without preferences.
+final class LkcMemoryCache extends LkcCache {
+  final _data = <String, Object?>{};
+
+  LkcMemoryCache();
+
+  @override
+  Object? read(String key) => _data[key];
+
+  @override
+  void write(String key, Object? data) => _data[key] = data;
+
+  @override
+  void remove(String key) => _data.remove(key);
 }

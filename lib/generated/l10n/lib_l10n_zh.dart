@@ -364,66 +364,78 @@ class LibLocalizationsZh extends LibLocalizations {
   String get license => '许可证';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
-    return '每个 app 合计最大 $size';
+  String get lkcAccount => '账号';
+
+  @override
+  String get lkcBenefitBackups => '备份';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
+    return '每个 app 最大 $size';
   }
 
   @override
-  String get lkcBenefitBackupLatest => '每个 app 只保留最新一次';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept，$limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => '不限容量';
+  String get lkcBenefitBackupsLatest => '每个 app 只保留最新一次';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => '不限容量';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count',
+      other: '$count 份',
     );
-    return '每个 app 保留最近 $_temp0 份滚动备份';
+    return '每个 app 滚动保留 $_temp0';
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited => '每个 app 不限滚动备份份数';
+  String get lkcBenefitBackupsRollingUnlimited => '每个 app 不限滚动备份份数';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
-    return '所有 app 共享最大 $size';
+  String lkcBenefitBackupsTotalBytes(String size) {
+    return '所有 app 共享 $size';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return '备份：$kept，$limit';
+  String get lkcBenefitRelay => 'Relay、tailnet 和推送';
+
+  @override
+  String lkcBenefitRelayDetail(String rate) {
+    return '不限流量，中转速率 $rate，不保证可用';
   }
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay、tailnet、通知推送：不限流量，中转速率 $rate，不保证可用';
+  String get lkcBenefitRelayUnlimited => '不限流量和速率，不保证可用';
+
+  @override
+  String get lkcBenefitShareLinks => '文件分享链接';
+
+  @override
+  String get lkcBenefitShareLinksDetail => '带有效期';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return '单个文件最大 $file';
   }
 
   @override
-  String get lkcBenefitRelayUnlimited =>
-      'Monitor relay、tailnet、通知推送：不限流量和速率，不保证可用';
+  String get lkcBenefitSync => '多设备同步';
 
   @override
-  String get lkcBenefitShareLinks => '文件分享链接（带有效期）';
+  String get lkcBenefitSyncDetail => '实时，端到端加密';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size，单个文件最大 $file';
-  }
+  String get lkcBenefitUptime => '外部宕机检测';
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'WebDAV 不限容量，单个文件最大 $file';
-  }
-
-  @override
-  String get lkcBenefitSync => '多设备实时同步（端到端加密）';
-
-  @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
@@ -433,9 +445,9 @@ class LibLocalizationsZh extends LibLocalizations {
     String _temp1 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count',
+      other: '$count 个目标',
     );
-    return '外部宕机检测：$_temp0从外部检查，最多 $_temp1 个目标';
+    return '$_temp0检测一次，最多 $_temp1';
   }
 
   @override
@@ -443,13 +455,13 @@ class LibLocalizationsZh extends LibLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count',
+      other: '$count 个目标',
     );
-    return '外部宕机检测，最多 $_temp0 个目标';
+    return '最多 $_temp0';
   }
 
   @override
-  String get lkcBenefitUptimeTargetsUnlimited => '外部宕机检测，不限目标数';
+  String get lkcBenefitUptimeTargetsUnlimited => '不限目标数';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
@@ -459,7 +471,92 @@ class LibLocalizationsZh extends LibLocalizations {
       other: '每 $minutes 分钟',
       one: '每分钟',
     );
-    return '外部宕机检测：$_temp0从外部检查，不限目标数';
+    return '$_temp0检测一次，不限目标数';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return '将于 $date 取消';
+  }
+
+  @override
+  String get lkcConduitConcurrency => '并发';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个请求',
+    );
+    return '同时处理 $_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => '额度';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '每月 $credit';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '每周 $credit';
+  }
+
+  @override
+  String get lkcDeleteAccount => '删除账号';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name 及其订阅将被删除，且无法撤销。';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date 结束';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => '文件';
+
+  @override
+  String get lkcFreeTier => '免费';
+
+  @override
+  String get lkcManageSubscriptions => '管理订阅';
+
+  @override
+  String get lkcNoEndDate => '无结束日期';
+
+  @override
+  String get lkcNotSignedIn => '未登录';
+
+  @override
+  String get lkcPastDue => '付款逾期';
+
+  @override
+  String get lkcPaused => '已暂停';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
   }
 
   @override
@@ -668,6 +765,26 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => '该用户已不存在。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date 续订';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      '你有一项通过 App Store 或 Google Play 计费的订阅。请先在商店中取消：删除账号不会停止该订阅。';
+
+  @override
+  String get lkcSubscribe => '订阅';
+
+  @override
+  String get lkcUnlimited => '不限';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';
@@ -1634,66 +1751,78 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get license => '授權';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
-    return '每個 app 合計最大 $size';
+  String get lkcAccount => '帳號';
+
+  @override
+  String get lkcBenefitBackups => '備份';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
+    return '每個 app 最大 $size';
   }
 
   @override
-  String get lkcBenefitBackupLatest => '每個 app 只保留最新一次';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept，$limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => '不限容量';
+  String get lkcBenefitBackupsLatest => '每個 app 只保留最新一次';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => '不限容量';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count',
+      other: '$count 份',
     );
-    return '每個 app 保留最近 $_temp0 份滾動備份';
+    return '每個 app 滾動保留 $_temp0';
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited => '每個 app 不限滾動備份份數';
+  String get lkcBenefitBackupsRollingUnlimited => '每個 app 不限滾動備份份數';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
-    return '所有 app 共用最大 $size';
+  String lkcBenefitBackupsTotalBytes(String size) {
+    return '所有 app 共用 $size';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return '備份：$kept，$limit';
+  String get lkcBenefitRelay => 'Relay、tailnet 和推播';
+
+  @override
+  String lkcBenefitRelayDetail(String rate) {
+    return '不限流量，中繼速率 $rate，不保證可用';
   }
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay、tailnet、通知推播：不限流量，中繼速率 $rate，不保證可用';
+  String get lkcBenefitRelayUnlimited => '不限流量與速率，不保證可用';
+
+  @override
+  String get lkcBenefitShareLinks => '檔案分享連結';
+
+  @override
+  String get lkcBenefitShareLinksDetail => '附有效期限';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return '單一檔案最大 $file';
   }
 
   @override
-  String get lkcBenefitRelayUnlimited =>
-      'Monitor relay、tailnet、通知推播：不限流量與速率，不保證可用';
+  String get lkcBenefitSync => '多裝置同步';
 
   @override
-  String get lkcBenefitShareLinks => '檔案分享連結（附有效期限）';
+  String get lkcBenefitSyncDetail => '即時，端對端加密';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size，單一檔案最大 $file';
-  }
+  String get lkcBenefitUptime => '外部停機偵測';
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'WebDAV 不限容量，單一檔案最大 $file';
-  }
-
-  @override
-  String get lkcBenefitSync => '多裝置即時同步（端對端加密）';
-
-  @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
@@ -1703,9 +1832,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
     String _temp1 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count',
+      other: '$count 個目標',
     );
-    return '外部停機偵測：$_temp0從外部檢查，最多 $_temp1 個目標';
+    return '$_temp0偵測一次，最多 $_temp1';
   }
 
   @override
@@ -1713,13 +1842,13 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count',
+      other: '$count 個目標',
     );
-    return '外部停機偵測，最多 $_temp0 個目標';
+    return '最多 $_temp0';
   }
 
   @override
-  String get lkcBenefitUptimeTargetsUnlimited => '外部停機偵測，不限目標數';
+  String get lkcBenefitUptimeTargetsUnlimited => '不限目標數';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
@@ -1729,7 +1858,92 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
       other: '每 $minutes 分鐘',
       one: '每分鐘',
     );
-    return '外部停機偵測：$_temp0從外部檢查，不限目標數';
+    return '$_temp0偵測一次，不限目標數';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return '將於 $date 取消';
+  }
+
+  @override
+  String get lkcConduitConcurrency => '並行數';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個請求',
+    );
+    return '同時處理 $_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => '額度';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '每月 $credit';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '每週 $credit';
+  }
+
+  @override
+  String get lkcDeleteAccount => '刪除帳號';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name 及其訂閱將被刪除，且無法復原。';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date 結束';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個檔案',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => '檔案';
+
+  @override
+  String get lkcFreeTier => '免費';
+
+  @override
+  String get lkcManageSubscriptions => '管理訂閱';
+
+  @override
+  String get lkcNoEndDate => '無結束日期';
+
+  @override
+  String get lkcNotSignedIn => '未登入';
+
+  @override
+  String get lkcPastDue => '付款逾期';
+
+  @override
+  String get lkcPaused => '已暫停';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
   }
 
   @override
@@ -1938,6 +2152,26 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcReasonUserGone => '該使用者已不存在。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date 續訂';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      '你有一項透過 App Store 或 Google Play 計費的訂閱。請先在商店中取消：刪除帳號不會停止該訂閱。';
+
+  @override
+  String get lkcSubscribe => '訂閱';
+
+  @override
+  String get lkcUnlimited => '不限';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

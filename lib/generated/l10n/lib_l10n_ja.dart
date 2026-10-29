@@ -364,66 +364,78 @@ class LibLocalizationsJa extends LibLocalizations {
   String get license => 'ライセンス';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
+  String get lkcAccount => 'アカウント';
+
+  @override
+  String get lkcBenefitBackups => 'バックアップ';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
     return 'アプリごとに最大 $size';
   }
 
   @override
-  String get lkcBenefitBackupLatest => 'アプリごとに最新の 1 件のみ';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept、$limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => '容量無制限';
+  String get lkcBenefitBackupsLatest => 'アプリごとに最新の 1 件のみ';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => '容量無制限';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count 世代',
     );
-    return 'アプリごとにローリングバックアップ $_temp0';
+    return 'アプリごとに $_temp0をローリング保存';
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited => 'アプリごとにローリングバックアップ無制限';
+  String get lkcBenefitBackupsRollingUnlimited => 'アプリごとにローリング保存無制限';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
-    return '全アプリ共有で最大 $size';
+  String lkcBenefitBackupsTotalBytes(String size) {
+    return '全アプリ共有で $size';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return 'バックアップ：$kept、$limit';
+  String get lkcBenefitRelay => 'Relay、tailnet、プッシュ';
+
+  @override
+  String lkcBenefitRelayDetail(String rate) {
+    return 'トラフィック無制限、中継速度 $rate、可用性の保証なし';
   }
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay、tailnet、プッシュ通知：トラフィック無制限、中継速度 $rate、可用性の保証なし';
+  String get lkcBenefitRelayUnlimited => 'トラフィック・速度無制限、可用性の保証なし';
+
+  @override
+  String get lkcBenefitShareLinks => '共有リンク';
+
+  @override
+  String get lkcBenefitShareLinksDetail => '有効期限付き';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return '1 ファイルあたり最大 $file';
   }
 
   @override
-  String get lkcBenefitRelayUnlimited =>
-      'Monitor relay、tailnet、プッシュ通知：トラフィック・速度無制限、可用性の保証なし';
+  String get lkcBenefitSync => '同期';
 
   @override
-  String get lkcBenefitShareLinks => '有効期限付きの共有リンク';
+  String get lkcBenefitSyncDetail => 'リアルタイム、エンドツーエンド暗号化';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size、1 ファイルあたり最大 $file';
-  }
+  String get lkcBenefitUptime => '外部ダウンタイム監視';
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'WebDAV 容量無制限、1 ファイルあたり最大 $file';
-  }
-
-  @override
-  String get lkcBenefitSync => 'デバイス間のリアルタイム同期（エンドツーエンド暗号化）';
-
-  @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
@@ -434,7 +446,7 @@ class LibLocalizationsJa extends LibLocalizations {
       locale: localeName,
       other: '$count 件',
     );
-    return '外部ダウンタイム監視：$_temp0ごとに外部からチェック、最大 $_temp1の対象';
+    return '$_temp0ごとにチェック、最大 $_temp1の対象';
   }
 
   @override
@@ -444,11 +456,11 @@ class LibLocalizationsJa extends LibLocalizations {
       locale: localeName,
       other: '$count 件',
     );
-    return '外部ダウンタイム監視、最大 $_temp0の対象';
+    return '最大 $_temp0の対象';
   }
 
   @override
-  String get lkcBenefitUptimeTargetsUnlimited => '外部ダウンタイム監視、対象数無制限';
+  String get lkcBenefitUptimeTargetsUnlimited => '対象数無制限';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
@@ -457,7 +469,92 @@ class LibLocalizationsJa extends LibLocalizations {
       locale: localeName,
       other: '$minutes 分',
     );
-    return '外部ダウンタイム監視：$_temp0ごとに外部からチェック、対象数無制限';
+    return '$_temp0ごとにチェック、対象数無制限';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return '$date にキャンセル';
+  }
+
+  @override
+  String get lkcConduitConcurrency => '同時実行数';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件',
+    );
+    return '同時に $_temp0のリクエスト';
+  }
+
+  @override
+  String get lkcConduitCredit => 'クレジット';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '月 $credit';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '週 $credit';
+  }
+
+  @override
+  String get lkcDeleteAccount => 'アカウントを削除';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name とそのサブスクリプションは削除されます。この操作は取り消せません。';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date に終了';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個のファイル',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'ファイル';
+
+  @override
+  String get lkcFreeTier => '無料';
+
+  @override
+  String get lkcManageSubscriptions => 'サブスクリプションを管理';
+
+  @override
+  String get lkcNoEndDate => '終了日なし';
+
+  @override
+  String get lkcNotSignedIn => 'ログインしていません';
+
+  @override
+  String get lkcPastDue => '支払い期限超過';
+
+  @override
+  String get lkcPaused => '一時停止中';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
   }
 
   @override
@@ -669,6 +766,26 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => 'このユーザーはすでに存在しません。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date に更新';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'App Store または Google Play で請求されるサブスクリプションがあります。先にストアで解約してください。アカウントを削除しても停止されません。';
+
+  @override
+  String get lkcSubscribe => '購読する';
+
+  @override
+  String get lkcUnlimited => '無制限';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';

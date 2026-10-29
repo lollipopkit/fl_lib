@@ -365,69 +365,81 @@ class LibLocalizationsTr extends LibLocalizations {
   String get license => 'Lisans';
 
   @override
-  String lkcBenefitBackupAppBytes(String size) {
+  String get lkcAccount => 'Hesap';
+
+  @override
+  String get lkcBenefitBackups => 'Yedekler';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
     return 'uygulama başına en fazla $size';
   }
 
   @override
-  String get lkcBenefitBackupLatest => 'uygulama başına en sonuncusu';
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept, $limit';
+  }
 
   @override
-  String get lkcBenefitBackupNoLimit => 'boyut sınırı yok';
+  String get lkcBenefitBackupsLatest => 'Uygulama başına en sonuncusu';
 
   @override
-  String lkcBenefitBackupRolling(int count) {
+  String get lkcBenefitBackupsNoLimit => 'boyut sınırı yok';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count dönüşümlü yedek',
       one: '1 dönüşümlü yedek',
     );
-    return 'uygulama başına $_temp0';
+    return 'Uygulama başına $_temp0';
   }
 
   @override
-  String get lkcBenefitBackupRollingUnlimited =>
-      'uygulama başına sınırsız dönüşümlü yedek';
+  String get lkcBenefitBackupsRollingUnlimited =>
+      'Uygulama başına sınırsız dönüşümlü yedek';
 
   @override
-  String lkcBenefitBackupTotalBytes(String size) {
+  String lkcBenefitBackupsTotalBytes(String size) {
     return 'tüm uygulamalar için ortak $size';
   }
 
   @override
-  String lkcBenefitBackups(String kept, String limit) {
-    return 'Yedekler: $kept, $limit';
-  }
+  String get lkcBenefitRelay => 'Relay, tailnet ve push';
 
   @override
-  String lkcBenefitRelay(String rate) {
-    return 'Monitor relay, tailnet ve push bildirimleri: sınırsız trafik, $rate hızında relay, erişilebilirlik garantisi yok';
+  String lkcBenefitRelayDetail(String rate) {
+    return 'Sınırsız trafik, $rate, erişilebilirlik garantisi yok';
   }
 
   @override
   String get lkcBenefitRelayUnlimited =>
-      'Monitor relay, tailnet ve push bildirimleri: sınırsız trafik ve hız, erişilebilirlik garantisi yok';
+      'Sınırsız trafik ve hız, erişilebilirlik garantisi yok';
 
   @override
-  String get lkcBenefitShareLinks => 'Süreli paylaşım bağlantıları';
+  String get lkcBenefitShareLinks => 'Paylaşım bağlantıları';
 
   @override
-  String lkcBenefitStorage(String size, String file) {
-    return 'WebDAV $size, dosya başına en fazla $file';
+  String get lkcBenefitShareLinksDetail => 'Süreli';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return 'Dosya başına en fazla $file';
   }
 
   @override
-  String lkcBenefitStorageUnlimited(String file) {
-    return 'Boyut sınırı olmayan WebDAV, dosya başına en fazla $file';
-  }
+  String get lkcBenefitSync => 'Senkronizasyon';
 
   @override
-  String get lkcBenefitSync =>
-      'Cihazlar arasında gerçek zamanlı senkronizasyon (uçtan uca şifreli)';
+  String get lkcBenefitSyncDetail => 'Gerçek zamanlı, uçtan uca şifreli';
 
   @override
-  String lkcBenefitUptime(int minutes, int count) {
+  String get lkcBenefitUptime => 'Kesinti kontrolleri';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
     String _temp0 = intl.Intl.pluralLogic(
       minutes,
       locale: localeName,
@@ -440,7 +452,7 @@ class LibLocalizationsTr extends LibLocalizations {
       other: '$count hedef',
       one: '1 hedef',
     );
-    return '$_temp0 harici kesinti kontrolü, en fazla $_temp1';
+    return '$_temp0, en fazla $_temp1';
   }
 
   @override
@@ -451,12 +463,11 @@ class LibLocalizationsTr extends LibLocalizations {
       other: '$count hedef',
       one: '1 hedef',
     );
-    return 'Harici kesinti kontrolü, en fazla $_temp0';
+    return 'En fazla $_temp0';
   }
 
   @override
-  String get lkcBenefitUptimeTargetsUnlimited =>
-      'Harici kesinti kontrolü, sınırsız hedef';
+  String get lkcBenefitUptimeTargetsUnlimited => 'Sınırsız hedef';
 
   @override
   String lkcBenefitUptimeUnlimited(int minutes) {
@@ -466,7 +477,94 @@ class LibLocalizationsTr extends LibLocalizations {
       other: 'Her $minutes dakikada bir',
       one: 'Her dakika',
     );
-    return '$_temp0 harici kesinti kontrolü, sınırsız hedef';
+    return '$_temp0, sınırsız hedef';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return '$date tarihinde iptal edilir';
+  }
+
+  @override
+  String get lkcConduitConcurrency => 'Eşzamanlılık';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count eşzamanlı istek',
+      one: '1 eşzamanlı istek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => 'Kredi';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return 'Aylık $credit';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return 'Haftalık $credit';
+  }
+
+  @override
+  String get lkcDeleteAccount => 'Hesabı sil';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name ve abonelikleri kaldırılır. Bu işlem geri alınamaz.';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date tarihinde sona erer';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dosya',
+      one: '1 dosya',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'Dosyalar';
+
+  @override
+  String get lkcFreeTier => 'Ücretsiz';
+
+  @override
+  String get lkcManageSubscriptions => 'Abonelikleri yönet';
+
+  @override
+  String get lkcNoEndDate => 'Bitiş tarihi yok';
+
+  @override
+  String get lkcNotSignedIn => 'Giriş yapılmadı';
+
+  @override
+  String get lkcPastDue => 'Ödeme gecikti';
+
+  @override
+  String get lkcPaused => 'Duraklatıldı';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / ay';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / yıl';
   }
 
   @override
@@ -693,6 +791,26 @@ class LibLocalizationsTr extends LibLocalizations {
 
   @override
   String get lkcReasonUserGone => 'Kullanıcı artık mevcut değil';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date tarihinde yenilenir';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'App Store veya Google Play üzerinden faturalandırılan bir aboneliğiniz var. Önce mağazada iptal edin: hesabı silmek aboneliği durdurmaz.';
+
+  @override
+  String get lkcSubscribe => 'Abone ol';
+
+  @override
+  String get lkcUnlimited => 'Sınırsız';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
 
   @override
   String get loadingEllipsis => '...';
