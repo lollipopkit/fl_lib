@@ -165,7 +165,13 @@ final class LkcConduitLimits {
 final class LkcPlan {
   final String id;
   final LkcLine line;
+
+  /// Its place among the plans of [line], the higher the more it grants.
+  final int rank;
   final LkcPeriod period;
+
+  /// A brand name, shown untranslated.
+  final String? name;
 
   /// Web checkouts available for the plan, in order of preference.
   final List<LkcPrice> web;
@@ -176,7 +182,9 @@ final class LkcPlan {
   const LkcPlan({
     required this.id,
     required this.line,
+    this.rank = 0,
     required this.period,
+    this.name,
     required this.web,
     this.limits,
   });
@@ -188,7 +196,9 @@ final class LkcPlan {
   factory LkcPlan.fromJson(Map<String, dynamic> json) => LkcPlan(
     id: json['id'] as String,
     line: _byName(LkcLine.values, json['line']) ?? LkcLine.unknown,
+    rank: (json['rank'] as num?)?.toInt() ?? 0,
     period: _byName(LkcPeriod.values, json['period']) ?? LkcPeriod.unknown,
+    name: json['name'] as String?,
     web: [
       for (final p in json['web'] as List? ?? const [])
         LkcPrice.fromJson(p as Map<String, dynamic>),
@@ -198,6 +208,47 @@ final class LkcPlan {
       _ => null,
     },
   );
+}
+
+/// The plans on sale and the names of the lines: GET /v2/billing/plans.
+final class LkcCatalog {
+  /// In display order.
+  final List<LkcPlan> plans;
+
+  /// Brand names by line id, in display order.
+  final Map<String, String> lines;
+
+  /// The name of having no plan.
+  final String? freeName;
+
+  const LkcCatalog({required this.plans, this.lines = const {}, this.freeName});
+
+  factory LkcCatalog.fromJson(Object? json) => switch (json) {
+    // TODO: rm once no homebase answering a bare plan list is served.
+    final List<Object?> plans => LkcCatalog(plans: _plans(plans)),
+    final Map<String, dynamic> json => LkcCatalog(
+      plans: _plans(json['plans'] as List? ?? const []),
+      lines: {
+        for (final l in json['lines'] as List? ?? const [])
+          (l as Map<String, dynamic>)['id'] as String: l['name'] as String,
+      },
+      freeName: (json['free'] as Map<String, dynamic>?)?['name'] as String?,
+    ),
+    _ => throw FormatException('Not a catalog: ${json.runtimeType}'),
+  };
+
+  static List<LkcPlan> _plans(List<Object?> list) => [
+    for (final p in list) LkcPlan.fromJson(p as Map<String, dynamic>),
+  ];
+
+  LkcPlan? plan(String id) => plans.where((p) => p.id == id).firstOrNull;
+}
+
+/// Names from the catalog; the ids while it hasn't been read.
+extension LkcCatalogNames on LkcCatalog? {
+  String lineName(LkcLine line) => this?.lines[line.name] ?? line.name;
+
+  String planName(String plan) => this?.plan(plan)?.name ?? plan;
 }
 
 /// The largest file one upload sends: the object store's limit, no plan's.

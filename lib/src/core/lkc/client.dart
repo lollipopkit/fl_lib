@@ -77,11 +77,11 @@ final class LkcClient {
   /// The effective plan of each line the user holds one in, null until read.
   final entitlements = ValueNotifier<List<LkcEntitlement>?>(null);
 
-  /// What every plan grants, null until read. Public, as is [plans].
+  /// What every plan grants, null until read. Public, as is [catalog].
   final benefits = ValueNotifier<LkcBenefits?>(null);
 
   /// The plan catalog, null until read.
-  final plans = ValueNotifier<List<LkcPlan>?>(null);
+  final catalog = ValueNotifier<LkcCatalog?>(null);
 
   /// What the user's own files take, null until read.
   final usage = ValueNotifier<LkcUsage?>(null);
@@ -117,13 +117,16 @@ final class LkcClient {
     _store.options.validateStatus = (_) => true;
     benefits.value = _cached(
       _kBenefits,
-      (d) => LkcBenefits.fromJson(d as List),
+      (d) => LkcBenefits.fromJson(_Tagged.of(d)!.data as List),
     );
-    plans.value = _cached(_kPlans, (d) => _list(d, LkcPlan.fromJson));
+    catalog.value = _cached(
+      _kCatalog,
+      (d) => LkcCatalog.fromJson(_Tagged.of(d)!.data),
+    );
   }
 
   static const _kBenefits = 'benefits';
-  static const _kPlans = 'plans';
+  static const _kCatalog = 'plans';
   static const _kUser = 'user';
   static const _kEntitlements = 'entitlements';
 
@@ -156,6 +159,10 @@ final class LkcClient {
   /// Load the saved tokens and their user. Tokens the IdP or homebase refuse
   /// are dropped; on any other error they are kept, and the error thrown.
   Future<void> init() async {
+    // The names of the lines the account row shows; the page reads it again.
+    if (catalog.value == null) {
+      unawaited(refreshCatalog().then((_) {}, onError: (_) {}));
+    }
     final saved = await tokenProp.read();
     if (saved == null) return;
     try {
@@ -381,21 +388,33 @@ final class LkcClient {
 
   /// Read [benefits] again. Public: no sign-in needed.
   Future<LkcBenefits> refreshBenefits() async {
-    final data =
-        await _call('GET', '/v2/billing/benefits', auth: false) ?? const [];
-    final b = LkcBenefits.fromJson(data as List);
-    benefits.value = b;
-    cache.write(_kBenefits, data);
-    return b;
+    final data = await _public('/v2/billing/benefits', _kBenefits);
+    return benefits.value = LkcBenefits.fromJson(data as List? ?? const []);
   }
 
-  /// Read [plans] again. Public: no sign-in needed.
-  Future<List<LkcPlan>> refreshPlans() async {
-    final data = await _call('GET', '/v2/billing/plans', auth: false);
-    final list = _list(data, LkcPlan.fromJson);
-    plans.value = list;
-    cache.write(_kPlans, data);
-    return list;
+  /// Read [catalog] again. Public: no sign-in needed.
+  Future<LkcCatalog> refreshCatalog() async {
+    final data = await _public('/v2/billing/plans', _kCatalog);
+    return catalog.value = LkcCatalog.fromJson(data);
+  }
+
+  /// The `data` of a public reply, kept under [key] with its ETag: the copy
+  /// kept is sent for again, and a 304 confirms it.
+  Future<Object?> _public(String path, String key) async {
+    final kept = _Tagged.of(cache.read(key));
+    final res = await _api.get<Object?>(
+      path,
+      options: Options(headers: {HttpHeaders.ifNoneMatchHeader: ?kept?.etag}),
+    );
+    if (res.statusCode == HttpStatus.notModified && kept != null) {
+      return kept.data;
+    }
+    final data = unwrap(res.statusCode, res.data);
+    cache.write(key, {
+      'etag': ?res.headers.value(HttpHeaders.etagHeader),
+      'data': data,
+    });
+    return data;
   }
 
   /// Open the Stripe checkout of [plan] in the browser, with a discount [code].
@@ -611,7 +630,7 @@ final class LkcClient {
 
   void dispose() {
     benefits.dispose();
-    plans.dispose();
+    catalog.dispose();
     usage.dispose();
     _returnListener?.dispose();
     user.dispose();
@@ -619,6 +638,16 @@ final class LkcClient {
     _api.close();
     _store.close();
   }
+}
+
+/// A public reply kept with its ETag.
+extension type const _Tagged(Map<String, dynamic> _json) {
+  /// Null for none, or a copy kept before ETags were.
+  static _Tagged? of(Object? json) =>
+      json is Map<String, dynamic> ? _Tagged(json) : null;
+
+  String? get etag => _json['etag'] as String?;
+  Object? get data => _json['data'];
 }
 
 /// Replies kept in the app's preferences: nothing secret, the tokens are elsewhere.

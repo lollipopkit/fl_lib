@@ -11,18 +11,38 @@ import 'package:material_ui/material_ui.dart';
 
 final _l10n = LibLocalizationsEn();
 
-const _plans = [
-  {
-    'id': 'storage.plus',
-    'line': 'storage',
-    'period': 'year',
-    'web': [
-      {'source': 'stripe', 'amount': 1200, 'currency': 'usd'},
-    ],
-    'apple': [],
-    'google': [],
-  },
-];
+const _catalog = {
+  'plans': [
+    {
+      'id': 'basic',
+      'line': 'basic',
+      'rank': 1,
+      'period': 'year',
+      'name': 'Cloud Basic',
+      'web': [],
+      'apple': [],
+      'google': [],
+    },
+    {
+      'id': 'storage.plus',
+      'line': 'storage',
+      'rank': 1,
+      'period': 'year',
+      'name': 'Storage Plus',
+      'web': [
+        {'source': 'stripe', 'amount': 1200, 'currency': 'usd'},
+      ],
+      'apple': [],
+      'google': [],
+    },
+  ],
+  'lines': [
+    {'id': 'basic', 'name': 'Cloud Basic'},
+    {'id': 'storage', 'name': 'Storage'},
+    {'id': 'conduit', 'name': 'Conduit'},
+  ],
+  'free': {'name': 'Cloud Free'},
+};
 
 const _benefits = [
   {'tier': 'basic', 'benefit': 'backup.count', 'value': 10},
@@ -58,7 +78,7 @@ LkcClient _client({required bool webCheckout}) => LkcClient(
   webCheckout: webCheckout,
   api: Dio()
     ..httpClientAdapter = _Adapter({
-      '/v2/billing/plans': _plans,
+      '/v2/billing/plans': _catalog,
       '/v2/billing/benefits': _benefits,
       '/auth/user': _user,
       '/v2/entitlements': _entitlements,
@@ -100,14 +120,16 @@ void main() {
     await _pump(tester, _client(webCheckout: true));
     expect(find.text(_l10n.lkcNotSignedIn), findsOneWidget);
     expect(find.text(_l10n.login), findsOneWidget);
-    expect(find.text('SERVERBOX BASIC'), findsNothing);
+    expect(find.text('CLOUD BASIC'), findsNothing);
   });
 
   testWidgets('signed in: each line by what it grants', (tester) async {
     await _pump(tester, _client(webCheckout: true), signedIn: true);
     expect(find.text('lollipopkit'), findsOneWidget);
-    expect(find.text('SERVERBOX BASIC'), findsOneWidget);
+    expect(find.text('CLOUD BASIC'), findsOneWidget);
     expect(find.text(_l10n.lkcEndsOn('Oct 28, 2027')), findsOneWidget);
+    // No plan held in Storage.
+    expect(find.text('Cloud Free'), findsOneWidget);
     expect(find.text(_l10n.lkcBenefitBackups), findsOneWidget);
     expect(find.text('12 MB / 100 MB'), findsOneWidget);
     expect(find.text(_l10n.lkcBenefitStorageDetail('5 GB')), findsOneWidget);
@@ -119,7 +141,7 @@ void main() {
 
   testWidgets('no plans or prices where web checkout is off', (tester) async {
     await _pump(tester, _client(webCheckout: false), signedIn: true);
-    expect(find.text('SERVERBOX BASIC'), findsOneWidget);
+    expect(find.text('CLOUD BASIC'), findsOneWidget);
     expect(find.text('Storage Plus'), findsNothing);
     expect(find.text(_l10n.lkcSubscribe), findsNothing);
   });

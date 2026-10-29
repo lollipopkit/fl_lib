@@ -73,7 +73,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
       // unhandled error. The benefits and the catalog only word the page:
       // without them it shows what it read last.
       await _client.refreshBenefits().then((_) {}, onError: (_) {});
-      await _client.refreshPlans().then((_) {}, onError: (_) {});
+      await _client.refreshCatalog().then((_) {}, onError: (_) {});
       if (_client.signedIn) {
         await _client.refresh();
         await _loadUsage();
@@ -105,7 +105,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
           _client.user,
           _client.entitlements,
           _client.benefits,
-          _client.plans,
+          _client.catalog,
           _client.usage,
         ]),
         builder: (_, _) {
@@ -249,13 +249,13 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
               const <LkcBenefitItem>[];
     final onSale = [
       if (_client.webCheckout)
-        for (final plan in _client.plans.value ?? const <LkcPlan>[])
+        for (final plan in _client.catalog.value?.plans ?? const <LkcPlan>[])
           if (plan.line == line && plan.stripe != null && plan.id != held?.plan)
             plan,
     ];
     // Not read yet, neither now nor before: rows to come rather than none.
     final unknown = line == LkcLine.conduit
-        ? held != null && _client.plans.value == null
+        ? held != null && _client.catalog.value == null
         : _client.benefits.value == null;
     if (unknown) {
       if (!_loading || (line == LkcLine.conduit && held == null)) {
@@ -302,21 +302,23 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     );
   }
 
-  LkcPlan? _planOf(String? id) => id == null
-      ? null
-      : _client.plans.value?.where((p) => p.id == id).firstOrNull;
+  LkcPlan? _planOf(String? id) =>
+      id == null ? null : _client.catalog.value?.plan(id);
 
-  /// What the group title says of the plan held: its name past the line's,
-  /// and when it renews or ends.
+  String _lineName(LkcLine line) => _client.catalog.value.lineName(line);
+
+  /// What the group title says of the plan held: its name where the line's
+  /// isn't it, and when it renews or ends.
   String _summaryOf(LkcEntitlement? e) {
-    if (e == null) return l10n.lkcFreeTier;
+    final catalog = _client.catalog.value;
+    if (e == null) return catalog?.freeName ?? l10n.lkcFreeTier;
     final status = switch (e.status) {
       LkcStatus.pastDue => l10n.lkcPastDue,
       LkcStatus.paused => l10n.lkcPaused,
       _ => _dateOf(e),
     };
-    final tier = e.plan.split('.').skip(1).map(_title).join(' ');
-    return [if (tier.isNotEmpty) tier, ?status].join(' · ');
+    final plan = catalog.planName(e.plan);
+    return [if (plan != catalog.lineName(e.line)) plan, ?status].join(' · ');
   }
 
   Widget _buildStorage(LkcBenefitItem item, String tier) {
@@ -385,7 +387,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     final formatted = _formatPrice(plan.stripe!);
     return _LkcTile(
       icon: Icons.upgrade,
-      title: _planName(plan.id),
+      title: _client.catalog.value.planName(plan.id),
       detail: switch (plan.period) {
         LkcPeriod.year => l10n.lkcPerYear(formatted),
         _ => l10n.lkcPerMonth(formatted),
@@ -774,7 +776,7 @@ String lkcAccountSummary(LkcClient client) {
   if (user == null) return l10n.lkcNotSignedIn;
   final lines = [
     for (final e in client.entitlements.value ?? const <LkcEntitlement>[])
-      _lineName(e.line),
+      client.catalog.value.lineName(e.line),
   ];
   return [user.name, if (lines.isNotEmpty) lines.join(', ')].join(' · ');
 }
@@ -794,6 +796,7 @@ final class _LkcAccountSummaryState extends State<LkcAccountSummary> {
   late final _changes = Listenable.merge([
     widget.client.user,
     widget.client.entitlements,
+    widget.client.catalog,
   ]);
 
   @override
@@ -1253,15 +1256,3 @@ IconData _benefitIcon(LkcBenefitKind kind) => switch (kind) {
   LkcBenefitKind.credit => Icons.toll,
   LkcBenefitKind.concurrency => Icons.layers,
 };
-
-/// The product name of the Basic line and plan, whichever app shows it.
-const _basicName = 'ServerBox Basic';
-
-String _lineName(LkcLine line) =>
-    line == LkcLine.basic ? _basicName : _title(line.name);
-
-String _planName(String plan) =>
-    plan == 'basic' ? _basicName : plan.split('.').map(_title).join(' ');
-
-String _title(String s) =>
-    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';

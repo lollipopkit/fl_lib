@@ -572,6 +572,37 @@ void main() {
     expect(cache.read('device'), isNull);
   });
 
+  test('the catalog is asked for by its ETag, and kept on a 304', () async {
+    api
+      ..etag = '"v1"'
+      ..on('GET /v2/billing/plans', {
+        'data': {
+          'plans': [],
+          'lines': [
+            {'id': 'basic', 'name': 'Cloud Basic'},
+          ],
+          'free': {'name': 'Cloud Free'},
+        },
+      });
+    await client.refreshCatalog();
+    expect(
+      api.requests.single.headers.keys,
+      isNot(contains(HttpHeaders.ifNoneMatchHeader)),
+    );
+    api.onFn('GET /v2/billing/plans', (_) => (304, ''));
+    final catalog = await client.refreshCatalog();
+    expect(api.requests.last.headers[HttpHeaders.ifNoneMatchHeader], '"v1"');
+    expect(catalog.lineName(LkcLine.basic), 'Cloud Basic');
+    expect(catalog.freeName, 'Cloud Free');
+  });
+
+  test('names are the ids until the catalog is read', () {
+    const LkcCatalog? none = null;
+    expect(none.lineName(LkcLine.basic), 'basic');
+    expect(none.planName('storage.plus'), 'storage.plus');
+  });
+
+  // TODO: rm with LkcCatalog's reading of a bare plan list.
   test('plans need no sign-in', () async {
     api.on('GET /v2/billing/plans', {
       'data': [
@@ -592,7 +623,7 @@ void main() {
         },
       ],
     });
-    final plan = (await client.refreshPlans()).single;
+    final plan = (await client.refreshCatalog()).plans.single;
     expect(plan.line, LkcLine.conduit);
     expect(plan.stripe?.amount, 500);
     expect(plan.limits?.concurrency, isNull);
@@ -615,6 +646,9 @@ final class _Adapter implements HttpClientAdapter {
   final requests = <RequestOptions>[];
   final bodies = <List<int>>[];
   int status = 200;
+
+  /// Sent with every reply.
+  String? etag;
 
   final _handlers = <String, (int, Object) Function(String body)>{};
   final _sent = <String, String>{};
@@ -653,6 +687,7 @@ final class _Adapter implements HttpClientAdapter {
         code,
         headers: {
           Headers.contentTypeHeader: ['application/json'],
+          if (etag case final etag?) HttpHeaders.etagHeader: [etag],
         },
       );
     }
@@ -662,6 +697,7 @@ final class _Adapter implements HttpClientAdapter {
       reply == null && status == 200 ? 200 : status,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
+        if (etag case final etag?) HttpHeaders.etagHeader: [etag],
       },
     );
   }
