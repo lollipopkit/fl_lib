@@ -486,6 +486,575 @@
   "@license": {
     "description": "Label for license."
   },
+  "lkcAccount": "Account",
+  "@lkcAccount": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitBackups": "Backups",
+  "@lkcBenefitBackups": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitBackupsAppBytes": "up to {size} per app",
+  "@lkcBenefitBackupsAppBytes": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitBackupsDetail": "{kept}, {limit}",
+  "@lkcBenefitBackupsDetail": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "kept": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitBackupsLatest": "Latest one per app",
+  "@lkcBenefitBackupsLatest": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitBackupsNoLimit": "no size limit",
+  "@lkcBenefitBackupsNoLimit": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitBackupsRolling": "{count, plural, =1{1 rolling} other{{count} rolling}} per app",
+  "@lkcBenefitBackupsRolling": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitBackupsRollingUnlimited": "Unlimited rolling per app",
+  "@lkcBenefitBackupsRollingUnlimited": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitBackupsTotalBytes": "{size} shared by all apps",
+  "@lkcBenefitBackupsTotalBytes": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitRelay": "Relay, tailnet and push",
+  "@lkcBenefitRelay": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitRelayDetail": "Unlimited traffic, {rate}, no availability guarantee",
+  "@lkcBenefitRelayDetail": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitRelayUnlimited": "Unlimited traffic and speed, no availability guarantee",
+  "@lkcBenefitRelayUnlimited": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitShareLinks": "Share links",
+  "@lkcBenefitShareLinks": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitShareLinksDetail": "With expiry",
+  "@lkcBenefitShareLinksDetail": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitStorageDetail": "Files up to {file} each",
+  "@lkcBenefitStorageDetail": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcBenefitSync": "Sync",
+  "@lkcBenefitSync": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitSyncDetail": "Real-time, end-to-end encrypted",
+  "@lkcBenefitSyncDetail": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitUptime": "Downtime checks",
+  "@lkcBenefitUptime": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitUptimeDetail": "Every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}",
+  "@lkcBenefitUptimeDetail": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitUptimeTargets": "Up to {count, plural, =1{1 target} other{{count} targets}}",
+  "@lkcBenefitUptimeTargets": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcBenefitUptimeTargetsUnlimited": "Unlimited targets",
+  "@lkcBenefitUptimeTargetsUnlimited": {
+    "description": "LK Cloud account page."
+  },
+  "lkcBenefitUptimeUnlimited": "Every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets",
+  "@lkcBenefitUptimeUnlimited": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcCancelsOn": "Cancels on {date}",
+  "@lkcCancelsOn": {
+    "description": "LK Cloud account page: a paid plan the user canceled.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcConduitConcurrency": "Concurrency",
+  "@lkcConduitConcurrency": {
+    "description": "LK Cloud account page."
+  },
+  "lkcConduitConcurrencyDetail": "{count, plural, =1{1 request} other{{count} requests}} in flight",
+  "@lkcConduitConcurrencyDetail": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcConduitCredit": "Credit",
+  "@lkcConduitCredit": {
+    "description": "LK Cloud account page."
+  },
+  "lkcConduitCreditMonthly": "{credit} per month",
+  "@lkcConduitCreditMonthly": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "credit": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcConduitCreditWeekly": "{credit} per week",
+  "@lkcConduitCreditWeekly": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "credit": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcDeleteAccount": "Delete account",
+  "@lkcDeleteAccount": {
+    "description": "LK Cloud account page."
+  },
+  "lkcDeleteAccountConfirm": "{name} and its subscriptions are removed. This can’t be undone.",
+  "@lkcDeleteAccountConfirm": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcEndsOn": "Ends on {date}",
+  "@lkcEndsOn": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcFileCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@lkcFileCount": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcFiles": "Files",
+  "@lkcFiles": {
+    "description": "LK Cloud account page."
+  },
+  "lkcFreeTier": "Free",
+  "@lkcFreeTier": {
+    "description": "LK Cloud account page."
+  },
+  "lkcManageSubscriptions": "Manage subscriptions",
+  "@lkcManageSubscriptions": {
+    "description": "LK Cloud account page."
+  },
+  "lkcNoEndDate": "No end date",
+  "@lkcNoEndDate": {
+    "description": "LK Cloud account page."
+  },
+  "lkcNotSignedIn": "Not logged in",
+  "@lkcNotSignedIn": {
+    "description": "LK Cloud account page."
+  },
+  "lkcPastDue": "Payment past due",
+  "@lkcPastDue": {
+    "description": "LK Cloud account page."
+  },
+  "lkcPaused": "Paused",
+  "@lkcPaused": {
+    "description": "LK Cloud account page."
+  },
+  "lkcPerMonth": "{price} / month",
+  "@lkcPerMonth": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcPerYear": "{price} / year",
+  "@lkcPerYear": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcReasonAlreadySubscribed": "Already subscribed",
+  "@lkcReasonAlreadySubscribed": {
+    "description": "LK Cloud rejection `already_subscribed`."
+  },
+  "lkcReasonBadPurchaseToken": "Invalid purchase token",
+  "@lkcReasonBadPurchaseToken": {
+    "description": "LK Cloud rejection `bad_purchase_token`."
+  },
+  "lkcReasonBadPushToken": "Invalid push token",
+  "@lkcReasonBadPushToken": {
+    "description": "LK Cloud rejection `bad_push_token`."
+  },
+  "lkcReasonBadQuery": "Invalid query",
+  "@lkcReasonBadQuery": {
+    "description": "LK Cloud rejection `bad_query`."
+  },
+  "lkcReasonBadSignature": "Invalid signature",
+  "@lkcReasonBadSignature": {
+    "description": "LK Cloud rejection `bad_signature`."
+  },
+  "lkcReasonBadTransaction": "Invalid transaction",
+  "@lkcReasonBadTransaction": {
+    "description": "LK Cloud rejection `bad_transaction`."
+  },
+  "lkcReasonBenefitInvalid": "A benefit is listed twice, of a tier that doesn't have it, or of no owner",
+  "@lkcReasonBenefitInvalid": {
+    "description": "LK Cloud rejection `benefit_invalid`."
+  },
+  "lkcReasonCodeCheckout": "The code can't be used with this checkout",
+  "@lkcReasonCodeCheckout": {
+    "description": "LK Cloud rejection `code_checkout`."
+  },
+  "lkcReasonCodeCurrency": "The code's currency doesn't match the price",
+  "@lkcReasonCodeCurrency": {
+    "description": "LK Cloud rejection `code_currency`."
+  },
+  "lkcReasonCodeCurrencyNeeded": "A fixed amount needs its currency",
+  "@lkcReasonCodeCurrencyNeeded": {
+    "description": "LK Cloud rejection `code_currency_needed`."
+  },
+  "lkcReasonCodeDiscountPeriods": "A discount grants no periods",
+  "@lkcReasonCodeDiscountPeriods": {
+    "description": "LK Cloud rejection `code_discount_periods`."
+  },
+  "lkcReasonCodeDuration": "Pick which payments the discount covers",
+  "@lkcReasonCodeDuration": {
+    "description": "LK Cloud rejection `code_duration`."
+  },
+  "lkcReasonCodeExpired": "The code has expired",
+  "@lkcReasonCodeExpired": {
+    "description": "LK Cloud rejection `code_expired`."
+  },
+  "lkcReasonCodeFormat": "A code is 4 to 32 letters, digits or dashes",
+  "@lkcReasonCodeFormat": {
+    "description": "LK Cloud rejection `code_format`."
+  },
+  "lkcReasonCodeGrantOff": "A grant has no discount",
+  "@lkcReasonCodeGrantOff": {
+    "description": "LK Cloud rejection `code_grant_off`."
+  },
+  "lkcReasonCodeGrantPeriods": "A grant lasts 1 to 120 periods",
+  "@lkcReasonCodeGrantPeriods": {
+    "description": "LK Cloud rejection `code_grant_periods`."
+  },
+  "lkcReasonCodeGrantPlan": "A grant is of one plan",
+  "@lkcReasonCodeGrantPlan": {
+    "description": "LK Cloud rejection `code_grant_plan`."
+  },
+  "lkcReasonCodeInactive": "The code is no longer valid",
+  "@lkcReasonCodeInactive": {
+    "description": "LK Cloud rejection `code_inactive`."
+  },
+  "lkcReasonCodeIsDiscount": "The code is a discount, enter it when subscribing",
+  "@lkcReasonCodeIsDiscount": {
+    "description": "LK Cloud rejection `code_is_discount`."
+  },
+  "lkcReasonCodeIsGrant": "The code grants a plan, redeem it instead",
+  "@lkcReasonCodeIsGrant": {
+    "description": "LK Cloud rejection `code_is_grant`."
+  },
+  "lkcReasonCodeKind": "A code's kind can't change",
+  "@lkcReasonCodeKind": {
+    "description": "LK Cloud rejection `code_kind`."
+  },
+  "lkcReasonCodeLimit": "The redemption limit must be positive",
+  "@lkcReasonCodeLimit": {
+    "description": "LK Cloud rejection `code_limit`."
+  },
+  "lkcReasonCodeLineHeld": "You already have a subscription in this line",
+  "@lkcReasonCodeLineHeld": {
+    "description": "LK Cloud rejection `code_line_held`."
+  },
+  "lkcReasonCodeMonths": "A repeating discount lasts 1 to 36 months",
+  "@lkcReasonCodeMonths": {
+    "description": "LK Cloud rejection `code_months`."
+  },
+  "lkcReasonCodeNewOnly": "The code is for new subscribers only",
+  "@lkcReasonCodeNewOnly": {
+    "description": "LK Cloud rejection `code_new_only`."
+  },
+  "lkcReasonCodeNotStarted": "The code is not valid yet",
+  "@lkcReasonCodeNotStarted": {
+    "description": "LK Cloud rejection `code_not_started`."
+  },
+  "lkcReasonCodeOff": "A discount is a percentage (1 to 100) or a fixed amount",
+  "@lkcReasonCodeOff": {
+    "description": "LK Cloud rejection `code_off`."
+  },
+  "lkcReasonCodePlan": "The code doesn't apply to this plan",
+  "@lkcReasonCodePlan": {
+    "description": "LK Cloud rejection `code_plan`."
+  },
+  "lkcReasonCodePlans": "Pick the plans the code applies to",
+  "@lkcReasonCodePlans": {
+    "description": "LK Cloud rejection `code_plans`."
+  },
+  "lkcReasonCodeRedeemed": "The code has been redeemed, deactivate it instead",
+  "@lkcReasonCodeRedeemed": {
+    "description": "LK Cloud rejection `code_redeemed`."
+  },
+  "lkcReasonCodeTaken": "The code exists already",
+  "@lkcReasonCodeTaken": {
+    "description": "LK Cloud rejection `code_taken`."
+  },
+  "lkcReasonCodeTries": "Too many tries, try again later",
+  "@lkcReasonCodeTries": {
+    "description": "LK Cloud rejection `code_tries`."
+  },
+  "lkcReasonCodeUnknown": "No such code",
+  "@lkcReasonCodeUnknown": {
+    "description": "LK Cloud rejection `code_unknown`."
+  },
+  "lkcReasonCodeUsed": "You have used this code",
+  "@lkcReasonCodeUsed": {
+    "description": "LK Cloud rejection `code_used`."
+  },
+  "lkcReasonCodeUsedUp": "The code has been used up",
+  "@lkcReasonCodeUsedUp": {
+    "description": "LK Cloud rejection `code_used_up`."
+  },
+  "lkcReasonCodeWindow": "The code must start before it expires",
+  "@lkcReasonCodeWindow": {
+    "description": "LK Cloud rejection `code_window`."
+  },
+  "lkcReasonDeleteAdmin": "Remove the admin role at the IdP before deleting an admin",
+  "@lkcReasonDeleteAdmin": {
+    "description": "LK Cloud rejection `delete_admin`."
+  },
+  "lkcReasonDeleteSelf": "Delete your own account from the account page",
+  "@lkcReasonDeleteSelf": {
+    "description": "LK Cloud rejection `delete_self`."
+  },
+  "lkcReasonFileExists": "A file of this name exists",
+  "@lkcReasonFileExists": {
+    "description": "LK Cloud rejection `file_exists`."
+  },
+  "lkcReasonFileName": "Not a valid file or directory name",
+  "@lkcReasonFileName": {
+    "description": "LK Cloud rejection `file_name`."
+  },
+  "lkcReasonFileQuota": "The files would exceed the storage quota",
+  "@lkcReasonFileQuota": {
+    "description": "LK Cloud rejection `file_quota`."
+  },
+  "lkcReasonFileTooLarge": "The file is too large",
+  "@lkcReasonFileTooLarge": {
+    "description": "LK Cloud rejection `file_too_large`."
+  },
+  "lkcReasonForeignTransaction": "Transaction of another app or environment",
+  "@lkcReasonForeignTransaction": {
+    "description": "LK Cloud rejection `foreign_transaction`."
+  },
+  "lkcReasonGrantGone": "No such live manual subscription",
+  "@lkcReasonGrantGone": {
+    "description": "LK Cloud rejection `grant_gone`."
+  },
+  "lkcReasonGrantHeld": "The user has a manual subscription in this line, change it instead",
+  "@lkcReasonGrantHeld": {
+    "description": "LK Cloud rejection `grant_held`."
+  },
+  "lkcReasonGrantInPast": "The grant must end in the future",
+  "@lkcReasonGrantInPast": {
+    "description": "LK Cloud rejection `grant_in_past`."
+  },
+  "lkcReasonManualProvider": "Manual is not a provider",
+  "@lkcReasonManualProvider": {
+    "description": "LK Cloud rejection `manual_provider`."
+  },
+  "lkcReasonNoCustomer": "No subscription to manage",
+  "@lkcReasonNoCustomer": {
+    "description": "LK Cloud rejection `no_customer`."
+  },
+  "lkcReasonNoSwitch": "No web subscription in this line to switch",
+  "@lkcReasonNoSwitch": {
+    "description": "LK Cloud rejection `no_switch`."
+  },
+  "lkcReasonNoUser": "No such user",
+  "@lkcReasonNoUser": {
+    "description": "LK Cloud rejection `no_user`."
+  },
+  "lkcReasonPriceArchived": "A sold price is archived at its provider",
+  "@lkcReasonPriceArchived": {
+    "description": "LK Cloud rejection `price_archived`."
+  },
+  "lkcReasonPriceMissing": "A sold price doesn't exist at its provider",
+  "@lkcReasonPriceMissing": {
+    "description": "LK Cloud rejection `price_missing`."
+  },
+  "lkcReasonPriceNotFixed": "A sold price has no fixed amount",
+  "@lkcReasonPriceNotFixed": {
+    "description": "LK Cloud rejection `price_not_fixed`."
+  },
+  "lkcReasonPricePeriod": "A sold price doesn't bill its plan's period",
+  "@lkcReasonPricePeriod": {
+    "description": "LK Cloud rejection `price_period`."
+  },
+  "lkcReasonProductId": "Empty or padded product id",
+  "@lkcReasonProductId": {
+    "description": "LK Cloud rejection `product_id`."
+  },
+  "lkcReasonProductInUse": "A product of live subscriptions keeps its plan",
+  "@lkcReasonProductInUse": {
+    "description": "LK Cloud rejection `product_in_use`."
+  },
+  "lkcReasonProductPlans": "A product maps to one plan only",
+  "@lkcReasonProductPlans": {
+    "description": "LK Cloud rejection `product_plans`."
+  },
+  "lkcReasonPurchaseAccount": "Purchase belongs to another account",
+  "@lkcReasonPurchaseAccount": {
+    "description": "LK Cloud rejection `purchase_account`."
+  },
+  "lkcReasonPushAccount": "Unexpected push account",
+  "@lkcReasonPushAccount": {
+    "description": "LK Cloud rejection `push_account`."
+  },
+  "lkcReasonSamePlan": "Already on this plan",
+  "@lkcReasonSamePlan": {
+    "description": "LK Cloud rejection `same_plan`."
+  },
+  "lkcReasonSoldTwice": "One sold price per plan and provider",
+  "@lkcReasonSoldTwice": {
+    "description": "LK Cloud rejection `sold_twice`."
+  },
+  "lkcReasonSwitchSync": "Saved, but Stripe's plan switching couldn't be updated; save again",
+  "@lkcReasonSwitchSync": {
+    "description": "LK Cloud rejection `switch_sync`."
+  },
+  "lkcReasonTestPurchase": "Test purchases are not accepted",
+  "@lkcReasonTestPurchase": {
+    "description": "LK Cloud rejection `test_purchase`."
+  },
+  "lkcReasonTransactionAccount": "Transaction belongs to another account",
+  "@lkcReasonTransactionAccount": {
+    "description": "LK Cloud rejection `transaction_account`."
+  },
+  "lkcReasonUnavailable": "Not available",
+  "@lkcReasonUnavailable": {
+    "description": "LK Cloud rejection `unavailable`."
+  },
+  "lkcReasonUnknownPackage": "Unknown package",
+  "@lkcReasonUnknownPackage": {
+    "description": "LK Cloud rejection `unknown_package`."
+  },
+  "lkcReasonUploadSize": "The uploaded file is missing or not of the announced size",
+  "@lkcReasonUploadSize": {
+    "description": "LK Cloud rejection `upload_size`."
+  },
+  "lkcReasonUploadUnknown": "No such upload, or it expired",
+  "@lkcReasonUploadUnknown": {
+    "description": "LK Cloud rejection `upload_unknown`."
+  },
+  "lkcReasonUserGone": "The user no longer exists",
+  "@lkcReasonUserGone": {
+    "description": "LK Cloud rejection `user_gone`."
+  },
+  "lkcRenewsOn": "Renews on {date}",
+  "@lkcRenewsOn": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcStoreSubscriptionTip": "You have a subscription billed by the App Store or Google Play. Cancel it in the store first: deleting the account doesn’t stop it.",
+  "@lkcStoreSubscriptionTip": {
+    "description": "LK Cloud account page."
+  },
+  "lkcSubscribe": "Subscribe",
+  "@lkcSubscribe": {
+    "description": "LK Cloud account page."
+  },
+  "lkcUnlimited": "Unlimited",
+  "@lkcUnlimited": {
+    "description": "LK Cloud account page."
+  },
+  "lkcUsageOf": "{used} of {quota}",
+  "@lkcUsageOf": {
+    "description": "LK Cloud account page.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "quota": {
+        "type": "String"
+      }
+    }
+  },
   "loadingEllipsis": "...",
   "@loadingEllipsis": {
     "description": "Abbreviated text for loading ellipsis."

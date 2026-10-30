@@ -364,6 +364,430 @@ class LibLocalizationsJa extends LibLocalizations {
   String get license => 'ライセンス';
 
   @override
+  String get lkcAccount => 'アカウント';
+
+  @override
+  String get lkcBenefitBackups => 'バックアップ';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
+    return 'アプリごとに最大 $size';
+  }
+
+  @override
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept、$limit';
+  }
+
+  @override
+  String get lkcBenefitBackupsLatest => 'アプリごとに最新の 1 件のみ';
+
+  @override
+  String get lkcBenefitBackupsNoLimit => '容量無制限';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 世代',
+    );
+    return 'アプリごとに $_temp0をローリング保存';
+  }
+
+  @override
+  String get lkcBenefitBackupsRollingUnlimited => 'アプリごとにローリング保存無制限';
+
+  @override
+  String lkcBenefitBackupsTotalBytes(String size) {
+    return '全アプリ共有で $size';
+  }
+
+  @override
+  String get lkcBenefitRelay => 'Relay、tailnet、プッシュ';
+
+  @override
+  String lkcBenefitRelayDetail(String rate) {
+    return 'トラフィック無制限、中継速度 $rate、可用性の保証なし';
+  }
+
+  @override
+  String get lkcBenefitRelayUnlimited => 'トラフィック・速度無制限、可用性の保証なし';
+
+  @override
+  String get lkcBenefitShareLinks => '共有リンク';
+
+  @override
+  String get lkcBenefitShareLinksDetail => '有効期限付き';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return '1 ファイルあたり最大 $file';
+  }
+
+  @override
+  String get lkcBenefitSync => '同期';
+
+  @override
+  String get lkcBenefitSyncDetail => 'リアルタイム、エンドツーエンド暗号化';
+
+  @override
+  String get lkcBenefitUptime => '外部ダウンタイム監視';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes 分',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件',
+    );
+    return '$_temp0ごとにチェック、最大 $_temp1の対象';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件',
+    );
+    return '最大 $_temp0の対象';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => '対象数無制限';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes 分',
+    );
+    return '$_temp0ごとにチェック、対象数無制限';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return '$date にキャンセル';
+  }
+
+  @override
+  String get lkcConduitConcurrency => '同時実行数';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件',
+    );
+    return '同時に $_temp0のリクエスト';
+  }
+
+  @override
+  String get lkcConduitCredit => 'クレジット';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '月 $credit';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '週 $credit';
+  }
+
+  @override
+  String get lkcDeleteAccount => 'アカウントを削除';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name とそのサブスクリプションは削除されます。この操作は取り消せません。';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return '$date に終了';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 個のファイル',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'ファイル';
+
+  @override
+  String get lkcFreeTier => '無料';
+
+  @override
+  String get lkcManageSubscriptions => 'サブスクリプションを管理';
+
+  @override
+  String get lkcNoEndDate => '終了日なし';
+
+  @override
+  String get lkcNotSignedIn => 'ログインしていません';
+
+  @override
+  String get lkcPastDue => '支払い期限超過';
+
+  @override
+  String get lkcPaused => '一時停止中';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / 月';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / 年';
+  }
+
+  @override
+  String get lkcReasonAlreadySubscribed => 'すでに購読しています。';
+
+  @override
+  String get lkcReasonBadPurchaseToken => '購入トークンが無効です。';
+
+  @override
+  String get lkcReasonBadPushToken => 'プッシュトークンが無効です。';
+
+  @override
+  String get lkcReasonBadQuery => 'クエリが無効です。';
+
+  @override
+  String get lkcReasonBadSignature => '署名が無効です。';
+
+  @override
+  String get lkcReasonBadTransaction => '取引が無効です。';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      '特典が重複しているか、その特典を含まないプランに属しているか、所属先がありません。';
+
+  @override
+  String get lkcReasonCodeCheckout => 'このチェックアウトではこのコードを使えません。';
+
+  @override
+  String get lkcReasonCodeCurrency => 'コードの通貨が価格と一致しません。';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded => '固定金額には通貨が必要です。';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => '割引では期間を付与できません。';
+
+  @override
+  String get lkcReasonCodeDuration => '割引を適用する支払いを選んでください。';
+
+  @override
+  String get lkcReasonCodeExpired => 'このコードは期限切れです。';
+
+  @override
+  String get lkcReasonCodeFormat => 'コードは 4〜32 文字の英字、数字、ハイフンです。';
+
+  @override
+  String get lkcReasonCodeGrantOff => '付与には割引を設定できません。';
+
+  @override
+  String get lkcReasonCodeGrantPeriods => '付与の期間は 1〜120 期間です。';
+
+  @override
+  String get lkcReasonCodeGrantPlan => '付与できるのは 1 つのプランだけです。';
+
+  @override
+  String get lkcReasonCodeInactive => 'このコードは無効になりました。';
+
+  @override
+  String get lkcReasonCodeIsDiscount => 'このコードは割引コードです。購読時に入力してください。';
+
+  @override
+  String get lkcReasonCodeIsGrant => 'このコードはプランを付与します。引き換えてください。';
+
+  @override
+  String get lkcReasonCodeKind => 'コードの種類は変更できません。';
+
+  @override
+  String get lkcReasonCodeLimit => '引き換え上限は正の数にしてください。';
+
+  @override
+  String get lkcReasonCodeLineHeld => 'このラインにはすでにサブスクリプションがあります。';
+
+  @override
+  String get lkcReasonCodeMonths => '繰り返し割引の期間は 1〜36 か月です。';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'このコードは新規登録者のみ使えます。';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'このコードはまだ有効ではありません。';
+
+  @override
+  String get lkcReasonCodeOff => '割引は 1〜100 のパーセントか固定金額です。';
+
+  @override
+  String get lkcReasonCodePlan => 'このコードはこのプランには使えません。';
+
+  @override
+  String get lkcReasonCodePlans => 'コードを適用するプランを選んでください。';
+
+  @override
+  String get lkcReasonCodeRedeemed => 'このコードは引き換え済みです。代わりに無効化してください。';
+
+  @override
+  String get lkcReasonCodeTaken => 'このコードはすでに存在します。';
+
+  @override
+  String get lkcReasonCodeTries => '試行回数が多すぎます。しばらくしてからもう一度お試しください。';
+
+  @override
+  String get lkcReasonCodeUnknown => 'コードが見つかりません。';
+
+  @override
+  String get lkcReasonCodeUsed => 'このコードはすでに使用済みです。';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'このコードは使用上限に達しました。';
+
+  @override
+  String get lkcReasonCodeWindow => 'コードの開始日時は有効期限より前にしてください。';
+
+  @override
+  String get lkcReasonDeleteAdmin => '管理者を削除する前に、IdP で管理者ロールを外してください。';
+
+  @override
+  String get lkcReasonDeleteSelf => 'ご自身のアカウントはアカウントページから削除してください。';
+
+  @override
+  String get lkcReasonFileExists => '同じ名前のファイルがすでにあります。';
+
+  @override
+  String get lkcReasonFileName => '有効なファイル名またはディレクトリ名ではありません。';
+
+  @override
+  String get lkcReasonFileQuota => 'ストレージの容量を超えます。';
+
+  @override
+  String get lkcReasonFileTooLarge => 'ファイルが大きすぎます。';
+
+  @override
+  String get lkcReasonForeignTransaction => '別のアプリまたは環境の取引です。';
+
+  @override
+  String get lkcReasonGrantGone => '有効な手動サブスクリプションが見つかりません。';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'このユーザーはこのラインに手動のサブスクリプションを持っています。そちらを変更してください。';
+
+  @override
+  String get lkcReasonGrantInPast => '終了日時は未来である必要があります。';
+
+  @override
+  String get lkcReasonManualProvider => '手動はプロバイダーではありません。';
+
+  @override
+  String get lkcReasonNoCustomer => '管理できるサブスクリプションがありません。';
+
+  @override
+  String get lkcReasonNoSwitch => 'このラインに切り替えられるウェブのサブスクリプションがありません。';
+
+  @override
+  String get lkcReasonNoUser => 'ユーザーが見つかりません。';
+
+  @override
+  String get lkcReasonPriceArchived => '販売中の価格がプロバイダーでアーカイブされています。';
+
+  @override
+  String get lkcReasonPriceMissing => '販売中の価格がプロバイダーに存在しません。';
+
+  @override
+  String get lkcReasonPriceNotFixed => '販売中の価格に固定金額がありません。';
+
+  @override
+  String get lkcReasonPricePeriod => '販売中の価格の請求期間がプランと一致しません。';
+
+  @override
+  String get lkcReasonProductId => 'プロダクト ID が空か、前後に空白があります。';
+
+  @override
+  String get lkcReasonProductInUse => '有効なサブスクリプションがあるプロダクトはプランを変更できません。';
+
+  @override
+  String get lkcReasonProductPlans => '1 つのプロダクトに対応できるプランは 1 つだけです。';
+
+  @override
+  String get lkcReasonPurchaseAccount => '購入は別のアカウントに属しています。';
+
+  @override
+  String get lkcReasonPushAccount => '予期しないプッシュアカウントです。';
+
+  @override
+  String get lkcReasonSamePlan => 'すでにこのプランをご利用中です。';
+
+  @override
+  String get lkcReasonSoldTwice => '販売中の価格はプランとプロバイダーごとに 1 つです。';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      '保存しましたが、Stripe のプラン切り替えを更新できませんでした。もう一度保存してください。';
+
+  @override
+  String get lkcReasonTestPurchase => 'テスト購入は受け付けていません。';
+
+  @override
+  String get lkcReasonTransactionAccount => '取引は別のアカウントに属しています。';
+
+  @override
+  String get lkcReasonUnavailable => '現在ご利用いただけません。';
+
+  @override
+  String get lkcReasonUnknownPackage => '不明なパッケージです。';
+
+  @override
+  String get lkcReasonUploadSize => 'アップロードされたファイルがないか、サイズが通知と一致しません。';
+
+  @override
+  String get lkcReasonUploadUnknown => 'アップロードが見つからないか、期限切れです。';
+
+  @override
+  String get lkcReasonUserGone => 'このユーザーはすでに存在しません。';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return '$date に更新';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'App Store または Google Play で請求されるサブスクリプションがあります。先にストアで解約してください。アカウントを削除しても停止されません。';
+
+  @override
+  String get lkcSubscribe => '購読する';
+
+  @override
+  String get lkcUnlimited => '無制限';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used / $quota';
+  }
+
+  @override
   String get loadingEllipsis => '...';
 
   @override

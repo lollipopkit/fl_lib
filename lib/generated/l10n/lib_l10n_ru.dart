@@ -365,6 +365,473 @@ class LibLocalizationsRu extends LibLocalizations {
   String get license => 'Лицензия';
 
   @override
+  String get lkcAccount => 'Аккаунт';
+
+  @override
+  String get lkcBenefitBackups => 'Резервные копии';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
+    return 'до $size на приложение';
+  }
+
+  @override
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept, $limit';
+  }
+
+  @override
+  String get lkcBenefitBackupsLatest => 'Последняя для каждого приложения';
+
+  @override
+  String get lkcBenefitBackupsNoLimit => 'без ограничения размера';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ротируемой копии',
+      many: '$count ротируемых копий',
+      few: '$count ротируемые копии',
+      one: '$count ротируемая копия',
+    );
+    return '$_temp0 на приложение';
+  }
+
+  @override
+  String get lkcBenefitBackupsRollingUnlimited =>
+      'Неограниченное число ротируемых копий на приложение';
+
+  @override
+  String lkcBenefitBackupsTotalBytes(String size) {
+    return '$size на все приложения';
+  }
+
+  @override
+  String get lkcBenefitRelay => 'Relay, tailnet и push';
+
+  @override
+  String lkcBenefitRelayDetail(String rate) {
+    return 'Безлимитный трафик, $rate, без гарантии доступности';
+  }
+
+  @override
+  String get lkcBenefitRelayUnlimited =>
+      'Безлимитный трафик и скорость, без гарантии доступности';
+
+  @override
+  String get lkcBenefitShareLinks => 'Ссылки для доступа';
+
+  @override
+  String get lkcBenefitShareLinksDetail => 'Со сроком действия';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return 'Файлы до $file каждый';
+  }
+
+  @override
+  String get lkcBenefitSync => 'Синхронизация';
+
+  @override
+  String get lkcBenefitSyncDetail => 'В реальном времени, сквозное шифрование';
+
+  @override
+  String get lkcBenefitUptime => 'Проверки недоступности';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Каждые $minutes минуты',
+      many: 'Каждые $minutes минут',
+      few: 'Каждые $minutes минуты',
+      one: 'Каждые $minutes минуту',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count цели',
+      many: '$count целей',
+      few: '$count целей',
+      one: '$count цели',
+    );
+    return '$_temp0, до $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count цели',
+      many: '$count целей',
+      few: '$count целей',
+      one: '$count цели',
+    );
+    return 'До $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => 'Без ограничения числа целей';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Каждые $minutes минуты',
+      many: 'Каждые $minutes минут',
+      few: 'Каждые $minutes минуты',
+      one: 'Каждые $minutes минуту',
+    );
+    return '$_temp0, без ограничения числа целей';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return 'Отменяется $date';
+  }
+
+  @override
+  String get lkcConduitConcurrency => 'Параллельные запросы';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count одновременного запроса',
+      many: '$count одновременных запросов',
+      few: '$count одновременных запроса',
+      one: '$count одновременный запрос',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => 'Лимит';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '$credit в месяц';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '$credit в неделю';
+  }
+
+  @override
+  String get lkcDeleteAccount => 'Удалить аккаунт';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name и его подписки будут удалены. Это действие нельзя отменить.';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return 'Заканчивается $date';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла',
+      many: '$count файлов',
+      few: '$count файла',
+      one: '$count файл',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'Файлы';
+
+  @override
+  String get lkcFreeTier => 'Бесплатный';
+
+  @override
+  String get lkcManageSubscriptions => 'Управление подписками';
+
+  @override
+  String get lkcNoEndDate => 'Без даты окончания';
+
+  @override
+  String get lkcNotSignedIn => 'Вход не выполнен';
+
+  @override
+  String get lkcPastDue => 'Платёж просрочен';
+
+  @override
+  String get lkcPaused => 'Приостановлена';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / месяц';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / год';
+  }
+
+  @override
+  String get lkcReasonAlreadySubscribed => 'Подписка уже оформлена';
+
+  @override
+  String get lkcReasonBadPurchaseToken => 'Недействительный токен покупки';
+
+  @override
+  String get lkcReasonBadPushToken => 'Недействительный push-токен';
+
+  @override
+  String get lkcReasonBadQuery => 'Недопустимый запрос';
+
+  @override
+  String get lkcReasonBadSignature => 'Недействительная подпись';
+
+  @override
+  String get lkcReasonBadTransaction => 'Недействительная транзакция';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Преимущество указано дважды, у тарифа, в котором его нет, или без владельца';
+
+  @override
+  String get lkcReasonCodeCheckout => 'Код нельзя использовать с этой оплатой';
+
+  @override
+  String get lkcReasonCodeCurrency => 'Валюта кода не совпадает с валютой цены';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded =>
+      'Для фиксированной суммы нужна валюта';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => 'Скидка не предоставляет периоды';
+
+  @override
+  String get lkcReasonCodeDuration =>
+      'Выберите, на какие платежи распространяется скидка';
+
+  @override
+  String get lkcReasonCodeExpired => 'Срок действия кода истёк';
+
+  @override
+  String get lkcReasonCodeFormat =>
+      'Код состоит из 4–32 букв, цифр или дефисов';
+
+  @override
+  String get lkcReasonCodeGrantOff => 'Выдача не предполагает скидку';
+
+  @override
+  String get lkcReasonCodeGrantPeriods =>
+      'Выдача действует от 1 до 120 периодов';
+
+  @override
+  String get lkcReasonCodeGrantPlan => 'Выдача относится к одному тарифу';
+
+  @override
+  String get lkcReasonCodeInactive => 'Код больше не действителен';
+
+  @override
+  String get lkcReasonCodeIsDiscount =>
+      'Это код скидки, введите его при оформлении подписки';
+
+  @override
+  String get lkcReasonCodeIsGrant => 'Этот код выдаёт тариф, активируйте его';
+
+  @override
+  String get lkcReasonCodeKind => 'Тип кода нельзя изменить';
+
+  @override
+  String get lkcReasonCodeLimit => 'Лимит активаций должен быть положительным';
+
+  @override
+  String get lkcReasonCodeLineHeld => 'У вас уже есть подписка в этой линейке';
+
+  @override
+  String get lkcReasonCodeMonths =>
+      'Повторяющаяся скидка действует от 1 до 36 месяцев';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'Код только для новых подписчиков';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'Код ещё не действует';
+
+  @override
+  String get lkcReasonCodeOff =>
+      'Скидка — это процент (от 1 до 100) или фиксированная сумма';
+
+  @override
+  String get lkcReasonCodePlan => 'Код не применяется к этому тарифу';
+
+  @override
+  String get lkcReasonCodePlans => 'Выберите тарифы, к которым применяется код';
+
+  @override
+  String get lkcReasonCodeRedeemed => 'Код уже активирован, деактивируйте его';
+
+  @override
+  String get lkcReasonCodeTaken => 'Такой код уже существует';
+
+  @override
+  String get lkcReasonCodeTries => 'Слишком много попыток, повторите позже';
+
+  @override
+  String get lkcReasonCodeUnknown => 'Код не найден';
+
+  @override
+  String get lkcReasonCodeUsed => 'Вы уже использовали этот код';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'Лимит использований кода исчерпан';
+
+  @override
+  String get lkcReasonCodeWindow =>
+      'Код должен начинать действовать до истечения срока';
+
+  @override
+  String get lkcReasonDeleteAdmin =>
+      'Снимите роль администратора в IdP перед удалением администратора';
+
+  @override
+  String get lkcReasonDeleteSelf => 'Удалите свой аккаунт на странице аккаунта';
+
+  @override
+  String get lkcReasonFileExists => 'Файл с таким именем уже существует';
+
+  @override
+  String get lkcReasonFileName => 'Недопустимое имя файла или каталога';
+
+  @override
+  String get lkcReasonFileQuota => 'Файлы превысят квоту хранилища';
+
+  @override
+  String get lkcReasonFileTooLarge => 'Файл слишком большой';
+
+  @override
+  String get lkcReasonForeignTransaction =>
+      'Транзакция другого приложения или окружения';
+
+  @override
+  String get lkcReasonGrantGone => 'Активная ручная подписка не найдена';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'У пользователя уже есть ручная подписка в этой линейке, измените её';
+
+  @override
+  String get lkcReasonGrantInPast =>
+      'Срок выдачи должен заканчиваться в будущем';
+
+  @override
+  String get lkcReasonManualProvider => 'Manual не является провайдером';
+
+  @override
+  String get lkcReasonNoCustomer => 'Нет подписки для управления';
+
+  @override
+  String get lkcReasonNoSwitch => 'В этой линейке нет веб-подписки для смены';
+
+  @override
+  String get lkcReasonNoUser => 'Пользователь не найден';
+
+  @override
+  String get lkcReasonPriceArchived =>
+      'Продаваемая цена архивирована у провайдера';
+
+  @override
+  String get lkcReasonPriceMissing =>
+      'Продаваемая цена отсутствует у провайдера';
+
+  @override
+  String get lkcReasonPriceNotFixed =>
+      'У продаваемой цены нет фиксированной суммы';
+
+  @override
+  String get lkcReasonPricePeriod =>
+      'Продаваемая цена не соответствует периоду тарифа';
+
+  @override
+  String get lkcReasonProductId => 'ID продукта пуст или содержит пробелы';
+
+  @override
+  String get lkcReasonProductInUse =>
+      'Продукт с активными подписками сохраняет свой тариф';
+
+  @override
+  String get lkcReasonProductPlans =>
+      'Продукт привязывается только к одному тарифу';
+
+  @override
+  String get lkcReasonPurchaseAccount => 'Покупка принадлежит другому аккаунту';
+
+  @override
+  String get lkcReasonPushAccount => 'Неожиданный push-аккаунт';
+
+  @override
+  String get lkcReasonSamePlan => 'Этот тариф уже активен';
+
+  @override
+  String get lkcReasonSoldTwice =>
+      'Одна продаваемая цена на тариф и провайдера';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      'Сохранено, но смену тарифа в Stripe обновить не удалось; сохраните ещё раз';
+
+  @override
+  String get lkcReasonTestPurchase => 'Тестовые покупки не принимаются';
+
+  @override
+  String get lkcReasonTransactionAccount =>
+      'Транзакция принадлежит другому аккаунту';
+
+  @override
+  String get lkcReasonUnavailable => 'Недоступно';
+
+  @override
+  String get lkcReasonUnknownPackage => 'Неизвестный пакет';
+
+  @override
+  String get lkcReasonUploadSize =>
+      'Загруженный файл отсутствует или не соответствует заявленному размеру';
+
+  @override
+  String get lkcReasonUploadUnknown => 'Загрузка не найдена или истекла';
+
+  @override
+  String get lkcReasonUserGone => 'Пользователь больше не существует';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return 'Продление $date';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'У вас есть подписка, оплачиваемая через App Store или Google Play. Сначала отмените её в магазине: удаление аккаунта её не останавливает.';
+
+  @override
+  String get lkcSubscribe => 'Оформить подписку';
+
+  @override
+  String get lkcUnlimited => 'Без ограничений';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used из $quota';
+  }
+
+  @override
   String get loadingEllipsis => '...';
 
   @override

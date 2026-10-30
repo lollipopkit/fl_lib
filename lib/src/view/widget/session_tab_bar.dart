@@ -73,8 +73,8 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   /// [SwitcherBar.menuActions].
   final List<BarAction> sessionMenuActions;
 
-  /// What the leading tab shows instead of a label.
-  final IconData leadingIcon;
+  /// What the leading tab shows instead of a label; null for its name alone.
+  final IconData? leadingIcon;
 
   /// Where a session is, for its row in the sheet — an address, a path. The
   /// name says which one it is and this says which thing it is on, which is
@@ -168,7 +168,12 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
           ListTile(
             leading: SizedBox(
               width: _numberWidth,
-              child: Center(child: Icon(leadingIcon, size: _iconSize)),
+              child: Center(
+                child: switch (leadingIcon) {
+                  final icon? => Icon(icon, size: _iconSize),
+                  null => null,
+                },
+              ),
             ),
             title: Text(names.first),
             onTap: () => pick(0),

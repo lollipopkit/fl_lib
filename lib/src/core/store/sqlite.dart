@@ -12,13 +12,17 @@ abstract final class _StoreSecret {
   /// Where installs older than [SecureStoreProps] kept the key.
   static const _legacyPrefKey = 'hive_key';
 
-  /// Reads the key, generating one the first time.
+  /// Reads the key, generating one when there is none and [generate] is set.
   ///
-  /// Returns the raw bytes rather than the stored base64, because both callers
-  /// want bytes and the encoding is an artifact of the vault taking strings.
-  static Future<Uint8List> read() async {
+  /// Returns the raw bytes rather than the stored base64, because the caller
+  /// wants bytes and the encoding is an artifact of the vault taking strings.
+  /// Null when the vault has no key and [generate] is false: a database that
+  /// exists was written with a key, and making a new one would overwrite it
+  /// if the vault is only unavailable this once (a keyring not yet unlocked).
+  static Future<Uint8List?> read({required bool generate}) async {
     final existing = await _stored();
     if (existing != null) return base64Url.decode(existing);
+    if (!generate) return null;
 
     // `Random.secure()` rather than a counter or a hash of anything on the
     // device: this is the only thing standing between a copied `.db` file and
@@ -48,6 +52,84 @@ abstract final class _StoreSecret {
         PrefStore.shared.get<String>('flutter.$_legacyPrefKey');
     if (fromPrefs != null) await SecureStoreProps.hivePwd.write(fromPrefs);
     return fromPrefs;
+  }
+}
+
+/// Why [SqliteDb.open] could not read the file it found.
+enum StoreUnreadableReason {
+  /// The vault holds no key, and the file exists. The platform keystore lost
+  /// it — reset by the system, or the app's data copied to this device
+  /// without it — or cannot be read right now (a keyring not yet unlocked).
+  /// No key is made, so a later attempt can still find the old one.
+  keyLost,
+
+  /// The vault's key does not open the file: it was written with another key,
+  /// or it is damaged. SQLite cannot tell these apart.
+  keyRejected,
+
+  /// The file exists, and reading its key from the vault failed. On Android
+  /// the plugin's key pair may have been replaced, which leaves the key it
+  /// wrapped unreadable for good (flutter_secure_storage#1298), or the
+  /// Keystore failed this once. No key is made; only [SecureStore.reset]
+  /// gets the vault working again.
+  vaultFailed,
+}
+
+/// [SqliteDb.open] found a file that its key does not open.
+///
+/// Thrown rather than recovered from here: whether to start empty is the
+/// app's decision, and so is telling the user. [SqliteDb.setAside] moves the
+/// file out of the way for the next [SqliteDb.open].
+final class StoreUnreadableException implements Exception {
+  const StoreUnreadableException(this.reason, this.path, this.cause, [this.file = '']);
+
+  final StoreUnreadableReason reason;
+
+  /// The file that did not open.
+  final String path;
+
+  /// What SQLite said for [StoreUnreadableReason.keyRejected], what the vault
+  /// threw for [StoreUnreadableReason.vaultFailed]; null for
+  /// [StoreUnreadableReason.keyLost], which is decided before the file is
+  /// opened.
+  final Object? cause;
+
+  /// What the file and its sidecars looked like — see [describe].
+  final String file;
+
+  @override
+  String toString() =>
+      'StoreUnreadableException(${reason.name}, $path)${cause == null ? '' : ': $cause'}\n$file';
+
+  /// Size, first page and sidecars of the database at [path].
+  ///
+  /// A wrong key and a damaged first page are both `SQLITE_NOTADB`; a zeroed,
+  /// truncated or plaintext file is told apart here.
+  static String describe(String path) {
+    String one(String suffix) {
+      final f = File('$path$suffix');
+      if (!f.existsSync()) return '${suffix.isEmpty ? 'db' : suffix}=none';
+      final stat = f.statSync();
+      return '${suffix.isEmpty ? 'db' : suffix}=${stat.size}B@${stat.modified.toIso8601String()}';
+    }
+
+    try {
+      final raf = File(path).openSync();
+      final List<int> head;
+      try {
+        head = raf.readSync(4096);
+      } finally {
+        raf.closeSync();
+      }
+      final kind = head.every((b) => b == 0)
+          ? 'zero'
+          : String.fromCharCodes(head.take(16)) == 'SQLite format 3\x00'
+          ? 'plain'
+          : 'opaque';
+      return '${one('')} ${one('-wal')} ${one('-shm')} page1=$kind';
+    } catch (e) {
+      return 'unavailable: $e';
+    }
   }
 }
 
@@ -102,8 +184,32 @@ abstract final class SqliteDb {
   }
 
   static Future<Database> _open(String dir) async {
-    final key = await _StoreSecret.read();
     final path = dir.joinPath(fileName);
+    // Asked before `sqlite3.open`, which creates it. An empty file holds
+    // nothing a key was ever used on.
+    final file = File(path);
+    final existed = file.existsSync() && file.lengthSync() > 0;
+    final Uint8List? key;
+    try {
+      key = await _StoreSecret.read(generate: !existed);
+    } on Exception catch (e) {
+      // No file: nothing to protect, and the vault's own error says more.
+      if (!existed) rethrow;
+      throw StoreUnreadableException(
+        StoreUnreadableReason.vaultFailed,
+        path,
+        e,
+        StoreUnreadableException.describe(path),
+      );
+    }
+    if (key == null) {
+      throw StoreUnreadableException(
+        StoreUnreadableReason.keyLost,
+        path,
+        null,
+        StoreUnreadableException.describe(path),
+      );
+    }
     final db = sqlite3.open(path);
 
     try {
@@ -120,7 +226,17 @@ abstract final class SqliteDb {
       // The first statement that actually reads a page, and so the first that
       // can fail on a wrong key. Doing it here means a bad key surfaces as a
       // failure to open rather than as an empty store.
-      db.select('SELECT count(*) FROM sqlite_master;');
+      try {
+        db.select('SELECT count(*) FROM sqlite_master;');
+      } on SqliteException catch (e) {
+        if (e.resultCode != SqlError.SQLITE_NOTADB) rethrow;
+        throw StoreUnreadableException(
+          StoreUnreadableReason.keyRejected,
+          path,
+          e,
+          StoreUnreadableException.describe(path),
+        );
+      }
 
       db.execute('PRAGMA journal_mode = WAL;');
       db.execute('PRAGMA foreign_keys = ON;');
@@ -141,6 +257,36 @@ CREATE TABLE IF NOT EXISTS kv (
     _db = db;
     _path = path;
     return db;
+  }
+
+  /// Moves the file at [path] and its sidecars aside, so the next [open]
+  /// starts an empty one, and returns where it went.
+  ///
+  /// Renamed rather than deleted: the key may yet turn up — a keychain
+  /// restored, a device migrated back — and the file is the only copy.
+  static String setAside(String path) {
+    if (_db != null || _opening != null) {
+      throw StateError('SqliteDb is open or opening');
+    }
+    final aside = '$path.unreadable-${DateTime.now().millisecondsSinceEpoch}';
+    // The sidecars keep their suffix, so `<aside>-wal` still belongs to it.
+    // All or none: a WAL can hold committed pages, and one left behind would
+    // be read into the empty database the next `open` creates.
+    final moved = <String>[];
+    try {
+      for (final suffix in const ['', '-wal', '-shm']) {
+        final file = File('$path$suffix');
+        if (!file.existsSync()) continue;
+        file.renameSync('$aside$suffix');
+        moved.add(suffix);
+      }
+    } catch (_) {
+      for (final suffix in moved.reversed) {
+        File('$aside$suffix').renameSync('$path$suffix');
+      }
+      rethrow;
+    }
+    return aside;
   }
 
   /// Opens an unencrypted in-memory database, for tests.

@@ -365,6 +365,456 @@ class LibLocalizationsId extends LibLocalizations {
   String get license => 'Lisensi';
 
   @override
+  String get lkcAccount => 'Akun';
+
+  @override
+  String get lkcBenefitBackups => 'Cadangan';
+
+  @override
+  String lkcBenefitBackupsAppBytes(String size) {
+    return 'hingga $size per aplikasi';
+  }
+
+  @override
+  String lkcBenefitBackupsDetail(String kept, String limit) {
+    return '$kept, $limit';
+  }
+
+  @override
+  String get lkcBenefitBackupsLatest => 'Yang terbaru per aplikasi';
+
+  @override
+  String get lkcBenefitBackupsNoLimit => 'tanpa batas ukuran';
+
+  @override
+  String lkcBenefitBackupsRolling(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cadangan bergilir',
+      one: '1 cadangan bergilir',
+    );
+    return '$_temp0 per aplikasi';
+  }
+
+  @override
+  String get lkcBenefitBackupsRollingUnlimited =>
+      'Cadangan bergilir tanpa batas per aplikasi';
+
+  @override
+  String lkcBenefitBackupsTotalBytes(String size) {
+    return '$size bersama untuk semua aplikasi';
+  }
+
+  @override
+  String get lkcBenefitRelay => 'Relay, tailnet, dan push';
+
+  @override
+  String lkcBenefitRelayDetail(String rate) {
+    return 'Lalu lintas tanpa batas, $rate, tanpa jaminan ketersediaan';
+  }
+
+  @override
+  String get lkcBenefitRelayUnlimited =>
+      'Lalu lintas dan kecepatan tanpa batas, tanpa jaminan ketersediaan';
+
+  @override
+  String get lkcBenefitShareLinks => 'Tautan berbagi';
+
+  @override
+  String get lkcBenefitShareLinksDetail => 'Dengan masa berlaku';
+
+  @override
+  String lkcBenefitStorageDetail(String file) {
+    return 'File hingga $file per file';
+  }
+
+  @override
+  String get lkcBenefitSync => 'Sinkronisasi';
+
+  @override
+  String get lkcBenefitSyncDetail => 'Real-time, terenkripsi end-to-end';
+
+  @override
+  String get lkcBenefitUptime => 'Pemeriksaan downtime';
+
+  @override
+  String lkcBenefitUptimeDetail(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes menit',
+      one: 'menit',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count target',
+      one: '1 target',
+    );
+    return 'Setiap $_temp0, hingga $_temp1';
+  }
+
+  @override
+  String lkcBenefitUptimeTargets(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count target',
+      one: '1 target',
+    );
+    return 'Hingga $_temp0';
+  }
+
+  @override
+  String get lkcBenefitUptimeTargetsUnlimited => 'Target tanpa batas';
+
+  @override
+  String lkcBenefitUptimeUnlimited(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes menit',
+      one: 'menit',
+    );
+    return 'Setiap $_temp0, target tanpa batas';
+  }
+
+  @override
+  String lkcCancelsOn(String date) {
+    return 'Dibatalkan pada $date';
+  }
+
+  @override
+  String get lkcConduitConcurrency => 'Konkurensi';
+
+  @override
+  String lkcConduitConcurrencyDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count permintaan bersamaan',
+      one: '1 permintaan bersamaan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcConduitCredit => 'Kredit';
+
+  @override
+  String lkcConduitCreditMonthly(String credit) {
+    return '$credit per bulan';
+  }
+
+  @override
+  String lkcConduitCreditWeekly(String credit) {
+    return '$credit per minggu';
+  }
+
+  @override
+  String get lkcDeleteAccount => 'Hapus akun';
+
+  @override
+  String lkcDeleteAccountConfirm(String name) {
+    return '$name dan langganannya akan dihapus. Tindakan ini tidak dapat dibatalkan.';
+  }
+
+  @override
+  String lkcEndsOn(String date) {
+    return 'Berakhir pada $date';
+  }
+
+  @override
+  String lkcFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count file',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcFiles => 'File';
+
+  @override
+  String get lkcFreeTier => 'Gratis';
+
+  @override
+  String get lkcManageSubscriptions => 'Kelola langganan';
+
+  @override
+  String get lkcNoEndDate => 'Tanpa tanggal berakhir';
+
+  @override
+  String get lkcNotSignedIn => 'Belum masuk';
+
+  @override
+  String get lkcPastDue => 'Pembayaran terlambat';
+
+  @override
+  String get lkcPaused => 'Dijeda';
+
+  @override
+  String lkcPerMonth(String price) {
+    return '$price / bulan';
+  }
+
+  @override
+  String lkcPerYear(String price) {
+    return '$price / tahun';
+  }
+
+  @override
+  String get lkcReasonAlreadySubscribed => 'Sudah berlangganan';
+
+  @override
+  String get lkcReasonBadPurchaseToken => 'Token pembelian tidak valid';
+
+  @override
+  String get lkcReasonBadPushToken => 'Token push tidak valid';
+
+  @override
+  String get lkcReasonBadQuery => 'Kueri tidak valid';
+
+  @override
+  String get lkcReasonBadSignature => 'Tanda tangan tidak valid';
+
+  @override
+  String get lkcReasonBadTransaction => 'Transaksi tidak valid';
+
+  @override
+  String get lkcReasonBenefitInvalid =>
+      'Sebuah manfaat tercantum dua kali, pada paket yang tidak memilikinya, atau tanpa pemilik';
+
+  @override
+  String get lkcReasonCodeCheckout =>
+      'Kode tidak dapat digunakan untuk checkout ini';
+
+  @override
+  String get lkcReasonCodeCurrency =>
+      'Mata uang kode tidak sesuai dengan harga';
+
+  @override
+  String get lkcReasonCodeCurrencyNeeded => 'Jumlah tetap memerlukan mata uang';
+
+  @override
+  String get lkcReasonCodeDiscountPeriods => 'Diskon tidak memberikan periode';
+
+  @override
+  String get lkcReasonCodeDuration => 'Pilih pembayaran yang dicakup diskon';
+
+  @override
+  String get lkcReasonCodeExpired => 'Kode sudah kedaluwarsa';
+
+  @override
+  String get lkcReasonCodeFormat =>
+      'Kode terdiri dari 4 hingga 32 huruf, angka, atau tanda hubung';
+
+  @override
+  String get lkcReasonCodeGrantOff => 'Pemberian tidak memiliki diskon';
+
+  @override
+  String get lkcReasonCodeGrantPeriods =>
+      'Pemberian berlaku 1 hingga 120 periode';
+
+  @override
+  String get lkcReasonCodeGrantPlan => 'Pemberian hanya untuk satu paket';
+
+  @override
+  String get lkcReasonCodeInactive => 'Kode sudah tidak berlaku';
+
+  @override
+  String get lkcReasonCodeIsDiscount =>
+      'Kode ini adalah diskon, masukkan saat berlangganan';
+
+  @override
+  String get lkcReasonCodeIsGrant =>
+      'Kode ini memberikan paket, tukarkan kode tersebut';
+
+  @override
+  String get lkcReasonCodeKind => 'Jenis kode tidak dapat diubah';
+
+  @override
+  String get lkcReasonCodeLimit => 'Batas penukaran harus positif';
+
+  @override
+  String get lkcReasonCodeLineHeld =>
+      'Anda sudah memiliki langganan di lini ini';
+
+  @override
+  String get lkcReasonCodeMonths => 'Diskon berulang berlaku 1 hingga 36 bulan';
+
+  @override
+  String get lkcReasonCodeNewOnly => 'Kode hanya untuk pelanggan baru';
+
+  @override
+  String get lkcReasonCodeNotStarted => 'Kode belum berlaku';
+
+  @override
+  String get lkcReasonCodeOff =>
+      'Diskon berupa persentase (1 hingga 100) atau jumlah tetap';
+
+  @override
+  String get lkcReasonCodePlan => 'Kode tidak berlaku untuk paket ini';
+
+  @override
+  String get lkcReasonCodePlans => 'Pilih paket yang berlaku untuk kode ini';
+
+  @override
+  String get lkcReasonCodeRedeemed => 'Kode sudah ditukarkan, nonaktifkan saja';
+
+  @override
+  String get lkcReasonCodeTaken => 'Kode sudah ada';
+
+  @override
+  String get lkcReasonCodeTries => 'Terlalu banyak percobaan, coba lagi nanti';
+
+  @override
+  String get lkcReasonCodeUnknown => 'Kode tidak ditemukan';
+
+  @override
+  String get lkcReasonCodeUsed => 'Anda sudah menggunakan kode ini';
+
+  @override
+  String get lkcReasonCodeUsedUp => 'Kuota penggunaan kode sudah habis';
+
+  @override
+  String get lkcReasonCodeWindow =>
+      'Kode harus mulai berlaku sebelum kedaluwarsa';
+
+  @override
+  String get lkcReasonDeleteAdmin =>
+      'Hapus peran admin di IdP sebelum menghapus admin';
+
+  @override
+  String get lkcReasonDeleteSelf => 'Hapus akun Anda sendiri dari halaman akun';
+
+  @override
+  String get lkcReasonFileExists => 'File dengan nama ini sudah ada';
+
+  @override
+  String get lkcReasonFileName => 'Bukan nama file atau direktori yang valid';
+
+  @override
+  String get lkcReasonFileQuota => 'File akan melebihi kuota penyimpanan';
+
+  @override
+  String get lkcReasonFileTooLarge => 'File terlalu besar';
+
+  @override
+  String get lkcReasonForeignTransaction =>
+      'Transaksi dari aplikasi atau lingkungan lain';
+
+  @override
+  String get lkcReasonGrantGone => 'Langganan manual aktif tidak ditemukan';
+
+  @override
+  String get lkcReasonGrantHeld =>
+      'Pengguna memiliki langganan manual di lini ini, ubah langganan itu';
+
+  @override
+  String get lkcReasonGrantInPast =>
+      'Pemberian harus berakhir di masa mendatang';
+
+  @override
+  String get lkcReasonManualProvider => 'Manual bukan penyedia';
+
+  @override
+  String get lkcReasonNoCustomer => 'Tidak ada langganan untuk dikelola';
+
+  @override
+  String get lkcReasonNoSwitch =>
+      'Tidak ada langganan web di lini ini untuk diganti';
+
+  @override
+  String get lkcReasonNoUser => 'Pengguna tidak ditemukan';
+
+  @override
+  String get lkcReasonPriceArchived => 'Harga jual diarsipkan di penyedianya';
+
+  @override
+  String get lkcReasonPriceMissing => 'Harga jual tidak ada di penyedianya';
+
+  @override
+  String get lkcReasonPriceNotFixed => 'Harga jual tidak memiliki jumlah tetap';
+
+  @override
+  String get lkcReasonPricePeriod =>
+      'Harga jual tidak menagih sesuai periode paketnya';
+
+  @override
+  String get lkcReasonProductId => 'ID produk kosong atau berisi spasi';
+
+  @override
+  String get lkcReasonProductInUse =>
+      'Produk dengan langganan aktif tetap pada paketnya';
+
+  @override
+  String get lkcReasonProductPlans => 'Satu produk hanya untuk satu paket';
+
+  @override
+  String get lkcReasonPurchaseAccount => 'Pembelian milik akun lain';
+
+  @override
+  String get lkcReasonPushAccount => 'Akun push tidak terduga';
+
+  @override
+  String get lkcReasonSamePlan => 'Sudah menggunakan paket ini';
+
+  @override
+  String get lkcReasonSoldTwice => 'Satu harga jual per paket dan penyedia';
+
+  @override
+  String get lkcReasonSwitchSync =>
+      'Tersimpan, tetapi pergantian paket di Stripe tidak dapat diperbarui; simpan lagi';
+
+  @override
+  String get lkcReasonTestPurchase => 'Pembelian uji coba tidak diterima';
+
+  @override
+  String get lkcReasonTransactionAccount => 'Transaksi milik akun lain';
+
+  @override
+  String get lkcReasonUnavailable => 'Tidak tersedia';
+
+  @override
+  String get lkcReasonUnknownPackage => 'Paket aplikasi tidak dikenal';
+
+  @override
+  String get lkcReasonUploadSize =>
+      'File yang diunggah tidak ada atau ukurannya tidak sesuai';
+
+  @override
+  String get lkcReasonUploadUnknown =>
+      'Unggahan tidak ditemukan atau sudah kedaluwarsa';
+
+  @override
+  String get lkcReasonUserGone => 'Pengguna sudah tidak ada';
+
+  @override
+  String lkcRenewsOn(String date) {
+    return 'Diperpanjang pada $date';
+  }
+
+  @override
+  String get lkcStoreSubscriptionTip =>
+      'Anda memiliki langganan yang ditagih melalui App Store atau Google Play. Batalkan dulu di toko: menghapus akun tidak menghentikannya.';
+
+  @override
+  String get lkcSubscribe => 'Berlangganan';
+
+  @override
+  String get lkcUnlimited => 'Tanpa batas';
+
+  @override
+  String lkcUsageOf(String used, String quota) {
+    return '$used dari $quota';
+  }
+
+  @override
   String get loadingEllipsis => '...';
 
   @override
