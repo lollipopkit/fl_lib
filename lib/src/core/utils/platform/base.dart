@@ -124,8 +124,8 @@ enum Pfs {
     return picked?.path;
   }
 
-  /// Pick a file and return the file String.
-  static Future<String?> pickFileString() async {
+  /// Pick a file and return its bytes.
+  static Future<Uint8List?> pickFileBytes() async {
     final picked = await pickFile();
     if (picked == null) return null;
 
@@ -133,12 +133,18 @@ enum Pfs {
       case Pfs.web:
         // Read on demand since file_picker 12; there is no eagerly filled
         // `bytes` to reach for any more.
-        return utf8.decode(await picked.readAsBytes());
+        return await picked.readAsBytes();
       default:
         final path = picked.path;
         if (path == null) return null;
-        return await File(path).readAsString();
+        return await File(path).readAsBytes();
     }
+  }
+
+  /// Pick a file and return the file String.
+  static Future<String?> pickFileString() async {
+    final bytes = await pickFileBytes();
+    return bytes == null ? null : utf8.decode(bytes);
   }
 
   /// Copy the data to the clipboard.

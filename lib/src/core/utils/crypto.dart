@@ -3,6 +3,18 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
 
+/// The password does not open the data: what a reader asks for again.
+///
+/// Its text is what [Cryptor] always threw, so a caller matching the message
+/// keeps working until it matches the type.
+final class WrongPasswordException implements Exception {
+  const WrongPasswordException();
+
+  @override
+  String toString() =>
+      'Failed to decrypt: incorrect password or corrupted data';
+}
+
 /// Secure backup encryption utility class
 /// Uses AES-GCM authenticated encryption and PBKDF2 key derivation
 abstract final class Cryptor {
@@ -15,6 +27,10 @@ abstract final class Cryptor {
   static const defaultIterations = 100000;
 
   static const _magicHeader = 'LKFL_ENC_V01';
+
+  /// What an envelope of either version begins with, once base64 is undone:
+  /// for a reader deciding from the head alone (`AgeCryptor`).
+  static const envelopePrefix = 'LKFL_ENC_V0';
 
   /// Same construction as [_magicHeader], with the PBKDF2 iteration count
   /// written into the envelope instead of assumed.
@@ -176,7 +192,7 @@ abstract final class Cryptor {
       // Decrypt data (automatically verifies authentication tag)
       return cipher.process(Uint8List.fromList(envelope.ciphertext));
     } on InvalidCipherTextException {
-      throw Exception('Failed to decrypt: incorrect password or corrupted data');
+      throw const WrongPasswordException();
     } on FormatException {
       throw Exception('Failed to decrypt: invalid Base64 format');
     } catch (e) {
