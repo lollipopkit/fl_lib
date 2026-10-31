@@ -20,7 +20,11 @@ void main() {
   ///
   /// The "sibling" button stands for a list next to a detail area: it is
   /// outside the pane, so `nearest` would push over the whole layout.
-  Widget harness({required NavTarget targetFromSibling}) {
+  Widget harness({
+    required NavTarget targetFromSibling,
+    NavTarget? scope,
+    NavTarget? targetFromInside,
+  }) {
     final paneKey = GlobalKey<NavigatorState>();
     return MaterialApp(
       home: PaneScope(
@@ -38,15 +42,19 @@ void main() {
                   ),
                 ),
                 Expanded(
-                  child: Navigator(
-                    key: paneKey,
-                    onGenerateRoute: (settings) => MaterialPageRoute<void>(
-                      settings: settings,
-                      builder: (paneCtx) => Scaffold(
-                        appBar: const CustomAppBar(title: Text('pane root')),
-                        body: TextButton(
-                          onPressed: () => route.go(paneCtx),
-                          child: const Text('inside'),
+                  child: _maybeScope(
+                    scope,
+                    Navigator(
+                      key: paneKey,
+                      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+                        settings: settings,
+                        builder: (paneCtx) => Scaffold(
+                          appBar: const CustomAppBar(title: Text('pane root')),
+                          body: TextButton(
+                            onPressed: () =>
+                                route.go(paneCtx, target: targetFromInside),
+                            child: const Text('inside'),
+                          ),
                         ),
                       ),
                     ),
@@ -201,4 +209,35 @@ void main() {
       reason: 'the pane has a stack now, and back is what leaves the page',
     );
   });
+
+  testWidgets('a scope decides for a push that names no target', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(targetFromSibling: NavTarget.nearest, scope: NavTarget.root),
+    );
+    await tester.tap(find.text('inside'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('pushed'), findsOneWidget);
+    expect(find.text('sibling'), findsNothing);
+  });
+
+  testWidgets('and an explicit target still wins over it', (tester) async {
+    await tester.pumpWidget(
+      harness(
+        targetFromSibling: NavTarget.nearest,
+        scope: NavTarget.root,
+        targetFromInside: NavTarget.nearest,
+      ),
+    );
+    await tester.tap(find.text('inside'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('pushed'), findsOneWidget);
+    expect(find.text('sibling'), findsOneWidget);
+  });
 }
+
+Widget _maybeScope(NavTarget? target, Widget child) =>
+    target == null ? child : NavTargetScope(target: target, child: child);

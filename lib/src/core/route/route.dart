@@ -13,8 +13,9 @@ typedef Middleware<T extends AppRouteIface> = ({BuildContext context, T route});
 enum NavTarget {
   /// The navigator that owns the calling context.
   ///
-  /// Inside a pane that is the pane's own navigator. This is the default, and
-  /// it is why an unchanged call site does the right thing in both layouts:
+  /// Inside a pane that is the pane's own navigator. This is the default
+  /// outside a [NavTargetScope], and it is why an unchanged call site does the
+  /// right thing in both layouts:
   /// pushed over the whole screen when there is only one, and within the pane
   /// when there are several.
   nearest,
@@ -33,6 +34,25 @@ enum NavTarget {
   /// the single-page behaviour — with nothing beside it, "open in the detail
   /// area" and "open here" are the same instruction.
   pane,
+}
+
+/// The [NavTarget] a push from inside [child] uses when it names none.
+///
+/// For a region that keeps a bar of its own over a nested navigator: a page
+/// with its own bar pushed there shows two, and the region's actions sit right
+/// over the page's own. The region says so once, rather than every push inside
+/// it having to know where it is shown. An explicit target still wins.
+final class NavTargetScope extends InheritedWidget {
+  const NavTargetScope({super.key, required this.target, required super.child});
+
+  final NavTarget target;
+
+  static NavTarget? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<NavTargetScope>()?.target;
+
+  @override
+  bool updateShouldNotify(NavTargetScope oldWidget) =>
+      target != oldWidget.target;
 }
 
 /// {@template app_route_iface}
@@ -73,7 +93,7 @@ final class AppRoute<Ret, Arg extends Object> extends AppRouteIface {
     Key? key,
     Arg? args,
     PageRoute<Ret>? route,
-    NavTarget target = NavTarget.nearest,
+    NavTarget? target,
   }) {
     if (_rejected(middlewares, context, this)) return Future.value(null);
     return _push<Ret>(
@@ -118,7 +138,7 @@ final class AppRouteArg<Ret, Arg extends Object> extends AppRouteIface {
     Arg args, {
     Key? key,
     PageRoute<Ret>? route,
-    NavTarget target = NavTarget.nearest,
+    NavTarget? target,
   }) {
     if (_rejected(middlewares, context, this)) return Future.value(null);
     return _push<Ret>(
@@ -155,7 +175,7 @@ final class AppRouteNoArg<Ret> extends AppRouteIface {
     BuildContext context, {
     Key? key,
     PageRoute<Ret>? route,
-    NavTarget target = NavTarget.nearest,
+    NavTarget? target,
   }) {
     if (_rejected(middlewares, context, this)) return Future.value(null);
     return _push<Ret>(
@@ -191,10 +211,13 @@ Future<Ret?> _push<Ret>(
   BuildContext context, {
   required RouteSettings settings,
   required WidgetBuilder build,
-  required NavTarget target,
+  required NavTarget? target,
   PageRoute<Ret>? route,
 }) {
-  final navigator = _navigatorFor(context, target);
+  final navigator = _navigatorFor(
+    context,
+    target ?? NavTargetScope.maybeOf(context) ?? NavTarget.nearest,
+  );
   return navigator.push<Ret>(
     route ?? MaterialPageRoute<Ret>(builder: build, settings: settings),
   );

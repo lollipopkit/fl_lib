@@ -49,15 +49,16 @@ final class ThemeAppearance {
   ThemeAppearance(
     this.context,
     this.setState, {
-    this.storeTarget = NavTarget.nearest,
+    this.storeTarget,
   });
 
   final BuildContext context;
   final void Function(VoidCallback fn) setState;
 
   /// Where the theme store opens: over the whole app, or in the pane the
-  /// settings are in — the settings page's layout decides, not this.
-  final NavTarget storeTarget;
+  /// settings are in — the settings page's layout decides, not this. Null
+  /// leaves it to [NavTargetScope].
+  final NavTarget? storeTarget;
 
   ThemeSettings get _setting => ThemeHost.settings;
 
