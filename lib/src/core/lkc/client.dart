@@ -42,7 +42,7 @@ final class LkcException implements Exception {
 /// The user signs in at the IdP with the app's public client ([LkcOidc]);
 /// homebase is sent the IdP's access token, refreshed when it is about to end.
 final class LkcClient {
-  static const defaultBaseUrl = 'https://api.lollipopkit.com';
+  static const defaultBaseUrl = 'https://api.lolli.tech';
 
   // Not on the object store: an upload of 5 GB takes as long as it takes.
   static const _connectTimeout = Duration(seconds: 15);
