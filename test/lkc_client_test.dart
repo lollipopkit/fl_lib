@@ -48,6 +48,7 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+    SecureProp.resetRateLimits();
     api = _Adapter()
       ..on('GET /auth/user', {'data': _user})
       ..on('GET /v2/entitlements', {'data': []});
@@ -386,21 +387,56 @@ void main() {
       expect((saved['access'], saved['refresh']), ('a2', 'r1'));
     });
 
-    test('a refused refresh token signs out', () async {
-      idp.onFn(
-        'POST /auth/v1/oidc/token',
-        (_) => (400, {'error': 'invalid_grant'}),
-      );
-      FlutterSecureStorage.setMockInitialValues({
-        'lkcToken': _saved(Duration.zero),
+    // A refresh token that can never be used again, in Rauthy's words and
+    // OAuth's.
+    for (final (status, error, message) in [
+      (401, 'JwtToken', 'Invalid `iss`'),
+      (401, 'JwtToken', 'Token has expired'),
+      (404, 'NotFound', 'Refresh Token not found'),
+      (403, 'Forbidden', 'Refresh Token has expired'),
+      (401, 'Unauthorized', 'Invalid JWT Token signature'),
+      (400, 'invalid_grant', null),
+    ]) {
+      test('a refresh refused with $error $message signs out', () async {
+        idp.onFn(
+          'POST /auth/v1/oidc/token',
+          (_) => (status, {'error': error, 'message': ?message}),
+        );
+        FlutterSecureStorage.setMockInitialValues({
+          'lkcToken': _saved(Duration.zero),
+        });
+        await expectLater(client.init(), throwsA(isA<LkcException>()));
+        expect(client.signedIn, isFalse);
+        expect(await SecureStoreProps.lkcToken.read(), isNull);
       });
-      await expectLater(client.init(), throwsA(isA<LkcException>()));
-      expect(client.signedIn, isFalse);
-      expect(await SecureStoreProps.lkcToken.read(), isNull);
-    });
+    }
+
+    // A clock off, a user disabled for now, the client's setup, a rate
+    // limit, an outage: the refresh token may still be good.
+    for (final (status, error, message) in [
+      (401, 'JwtToken', 'Token is not valid yet'),
+      (401, 'JwtToken', 'Token was issued in the future'),
+      (401, 'Disabled', 'User is not enabled'),
+      (403, 'Forbidden', 'Invalid origin'),
+      (429, 'TooManyRequests', null),
+      (503, 'Internal', null),
+    ]) {
+      test('a refresh refused with $error $message keeps the session', () async {
+        idp.onFn(
+          'POST /auth/v1/oidc/token',
+          (_) => (status, {'error': error, 'message': ?message}),
+        );
+        await expectLater(
+          signedIn(const Duration(seconds: 30)),
+          throwsA(isA<LkcException>()),
+        );
+        expect(client.signedIn, isTrue);
+        expect(await SecureStoreProps.lkcToken.read(), isNotNull);
+      });
+    }
 
     test('a proxy in front of the IdP is no word on the grant', () async {
-      // Cloudflare's challenge: a page, not the IdP's `invalid_grant`.
+      // Cloudflare's challenge: a page, not the IdP's refusal.
       idp.onFn(
         'POST /auth/v1/oidc/token',
         (_) => (403, '<html>challenge</html>'),

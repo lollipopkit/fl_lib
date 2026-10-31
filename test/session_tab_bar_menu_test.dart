@@ -24,6 +24,9 @@ void main() {
               sessionMenu: () => [
                 ContextMenuAction(text: 'As text', onTap: () {}),
               ],
+              sessionMenuActions: [
+                BarAction(icon: Icons.settings, label: 'Settings', onTap: () {}),
+              ],
             ),
           ),
         ),
@@ -35,10 +38,13 @@ void main() {
     await pump(tester, index: 1);
     expect(find.byTooltip('Snippet'), findsOneWidget);
     expect(find.text('As text'), findsNothing);
+    // Not a button on the bar, however wide it is.
+    expect(find.byTooltip('Settings'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
     expect(find.text('As text'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets('the leading tab has no session menu', (tester) async {

@@ -9,6 +9,7 @@ import 'package:fl_lib/src/view/component_styles.dart';
 import 'package:fl_lib/src/view/widget/appbar.dart';
 import 'package:fl_lib/src/view/widget/val_builder.dart';
 import 'package:fl_lib/src/view/widget/virtual_window_frame.dart';
+import 'package:fl_lib/src/view/widget/window_controls.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';

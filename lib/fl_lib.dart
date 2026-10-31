@@ -56,6 +56,7 @@ export 'src/core/mixin/global_ref.dart';
 // --- Utilities ---
 // Platform abstractions, UI helpers, crypto, localization, and common functions
 export 'src/core/utils/bounded_output_stream.dart';
+export 'src/core/utils/age_cryptor.dart';
 export 'src/core/utils/crypto.dart';
 export 'src/core/utils/font.dart';
 export 'src/core/utils/func.dart';

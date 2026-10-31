@@ -53,27 +53,47 @@ final class TipText extends StatelessWidget {
             else
               textWidget,
             UIs.width13,
-            InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                context.showRoundDialog(
-                  title: l10n.note,
-                  child: isMarkdown
-                      ? SingleChildScrollView(child: SimpleMarkdown(data: tip))
-                      : Text(tip),
-                  actions: Btnx.oks,
-                );
-              },
-              child: const Icon(
-                Icons.help_outline,
-                size: 17,
-                color: Colors.grey,
-              ),
-            ),
+            TipButton(tip, isMarkdown: isMarkdown),
           ],
         );
         return bounded ? SizedBox(width: width, child: row) : row;
       },
+    );
+  }
+}
+
+/// The help glyph [TipText] puts after its text, which opens [tip] in a
+/// dialog: for a label drawn some other way.
+final class TipButton extends StatelessWidget {
+  const TipButton(this.tip, {super.key, this.isMarkdown = false});
+
+  final String tip;
+
+  /// See [TipText.isMarkdown].
+  final bool isMarkdown;
+
+  /// What it takes across.
+  static const size = 17.0;
+
+  @override
+  Widget build(BuildContext context) {
+    // Named as an [IconButton] is: what a screen reader says, and a hover.
+    return Tooltip(
+      message: l10n.note,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          context.showRoundDialog(
+            title: l10n.note,
+            // The dialog does not scroll its content: a long tip does here.
+            child: SingleChildScrollView(
+              child: isMarkdown ? SimpleMarkdown(data: tip) : Text(tip),
+            ),
+            actions: Btnx.oks,
+          );
+        },
+        child: const Icon(Icons.help_outline, size: size, color: Colors.grey),
+      ),
     );
   }
 }

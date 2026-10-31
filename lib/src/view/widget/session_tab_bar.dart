@@ -40,6 +40,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     required this.sessionActions,
     required this.leadingActions,
     this.sessionMenu,
+    this.sessionMenuActions = const [],
     this.leadingIcon = MingCute.add_circle_fill,
     this.detailOf,
     this.leadingOf,
@@ -67,6 +68,10 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
   /// see [SwitcherBar.menu]. For what is not worth a slot of its own: it
   /// costs none of the [sessionActions] theirs when they do not all fit.
   final List<ContextMenuAction> Function()? sessionMenu;
+
+  /// Buttons behind the last button while a session is open — see
+  /// [SwitcherBar.menuActions].
+  final List<BarAction> sessionMenuActions;
 
   /// What the leading tab shows instead of a label; null for its name alone.
   final IconData? leadingIcon;
@@ -101,7 +106,10 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
 
   /// A line with nothing to switch between and no buttons on it is a row of
   /// height above a page for no reason.
-  bool get _bare => !_anyTabs && _actions.isEmpty;
+  bool get _bare =>
+      !_anyTabs &&
+      _actions.isEmpty &&
+      (_onLeading || sessionMenuActions.isEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +119,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
       switcher: _buildSwitcher(context),
       actions: _actions,
       menu: _onLeading ? null : sessionMenu,
+      menuActions: _onLeading ? const [] : sessionMenuActions,
       search: search,
       searchHint: searchHint,
     );
