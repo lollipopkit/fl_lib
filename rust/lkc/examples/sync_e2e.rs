@@ -66,7 +66,7 @@ async fn run(session: Arc<Session<Memory>>) {
     let other = SyncClient::new(session, APP);
 
     let mut events = Box::pin(this.clone().events());
-    assert_eq!(tokio::time::timeout(Duration::from_secs(30), events.next()).await.unwrap(), Some(Event::Connected));
+    assert_eq!(next(&mut events).await, Event::Connected);
     println!("listening");
 
     let one = dir.join("one");
@@ -82,8 +82,7 @@ async fn run(session: Arc<Session<Memory>>) {
     std::fs::write(&two, age(300, b'2')).unwrap();
     let e2 = other.upload(&name, &two, Condition::Match(e1.clone())).await.expect("other's write");
     assert_eq!(this.upload(&name, &one, Condition::Match(e1.clone())).await.unwrap_err().kind, Kind::Changed);
-    let seen = tokio::time::timeout(Duration::from_secs(30), events.next()).await.expect("an event");
-    assert_eq!(seen, Some(Event::Changed { name: name.clone(), etag: Some(e2.clone()) }));
+    assert_eq!(next(&mut events).await, Event::Changed { name: name.clone(), etag: Some(e2.clone()) });
     println!("the race lost, and heard of");
 
     let got = dir.join("got");
@@ -112,4 +111,18 @@ async fn run(session: Arc<Session<Memory>>) {
     assert_eq!(this.head(&name).await.unwrap(), None);
     println!("removed");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The next event but a lost connection, each of those printed.
+async fn next(events: &mut (impl futures_util::Stream<Item = Event> + Unpin)) -> Event {
+    tokio::time::timeout(Duration::from_secs(90), async {
+        loop {
+            match events.next().await.expect("the events ended") {
+                Event::Lost(why) => eprintln!("events: {why}"),
+                event => return event,
+            }
+        }
+    })
+    .await
+    .expect("no event in 90 s")
 }

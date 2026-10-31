@@ -129,6 +129,9 @@ pub enum Event {
     Connected,
     /// [name] is now at [etag], or removed (`None`), by another device.
     Changed { name: String, etag: Option<String> },
+    /// Not listening: a connection failed or ended, and is tried again after
+    /// a wait. For logs; never a token.
+    Lost(String),
 }
 
 #[derive(Deserialize)]
@@ -319,9 +322,14 @@ impl<S: Store> SyncClient<S> {
             body: Option<Body>,
             buffer: Vec<u8>,
             wait: Duration,
+            /// Waited before the next connection, once [Event::Lost] is out.
+            retry: Option<Duration>,
         }
-        let start = Listen { sync: self, body: None, buffer: Vec::new(), wait: Duration::from_secs(1) };
+        let start = Listen { sync: self, body: None, buffer: Vec::new(), wait: Duration::from_secs(1), retry: None };
         futures_util::stream::unfold(start, |mut st| async move {
+            if let Some(wait) = st.retry.take() {
+                tokio::time::sleep(wait).await;
+            }
             loop {
                 if let Some(event) = take_event(&mut st.buffer) {
                     if let Some(event) = st.sync.heard(&event) {
@@ -338,21 +346,27 @@ impl<S: Store> SyncClient<S> {
                             return Some((Event::Connected, st));
                         }
                         Err(e) if e.kind == Kind::SignedOut => return None,
-                        Err(_) => {
-                            tokio::time::sleep(st.wait).await;
+                        Err(e) => {
+                            let wait = st.wait;
                             st.wait = (st.wait * 2).min(MAX_BACKOFF);
-                            continue;
+                            st.retry = Some(wait);
+                            return Some((Event::Lost(e.to_string()), st));
                         }
                     }
                 };
-                match body.next().await {
-                    Some(Ok(chunk)) => st.buffer.extend_from_slice(&chunk),
-                    _ => {
-                        st.body = None;
-                        tokio::time::sleep(st.wait).await;
-                        st.wait = (st.wait * 2).min(MAX_BACKOFF);
+                let lost = match body.next().await {
+                    Some(Ok(chunk)) => {
+                        st.buffer.extend_from_slice(&chunk);
+                        continue;
                     }
-                }
+                    Some(Err(e)) => format!("the event stream failed: {e}"),
+                    None => "the event stream ended".to_string(),
+                };
+                st.body = None;
+                let wait = st.wait;
+                st.wait = (st.wait * 2).min(MAX_BACKOFF);
+                st.retry = Some(wait);
+                return Some((Event::Lost(lost), st));
             }
         })
     }

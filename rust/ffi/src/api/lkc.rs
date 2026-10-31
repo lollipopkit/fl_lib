@@ -203,6 +203,8 @@ pub struct LkcSyncEvent {
     pub connected: bool,
     pub name: Option<String>,
     pub etag: Option<String>,
+    /// Not listening, why: tried again after a wait.
+    pub lost: Option<String>,
 }
 
 /// One app's files on homebase, on a session.

@@ -1484,12 +1484,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcSyncEvent dco_decode_lkc_sync_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return LkcSyncEvent(
       connected: dco_decode_bool(arr[0]),
       name: dco_decode_opt_String(arr[1]),
       etag: dco_decode_opt_String(arr[2]),
+      lost: dco_decode_opt_String(arr[3]),
     );
   }
 
@@ -1883,10 +1884,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_connected = sse_decode_bool(deserializer);
     final var_name = sse_decode_opt_String(deserializer);
     final var_etag = sse_decode_opt_String(deserializer);
+    final var_lost = sse_decode_opt_String(deserializer);
     return LkcSyncEvent(
       connected: var_connected,
       name: var_name,
       etag: var_etag,
+      lost: var_lost,
     );
   }
 
@@ -2312,6 +2315,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.connected, serializer);
     sse_encode_opt_String(self.name, serializer);
     sse_encode_opt_String(self.etag, serializer);
+    sse_encode_opt_String(self.lost, serializer);
   }
 
   @protected

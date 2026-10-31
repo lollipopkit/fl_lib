@@ -704,7 +704,8 @@ return crate::api::lkc::LkcSyncError{kind: var_kind, reason: var_reason, detail:
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_connected = <bool>::sse_decode(deserializer);
 let mut var_name = <Option<String>>::sse_decode(deserializer);
 let mut var_etag = <Option<String>>::sse_decode(deserializer);
-return crate::api::lkc::LkcSyncEvent{connected: var_connected, name: var_name, etag: var_etag};}
+let mut var_lost = <Option<String>>::sse_decode(deserializer);
+return crate::api::lkc::LkcSyncEvent{connected: var_connected, name: var_name, etag: var_etag, lost: var_lost};}
                 }
                 
                 impl SseDecode for crate::api::lkc::LkcSyncFile {
@@ -994,7 +995,8 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcSyncErrorKind> for cr
                     [
                     self.connected.into_into_dart().into_dart(),
 self.name.into_into_dart().into_dart(),
-self.etag.into_into_dart().into_dart()
+self.etag.into_into_dart().into_dart(),
+self.lost.into_into_dart().into_dart()
                 ].into_dart()
                 }
             }
@@ -1283,7 +1285,8 @@ crate::api::lkc::LkcSyncErrorKind::Invalid => { 8 }
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.connected, serializer);
 <Option<String>>::sse_encode(self.name, serializer);
-<Option<String>>::sse_encode(self.etag, serializer);}
+<Option<String>>::sse_encode(self.etag, serializer);
+<Option<String>>::sse_encode(self.lost, serializer);}
                 }
                 
                 impl SseEncode for crate::api::lkc::LkcSyncFile {

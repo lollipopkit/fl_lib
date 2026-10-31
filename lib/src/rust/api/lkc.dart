@@ -196,10 +196,19 @@ class LkcSyncEvent {
   final String? name;
   final String? etag;
 
-  const LkcSyncEvent({required this.connected, this.name, this.etag});
+  /// Not listening, why: tried again after a wait.
+  final String? lost;
+
+  const LkcSyncEvent({
+    required this.connected,
+    this.name,
+    this.etag,
+    this.lost,
+  });
 
   @override
-  int get hashCode => connected.hashCode ^ name.hashCode ^ etag.hashCode;
+  int get hashCode =>
+      connected.hashCode ^ name.hashCode ^ etag.hashCode ^ lost.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -208,7 +217,8 @@ class LkcSyncEvent {
           runtimeType == other.runtimeType &&
           connected == other.connected &&
           name == other.name &&
-          etag == other.etag;
+          etag == other.etag &&
+          lost == other.lost;
 }
 
 class LkcSyncFile {
