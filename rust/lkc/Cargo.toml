@@ -1,0 +1,22 @@
+[package]
+name = "fl_lkc"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "LK Cloud: the IdP, the session an app or agent keeps, and homebase's sync"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.53", default-features = false, features = ["sync", "time", "macros", "fs", "io-util", "rt"] }
+bytes = "1"
+# `rustls-no-provider`: the ring provider is passed where the client is built,
+# so a tree that depends on this keeps one crypto implementation.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "http2", "stream"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
+url = "2"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { version = "1.53", features = ["full"] }

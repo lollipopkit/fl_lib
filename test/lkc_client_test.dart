@@ -10,6 +10,8 @@ import 'package:fl_lib/generated/l10n/lib_l10n_en.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'rust_lib.dart';
+
 const _user = {
   'id': 'u1',
   'name': 'Lk',
@@ -26,18 +28,17 @@ const _discovery = {
   'revocation_endpoint': 'https://idp.example.com/auth/v1/oidc/token/revoke',
 };
 
-/// Saved tokens whose access token ends in [left].
+/// A saved session (`fl_lkc::Stored`) whose access token ends in [left].
 String _saved(Duration left, {String access = 'a1', String refresh = 'r1'}) =>
-    jsonEncode(
-      LkcTokens(
-        access: access,
-        refresh: refresh,
-        expiresAt: DateTime.now().add(left),
-      ).toJson(),
-    );
+    jsonEncode({
+      'access': access,
+      'refresh': refresh,
+      'expires_at': DateTime.now().add(left).millisecondsSinceEpoch,
+    });
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(loadFlRustForTest);
 
   late _Adapter api;
   late _Adapter store;
@@ -365,90 +366,6 @@ void main() {
       expect(api.requests.last.headers['Authorization'], 'Bearer a1');
     });
 
-    test('a due one is refreshed once, however many ask', () async {
-      var refreshes = 0;
-      idp.onFn('POST /auth/v1/oidc/token', (_) {
-        refreshes++;
-        return (200, {'access_token': 'a2', 'expires_in': 300});
-      });
-      await signedIn(const Duration(seconds: 30));
-      await Future.wait([
-        for (var i = 0; i < 3; i++) client.refreshEntitlements(),
-      ]);
-      expect(refreshes, 1);
-      expect(
-        Uri.splitQueryString(idp.bodyOf('/auth/v1/oidc/token'))['grant_type'],
-        'refresh_token',
-      );
-      expect(api.requests.last.headers['Authorization'], 'Bearer a2');
-      // A refresh token not rotated is kept.
-      final saved =
-          jsonDecode((await SecureStoreProps.lkcToken.read())!) as Map;
-      expect((saved['access'], saved['refresh']), ('a2', 'r1'));
-    });
-
-    // A refresh token that can never be used again, in Rauthy's words and
-    // OAuth's.
-    for (final (status, error, message) in [
-      (401, 'JwtToken', 'Invalid `iss`'),
-      (401, 'JwtToken', 'Token has expired'),
-      (404, 'NotFound', 'Refresh Token not found'),
-      (403, 'Forbidden', 'Refresh Token has expired'),
-      (401, 'Unauthorized', 'Invalid JWT Token signature'),
-      (400, 'invalid_grant', null),
-    ]) {
-      test('a refresh refused with $error $message signs out', () async {
-        idp.onFn(
-          'POST /auth/v1/oidc/token',
-          (_) => (status, {'error': error, 'message': ?message}),
-        );
-        FlutterSecureStorage.setMockInitialValues({
-          'lkcToken': _saved(Duration.zero),
-        });
-        await expectLater(client.init(), throwsA(isA<LkcException>()));
-        expect(client.signedIn, isFalse);
-        expect(await SecureStoreProps.lkcToken.read(), isNull);
-      });
-    }
-
-    // A clock off, a user disabled for now, the client's setup, a rate
-    // limit, an outage: the refresh token may still be good.
-    for (final (status, error, message) in [
-      (401, 'JwtToken', 'Token is not valid yet'),
-      (401, 'JwtToken', 'Token was issued in the future'),
-      (401, 'Disabled', 'User is not enabled'),
-      (403, 'Forbidden', 'Invalid origin'),
-      (429, 'TooManyRequests', null),
-      (503, 'Internal', null),
-    ]) {
-      test('a refresh refused with $error $message keeps the session', () async {
-        idp.onFn(
-          'POST /auth/v1/oidc/token',
-          (_) => (status, {'error': error, 'message': ?message}),
-        );
-        await expectLater(
-          signedIn(const Duration(seconds: 30)),
-          throwsA(isA<LkcException>()),
-        );
-        expect(client.signedIn, isTrue);
-        expect(await SecureStoreProps.lkcToken.read(), isNotNull);
-      });
-    }
-
-    test('a proxy in front of the IdP is no word on the grant', () async {
-      // Cloudflare's challenge: a page, not the IdP's refusal.
-      idp.onFn(
-        'POST /auth/v1/oidc/token',
-        (_) => (403, '<html>challenge</html>'),
-      );
-      await expectLater(
-        signedIn(const Duration(seconds: 30)),
-        throwsA(isA<LkcException>()),
-      );
-      expect(client.signedIn, isTrue);
-      expect(await SecureStoreProps.lkcToken.read(), isNotNull);
-    });
-
     test('a token homebase refuses signs out', () async {
       api.on('GET /auth/user', {'code': 2, 'msg': 'No perm'});
       await expectLater(signedIn(), throwsA(isA<LkcException>()));
@@ -459,20 +376,16 @@ void main() {
       FlutterSecureStorage.setMockInitialValues({'lkcToken': 'eyJ.old.jwt'});
       await client.init();
       expect(client.signedIn, isFalse);
-      expect(api.requests, isEmpty);
+      expect(await SecureStoreProps.lkcToken.read(), isNull);
+      expect(api.requests.where((r) => r.path == '/auth/user'), isEmpty);
     });
 
-    test('signing out revokes the refresh token', () async {
+    // Revoking is the session's (`fl_lkc`'s tests).
+    test('signing out drops the session', () async {
       await signedIn();
       await client.signOut();
       expect(client.signedIn, isFalse);
-      final revoke = Uri.splitQueryString(
-        idp.bodyOf('/auth/v1/oidc/token/revoke'),
-      );
-      expect(
-        (revoke['token'], revoke['token_type_hint']),
-        ('r1', 'refresh_token'),
-      );
+      expect(await SecureStoreProps.lkcToken.read(), isNull);
     });
 
     test('a deleted account takes the tokens with it', () async {
@@ -482,7 +395,6 @@ void main() {
       expect(client.signedIn, isFalse);
       expect(client.user.value, isNull);
       expect(await SecureStoreProps.lkcToken.read(), isNull);
-      expect(idp.requests.any((r) => r.uri.path.endsWith('/revoke')), isTrue);
     });
   });
 

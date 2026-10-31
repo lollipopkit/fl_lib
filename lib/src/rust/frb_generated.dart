@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/lkc.dart';
 import 'api/theme.dart';
 
 import 'dart:async';
@@ -67,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1677860727;
+  int get rustContentHash => 1440810845;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -79,6 +80,81 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that});
+
+  Future<void> crateApiLkcLkcSessionForget({required LkcSession that});
+
+  String? crateApiLkcLkcSessionFreshAccessToken({required LkcSession that});
+
+  Future<LkcSession> crateApiLkcLkcSessionRestore({
+    required String issuer,
+    required String clientId,
+    required String api,
+    String? stored,
+    required FutureOr<bool> Function(String?) save,
+  });
+
+  Future<void> crateApiLkcLkcSessionSignIn({
+    required LkcSession that,
+    required String access,
+    String? refresh,
+    required PlatformInt64 expiresAtMs,
+  });
+
+  Future<void> crateApiLkcLkcSessionSignOut({required LkcSession that});
+
+  bool crateApiLkcLkcSessionSignedIn({required LkcSession that});
+
+  Future<bool> crateApiLkcLkcSyncDelete({
+    required LkcSync that,
+    required String name,
+    String? ifMatch,
+  });
+
+  Future<LkcFetched> crateApiLkcLkcSyncDownload({
+    required LkcSync that,
+    required String name,
+    required String to,
+    String? known,
+  });
+
+  Future<LkcFetched> crateApiLkcLkcSyncDownloadVersion({
+    required LkcSync that,
+    required String name,
+    required String etag,
+    required String to,
+  });
+
+  Future<String?> crateApiLkcLkcSyncHead({
+    required LkcSync that,
+    required String name,
+  });
+
+  Future<List<LkcSyncFile>> crateApiLkcLkcSyncList({required LkcSync that});
+
+  Stream<LkcSyncEvent> crateApiLkcLkcSyncListen({required LkcSync that});
+
+  LkcSync crateApiLkcLkcSyncNew({
+    required LkcSession session,
+    required String app,
+  });
+
+  PlatformInt64 crateApiLkcLkcSyncOffsetMs({required LkcSync that});
+
+  void crateApiLkcLkcSyncStopListening({required LkcSync that});
+
+  Future<String> crateApiLkcLkcSyncUpload({
+    required LkcSync that,
+    required String name,
+    required String from,
+    String? ifMatch,
+  });
+
+  Future<List<LkcSyncVersion>> crateApiLkcLkcSyncVersions({
+    required LkcSync that,
+    required String name,
+  });
+
   String crateApiThemeCheckThemeComponents({
     String? components,
     String? layout,
@@ -125,6 +201,20 @@ abstract class RustLibApi extends BaseApi {
   String crateApiThemeThemeFormat();
 
   String crateApiThemeThemeRepoArchiveUrl({required String address});
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcSession;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcSession;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LkcSessionPtr;
+
+  RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_LkcSync;
+
+  RustArcDecrementStrongCountFnType get rust_arc_decrement_strong_count_LkcSync;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LkcSyncPtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -134,6 +224,634 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @override
+  Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_lkc_error,
+        ),
+        constMeta: kCrateApiLkcLkcSessionAccessTokenConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionAccessTokenConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSession_access_token",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<void> crateApiLkcLkcSessionForget({required LkcSession that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSessionForgetConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionForgetConstMeta =>
+      const TaskConstMeta(debugName: "LkcSession_forget", argNames: ["that"]);
+
+  @override
+  String? crateApiLkcLkcSessionFreshAccessToken({required LkcSession that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSessionFreshAccessTokenConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionFreshAccessTokenConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSession_fresh_access_token",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<LkcSession> crateApiLkcLkcSessionRestore({
+    required String issuer,
+    required String clientId,
+    required String api,
+    String? stored,
+    required FutureOr<bool> Function(String?) save,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(issuer, serializer);
+          sse_encode_String(clientId, serializer);
+          sse_encode_String(api, serializer);
+          sse_encode_opt_String(stored, serializer);
+          sse_encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
+            save,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession,
+          decodeErrorData: sse_decode_lkc_error,
+        ),
+        constMeta: kCrateApiLkcLkcSessionRestoreConstMeta,
+        argValues: [issuer, clientId, api, stored, save],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionRestoreConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSession_restore",
+        argNames: ["issuer", "clientId", "api", "stored", "save"],
+      );
+
+  @override
+  Future<void> crateApiLkcLkcSessionSignIn({
+    required LkcSession that,
+    required String access,
+    String? refresh,
+    required PlatformInt64 expiresAtMs,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            that,
+            serializer,
+          );
+          sse_encode_String(access, serializer);
+          sse_encode_opt_String(refresh, serializer);
+          sse_encode_i_64(expiresAtMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_error,
+        ),
+        constMeta: kCrateApiLkcLkcSessionSignInConstMeta,
+        argValues: [that, access, refresh, expiresAtMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionSignInConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSession_sign_in",
+        argNames: ["that", "access", "refresh", "expiresAtMs"],
+      );
+
+  @override
+  Future<void> crateApiLkcLkcSessionSignOut({required LkcSession that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSessionSignOutConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionSignOutConstMeta =>
+      const TaskConstMeta(debugName: "LkcSession_sign_out", argNames: ["that"]);
+
+  @override
+  bool crateApiLkcLkcSessionSignedIn({required LkcSession that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSessionSignedInConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSessionSignedInConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSession_signed_in",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<bool> crateApiLkcLkcSyncDelete({
+    required LkcSync that,
+    required String name,
+    String? ifMatch,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_opt_String(ifMatch, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncDeleteConstMeta,
+        argValues: [that, name, ifMatch],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncDeleteConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_delete",
+    argNames: ["that", "name", "ifMatch"],
+  );
+
+  @override
+  Future<LkcFetched> crateApiLkcLkcSyncDownload({
+    required LkcSync that,
+    required String name,
+    required String to,
+    String? known,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_String(to, serializer);
+          sse_encode_opt_String(known, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_fetched,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncDownloadConstMeta,
+        argValues: [that, name, to, known],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncDownloadConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_download",
+    argNames: ["that", "name", "to", "known"],
+  );
+
+  @override
+  Future<LkcFetched> crateApiLkcLkcSyncDownloadVersion({
+    required LkcSync that,
+    required String name,
+    required String etag,
+    required String to,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_String(etag, serializer);
+          sse_encode_String(to, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_fetched,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncDownloadVersionConstMeta,
+        argValues: [that, name, etag, to],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncDownloadVersionConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSync_download_version",
+        argNames: ["that", "name", "etag", "to"],
+      );
+
+  @override
+  Future<String?> crateApiLkcLkcSyncHead({
+    required LkcSync that,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncHeadConstMeta,
+        argValues: [that, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncHeadConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_head",
+    argNames: ["that", "name"],
+  );
+
+  @override
+  Future<List<LkcSyncFile>> crateApiLkcLkcSyncList({required LkcSync that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_lkc_sync_file,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncListConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncListConstMeta =>
+      const TaskConstMeta(debugName: "LkcSync_list", argNames: ["that"]);
+
+  @override
+  Stream<LkcSyncEvent> crateApiLkcLkcSyncListen({required LkcSync that}) {
+    final sink = RustStreamSink<LkcSyncEvent>();
+    handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_StreamSink_lkc_sync_event_Sse(sink, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSyncListenConstMeta,
+        argValues: [that, sink],
+        apiImpl: this,
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncListenConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_listen",
+    argNames: ["that", "sink"],
+  );
+
+  @override
+  LkcSync crateApiLkcLkcSyncNew({
+    required LkcSession session,
+    required String app,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            session,
+            serializer,
+          );
+          sse_encode_String(app, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSyncNewConstMeta,
+        argValues: [session, app],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncNewConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_new",
+    argNames: ["session", "app"],
+  );
+
+  @override
+  PlatformInt64 crateApiLkcLkcSyncOffsetMs({required LkcSync that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSyncOffsetMsConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncOffsetMsConstMeta =>
+      const TaskConstMeta(debugName: "LkcSync_offset_ms", argNames: ["that"]);
+
+  @override
+  void crateApiLkcLkcSyncStopListening({required LkcSync that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSyncStopListeningConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncStopListeningConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSync_stop_listening",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<String> crateApiLkcLkcSyncUpload({
+    required LkcSync that,
+    required String name,
+    required String from,
+    String? ifMatch,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_String(from, serializer);
+          sse_encode_opt_String(ifMatch, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncUploadConstMeta,
+        argValues: [that, name, from, ifMatch],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncUploadConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_upload",
+    argNames: ["that", "name", "from", "ifMatch"],
+  );
+
+  @override
+  Future<List<LkcSyncVersion>> crateApiLkcLkcSyncVersions({
+    required LkcSync that,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_lkc_sync_version,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcSyncVersionsConstMeta,
+        argValues: [that, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncVersionsConstMeta => const TaskConstMeta(
+    debugName: "LkcSync_versions",
+    argNames: ["that", "name"],
+  );
 
   @override
   String crateApiThemeCheckThemeComponents({
@@ -146,7 +864,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_opt_String(components, serializer);
           sse_encode_opt_String(layout, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -176,7 +894,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(a, serializer);
           sse_encode_String(b, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_i_32,
@@ -204,7 +922,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_list_theme_variant_info,
@@ -234,7 +952,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(bytes, serializer);
           sse_encode_opt_String(base, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_theme_catalog_info,
@@ -264,7 +982,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
           sse_encode_String(path, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -295,7 +1013,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 24,
             port: port_,
           );
         },
@@ -328,7 +1046,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 25,
             port: port_,
           );
         },
@@ -360,7 +1078,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
           sse_encode_list_String(iconFiles, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -390,7 +1108,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
           sse_encode_list_String(iconFiles, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -416,7 +1134,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_theme_file(files, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_theme_repo_tree,
@@ -441,7 +1159,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(bytes, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_theme_file,
@@ -466,7 +1184,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -489,7 +1207,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(address, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -507,6 +1225,138 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "theme_repo_archive_url",
         argNames: ["address"],
       );
+
+  Future<void> Function(int, dynamic)
+  encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
+    FutureOr<bool> Function(String?) raw,
+  ) {
+    return (callId, rawArg0) async {
+      final arg0 = dco_decode_opt_String(rawArg0);
+
+      Box<bool>? rawOutput;
+      Box<AnyhowException>? rawError;
+      try {
+        rawOutput = Box(await raw(arg0));
+      } catch (e, s) {
+        rawError = Box(AnyhowException("$e\n\n$s"));
+      }
+
+      final serializer = SseSerializer(generalizedFrbRustBinding);
+      assert((rawOutput != null) ^ (rawError != null));
+      if (rawOutput != null) {
+        serializer.buffer.putUint8(0);
+        sse_encode_bool(rawOutput.value, serializer);
+      } else {
+        serializer.buffer.putUint8(1);
+        sse_encode_AnyhowException(rawError!.value, serializer);
+      }
+      final output = serializer.intoRaw();
+
+      generalizedFrbRustBinding.dartFnDeliverOutput(
+        callId: callId,
+        ptr: output.ptr,
+        rustVecLen: output.rustVecLen,
+        dataLen: output.dataLen,
+      );
+    };
+  }
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcSession => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcSession => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcSync => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcSync => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync;
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AnyhowException(raw as String);
+  }
+
+  @protected
+  LkcSession
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSessionImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcSync
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSyncImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcSession
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSessionImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcSync
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSyncImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  FutureOr<bool> Function(String?)
+  dco_decode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError('');
+  }
+
+  @protected
+  Object dco_decode_DartOpaque(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return decodeDartOpaque(raw, generalizedFrbRustBinding);
+  }
+
+  @protected
+  LkcSession
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSessionImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcSync
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSyncImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  RustStreamSink<LkcSyncEvent> dco_decode_StreamSink_lkc_sync_event_Sse(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
 
   @protected
   String dco_decode_String(dynamic raw) {
@@ -527,9 +1377,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  PlatformInt64 dco_decode_isize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<LkcSyncFile> dco_decode_list_lkc_sync_file(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_lkc_sync_file).toList();
+  }
+
+  @protected
+  List<LkcSyncVersion> dco_decode_list_lkc_sync_version(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_lkc_sync_version).toList();
   }
 
   @protected
@@ -554,6 +1428,97 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<ThemeVariantInfo> dco_decode_list_theme_variant_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_theme_variant_info).toList();
+  }
+
+  @protected
+  LkcError dco_decode_lkc_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return LkcError(
+      failure: dco_decode_lkc_failure(arr[0]),
+      detail: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  LkcFailure dco_decode_lkc_failure(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcFailure.values[raw as int];
+  }
+
+  @protected
+  LkcFetched dco_decode_lkc_fetched(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return LkcFetched(
+      missing: dco_decode_bool(arr[0]),
+      saved: dco_decode_bool(arr[1]),
+      etag: dco_decode_opt_String(arr[2]),
+    );
+  }
+
+  @protected
+  LkcSyncError dco_decode_lkc_sync_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return LkcSyncError(
+      kind: dco_decode_lkc_sync_error_kind(arr[0]),
+      reason: dco_decode_opt_String(arr[1]),
+      detail: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  LkcSyncErrorKind dco_decode_lkc_sync_error_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcSyncErrorKind.values[raw as int];
+  }
+
+  @protected
+  LkcSyncEvent dco_decode_lkc_sync_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return LkcSyncEvent(
+      connected: dco_decode_bool(arr[0]),
+      name: dco_decode_opt_String(arr[1]),
+      etag: dco_decode_opt_String(arr[2]),
+    );
+  }
+
+  @protected
+  LkcSyncFile dco_decode_lkc_sync_file(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return LkcSyncFile(
+      name: dco_decode_String(arr[0]),
+      etag: dco_decode_String(arr[1]),
+      size: dco_decode_u_64(arr[2]),
+      updatedAt: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  LkcSyncVersion dco_decode_lkc_sync_version(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return LkcSyncVersion(
+      etag: dco_decode_String(arr[0]),
+      size: dco_decode_u_64(arr[1]),
+      writtenAt: dco_decode_String(arr[2]),
+      replacedAt: dco_decode_String(arr[3]),
+    );
   }
 
   @protected
@@ -642,6 +1607,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
   int dco_decode_u_8(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -651,6 +1622,106 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_String(deserializer);
+    return AnyhowException(inner);
+  }
+
+  @protected
+  LkcSession
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcSessionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcSync
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcSyncImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcSession
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcSessionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcSync
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcSyncImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  Object sse_decode_DartOpaque(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_isize(deserializer);
+    return decodeDartOpaque(inner, generalizedFrbRustBinding);
+  }
+
+  @protected
+  LkcSession
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcSessionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcSync
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcSyncImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  RustStreamSink<LkcSyncEvent> sse_decode_StreamSink_lkc_sync_event_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
   }
 
   @protected
@@ -673,6 +1744,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_isize(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -680,6 +1763,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<LkcSyncFile> sse_decode_list_lkc_sync_file(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <LkcSyncFile>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_lkc_sync_file(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<LkcSyncVersion> sse_decode_list_lkc_sync_version(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <LkcSyncVersion>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_lkc_sync_version(deserializer));
     }
     return ans_;
   }
@@ -722,6 +1833,91 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       ans_.add(sse_decode_theme_variant_info(deserializer));
     }
     return ans_;
+  }
+
+  @protected
+  LkcError sse_decode_lkc_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_failure = sse_decode_lkc_failure(deserializer);
+    final var_detail = sse_decode_String(deserializer);
+    return LkcError(failure: var_failure, detail: var_detail);
+  }
+
+  @protected
+  LkcFailure sse_decode_lkc_failure(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return LkcFailure.values[inner];
+  }
+
+  @protected
+  LkcFetched sse_decode_lkc_fetched(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_missing = sse_decode_bool(deserializer);
+    final var_saved = sse_decode_bool(deserializer);
+    final var_etag = sse_decode_opt_String(deserializer);
+    return LkcFetched(missing: var_missing, saved: var_saved, etag: var_etag);
+  }
+
+  @protected
+  LkcSyncError sse_decode_lkc_sync_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_kind = sse_decode_lkc_sync_error_kind(deserializer);
+    final var_reason = sse_decode_opt_String(deserializer);
+    final var_detail = sse_decode_String(deserializer);
+    return LkcSyncError(kind: var_kind, reason: var_reason, detail: var_detail);
+  }
+
+  @protected
+  LkcSyncErrorKind sse_decode_lkc_sync_error_kind(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return LkcSyncErrorKind.values[inner];
+  }
+
+  @protected
+  LkcSyncEvent sse_decode_lkc_sync_event(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_connected = sse_decode_bool(deserializer);
+    final var_name = sse_decode_opt_String(deserializer);
+    final var_etag = sse_decode_opt_String(deserializer);
+    return LkcSyncEvent(
+      connected: var_connected,
+      name: var_name,
+      etag: var_etag,
+    );
+  }
+
+  @protected
+  LkcSyncFile sse_decode_lkc_sync_file(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_name = sse_decode_String(deserializer);
+    final var_etag = sse_decode_String(deserializer);
+    final var_size = sse_decode_u_64(deserializer);
+    final var_updatedAt = sse_decode_String(deserializer);
+    return LkcSyncFile(
+      name: var_name,
+      etag: var_etag,
+      size: var_size,
+      updatedAt: var_updatedAt,
+    );
+  }
+
+  @protected
+  LkcSyncVersion sse_decode_lkc_sync_version(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_etag = sse_decode_String(deserializer);
+    final var_size = sse_decode_u_64(deserializer);
+    final var_writtenAt = sse_decode_String(deserializer);
+    final var_replacedAt = sse_decode_String(deserializer);
+    return LkcSyncVersion(
+      etag: var_etag,
+      size: var_size,
+      writtenAt: var_writtenAt,
+      replacedAt: var_replacedAt,
+    );
   }
 
   @protected
@@ -810,6 +2006,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
+  }
+
+  @protected
   int sse_decode_u_8(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint8();
@@ -818,6 +2020,143 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
+  }
+
+  @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    LkcSession self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcSessionImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    LkcSync self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcSyncImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    LkcSession self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcSessionImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    LkcSync self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcSyncImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
+    FutureOr<bool> Function(String?) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_DartOpaque(
+      encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(self),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_DartOpaque(Object self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_isize(
+      PlatformPointerUtil.ptrToPlatformInt64(
+        encodeDartOpaque(
+          self,
+          portManager.dartHandlerPort,
+          generalizedFrbRustBinding,
+        ),
+      ),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+    LkcSession self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcSessionImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    LkcSync self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcSyncImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_StreamSink_lkc_sync_event_Sse(
+    RustStreamSink<LkcSyncEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_sync_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
   }
 
   @protected
@@ -839,11 +2178,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_isize(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_lkc_sync_file(
+    List<LkcSyncFile> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_lkc_sync_file(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_lkc_sync_version(
+    List<LkcSyncVersion> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_lkc_sync_version(item, serializer);
     }
   }
 
@@ -891,6 +2266,73 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     for (final item in self) {
       sse_encode_theme_variant_info(item, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_lkc_error(LkcError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lkc_failure(self.failure, serializer);
+    sse_encode_String(self.detail, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_failure(LkcFailure self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_fetched(LkcFetched self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.missing, serializer);
+    sse_encode_bool(self.saved, serializer);
+    sse_encode_opt_String(self.etag, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_sync_error(LkcSyncError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lkc_sync_error_kind(self.kind, serializer);
+    sse_encode_opt_String(self.reason, serializer);
+    sse_encode_String(self.detail, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_sync_error_kind(
+    LkcSyncErrorKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_sync_event(LkcSyncEvent self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.connected, serializer);
+    sse_encode_opt_String(self.name, serializer);
+    sse_encode_opt_String(self.etag, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_sync_file(LkcSyncFile self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.etag, serializer);
+    sse_encode_u_64(self.size, serializer);
+    sse_encode_String(self.updatedAt, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_sync_version(
+    LkcSyncVersion self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.etag, serializer);
+    sse_encode_u_64(self.size, serializer);
+    sse_encode_String(self.writtenAt, serializer);
+    sse_encode_String(self.replacedAt, serializer);
   }
 
   @protected
@@ -971,6 +2413,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self);
@@ -980,4 +2428,145 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
   }
+
+  @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
+}
+
+@sealed
+class LkcSessionImpl extends RustOpaque implements LkcSession {
+  // Not to be used by end users
+  LkcSessionImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcSessionImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcSession,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcSession,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcSessionPtr,
+  );
+
+  /// The access token to send, refreshed first when due.
+  Future<String> accessToken() =>
+      RustLib.instance.api.crateApiLkcLkcSessionAccessToken(that: this);
+
+  /// Signed out here only: homebase refused the token.
+  Future<void> forget() =>
+      RustLib.instance.api.crateApiLkcLkcSessionForget(that: this);
+
+  /// The access token when it needs no refresh, without waiting; `None`
+  /// asks [LkcSession::access_token].
+  String? freshAccessToken() =>
+      RustLib.instance.api.crateApiLkcLkcSessionFreshAccessToken(that: this);
+
+  /// The tokens a browser sign-in was granted: [expires_at_ms] is when the
+  /// access token runs out, Unix milliseconds.
+  Future<void> signIn({
+    required String access,
+    String? refresh,
+    required PlatformInt64 expiresAtMs,
+  }) => RustLib.instance.api.crateApiLkcLkcSessionSignIn(
+    that: this,
+    access: access,
+    refresh: refresh,
+    expiresAtMs: expiresAtMs,
+  );
+
+  /// Signed out, the refresh token revoked at the IdP.
+  Future<void> signOut() =>
+      RustLib.instance.api.crateApiLkcLkcSessionSignOut(that: this);
+
+  bool signedIn() =>
+      RustLib.instance.api.crateApiLkcLkcSessionSignedIn(that: this);
+}
+
+@sealed
+class LkcSyncImpl extends RustOpaque implements LkcSync {
+  // Not to be used by end users
+  LkcSyncImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcSyncImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcSync,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcSync,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcSyncPtr,
+  );
+
+  Future<bool> delete({required String name, String? ifMatch}) => RustLib
+      .instance
+      .api
+      .crateApiLkcLkcSyncDelete(that: this, name: name, ifMatch: ifMatch);
+
+  Future<LkcFetched> download({
+    required String name,
+    required String to,
+    String? known,
+  }) => RustLib.instance.api.crateApiLkcLkcSyncDownload(
+    that: this,
+    name: name,
+    to: to,
+    known: known,
+  );
+
+  Future<LkcFetched> downloadVersion({
+    required String name,
+    required String etag,
+    required String to,
+  }) => RustLib.instance.api.crateApiLkcLkcSyncDownloadVersion(
+    that: this,
+    name: name,
+    etag: etag,
+    to: to,
+  );
+
+  Future<String?> head({required String name}) =>
+      RustLib.instance.api.crateApiLkcLkcSyncHead(that: this, name: name);
+
+  Future<List<LkcSyncFile>> list() =>
+      RustLib.instance.api.crateApiLkcLkcSyncList(that: this);
+
+  /// Other devices' writes, until [LkcSync::stop_listening] or another
+  /// [LkcSync::listen], which takes the place of this one.
+  Stream<LkcSyncEvent> listen() =>
+      RustLib.instance.api.crateApiLkcLkcSyncListen(that: this);
+
+  /// Homebase's clock minus this one's, in milliseconds; 0 before an answer.
+  PlatformInt64 offsetMs() =>
+      RustLib.instance.api.crateApiLkcLkcSyncOffsetMs(that: this);
+
+  /// Closes the connection [LkcSync::listen] holds.
+  void stopListening() =>
+      RustLib.instance.api.crateApiLkcLkcSyncStopListening(that: this);
+
+  /// [from] as [name]'s new version: if it is at [if_match], or, `None`, if
+  /// there is none. Answers the new version.
+  Future<String> upload({
+    required String name,
+    required String from,
+    String? ifMatch,
+  }) => RustLib.instance.api.crateApiLkcLkcSyncUpload(
+    that: this,
+    name: name,
+    from: from,
+    ifMatch: ifMatch,
+  );
+
+  Future<List<LkcSyncVersion>> versions({required String name}) =>
+      RustLib.instance.api.crateApiLkcLkcSyncVersions(that: this, name: name);
 }

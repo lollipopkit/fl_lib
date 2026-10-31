@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:fl_lib/src/core/lkc/auth.dart';
 import 'package:fl_lib/src/core/lkc/model.dart';
+import 'package:fl_lib/src/core/rust.dart';
+import 'package:fl_lib/src/rust/api/lkc.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
@@ -40,7 +42,11 @@ final class LkcException implements Exception {
 /// A client of LK Cloud (homebase): sign-in, account, subscriptions and files.
 ///
 /// The user signs in at the IdP with the app's public client ([LkcOidc]);
-/// homebase is sent the IdP's access token, refreshed when it is about to end.
+/// homebase is sent the IdP's access token. The tokens live in fl_lib's Rust
+/// ([LkcSession], `fl_lkc`), the one place they are refreshed: the IdP takes a
+/// refresh only in the access token's last minute and answers an early one,
+/// or a spent one sent again, by ending every session of the person. This
+/// side signs in in the browser and hands the tokens over.
 final class LkcClient {
   static const defaultBaseUrl = 'https://api.lolli.tech';
 
@@ -58,7 +64,7 @@ final class LkcClient {
   /// The Stripe portal can switch plans, so it is held to this too.
   final bool webCheckout;
 
-  /// Where the tokens are kept.
+  /// Where the session is kept, written by [LkcSession] through this side.
   final SecureProp tokenProp;
   final Dio _api;
 
@@ -66,10 +72,9 @@ final class LkcClient {
   final Dio _store;
   final LkcIdp _idp;
 
-  LkcTokens? _tokens;
-
-  /// The refresh in flight: one at a time, as the IdP takes a refresh token once.
-  Future<LkcTokens>? _refreshing;
+  /// The session, restored from [tokenProp] the first time it is asked for.
+  LkcSession? _session;
+  Future<LkcSession>? _restoring;
 
   /// The signed-in user, null when signed out.
   final user = ValueNotifier<LkcUser?>(null);
@@ -154,24 +159,57 @@ final class LkcClient {
     return dio;
   }
 
-  bool get signedIn => _tokens != null;
+  bool get signedIn => _session?.signedIn() ?? false;
 
-  /// Load the saved tokens and their user. Tokens the IdP or homebase refuse
-  /// are dropped; on any other error they are kept, and the error thrown.
+  /// A restore that failed (the keychain locked, the library not loaded) is
+  /// tried again by the next caller.
+  Future<LkcSession> _ensureSession() => _restoring ??= _restore().catchError(
+    (Object e, StackTrace s) {
+      _restoring = null;
+      Error.throwWithStackTrace(e, s);
+    },
+  );
+
+  Future<LkcSession> _restore() async {
+    await FlRust.ensureInitialized();
+    final saved = await tokenProp.read();
+    final session = await LkcSession.restore(
+      issuer: oidc.issuer.toString(),
+      clientId: oidc.clientId,
+      api: baseUrl.toString(),
+      stored: saved,
+      save: _saveSession,
+    );
+    // Kept by no build that reads it: a homebase token of the hand-off
+    // sign-in (TODO: rm once no such build is around), or a half-written one.
+    if (saved != null && !session.signedIn()) await _saveSession(null);
+    return _session = session;
+  }
+
+  /// Written for [LkcSession], which sends a refresh only once its mark is.
+  Future<bool> _saveSession(String? json) async {
+    try {
+      await tokenProp.write(json);
+      return true;
+    } catch (e) {
+      debugPrint('LKC session not saved: ${e.runtimeType}');
+      return false;
+    }
+  }
+
+  /// One app's files on homebase ([LkcSync]), on this session.
+  Future<LkcSync> sync(String app) async =>
+      LkcSync(session: await _ensureSession(), app: app);
+
+  /// Load the saved session and its user. A session the IdP or homebase
+  /// refuses is dropped; on any other error it is kept, and the error thrown.
   Future<void> init() async {
     // The names of the lines the account row shows; the page reads it again.
     if (catalog.value == null) {
       unawaited(refreshCatalog().then((_) {}, onError: (_) {}));
     }
-    final saved = await tokenProp.read();
-    if (saved == null) return;
-    try {
-      _tokens = LkcTokens.fromJson(jsonDecode(saved) as Map<String, dynamic>);
-    } catch (_) {
-      // TODO: rm once no build that kept a homebase token here is around.
-      await tokenProp.write(null);
-      return;
-    }
+    final session = await _ensureSession();
+    if (!session.signedIn()) return;
     // The account as last read, until homebase says it again.
     user.value ??= _cached(
       _kUser,
@@ -184,7 +222,7 @@ final class LkcClient {
     try {
       await refresh();
     } on LkcException catch (e) {
-      if (e.isPerm) await _forget();
+      if (e.isPerm) await forget();
       rethrow;
     }
   }
@@ -218,15 +256,24 @@ final class LkcClient {
   Future<LkcUser?> signIn() async {
     final tokens = await _idp.signIn();
     if (tokens == null) return null;
-    _tokens = tokens;
+    final session = await _ensureSession();
+    try {
+      await session.signIn(
+        access: tokens.access,
+        refresh: tokens.refresh,
+        expiresAtMs: tokens.expiresAt.millisecondsSinceEpoch,
+      );
+    } on LkcError catch (e) {
+      throw LkcException(message: e.detail);
+    }
     try {
       final u = await _refreshUser();
-      await _save(tokens);
       user.value = u;
       await refreshEntitlements();
       return u;
     } catch (_) {
-      if (user.value == null) _tokens = null;
+      // Nobody to show for it: let the tokens go rather than keep them.
+      if (user.value == null) await session.signOut();
       rethrow;
     }
   }
@@ -234,13 +281,17 @@ final class LkcClient {
   /// Sign out here and end the session at the IdP.
   Future<void> signOut() async {
     await _unregisterDevice();
-    final tokens = _tokens;
-    await _forget();
-    if (tokens != null) await _idp.revoke(tokens);
+    _clear();
+    await (await _ensureSession()).signOut();
   }
 
-  Future<void> _forget() async {
-    _tokens = null;
+  /// Signed out here only: homebase refused the token.
+  Future<void> forget() async {
+    _clear();
+    await _session?.forget();
+  }
+
+  void _clear() {
     _refreshedAt = null;
     usage.value = null;
     user.value = null;
@@ -248,34 +299,23 @@ final class LkcClient {
     cache
       ..remove(_kUser)
       ..remove(_kEntitlements);
-    await tokenProp.write(null);
   }
 
-  Future<void> _save(LkcTokens tokens) =>
-      tokenProp.write(jsonEncode(tokens.toJson()));
-
-  /// The access token to send, refreshed once due.
+  /// The access token to send, refreshed by the session once due. A session
+  /// that is over, or none: [LkcCode.perm].
   Future<String> _accessToken() async {
-    final tokens = _tokens;
-    if (tokens == null) throw const LkcException(code: LkcCode.perm);
-    if (!tokens.due) return tokens.access;
-    final refreshing = _refreshing ??= _refresh(tokens)
-        .whenComplete(() => _refreshing = null);
-    return (await refreshing).access;
-  }
-
-  Future<LkcTokens> _refresh(LkcTokens tokens) async {
-    final LkcTokens fresh;
+    final session = _session ?? await _ensureSession();
+    // Asked without waiting while it needs no refresh: Rust says when it does.
+    if (session.freshAccessToken() case final token?) return token;
     try {
-      fresh = await _idp.refresh(tokens);
-    } on LkcException catch (e) {
-      // The refresh token is spent or revoked: the session is over.
-      if (e.isPerm) await _forget();
-      rethrow;
+      return await session.accessToken();
+    } on LkcError catch (e) {
+      if (e.failure == LkcFailure.rejected) {
+        _clear();
+        throw const LkcException(code: LkcCode.perm);
+      }
+      throw LkcException(message: e.detail);
     }
-    _tokens = fresh;
-    await _save(fresh);
-    return fresh;
   }
 
   Future<void> updateUser({String? name, String? avatar}) async {

@@ -682,6 +682,15 @@ class LibLocalizationsKo extends LibLocalizations {
   String get lkcReasonFileQuota => '저장 공간 할당량을 초과합니다.';
 
   @override
+  String get lkcReasonSyncUnavailable => '이 요금제에는 동기화가 포함되어 있지 않습니다.';
+
+  @override
+  String get lkcReasonSyncQuota => '동기화 파일이 요금제 공간을 초과합니다.';
+
+  @override
+  String get lkcReasonSyncDailyLimit => '오늘의 동기화 한도를 모두 사용했습니다. 내일 초기화됩니다.';
+
+  @override
   String get lkcReasonFileTooLarge => '파일이 너무 큽니다.';
 
   @override

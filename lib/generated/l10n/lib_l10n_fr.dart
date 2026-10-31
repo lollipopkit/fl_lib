@@ -711,6 +711,18 @@ class LibLocalizationsFr extends LibLocalizations {
       'Les fichiers dépasseraient le quota de stockage';
 
   @override
+  String get lkcReasonSyncUnavailable =>
+      'Le forfait n\'inclut pas la synchronisation';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'Les fichiers synchronisés dépasseraient l\'espace du forfait';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Le volume de synchronisation du jour est épuisé ; il sera réinitialisé demain';
+
+  @override
   String get lkcReasonFileTooLarge => 'Le fichier est trop volumineux';
 
   @override

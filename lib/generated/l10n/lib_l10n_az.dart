@@ -700,6 +700,17 @@ class LibLocalizationsAz extends LibLocalizations {
   String get lkcReasonFileQuota => 'Fayllar yaddaş kvotasını aşar.';
 
   @override
+  String get lkcReasonSyncUnavailable => 'Plana sinxronizasiya daxil deyil.';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'Sinxronlaşdırılan fayllar planın yerini aşar.';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Bugünkü sinxronizasiya limiti bitdi; sabah yenilənir.';
+
+  @override
   String get lkcReasonFileTooLarge => 'Fayl çox böyükdür.';
 
   @override

@@ -47,9 +47,8 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   void initState() {
     super.initState();
     _client.user.addListener(_onUser);
-    // Signed out, the page is only a way in: nothing to read for it. Opened
-    // again within a minute, what it read is still what there is.
-    if (_client.signedIn && !_client.fresh) unawaited(_load());
+    // Signed out, the page is only a way in: nothing to read for it.
+    if (_client.signedIn) unawaited(_load());
   }
 
   @override
@@ -60,9 +59,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   /// Signed in by [LkcClient.init] while the page is open.
   void _onUser() {
-    if (_client.user.value != null && !_client.fresh && !_loading) {
-      unawaited(_load());
-    }
+    if (_client.user.value != null && !_loading) unawaited(_load());
   }
 
   Future<void> _load() async {
@@ -75,7 +72,10 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
       await _client.refreshBenefits().then((_) {}, onError: (_) {});
       await _client.refreshCatalog().then((_) {}, onError: (_) {});
       if (_client.signedIn) {
-        await _client.refresh();
+        // The account and plans as read within a minute (a launch's own
+        // read, the page opened again) are still what there is; the usage
+        // and what the plans grant only this page reads.
+        if (!_client.fresh) await _client.refresh();
         await _loadUsage();
       }
     } catch (e) {

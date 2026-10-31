@@ -704,6 +704,18 @@ class LibLocalizationsIt extends LibLocalizations {
       'I file supererebbero la quota di archiviazione';
 
   @override
+  String get lkcReasonSyncUnavailable =>
+      'Il piano non include la sincronizzazione';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'I file sincronizzati supererebbero lo spazio del piano';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Il volume di sincronizzazione di oggi è esaurito; si azzera domani';
+
+  @override
   String get lkcReasonFileTooLarge => 'Il file è troppo grande';
 
   @override

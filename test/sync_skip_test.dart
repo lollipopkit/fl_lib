@@ -66,6 +66,27 @@ final class _FakeRemote extends RemoteStorage<String> {
   Future<List<String>> list() async => const [];
 }
 
+/// Writes conditionally: refuses the first [conflicts] uploads as beaten by
+/// another device, and answers the version each upload made.
+final class _CasRemote extends _FakeRemote implements ConditionalStorage {
+  var conflicts = 0;
+  String? _written;
+
+  @override
+  Future<void> upload({required String relativePath, String? localPath}) async {
+    uploadCalls++;
+    if (conflicts > 0) {
+      conflicts--;
+      throw RemoteChangedException(relativePath);
+    }
+    _uploads++;
+    _written = 'written-$_uploads';
+  }
+
+  @override
+  String? writtenTag(String relativePath) => _written;
+}
+
 final class _NoopMergeable implements Mergeable {
   @override
   Future<void> merge({bool force = false}) async {}
@@ -354,6 +375,53 @@ void main() {
     /// refusal must not be widened into one that covers it.
     test('does not overwrite the checkpoint of the one before it', () async {
       remote.tag = 'etag-1';
+      await runSync();
+      final good = syncer.checkpoint;
+
+      syncer.localTag = 'local-2';
+      syncer.refuseUpload = true;
+      await runSync();
+
+      expect(syncer.checkpoint, good);
+    });
+  });
+
+  /// A backend whose writes are conditional says which version its upload
+  /// made, so the checkpoint names exactly what this device wrote.
+  group('a conditional backend', () {
+    late _CasRemote cas;
+
+    setUp(() {
+      cas = _CasRemote()..tag = 'etag-1';
+      syncer = _FakeSyncer(cas);
+    });
+
+    test('records the version its upload made, without reading it back', () async {
+      await runSync();
+
+      expect(cas.uploadCalls, 1);
+      expect(cas.versionTagCalls, 1, reason: 'only the check before');
+      expect(syncer.checkpoint?.$1, endsWith(':written-1'));
+    });
+
+    test('starts over when another device wrote meanwhile', () async {
+      cas.conflicts = 2;
+      await runSync();
+
+      expect(cas.existsCalls, 3, reason: 'read again each time');
+      expect(cas.uploadCalls, 3);
+      expect(syncer.checkpoint?.$1, endsWith(':written-1'));
+    });
+
+    test('gives up after three, recording nothing', () async {
+      cas.conflicts = 3;
+      await expectLater(runSync(), throwsA(isA<RemoteChangedException>()));
+
+      expect(cas.uploadCalls, 3);
+      expect(syncer.checkpoint, isNull);
+    });
+
+    test('records nothing when the upload was declined', () async {
       await runSync();
       final good = syncer.checkpoint;
 
