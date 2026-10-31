@@ -682,6 +682,15 @@ class LibLocalizationsJa extends LibLocalizations {
   String get lkcReasonFileQuota => 'ストレージの容量を超えます。';
 
   @override
+  String get lkcReasonSyncUnavailable => 'このプランには同期が含まれていません。';
+
+  @override
+  String get lkcReasonSyncQuota => '同期ファイルがプランの容量を超えます。';
+
+  @override
+  String get lkcReasonSyncDailyLimit => '本日の同期量の上限に達しました。明日リセットされます。';
+
+  @override
   String get lkcReasonFileTooLarge => 'ファイルが大きすぎます。';
 
   @override

@@ -7,6 +7,8 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n_en.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'rust_lib.dart';
 import 'package:material_ui/material_ui.dart';
 
 final _l10n = LibLocalizationsEn();
@@ -97,15 +99,16 @@ Future<void> _pump(
 }) async {
   FlutterSecureStorage.setMockInitialValues({
     if (signedIn)
-      'lkcToken': jsonEncode(
-        LkcTokens(
-          access: 'a',
-          refresh: 'r',
-          expiresAt: DateTime.now().add(const Duration(hours: 1)),
-        ).toJson(),
-      ),
+      'lkcToken': jsonEncode({
+        'access': 'a',
+        'refresh': 'r',
+        'expires_at': DateTime.now()
+            .add(const Duration(hours: 1))
+            .millisecondsSinceEpoch,
+      }),
   });
-  unawaited(client.init());
+  // The session is restored in Rust, which fake time does not wait for.
+  await tester.runAsync(() => client.init().then((_) {}, onError: (_) {}));
   await tester.binding.setSurfaceSize(const Size(400, 1600));
   await tester.pumpWidget(
     MaterialApp(home: LkcAccountPage(args: LkcPageArgs(client))),
@@ -116,6 +119,7 @@ Future<void> _pump(
 }
 
 void main() {
+  setUpAll(loadFlRustForTest);
   testWidgets('signed out: a way in, and nothing else', (tester) async {
     await _pump(tester, _client(webCheckout: true));
     expect(find.text(_l10n.lkcNotSignedIn), findsOneWidget);

@@ -702,6 +702,17 @@ class LibLocalizationsId extends LibLocalizations {
   String get lkcReasonFileQuota => 'File akan melebihi kuota penyimpanan';
 
   @override
+  String get lkcReasonSyncUnavailable => 'Paket tidak mencakup sinkronisasi';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'File yang disinkronkan akan melebihi ruang paket';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Kuota sinkronisasi hari ini habis; diatur ulang besok';
+
+  @override
   String get lkcReasonFileTooLarge => 'File terlalu besar';
 
   @override

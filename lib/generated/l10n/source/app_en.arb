@@ -910,6 +910,18 @@
   "@lkcReasonFileQuota": {
     "description": "LK Cloud rejection `file_quota`."
   },
+  "lkcReasonSyncUnavailable": "The plan has no sync",
+  "@lkcReasonSyncUnavailable": {
+    "description": "LK Cloud rejection `sync_unavailable`."
+  },
+  "lkcReasonSyncQuota": "The synced files would exceed the plan's space",
+  "@lkcReasonSyncQuota": {
+    "description": "LK Cloud rejection `sync_quota`."
+  },
+  "lkcReasonSyncDailyLimit": "Today's sync allowance is used up; it resets tomorrow",
+  "@lkcReasonSyncDailyLimit": {
+    "description": "LK Cloud rejection `sync_daily_limit`."
+  },
   "lkcReasonFileTooLarge": "The file is too large",
   "@lkcReasonFileTooLarge": {
     "description": "LK Cloud rejection `file_too_large`."

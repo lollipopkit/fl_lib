@@ -710,6 +710,18 @@ class LibLocalizationsNl extends LibLocalizations {
       'De bestanden zouden het opslagquotum overschrijden';
 
   @override
+  String get lkcReasonSyncUnavailable =>
+      'Het abonnement bevat geen synchronisatie';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'De gesynchroniseerde bestanden zouden de ruimte van het abonnement overschrijden';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Het synchronisatievolume van vandaag is op; het wordt morgen hersteld';
+
+  @override
   String get lkcReasonFileTooLarge => 'Het bestand is te groot';
 
   @override

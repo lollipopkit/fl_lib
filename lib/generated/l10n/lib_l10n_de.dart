@@ -713,6 +713,18 @@ class LibLocalizationsDe extends LibLocalizations {
       'Die Dateien würden das Speicherkontingent überschreiten';
 
   @override
+  String get lkcReasonSyncUnavailable =>
+      'Der Tarif enthält keine Synchronisierung';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'Die synchronisierten Dateien würden den Speicher des Tarifs überschreiten';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Das heutige Synchronisierungskontingent ist aufgebraucht; es wird morgen zurückgesetzt';
+
+  @override
   String get lkcReasonFileTooLarge => 'Die Datei ist zu groß';
 
   @override

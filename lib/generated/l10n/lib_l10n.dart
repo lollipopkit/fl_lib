@@ -1309,6 +1309,24 @@ abstract class LibLocalizations {
   /// **'The files would exceed the storage quota'**
   String get lkcReasonFileQuota;
 
+  /// LK Cloud rejection `sync_unavailable`.
+  ///
+  /// In en, this message translates to:
+  /// **'The plan has no sync'**
+  String get lkcReasonSyncUnavailable;
+
+  /// LK Cloud rejection `sync_quota`.
+  ///
+  /// In en, this message translates to:
+  /// **'The synced files would exceed the plan\'s space'**
+  String get lkcReasonSyncQuota;
+
+  /// LK Cloud rejection `sync_daily_limit`.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s sync allowance is used up; it resets tomorrow'**
+  String get lkcReasonSyncDailyLimit;
+
   /// LK Cloud rejection `file_too_large`.
   ///
   /// In en, this message translates to:

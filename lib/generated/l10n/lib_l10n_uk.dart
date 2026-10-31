@@ -718,6 +718,17 @@ class LibLocalizationsUk extends LibLocalizations {
   String get lkcReasonFileQuota => 'Файли перевищать квоту сховища';
 
   @override
+  String get lkcReasonSyncUnavailable => 'Тариф не містить синхронізації';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'Синхронізовані файли перевищать обсяг тарифу';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Денний обсяг синхронізації вичерпано; він оновиться завтра';
+
+  @override
   String get lkcReasonFileTooLarge => 'Файл завеликий';
 
   @override

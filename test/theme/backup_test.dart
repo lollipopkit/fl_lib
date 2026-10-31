@@ -42,6 +42,24 @@ List<int> _fsbt({String id = 'example.amethyst', String name = 'Amethyst'}) {
   return ZipEncoder().encodeBytes(archive);
 }
 
+/// Packages kept in memory, as LK Cloud keeps them in files of their own.
+final class _Blobs implements ThemeBlobStore {
+  final kept = <String, Uint8List>{};
+  var puts = 0;
+
+  @override
+  Future<String> put(String id, Uint8List bytes) async {
+    puts++;
+    final name = 'blob-${kept.length}.age';
+    kept[name] = bytes;
+    return name;
+  }
+
+  @override
+  Future<Uint8List> get(String id, String name) async =>
+      kept[name] ?? (throw StateError('no $name'));
+}
+
 void main() {
   late Directory device;
   late Directory other;
@@ -84,6 +102,39 @@ void main() {
       ThemePackages.installed(theme.installationId, rootDirectory: other.path),
       isNotNull,
     );
+  });
+
+  test('a package goes apart from the backup where it can', () async {
+    final theme = await ThemePackages.install(_fsbt(), rootDirectory: device.path);
+    final blobs = _Blobs();
+
+    final export = await ThemeBackup.export(rootDirectory: device.path, blobs: blobs);
+    final entry = export.entries[theme.installationId] as Map;
+    expect(entry.containsKey('fsbt'), isFalse);
+    expect(entry['blob'], 'blob-0.age');
+
+    final report = await ThemeBackup.restore(
+      export.entries,
+      rootDirectory: other.path,
+      blobs: blobs,
+    );
+    expect(report.failed, isEmpty);
+    expect(
+      ThemePackages.installed(theme.installationId, rootDirectory: other.path),
+      isNotNull,
+    );
+  });
+
+  test('a kept package that is another theme, or none to fetch from, fails', () async {
+    final digest = sha256.convert(_fsbt()).toString();
+    final blobs = _Blobs()..kept['blob-x.age'] = Uint8List.fromList(_fsbt(id: 'example.other'));
+    final entries = {
+      digest: {'id': 'example.amethyst', 'name': 'Amethyst', 'blob': 'blob-x.age'},
+    };
+
+    expect((await ThemeBackup.restore(entries, rootDirectory: other.path, blobs: blobs)).failed, ['Amethyst']);
+    expect((await ThemeBackup.restore(entries, rootDirectory: other.path)).failed, ['Amethyst']);
+    expect(ThemePackages.listInstalled(rootDirectory: other.path), isEmpty);
   });
 
   test('a store theme is named, not copied', () async {

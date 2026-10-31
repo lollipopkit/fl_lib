@@ -702,6 +702,17 @@ class LibLocalizationsFa extends LibLocalizations {
       'این فایل‌ها از سهمیه فضای ذخیره‌سازی فراتر می‌روند';
 
   @override
+  String get lkcReasonSyncUnavailable => 'این طرح همگام‌سازی ندارد';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'فایل‌های همگام‌شده از فضای طرح فراتر می‌روند';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'سهمیه همگام‌سازی امروز تمام شده است؛ فردا بازنشانی می‌شود';
+
+  @override
   String get lkcReasonFileTooLarge => 'فایل بیش از حد بزرگ است';
 
   @override

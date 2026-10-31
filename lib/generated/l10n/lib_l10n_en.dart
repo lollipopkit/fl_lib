@@ -701,6 +701,17 @@ class LibLocalizationsEn extends LibLocalizations {
   String get lkcReasonFileQuota => 'The files would exceed the storage quota';
 
   @override
+  String get lkcReasonSyncUnavailable => 'The plan has no sync';
+
+  @override
+  String get lkcReasonSyncQuota =>
+      'The synced files would exceed the plan\'s space';
+
+  @override
+  String get lkcReasonSyncDailyLimit =>
+      'Today\'s sync allowance is used up; it resets tomorrow';
+
+  @override
   String get lkcReasonFileTooLarge => 'The file is too large';
 
   @override

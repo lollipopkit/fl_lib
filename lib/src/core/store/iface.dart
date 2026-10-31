@@ -165,7 +165,7 @@ sealed class KvStore {
         map = fetched;
       }
     } catch (_) {}
-    ts ??= DateTimeX.timestamp;
+    ts ??= SyncClock.now();
     if (key != null) {
       map[key] = ts;
     } else {
