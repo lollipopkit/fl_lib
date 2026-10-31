@@ -1,4 +1,5 @@
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
+import 'package:fl_lib/generated/l10n/lib_l10n_en.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -71,10 +72,10 @@ extension ContextX on BuildContext {
   /// Whether the text direction is right-to-left
   bool get isRTL => Directionality.of(this) == TextDirection.rtl;
 
-  /// L10n of this lib.
-  ///
-  /// WARN: Hard decode nullable.
-  LibLocalizations get libL10n => LibLocalizations.of(this)!;
+  /// L10n of this lib, English where it has no translation for the app's
+  /// locale: an app may support a language before this lib does, and its
+  /// delegate is then not loaded at all.
+  LibLocalizations get libL10n => LibLocalizations.of(this) ?? LibLocalizationsEn();
 }
 
 extension SafeContext on State {
