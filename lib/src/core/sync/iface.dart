@@ -80,6 +80,38 @@ abstract class RemoteStorage<ListItemType> {
   Future<String?> versionTag(String relativePath) async => null;
 }
 
+/// A [RemoteStorage] whose writes are conditional and answer the version
+/// they made. Its [RemoteStorage.upload] throws [RemoteChangedException]
+/// when another device wrote since this one read.
+abstract interface class ConditionalStorage {
+  /// The [RemoteStorage.versionTag] the last upload of [relativePath]
+  /// created, null before one: a tag that provably names what this device
+  /// wrote.
+  String? writtenTag(String relativePath);
+}
+
+/// Another device wrote the remote file since this one read it: the upload
+/// was refused, and the sync starts again from the download.
+final class RemoteChangedException implements Exception {
+  const RemoteChangedException(this.relativePath);
+
+  final String relativePath;
+
+  @override
+  String toString() => 'RemoteChangedException: $relativePath changed remotely';
+}
+
+/// The time a sync compares edits by: this device's clock, corrected by the
+/// offset to the sync server's when one is known ([offsetMs]). Two devices
+/// whose clocks disagree would otherwise let the one running ahead win every
+/// merge.
+abstract final class SyncClock {
+  /// The server's clock minus this one's; 0 when no server says.
+  static int offsetMs = 0;
+
+  static int now() => DateTime.now().millisecondsSinceEpoch + offsetMs;
+}
+
 abstract class Mergeable {
   /// Merge backup with current data
   Future<void> merge({bool force = false});

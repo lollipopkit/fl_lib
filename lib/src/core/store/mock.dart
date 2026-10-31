@@ -141,7 +141,7 @@ class MockStore extends KvStore {
     final timestampMap = Map<String, int>.from(
       (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {},
     );
-    final currentTs = ts ?? DateTimeX.timestamp;
+    final currentTs = ts ?? SyncClock.now();
 
     if (key != null) {
       timestampMap[key] = currentTs;

@@ -21,7 +21,10 @@ import 'package:flutter/services.dart';
 /// - `store`: a theme store release, by its listing and version — installed
 ///   again from the store, checked against the same digest;
 /// - `fsbt`: the package itself, base64, for one imported by hand — when it
-///   was kept ([ThemePackages.sourceOf]) and is at most [maxEmbeddedBytes].
+///   was kept ([ThemePackages.sourceOf]) and is at most [maxEmbeddedBytes];
+/// - `blob`: the same package kept apart from the backup, by its name in a
+///   [ThemeBlobStore], when the backup goes where one is (LK Cloud): any size
+///   up to [ThemeBlobStore.maxBytes], and not sent again with every sync.
 ///
 /// An icon pack ([ThemeIconPack]) is described the same way, and marked
 /// `kind = icons`.
@@ -38,6 +41,7 @@ abstract final class ThemeBackup {
   static Future<ThemeBackupExport> export({
     String? rootDirectory,
     AssetBundle? bundle,
+    ThemeBlobStore? blobs,
   }) async {
     final installed = <ThemeInstallation>[
       ...ThemePackages.listInstalled(rootDirectory: rootDirectory),
@@ -74,6 +78,17 @@ abstract final class ThemeBackup {
           rootDirectory: _packsRoot(rootDirectory),
         ),
       };
+      if (blobs != null &&
+          source != null &&
+          source.length <= ThemeBlobStore.maxBytes) {
+        try {
+          entries[id] = {...base, 'blob': await blobs.put(id, source)};
+          continue;
+        } catch (error, stack) {
+          // Embedded instead when it can be, else named as skipped.
+          Loggers.app.warning('Storing theme ${theme.name}', error, stack);
+        }
+      }
       if (source != null && source.length <= maxEmbeddedBytes) {
         entries[id] = {...base, 'fsbt': base64Encode(source)};
         continue;
@@ -94,6 +109,7 @@ abstract final class ThemeBackup {
     Map<String, Object?> entries, {
     String? rootDirectory,
     AssetBundle? bundle,
+    ThemeBlobStore? blobs,
   }) async {
     final installedAs = <String, String>{};
     final failed = <String>[];
@@ -122,7 +138,13 @@ abstract final class ThemeBackup {
         continue;
       }
       try {
-        final theme = await _install(id, raw, rootDirectory, bundle ?? rootBundle);
+        final theme = await _install(
+          id,
+          raw,
+          rootDirectory,
+          bundle ?? rootBundle,
+          blobs,
+        );
         installedAs[id] = theme.installationId;
       } catch (error, stack) {
         Loggers.app.warning('Restoring theme $name', error, stack);
@@ -137,6 +159,7 @@ abstract final class ThemeBackup {
     Map<Object?, Object?> raw,
     String? rootDirectory,
     AssetBundle bundle,
+    ThemeBlobStore? blobs,
   ) async {
     if (raw['store'] case final store?) {
       final item = ThemeStoreItem.fromJson(store);
@@ -177,6 +200,12 @@ abstract final class ThemeBackup {
       bytes = base64Decode(encoded);
       if (sha256.convert(bytes).toString() != id) {
         throw const FormatException('The embedded package is another theme');
+      }
+    } else if (raw['blob'] case final String name) {
+      if (blobs == null) throw const FormatException('The theme is kept apart');
+      bytes = await blobs.get(id, name);
+      if (sha256.convert(bytes).toString() != id) {
+        throw const FormatException('The kept package is another theme');
       }
     } else {
       // Listed so the restore can say it is missing; see the class doc.
@@ -290,6 +319,20 @@ abstract final class ThemeBackup {
       return const {};
     }
   }
+}
+
+/// Where a backup keeps theme packages apart from itself: one file each, so
+/// a sync sends a package once rather than inside every backup.
+abstract interface class ThemeBlobStore {
+  /// The largest package kept apart.
+  static const maxBytes = 16 * 1024 * 1024;
+
+  /// Keeps [bytes], the package of installation [id], answering the name it
+  /// is kept under: one kept before when it is still there.
+  Future<String> put(String id, Uint8List bytes);
+
+  /// The package of installation [id] kept as [name].
+  Future<Uint8List> get(String id, String name);
 }
 
 /// What [ThemeBackup.export] found: the entries, by installation id, and the

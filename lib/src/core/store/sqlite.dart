@@ -520,7 +520,7 @@ class SqliteStore extends KvStore {
     }
 
     try {
-      _stmt(_sqlSet).execute([name, key, encoded, DateTimeX.timestamp]);
+      _stmt(_sqlSet).execute([name, key, encoded, SyncClock.now()]);
     } catch (e) {
       dprintWarn('set("$key")', 'write failed: $e');
       return false;

@@ -14,6 +14,7 @@ part 'webdav.dart';
 part 'icloud.dart';
 part 'iface.dart';
 part 'gist.dart';
+part 'lkc.dart';
 
 /// Impl this interface to provide a backup service.
 abstract class SyncIface<T extends Mergeable, I> {
@@ -73,12 +74,11 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// pair is recorded as though it had been. Every later launch matches it and
   /// skips, so the two diverge until something edits data locally.
   ///
-  /// Closing that needs a compare-and-swap the interface does not have — a
-  /// conditional `If-Match` write, or an upload that returns the revision it
-  /// created. WebDAV's client exposes neither and iCloud has no notion of one,
-  /// so a full fix would mean giving up the shortcut on both.
+  /// A backend with conditional writes closes it: it answers
+  /// [ConditionalStorage.writtenTag], the revision its upload created. WebDAV's
+  /// client exposes no conditional write and iCloud has no notion of one.
   ///
-  /// This bounds it instead: a checkpoint older than this is not believed, so
+  /// Elsewhere this bounds it: a checkpoint older than this is not believed, so
   /// a divergence heals on its own within a day rather than lasting until the
   /// next local edit. It bounds every other way the checkpoint could be wrong
   /// too, which is the right property for what is ultimately a cache.
@@ -223,6 +223,26 @@ abstract class SyncIface<T extends Mergeable, I> {
         : await rs.versionTag(Paths.bakName);
     if (await _skippable(rs, localTag, beforeRemote)) return;
 
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await _cycle(rs, attempt == 1 ? beforeRemote : null);
+      } on RemoteChangedException {
+        if (attempt == _attempts) rethrow;
+        Loggers.app.info('Sync: the remote changed meanwhile, merging again');
+      }
+    }
+  }
+
+  static String? _writtenTag(Object rs) =>
+      rs is ConditionalStorage ? rs.writtenTag(Paths.bakName) : null;
+
+  /// How many times a sync starts over when its upload finds another device
+  /// wrote meanwhile ([RemoteChangedException]).
+  static const _attempts = 3;
+
+  /// Download, merge, upload, record. [beforeRemote] is the remote's tag as
+  /// read before, null when not read.
+  Future<void> _cycle(RemoteStorage<I> rs, String? beforeRemote) async {
     final remoteExists = await rs.exists(Paths.bakName);
 
     // Only try to merge if the remote backup file exists
@@ -245,6 +265,7 @@ abstract class SyncIface<T extends Mergeable, I> {
 
     // Upload merged or new backup
     await Future.delayed(const Duration(milliseconds: 77));
+    final writtenBefore = _writtenTag(rs);
     await backup(rs);
 
     // Only here, and only on the path that got this far. Every early return
@@ -255,6 +276,25 @@ abstract class SyncIface<T extends Mergeable, I> {
     // upload should have changed the remote.
     final afterLocal = await localVersionTag;
     if (afterLocal == null) return;
+
+    // A conditional write names the version it made: that is what this
+    // device wrote, with no window for another's write to slip in. Unchanged
+    // means [backup] declined to upload. Never the re-read below for such a
+    // backend: a retry has no tag from before to compare with.
+    if (rs is ConditionalStorage) {
+      final written = _writtenTag(rs);
+      if (written == null || written == writtenBefore) {
+        Loggers.app.info('Sync checkpoint skipped: nothing was uploaded');
+        return;
+      }
+      await saveSyncCheckpoint(
+        _remoteKey(rs, written),
+        afterLocal,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      return;
+    }
+
     final afterRemote = await rs.versionTag(Paths.bakName);
     if (afterRemote == null) return;
 

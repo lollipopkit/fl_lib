@@ -683,6 +683,15 @@ class LibLocalizationsZh extends LibLocalizations {
   String get lkcReasonFileQuota => '上传后会超出存储配额。';
 
   @override
+  String get lkcReasonSyncUnavailable => '当前套餐不含同步。';
+
+  @override
+  String get lkcReasonSyncQuota => '同步文件会超出套餐的空间。';
+
+  @override
+  String get lkcReasonSyncDailyLimit => '今日同步流量已用完，明天恢复。';
+
+  @override
   String get lkcReasonFileTooLarge => '文件过大。';
 
   @override
@@ -2068,6 +2077,15 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcReasonFileQuota => '上傳後會超出儲存空間配額。';
+
+  @override
+  String get lkcReasonSyncUnavailable => '目前方案不含同步。';
+
+  @override
+  String get lkcReasonSyncQuota => '同步檔案會超出方案的空間。';
+
+  @override
+  String get lkcReasonSyncDailyLimit => '今日同步流量已用完，明天恢復。';
 
   @override
   String get lkcReasonFileTooLarge => '檔案過大。';

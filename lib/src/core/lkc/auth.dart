@@ -41,59 +41,29 @@ final class LkcOidc {
   static const loopbackPath = '/oauth-callback';
 }
 
-/// The IdP's tokens. The access token is what homebase is sent.
+/// What a browser sign-in was granted, handed to the session (`LkcSession`),
+/// which keeps and refreshes them from then on.
 final class LkcTokens {
   final String access;
   final String? refresh;
 
   /// Local time: when the token was received plus its `expires_in`.
   final DateTime expiresAt;
-  final String? idToken;
 
   const LkcTokens({
     required this.access,
     required this.expiresAt,
     this.refresh,
-    this.idToken,
   });
 
-  /// How long before [expiresAt] a refresh is due.
-  ///
-  /// The IdP refuses a refresh token before the last minute of its access
-  /// token, and answers an early use by revoking all of the user's sessions.
-  /// [expiresAt] was taken on receipt, after the IdP's own clock started, so
-  /// this window is entered no earlier than the IdP's; the margin under 60 s
-  /// covers the request's own way there.
-  static const refreshWindow = Duration(seconds: 45);
-
-  bool get due => expiresAt.difference(DateTime.now()) < refreshWindow;
-
-  /// A token response of the IdP; [previous] keeps a refresh token not rotated.
-  factory LkcTokens.fromResponse(
-    Map<String, dynamic> json, {
-    LkcTokens? previous,
-  }) => LkcTokens(
+  /// A token response of the IdP.
+  factory LkcTokens.fromResponse(Map<String, dynamic> json) => LkcTokens(
     access: json['access_token'] as String,
-    refresh: json['refresh_token'] as String? ?? previous?.refresh,
+    refresh: json['refresh_token'] as String?,
     expiresAt: DateTime.now().add(
       Duration(seconds: (json['expires_in'] as num?)?.toInt() ?? 0),
     ),
-    idToken: json['id_token'] as String? ?? previous?.idToken,
   );
-
-  factory LkcTokens.fromJson(Map<String, dynamic> json) => LkcTokens(
-    access: json['access'] as String,
-    refresh: json['refresh'] as String?,
-    expiresAt: DateTime.fromMillisecondsSinceEpoch(json['expires_at'] as int),
-    idToken: json['id_token'] as String?,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'access': access,
-    'refresh': ?refresh,
-    'expires_at': expiresAt.millisecondsSinceEpoch,
-    'id_token': ?idToken,
-  };
 }
 
 /// The endpoints of the IdP's discovery document.
@@ -119,7 +89,8 @@ final class LkcIdpEndpoints {
       );
 }
 
-/// Talks to the IdP: sign-in, refresh, revocation.
+/// Talks to the IdP for a browser sign-in. Refreshing and revoking are the
+/// session's (`LkcSession`, fl_lib's Rust).
 @internal
 final class LkcIdp {
   final LkcOidc oidc;
@@ -161,7 +132,6 @@ final class LkcIdp {
         access: access,
         refresh: res.refreshToken,
         expiresAt: res.accessTokenExpirationDateTime ?? DateTime.now(),
-        idToken: res.idToken,
       );
     } on FlutterAppAuthUserCancelledException {
       return null;
@@ -243,79 +213,9 @@ final class LkcIdp {
     return null;
   }
 
-  /// New tokens for [tokens]. Throws [LkcException] with [LkcCode.perm] when
-  /// the IdP refuses the refresh token: the session is over.
-  Future<LkcTokens> refresh(LkcTokens tokens) async {
-    final refresh = tokens.refresh;
-    if (refresh == null) throw const LkcException(code: LkcCode.perm);
-    final endpoints = await this.endpoints();
-    final res = await _dio.postUri<Object>(
-      endpoints.token,
-      data: {
-        'grant_type': 'refresh_token',
-        'refresh_token': refresh,
-        'client_id': oidc.clientId,
-      },
-      options: _form,
-    );
-    return LkcTokens.fromResponse(_tokenResponse(res), previous: tokens);
-  }
-
-  /// Revoke the refresh token, best effort: the local tokens go either way.
-  Future<void> revoke(LkcTokens tokens) async {
-    final refresh = tokens.refresh;
-    if (refresh == null) return;
-    try {
-      final endpoint = (await endpoints()).revocation;
-      if (endpoint == null) return;
-      await _dio.postUri<void>(
-        endpoint,
-        data: {
-          'token': refresh,
-          'token_type_hint': 'refresh_token',
-          'client_id': oidc.clientId,
-        },
-        options: _form,
-      );
-    } catch (e) {
-      debugPrint('LKC revoke: ${e.runtimeType}');
-    }
-  }
-
   static final _form = Options(contentType: Headers.formUrlEncodedContentType);
 
-  /// Rauthy's refusals (`error`, `message`) of a refresh token that can never
-  /// be used again: run out, revoked or spent, another issuer's, or not a
-  /// refresh token at all. It answers these in its own words, never
-  /// `invalid_grant`. A clock off, a user disabled for now or the client's
-  /// setup keep the session. `sbm_lkc::GONE` is the same list.
-  static const _gone = {
-    ('JwtToken', 'Token has expired'),
-    ('JwtToken', 'Invalid `iss`'),
-    ('JwtToken', 'Invalid `typ`'),
-    ('Unauthorized', 'Invalid JWT Token signature'),
-    ('Unauthorized', 'Invalid refresh token'),
-    ('BadRequest', 'Invalid refresh token'),
-    ('BadRequest', 'Malformed token'),
-    ('BadRequest', 'Invalid JWT token format'),
-    ('BadRequest', 'Cannot deserialize JWT Token header'),
-    ('BadRequest', 'Cannot deserialize JWT Token claims'),
-    ('BadRequest', 'Cannot deserialize JWT Token signature'),
-    ('BadRequest', 'Invalid JWT Header `typ`'),
-    ('NotFound', 'Refresh Token not found'),
-    ('NotFound', 'Device Refresh Token not found'),
-    ('Forbidden', 'Refresh Token has expired'),
-    ('Forbidden', 'Device Refresh Token has expired'),
-    ('Forbidden', 'Mismatch in client.id'),
-    ('Forbidden', "'user_id' does not match"),
-    ('Forbidden', "'client_id' does not match"),
-    ('Forbidden', "'device_id' does not match"),
-  };
-
-  /// The body of a token reply, or the refusal. Only a refusal saying the
-  /// grant is gone ends the session: OAuth's `invalid_grant` or one of
-  /// [_gone]. Anything else, a 429, a 5xx or a proxy's page in front of it
-  /// (a challenge, a 403) is no word on the grant.
+  /// The body of the code exchange's reply, or the refusal.
   static Map<String, dynamic> _tokenResponse(Response<Object> res) {
     final status = res.statusCode ?? 0;
     final body = res.data;
@@ -324,14 +224,9 @@ final class LkcIdp {
         return body;
       }
       final error = body['error'];
-      final message = body['message'];
-      final gone =
-          status >= 400 &&
-          status < 500 &&
-          status != 429 &&
-          (error == 'invalid_grant' || _gone.contains((error, message)));
+      final message = body['message'] ?? body['error_description'];
       throw LkcException(
-        code: gone ? LkcCode.perm : null,
+        code: status >= 400 && status < 500 ? LkcCode.perm : null,
         reason: error is String ? error : null,
         message: message is String ? message : null,
         status: status,

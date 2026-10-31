@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:fl_lib/src/core/rust.dart';
 import 'package:fl_lib/src/rust/api/theme.dart';
-import 'package:fl_lib/src/rust/frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show ExternalLibrary;
 
@@ -14,13 +14,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 /// awaits [ThemePackages.prepareSelectedTheme] at launch, which does it). The
 /// synchronous reads ([ThemePackages.installed]) answer nothing until then.
 abstract final class ThemeRust {
-  static Future<void>? _init;
-
-  /// Loads the library; [library] is for tests, which load the one cargo built.
+  /// Loads the library ([FlRust]); [library] is for tests, which load the one
+  /// cargo built.
   static Future<void> ensureInitialized({ExternalLibrary? library}) =>
-      _init ??= RustLib.init(externalLibrary: library);
+      FlRust.ensureInitialized(library: library);
 
-  static bool get ready => RustLib.instance.initialized;
+  static bool get ready => FlRust.ready;
 
   /// Checks a `.fsbt`.
   static Future<PreparedTheme> preparePackage(List<int> bytes) async {
