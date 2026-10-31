@@ -284,8 +284,10 @@ final class LkcIdp {
 
   static final _form = Options(contentType: Headers.formUrlEncodedContentType);
 
-  /// The body of a token reply, or the refusal. Only the IdP's own
-  /// `invalid_grant` ends the session: a proxy's page in front of it (a
+  /// The body of a token reply, or the refusal. A 4xx carrying the IdP's own
+  /// `error` ends the session, whatever its words: Rauthy refuses a refresh
+  /// token it no longer takes as `JwtToken`, `NotFound` or `Forbidden`, never
+  /// `invalid_grant`. A 429, a 5xx or a proxy's page in front of it (a
   /// challenge, a 403) is no word on the grant.
   static Map<String, dynamic> _tokenResponse(Response<Object> res) {
     final status = res.statusCode ?? 0;
@@ -294,10 +296,13 @@ final class LkcIdp {
       if (status >= 200 && status < 300 && body['access_token'] is String) {
         return body;
       }
-      final error = body['error'] as String?;
+      final error = body['error'];
+      final refused =
+          error is String && status >= 400 && status < 500 && status != 429;
       throw LkcException(
-        code: error == 'invalid_grant' ? LkcCode.perm : null,
-        reason: error,
+        code: refused ? LkcCode.perm : null,
+        reason: error is String ? error : null,
+        message: refused ? body['message'] as String? : null,
         status: status,
       );
     }

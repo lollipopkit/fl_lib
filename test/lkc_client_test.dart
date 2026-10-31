@@ -48,6 +48,7 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+    SecureProp.resetRateLimits();
     api = _Adapter()
       ..on('GET /auth/user', {'data': _user})
       ..on('GET /v2/entitlements', {'data': []});
@@ -386,21 +387,44 @@ void main() {
       expect((saved['access'], saved['refresh']), ('a2', 'r1'));
     });
 
-    test('a refused refresh token signs out', () async {
-      idp.onFn(
-        'POST /auth/v1/oidc/token',
-        (_) => (400, {'error': 'invalid_grant'}),
-      );
-      FlutterSecureStorage.setMockInitialValues({
-        'lkcToken': _saved(Duration.zero),
+    // Rauthy's own words for a refresh token it no longer takes (an old
+    // issuer, spent, ran out), and OAuth's.
+    for (final (status, error) in [
+      (401, 'JwtToken'),
+      (404, 'NotFound'),
+      (403, 'Forbidden'),
+      (400, 'invalid_grant'),
+    ]) {
+      test('a refresh refused with $error signs out', () async {
+        idp.onFn(
+          'POST /auth/v1/oidc/token',
+          (_) => (status, {'error': error, 'message': 'Invalid `iss`'}),
+        );
+        FlutterSecureStorage.setMockInitialValues({
+          'lkcToken': _saved(Duration.zero),
+        });
+        await expectLater(client.init(), throwsA(isA<LkcException>()));
+        expect(client.signedIn, isFalse);
+        expect(await SecureStoreProps.lkcToken.read(), isNull);
       });
-      await expectLater(client.init(), throwsA(isA<LkcException>()));
-      expect(client.signedIn, isFalse);
-      expect(await SecureStoreProps.lkcToken.read(), isNull);
-    });
+    }
+
+    for (final status in [429, 503]) {
+      test('a refresh answered $status keeps the session', () async {
+        idp.onFn(
+          'POST /auth/v1/oidc/token',
+          (_) => (status, {'error': 'TooManyRequests'}),
+        );
+        await expectLater(
+          signedIn(const Duration(seconds: 30)),
+          throwsA(isA<LkcException>()),
+        );
+        expect(client.signedIn, isTrue);
+      });
+    }
 
     test('a proxy in front of the IdP is no word on the grant', () async {
-      // Cloudflare's challenge: a page, not the IdP's `invalid_grant`.
+      // Cloudflare's challenge: a page, not the IdP's refusal.
       idp.onFn(
         'POST /auth/v1/oidc/token',
         (_) => (403, '<html>challenge</html>'),

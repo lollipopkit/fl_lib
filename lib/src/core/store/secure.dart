@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class RateLimitExceededException implements Exception {
@@ -36,6 +37,8 @@ class _SlidingWindowRateLimiter {
   }
 
   int get remainingRequests => maxRequests - _timestamps.length;
+
+  void reset() => _timestamps.clear();
 }
 
 final class _RateLimiter {
@@ -53,6 +56,11 @@ final class _RateLimiter {
   static bool canWrite() => _writeLimiter.allowRequest();
   static int readRemaining() => _readLimiter.remainingRequests;
   static int writeRemaining() => _writeLimiter.remainingRequests;
+
+  static void reset() {
+    _readLimiter.reset();
+    _writeLimiter.reset();
+  }
 }
 
 /// Secure Store Properties
@@ -240,6 +248,11 @@ final class SecureProp {
 
   /// Creates a [SecureProp] with the given [key] and optional [storage].
   const SecureProp(this.key, {this.storage = SecureStore.storage});
+
+  /// Forgets the reads and writes counted against the rate limits, so each
+  /// test starts with the whole allowance.
+  @visibleForTesting
+  static void resetRateLimits() => _RateLimiter.reset();
 
   /// Reads the value of the property.
   /// Throws [RateLimitExceededException] if rate limit is exceeded.
