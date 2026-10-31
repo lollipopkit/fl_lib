@@ -279,10 +279,11 @@ abstract class SyncIface<T extends Mergeable, I> {
 
     // A conditional write names the version it made: that is what this
     // device wrote, with no window for another's write to slip in. Unchanged
-    // means [backup] declined to upload.
-    final written = _writtenTag(rs);
-    if (written != null) {
-      if (written == writtenBefore) {
+    // means [backup] declined to upload. Never the re-read below for such a
+    // backend: a retry has no tag from before to compare with.
+    if (rs is ConditionalStorage) {
+      final written = _writtenTag(rs);
+      if (written == null || written == writtenBefore) {
         Loggers.app.info('Sync checkpoint skipped: nothing was uploaded');
         return;
       }

@@ -72,11 +72,15 @@ final class _CasRemote extends _FakeRemote implements ConditionalStorage {
   var conflicts = 0;
   String? _written;
 
+  /// Called on each refused upload, before it throws.
+  void Function()? onConflict;
+
   @override
   Future<void> upload({required String relativePath, String? localPath}) async {
     uploadCalls++;
     if (conflicts > 0) {
       conflicts--;
+      onConflict?.call();
       throw RemoteChangedException(relativePath);
     }
     _uploads++;
@@ -418,6 +422,20 @@ void main() {
       await expectLater(runSync(), throwsA(isA<RemoteChangedException>()));
 
       expect(cas.uploadCalls, 3);
+      expect(syncer.checkpoint, isNull);
+    });
+
+    /// A retry has no tag from before: the remote read again after it would
+    /// have moved, by another device's write this one never merged.
+    test('records nothing when a retry declined to upload', () async {
+      cas.conflicts = 1;
+      cas.onConflict = () {
+        syncer.refuseUpload = true;
+        cas.tag = 'etag-2';
+      };
+      await runSync();
+
+      expect(cas.uploadCalls, 1);
       expect(syncer.checkpoint, isNull);
     });
 
