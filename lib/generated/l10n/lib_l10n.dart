@@ -9,6 +9,7 @@ import 'lib_l10n_az.dart';
 import 'lib_l10n_de.dart';
 import 'lib_l10n_en.dart';
 import 'lib_l10n_es.dart';
+import 'lib_l10n_fa.dart';
 import 'lib_l10n_fr.dart';
 import 'lib_l10n_id.dart';
 import 'lib_l10n_it.dart';
@@ -111,6 +112,7 @@ abstract class LibLocalizations {
     Locale('de'),
     Locale('en'),
     Locale('es'),
+    Locale('fa'),
     Locale('fr'),
     Locale('id'),
     Locale('it'),
@@ -2619,6 +2621,7 @@ class _LibLocalizationsDelegate
     'de',
     'en',
     'es',
+    'fa',
     'fr',
     'id',
     'it',
@@ -2659,6 +2662,8 @@ LibLocalizations lookupLibLocalizations(Locale locale) {
       return LibLocalizationsEn();
     case 'es':
       return LibLocalizationsEs();
+    case 'fa':
+      return LibLocalizationsFa();
     case 'fr':
       return LibLocalizationsFr();
     case 'id':
