@@ -284,11 +284,38 @@ final class LkcIdp {
 
   static final _form = Options(contentType: Headers.formUrlEncodedContentType);
 
-  /// The body of a token reply, or the refusal. A 4xx carrying the IdP's own
-  /// `error` ends the session, whatever its words: Rauthy refuses a refresh
-  /// token it no longer takes as `JwtToken`, `NotFound` or `Forbidden`, never
-  /// `invalid_grant`. A 429, a 5xx or a proxy's page in front of it (a
-  /// challenge, a 403) is no word on the grant.
+  /// Rauthy's refusals (`error`, `message`) of a refresh token that can never
+  /// be used again: run out, revoked or spent, another issuer's, or not a
+  /// refresh token at all. It answers these in its own words, never
+  /// `invalid_grant`. A clock off, a user disabled for now or the client's
+  /// setup keep the session. `sbm_lkc::GONE` is the same list.
+  static const _gone = {
+    ('JwtToken', 'Token has expired'),
+    ('JwtToken', 'Invalid `iss`'),
+    ('JwtToken', 'Invalid `typ`'),
+    ('Unauthorized', 'Invalid JWT Token signature'),
+    ('Unauthorized', 'Invalid refresh token'),
+    ('BadRequest', 'Invalid refresh token'),
+    ('BadRequest', 'Malformed token'),
+    ('BadRequest', 'Invalid JWT token format'),
+    ('BadRequest', 'Cannot deserialize JWT Token header'),
+    ('BadRequest', 'Cannot deserialize JWT Token claims'),
+    ('BadRequest', 'Cannot deserialize JWT Token signature'),
+    ('BadRequest', 'Invalid JWT Header `typ`'),
+    ('NotFound', 'Refresh Token not found'),
+    ('NotFound', 'Device Refresh Token not found'),
+    ('Forbidden', 'Refresh Token has expired'),
+    ('Forbidden', 'Device Refresh Token has expired'),
+    ('Forbidden', 'Mismatch in client.id'),
+    ('Forbidden', "'user_id' does not match"),
+    ('Forbidden', "'client_id' does not match"),
+    ('Forbidden', "'device_id' does not match"),
+  };
+
+  /// The body of a token reply, or the refusal. Only a refusal saying the
+  /// grant is gone ends the session: OAuth's `invalid_grant` or one of
+  /// [_gone]. Anything else, a 429, a 5xx or a proxy's page in front of it
+  /// (a challenge, a 403) is no word on the grant.
   static Map<String, dynamic> _tokenResponse(Response<Object> res) {
     final status = res.statusCode ?? 0;
     final body = res.data;
@@ -297,12 +324,16 @@ final class LkcIdp {
         return body;
       }
       final error = body['error'];
-      final refused =
-          error is String && status >= 400 && status < 500 && status != 429;
+      final message = body['message'];
+      final gone =
+          status >= 400 &&
+          status < 500 &&
+          status != 429 &&
+          (error == 'invalid_grant' || _gone.contains((error, message)));
       throw LkcException(
-        code: refused ? LkcCode.perm : null,
+        code: gone ? LkcCode.perm : null,
         reason: error is String ? error : null,
-        message: refused ? body['message'] as String? : null,
+        message: message is String ? message : null,
         status: status,
       );
     }
