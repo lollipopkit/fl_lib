@@ -58,11 +58,12 @@ abstract final class AgeCryptor {
     if (passphrase.isEmpty) {
       throw ArgumentError('Passphrase cannot be empty');
     }
-    switch (_form(data)) {
-      case _Form.age:
+    final form = _form(data);
+    switch (form) {
+      case _Form.armored || _Form.binary:
         try {
           return await Rage.decryptWithPassphrase(
-            _trimmed(data),
+            _trimmed(data, end: form == _Form.armored),
             passphrase,
             maxWorkFactor: maxWorkFactor,
           );
@@ -97,10 +98,8 @@ abstract final class AgeCryptor {
     while (start < data.length && _isSpace(data[start])) {
       start++;
     }
-    if (_startsAt(data, start, armorHeader) ||
-        _startsAt(data, start, binaryHeader)) {
-      return _Form.age;
-    }
+    if (_startsAt(data, start, armorHeader)) return _Form.armored;
+    if (_startsAt(data, start, binaryHeader)) return _Form.binary;
     if (data.length - start < _lkflHead) return null;
     final head = data.sublist(start, start + _lkflHead);
     if (!head.every(_isBase64)) return null;
@@ -120,18 +119,19 @@ abstract final class AgeCryptor {
     return true;
   }
 
-  /// [data] without the whitespace around a text form (a pasted armor, a
-  /// file ending in a newline); binary age never starts with any.
-  static Uint8List _trimmed(List<int> data) {
+  /// [data] without the whitespace before it, and with [end] after it too (a
+  /// pasted armor, a file ending in a newline). Binary age keeps its end: its
+  /// last bytes are ciphertext, which may be whitespace.
+  static Uint8List _trimmed(List<int> data, {required bool end}) {
     var start = 0;
-    var end = data.length;
-    while (start < end && _isSpace(data[start])) {
+    var stop = data.length;
+    while (start < stop && _isSpace(data[start])) {
       start++;
     }
-    while (end > start && _isSpace(data[end - 1])) {
-      end--;
+    while (end && stop > start && _isSpace(data[stop - 1])) {
+      stop--;
     }
-    return Uint8List.fromList(data.sublist(start, end));
+    return Uint8List.fromList(data.sublist(start, stop));
   }
 
   static bool _isSpace(int b) => b == 0x20 || b == 0x0a || b == 0x0d || b == 0x09;
@@ -145,4 +145,4 @@ abstract final class AgeCryptor {
       b == 0x3d;
 }
 
-enum _Form { age, lkfl }
+enum _Form { armored, binary, lkfl }

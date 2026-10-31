@@ -438,11 +438,13 @@ class _ContextMenuRoute extends PopupRoute<VoidCallback> {
     // A theme's popup menu style is this menu's too: both are "a menu".
     final menuTheme = PopupMenuTheme.of(context);
     final menuShape = menuTheme.shape;
-    return CustomSingleChildLayout(
-      delegate: _ContextMenuLayout(
-        at: at,
-        padding: MediaQuery.paddingOf(context),
-        zones: WindowControls.zones.value,
+    final padding = MediaQuery.paddingOf(context);
+    // Zones that change while the menu is open lay it out again.
+    return ValueListenableBuilder(
+      valueListenable: WindowControls.zones,
+      builder: (context, zones, child) => CustomSingleChildLayout(
+        delegate: _ContextMenuLayout(at: at, padding: padding, zones: zones),
+        child: child,
       ),
       child: Material(
         color: menuTheme.color ?? scheme.surfaceContainerHigh,
@@ -528,38 +530,60 @@ class _ContextMenuLayout extends SingleChildLayoutDelegate {
   final EdgeInsets padding;
 
   /// What the system draws over the window and leaves out of [padding] — see
-  /// [WindowControls.zones]. A menu that would land on one is pushed below it.
+  /// [WindowControls.zones], all along the top. A menu keeps below every one
+  /// in its column, and is no taller than what is left under them.
   final List<Rect> zones;
 
   EdgeInsets get _clear => padding + const EdgeInsets.all(ContextMenuUi.edge);
 
+  /// The menu's left edge, [width] wide in a window [size] wide. `max`
+  /// against the near edge, for the window too small to hold the menu at
+  /// all: without it the far edge is the smaller of the two and `clamp`
+  /// throws rather than laying anything out.
+  double _x(double size, double width) {
+    final clear = _clear;
+    return at.dx.clamp(
+      clear.left,
+      math.max(clear.left, size - clear.right - width),
+    );
+  }
+
+  /// The highest the menu may start in the column from [x], [width] wide.
+  /// A narrower menu's column lies within a wider one's, so the top
+  /// [getConstraintsForChild] sized it for is never above the one it is put at.
+  double _top(double x, double width) {
+    var top = _clear.top;
+    for (final zone in zones) {
+      if (zone.left < x + width && zone.right > x) {
+        top = math.max(top, zone.bottom + ContextMenuUi.edge);
+      }
+    }
+    return top;
+  }
+
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     final free = constraints.deflate(_clear);
+    final width = math.min(ContextMenuUi.width, free.maxWidth);
+    final top = _top(_x(constraints.maxWidth, width), width);
     return BoxConstraints(
-      maxWidth: math.min(ContextMenuUi.width, free.maxWidth),
-      maxHeight: free.maxHeight,
+      maxWidth: width,
+      maxHeight: math.max(
+        0,
+        constraints.maxHeight - _clear.bottom - top,
+      ),
     );
   }
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final clear = _clear;
-    final left = clear.left;
-    final top = clear.top;
-    // `max` against the near edge, for the window too small to hold the menu
-    // at all: without it the far edge is the smaller of the two and `clamp`
-    // throws rather than laying anything out.
-    final right = math.max(left, size.width - clear.right - childSize.width);
-    final bottom = math.max(top, size.height - clear.bottom - childSize.height);
-    final x = at.dx.clamp(left, right);
-    var y = at.dy.clamp(top, bottom);
-    for (final zone in zones) {
-      if ((Offset(x, y) & childSize).overlaps(zone)) {
-        y = math.max(y, zone.bottom + ContextMenuUi.edge);
-      }
-    }
-    return Offset(x, y);
+    final x = _x(size.width, childSize.width);
+    final top = _top(x, childSize.width);
+    final bottom = math.max(
+      top,
+      size.height - _clear.bottom - childSize.height,
+    );
+    return Offset(x, at.dy.clamp(top, bottom));
   }
 
   @override

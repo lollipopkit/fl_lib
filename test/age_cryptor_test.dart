@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,17 @@ void main() {
     );
     expect(AgeCryptor.isEncrypted(binary), isTrue);
     expect(await AgeCryptor.decrypt(binary, 'pwd'), plain);
+  });
+
+  test('binary age ending in a whitespace byte keeps it', () async {
+    // The last byte is ciphertext: one in 64 is a space, tab, CR or LF.
+    Uint8List? binary;
+    for (var i = 0; i < 2000 && binary == null; i++) {
+      final b = await Rage.encryptWithPassphrase(plain, 'pwd', workFactor: 1);
+      if (const [0x20, 0x09, 0x0a, 0x0d].contains(b.last)) binary = b;
+    }
+    expect(binary, isNotNull);
+    expect(await AgeCryptor.decrypt(binary!, 'pwd'), plain);
   });
 
   test('the LKFL_ENC envelope still opens, V01 and V02', () async {

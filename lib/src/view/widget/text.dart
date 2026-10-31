@@ -77,18 +77,23 @@ final class TipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: () {
-        context.showRoundDialog(
-          title: l10n.note,
-          child: isMarkdown
-              ? SingleChildScrollView(child: SimpleMarkdown(data: tip))
-              : Text(tip),
-          actions: Btnx.oks,
-        );
-      },
-      child: const Icon(Icons.help_outline, size: size, color: Colors.grey),
+    // Named as an [IconButton] is: what a screen reader says, and a hover.
+    return Tooltip(
+      message: l10n.note,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          context.showRoundDialog(
+            title: l10n.note,
+            // The dialog does not scroll its content: a long tip does here.
+            child: SingleChildScrollView(
+              child: isMarkdown ? SimpleMarkdown(data: tip) : Text(tip),
+            ),
+            actions: Btnx.oks,
+          );
+        },
+        child: const Icon(Icons.help_outline, size: size, color: Colors.grey),
+      ),
     );
   }
 }
