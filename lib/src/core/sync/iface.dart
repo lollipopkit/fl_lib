@@ -166,6 +166,9 @@ abstract class Mergeable {
       for (final key in keys) {
         if (processedKeys.contains(key)) continue;
         processedKeys.add(key);
+        // This device's own: never taken from a backup nor removed for being
+        // absent from one.
+        if (store.isDeviceLocalKey(key)) continue;
 
         final bakTs = lastModTimeMap[key] is int ? lastModTimeMap[key] as int : 0;
         final curTs = curLastModTimeMap[key] ?? 0;

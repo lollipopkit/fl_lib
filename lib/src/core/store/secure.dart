@@ -363,15 +363,15 @@ final class SecureProp {
     try {
       await storage.write(key: key, value: value);
     } catch (e, s) {
-      // iCloud Keychain off, or a build not entitled to it: on this device
-      // only, rather than not at all — once what it replaces is gone there,
-      // or [read] would go on answering that. If it cannot go, nothing has
-      // changed, and the caller hears so.
+      // A value there is never removed for this: in iCloud Keychain that
+      // removes it from every device. Nothing changes, and the caller hears
+      // so. With none there (iCloud Keychain off, or a build not entitled to
+      // it), on this device only rather than not at all.
+      String? held;
       try {
-        await storage.delete(key: key);
-      } catch (_) {
-        Error.throwWithStackTrace(e, s);
-      }
+        held = await storage.read(key: key);
+      } catch (_) {}
+      if (held != null) Error.throwWithStackTrace(e, s);
       dprint('SecureProp $key kept on this device: $e');
       await legacy.write(key: key, value: value);
       return;

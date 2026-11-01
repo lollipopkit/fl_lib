@@ -20,11 +20,28 @@ void main() {
     test('are not stamped, and a stamp left on one is not read', () async {
       final store = _LocalStore();
       await store.set(store.lastUpdateTsKey, <String, int>{'local': 9}, updateLastUpdateTsOnSet: false);
-      await store.set('local', 1);
+      expect(await store.set('local', 1), isTrue, reason: 'skipping its stamp is no failure');
       await store.set('synced', 1);
       await Future<void>.delayed(Duration.zero);
 
       expect(store.lastUpdateTs?.keys, ['synced']);
+    });
+
+    test('are neither taken from a backup nor removed for being absent', () async {
+      final store = _LocalStore();
+      await store.set('local', 1);
+      await Mergeable.mergeStore(
+        backupData: {
+          'local': 2,
+          store.lastUpdateTsKey: {'local': 9999999999999},
+        },
+        store: store,
+        force: false,
+      );
+      expect(store.get<int>('local'), 1);
+
+      await Mergeable.mergeStore(backupData: const {}, store: store, force: true);
+      expect(store.get<int>('local'), 1);
     });
   });
 

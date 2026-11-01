@@ -137,7 +137,8 @@ class MockStore extends KvStore {
       dprintWarn('updateLastUpdateTs()', 'Attempted to update timestamp for internal key "$key". Ignored.');
       return false;
     }
-    if (key != null && isDeviceLocalKey(key)) return false;
+    // Not stamped on purpose: nothing failed.
+    if (key != null && isDeviceLocalKey(key)) return true;
 
     final timestampMap = Map<String, int>.from(
       (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {},

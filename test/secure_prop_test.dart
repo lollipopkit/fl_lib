@@ -39,18 +39,18 @@ void main() {
     expect(await prop.read(), isNull);
   });
 
-  test('a value the synced store refuses is kept on this device', () async {
-    synced.values['pwd'] = 'old';
+  test('a value the synced store refuses, with none there, is kept on this device', () async {
     synced.failWrites = true;
     await prop.write('new');
     expect(local.values, {'pwd': 'new'});
-    expect(await prop.read(), 'new', reason: 'not the one it replaced');
+    expect(await prop.read(), 'new');
   });
 
-  test('a refused write whose old value cannot go changes nothing, and says so', () async {
+  test('a refused write over a synced value changes nothing, and says so', () async {
     synced.values['pwd'] = 'old';
-    synced.failWrites = synced.failDeletes = true;
+    synced.failWrites = true;
     await expectLater(prop.write('new'), throwsStateError);
+    expect(synced.values, {'pwd': 'old'}, reason: 'removed there is removed on every device');
     expect(local.values, isEmpty);
     expect(await prop.read(), 'old');
   });

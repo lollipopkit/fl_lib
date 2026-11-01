@@ -153,7 +153,9 @@ sealed class KvStore {
   }
 
   Future<bool> _updateLastUpdateTs({int? ts, required String? key}) async {
-    if (key != null && (isInternalKey(key) || isDeviceLocalKey(key))) {
+    // Not stamped on purpose: nothing failed.
+    if (key != null && isDeviceLocalKey(key)) return true;
+    if (key != null && isInternalKey(key)) {
       // dprintWarn('updateLastUpdateTs()', 'key `$key` is an internal key, ignored.');
       return false;
     }

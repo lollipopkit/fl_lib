@@ -63,7 +63,10 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// sync uploads anyway, rather than leave the remote short of it. Only what
   /// converges belongs in the answer: a difference no merge settles would
   /// have two devices write to each other forever.
-  FutureOr<bool> lacks(T downloaded) => false;
+  ///
+  /// True unless overridden: every sync uploads, as it always did. An
+  /// implementer that can tell opts into merging without writing back.
+  FutureOr<bool> lacks(T downloaded) => true;
 
   /// The `(remote, local, recordedAtMs)` the last *completed* sync ended on.
   ///
