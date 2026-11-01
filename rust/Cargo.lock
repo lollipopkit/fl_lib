@@ -445,6 +445,7 @@ name = "fl_lib_ffi"
 version = "0.1.0"
 dependencies = [
  "fl_lkc",
+ "fl_sync",
  "fl_theme",
  "flutter_rust_bridge",
  "futures-util",

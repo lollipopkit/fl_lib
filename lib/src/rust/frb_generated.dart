@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/lkc.dart';
+import 'api/sync.dart';
 import 'api/theme.dart';
 
 import 'dart:async';
@@ -68,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1440810845;
+  int get rustContentHash => 1845071002;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -197,6 +198,21 @@ abstract class RustLibApi extends BaseApi {
   ThemeRepoTree crateApiThemeReadThemeRepo({required List<ThemeFile> files});
 
   List<ThemeFile> crateApiThemeReadThemeRepoArchive({required List<int> bytes});
+
+  String crateApiSyncSyncLater({required String last, required String seen});
+
+  String crateApiSyncSyncStampOf({required BigInt ms, required BigInt device});
+
+  String crateApiSyncSyncTick({
+    required BigInt device,
+    required String last,
+    required BigInt nowMs,
+  });
+
+  String crateApiSyncSyncWinners({
+    required String opsJson,
+    required String currentJson,
+  });
 
   String crateApiThemeThemeFormat();
 
@@ -1179,12 +1195,122 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  String crateApiSyncSyncLater({required String last, required String seen}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(last, serializer);
+          sse_encode_String(seen, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_sync_failure,
+        ),
+        constMeta: kCrateApiSyncSyncLaterConstMeta,
+        argValues: [last, seen],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncSyncLaterConstMeta =>
+      const TaskConstMeta(debugName: "sync_later", argNames: ["last", "seen"]);
+
+  @override
+  String crateApiSyncSyncStampOf({required BigInt ms, required BigInt device}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(ms, serializer);
+          sse_encode_u_64(device, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncSyncStampOfConstMeta,
+        argValues: [ms, device],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncSyncStampOfConstMeta => const TaskConstMeta(
+    debugName: "sync_stamp_of",
+    argNames: ["ms", "device"],
+  );
+
+  @override
+  String crateApiSyncSyncTick({
+    required BigInt device,
+    required String last,
+    required BigInt nowMs,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(device, serializer);
+          sse_encode_String(last, serializer);
+          sse_encode_u_64(nowMs, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_sync_failure,
+        ),
+        constMeta: kCrateApiSyncSyncTickConstMeta,
+        argValues: [device, last, nowMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncSyncTickConstMeta => const TaskConstMeta(
+    debugName: "sync_tick",
+    argNames: ["device", "last", "nowMs"],
+  );
+
+  @override
+  String crateApiSyncSyncWinners({
+    required String opsJson,
+    required String currentJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(opsJson, serializer);
+          sse_encode_String(currentJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_sync_failure,
+        ),
+        constMeta: kCrateApiSyncSyncWinnersConstMeta,
+        argValues: [opsJson, currentJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncSyncWinnersConstMeta => const TaskConstMeta(
+    debugName: "sync_winners",
+    argNames: ["opsJson", "currentJson"],
+  );
+
+  @override
   String crateApiThemeThemeFormat() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1207,7 +1333,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(address, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1547,6 +1673,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       iconPack: dco_decode_bool(arr[3]),
       files: dco_decode_list_theme_file(arr[4]),
     );
+  }
+
+  @protected
+  SyncFailure dco_decode_sync_failure(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return SyncFailure(message: dco_decode_String(arr[0]));
   }
 
   @protected
@@ -1965,6 +2100,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SyncFailure sse_decode_sync_failure(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_message = sse_decode_String(deserializer);
+    return SyncFailure(message: var_message);
+  }
+
+  @protected
   ThemeCatalogInfo sse_decode_theme_catalog_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_name = sse_decode_opt_String(deserializer);
@@ -2370,6 +2512,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.name, serializer);
     sse_encode_bool(self.iconPack, serializer);
     sse_encode_list_theme_file(self.files, serializer);
+  }
+
+  @protected
+  void sse_encode_sync_failure(SyncFailure self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.message, serializer);
   }
 
   @protected
