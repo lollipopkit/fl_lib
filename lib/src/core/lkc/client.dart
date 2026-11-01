@@ -198,8 +198,18 @@ final class LkcClient {
   }
 
   /// One app's files on homebase ([LkcSync]), on this session.
-  Future<LkcSync> sync(String app) async =>
-      LkcSync(session: await _ensureSession(), app: app);
+  ///
+  /// One per app for the process: the client knows its own writes, so one
+  /// that listens must be the one that writes, or every upload comes back as
+  /// another device's.
+  Future<LkcSync> sync(String app) => _syncs[app] ??= _ensureSession()
+      .then((session) => LkcSync(session: session, app: app))
+      .catchError((Object e, StackTrace s) {
+        _syncs.remove(app);
+        Error.throwWithStackTrace(e, s);
+      });
+
+  final _syncs = <String, Future<LkcSync>>{};
 
   /// Load the saved session and its user. A session the IdP or homebase
   /// refuses is dropped; on any other error it is kept, and the error thrown.

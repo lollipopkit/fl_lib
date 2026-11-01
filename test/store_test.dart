@@ -2,7 +2,49 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Holds `local` for this device only.
+final class _LocalStore extends MockStore {
+  _LocalStore()
+      : super(
+          updateLastUpdateTsOnSet: true,
+          updateLastUpdateTsOnRemove: true,
+          updateLastUpdateTsOnClear: true,
+        );
+
+  @override
+  bool isDeviceLocalKey(String key) => key == 'local';
+}
+
 void main() {
+  group('device-local keys', () {
+    test('are not stamped, and a stamp left on one is not read', () async {
+      final store = _LocalStore();
+      await store.set(store.lastUpdateTsKey, <String, int>{'local': 9}, updateLastUpdateTsOnSet: false);
+      expect(await store.set('local', 1), isTrue, reason: 'skipping its stamp is no failure');
+      await store.set('synced', 1);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.lastUpdateTs?.keys, ['synced']);
+    });
+
+    test('are neither taken from a backup nor removed for being absent', () async {
+      final store = _LocalStore();
+      await store.set('local', 1);
+      await Mergeable.mergeStore(
+        backupData: {
+          'local': 2,
+          store.lastUpdateTsKey: {'local': 9999999999999},
+        },
+        store: store,
+        force: false,
+      );
+      expect(store.get<int>('local'), 1);
+
+      await Mergeable.mergeStore(backupData: const {}, store: store, force: true);
+      expect(store.get<int>('local'), 1);
+    });
+  });
+
   group('MockStore', () {
     late MockStore store;
 

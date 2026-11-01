@@ -153,6 +153,8 @@ sealed class KvStore {
   }
 
   Future<bool> _updateLastUpdateTs({int? ts, required String? key}) async {
+    // Not stamped on purpose: nothing failed.
+    if (key != null && isDeviceLocalKey(key)) return true;
     if (key != null && isInternalKey(key)) {
       // dprintWarn('updateLastUpdateTs()', 'key `$key` is an internal key, ignored.');
       return false;
@@ -194,11 +196,19 @@ sealed class KvStore {
   ///
   /// {@macro store_last_update_ts}
   Map<String, int>? get lastUpdateTs {
+    final ts = _readLastUpdateTs();
+    // Stamped by builds before the key was device-local.
+    // TODO: rm once no store can still hold such a stamp.
+    ts?.removeWhere((key, _) => isDeviceLocalKey(key));
+    return ts;
+  }
+
+  Map<String, int>? _readLastUpdateTs() {
     final ts = get<Map<String, int>>(lastUpdateTsKey, fromObj: (raw) {
       if (raw is String) {
-        return json.decode(raw).cast<String, int>();
+        return Map<String, int>.from(json.decode(raw) as Map);
       } else if (raw is Map<String, int>) {
-        return raw;
+        return Map.of(raw);
       } else if (raw is Map) {
         // A JSON round-trip widens this to `Map<String, dynamic>`, and so did
         // a Hive box to `Map<dynamic, dynamic>`. Matching only the exact type
@@ -214,6 +224,10 @@ sealed class KvStore {
     });
     return ts;
   }
+
+  /// Whether [key] describes this device rather than anything synced: never
+  /// stamped, and left out of [lastUpdateTs]. None by default.
+  bool isDeviceLocalKey(String key) => false;
 
   /// Whether the key is an internal key.
   bool isInternalKey(String key) {

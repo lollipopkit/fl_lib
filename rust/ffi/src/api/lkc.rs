@@ -5,12 +5,12 @@
 
 use std::sync::Arc;
 
-use flutter_rust_bridge::{DartFnFuture, frb};
+use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture, frb};
 use fl_lkc::sync::{Condition, Fetched, Kind, SyncClient};
 use fl_lkc::{Client, Session, Stored, Tokens};
 use tokio::sync::watch;
 
-use crate::frb_generated::StreamSink;
+use crate::frb_generated::{FLUTTER_RUST_BRIDGE_HANDLER, StreamSink};
 use crate::lkc_bridge::DartStore;
 
 /// Why a session request failed (`fl_lkc::Failure`).
@@ -280,7 +280,11 @@ impl LkcSync {
         if let Some(previous) = self.listening.lock().unwrap_or_else(|e| e.into_inner()).replace(stop) {
             let _ = previous.send(true);
         }
-        flutter_rust_bridge::spawn(crate::lkc_bridge::forward(self.client.clone(), sink, stopped));
+        // On the bridge's runtime by name: a sync call runs on Dart's thread,
+        // where no runtime is current for `tokio::spawn`.
+        FLUTTER_RUST_BRIDGE_HANDLER
+            .async_runtime()
+            .spawn(crate::lkc_bridge::forward(self.client.clone(), sink, stopped));
     }
 
     /// Closes the connection [LkcSync::listen] holds.
