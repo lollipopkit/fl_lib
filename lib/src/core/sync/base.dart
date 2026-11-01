@@ -57,6 +57,14 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// answer should return.
   FutureOr<String?> get localVersionTag => null;
 
+  /// Whether [downloaded], just merged, lacks something this device holds —
+  /// written over by a device that synced less (an older build, settings not
+  /// synced, a restore). Then a device with nothing edited since its last
+  /// sync uploads anyway, rather than leave the remote short of it. Only what
+  /// converges belongs in the answer: a difference no merge settles would
+  /// have two devices write to each other forever.
+  FutureOr<bool> lacks(T downloaded) => false;
+
   /// The `(remote, local, recordedAtMs)` the last *completed* sync ended on.
   ///
   /// Device-local bookkeeping, and it must not be part of what gets synced —
@@ -287,7 +295,14 @@ abstract class SyncIface<T extends Mergeable, I> {
         return;
       }
 
-      if (uploaded) {
+      bool short;
+      try {
+        short = uploaded && await lacks(dlBak);
+      } catch (e, s) {
+        Loggers.app.warning('Compare with the remote backup', e, s);
+        short = true;
+      }
+      if (uploaded && !short) {
         // Both tags as read before: if the remote moved since, the next sync
         // finds it moved and merges again; if this device was edited during
         // the merge, the next one finds that and uploads it. Read after, the

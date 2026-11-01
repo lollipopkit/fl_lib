@@ -323,6 +323,31 @@ final class SecureProp {
     return legacy.read(key: key);
   }
 
+  /// Whether the value is in [storage] while [legacy] is a store apart: on
+  /// iOS and macOS, in iCloud Keychain, where removing it removes it from
+  /// every device. False with no value, or one kept on this device only.
+  Future<bool> inSyncedStore() async {
+    if (_legacy == null) return false;
+    try {
+      return await storage.read(key: key) != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether the value is only in [legacy], a store apart: set by an older
+  /// build, or refused by [storage]. [write] moves it.
+  Future<bool> inLegacyOnly() async {
+    final legacy = _legacy;
+    if (legacy == null) return false;
+    try {
+      if (await storage.read(key: key) != null) return false;
+    } catch (_) {
+      return false;
+    }
+    return await legacy.read(key: key) != null;
+  }
+
   /// Writes the value of the property.
   /// Throws [RateLimitExceededException] if rate limit is exceeded.
   Future<void> write(String? value) async {
@@ -337,15 +362,18 @@ final class SecureProp {
     if (legacy == null) return storage.write(key: key, value: value);
     try {
       await storage.write(key: key, value: value);
-    } catch (e) {
+    } catch (e, s) {
       // iCloud Keychain off, or a build not entitled to it: on this device
-      // only, rather than not at all.
-      dprint('SecureProp $key kept on this device: $e');
-      await legacy.write(key: key, value: value);
-      // Or [read] would answer what this replaced.
+      // only, rather than not at all — once what it replaces is gone there,
+      // or [read] would go on answering that. If it cannot go, nothing has
+      // changed, and the caller hears so.
       try {
         await storage.delete(key: key);
-      } catch (_) {}
+      } catch (_) {
+        Error.throwWithStackTrace(e, s);
+      }
+      dprint('SecureProp $key kept on this device: $e');
+      await legacy.write(key: key, value: value);
       return;
     }
     // Or [read] would bring it back once this is cleared. Stored either way.

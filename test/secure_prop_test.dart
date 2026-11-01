@@ -47,6 +47,35 @@ void main() {
     expect(await prop.read(), 'new', reason: 'not the one it replaced');
   });
 
+  test('a refused write whose old value cannot go changes nothing, and says so', () async {
+    synced.values['pwd'] = 'old';
+    synced.failWrites = synced.failDeletes = true;
+    await expectLater(prop.write('new'), throwsStateError);
+    expect(local.values, isEmpty);
+    expect(await prop.read(), 'old');
+  });
+
+  test('in the synced store only when it is there', () async {
+    expect(await prop.inSyncedStore(), isFalse);
+    local.values['pwd'] = 'old';
+    expect(await prop.inSyncedStore(), isFalse, reason: 'this device only');
+    await prop.write('new');
+    expect(await prop.inSyncedStore(), isTrue);
+    SecureProp.legacyApart = false;
+    expect(await prop.inSyncedStore(), isFalse, reason: 'one store underneath');
+  });
+
+  test('in the device-only store only when only there', () async {
+    expect(await prop.inLegacyOnly(), isFalse);
+    local.values['pwd'] = 'old';
+    expect(await prop.inLegacyOnly(), isTrue);
+    await prop.write('new');
+    expect(await prop.inLegacyOnly(), isFalse);
+    SecureProp.legacyApart = false;
+    local.values['pwd'] = 'x';
+    expect(await prop.inLegacyOnly(), isFalse, reason: 'one store underneath');
+  });
+
   test('a synced store that cannot be read falls back to this device', () async {
     synced.failWrites = synced.failReads = true;
     await prop.write('new');

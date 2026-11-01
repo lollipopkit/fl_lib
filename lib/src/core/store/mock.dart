@@ -137,6 +137,7 @@ class MockStore extends KvStore {
       dprintWarn('updateLastUpdateTs()', 'Attempted to update timestamp for internal key "$key". Ignored.');
       return false;
     }
+    if (key != null && isDeviceLocalKey(key)) return false;
 
     final timestampMap = Map<String, int>.from(
       (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>() ?? {},
@@ -161,7 +162,12 @@ class MockStore extends KvStore {
 
   @override
   Map<String, int>? get lastUpdateTs {
-    return _mem[this.lastUpdateTsKey] as Map<String, int>?;
+    final ts = (_mem[this.lastUpdateTsKey] as Map?)?.cast<String, int>();
+    if (ts == null) return null;
+    return {
+      for (final e in ts.entries)
+        if (!isDeviceLocalKey(e.key)) e.key: e.value,
+    };
   }
 
   // Override async methods to call sync versions

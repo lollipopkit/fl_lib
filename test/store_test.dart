@@ -2,7 +2,32 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Holds `local` for this device only.
+final class _LocalStore extends MockStore {
+  _LocalStore()
+      : super(
+          updateLastUpdateTsOnSet: true,
+          updateLastUpdateTsOnRemove: true,
+          updateLastUpdateTsOnClear: true,
+        );
+
+  @override
+  bool isDeviceLocalKey(String key) => key == 'local';
+}
+
 void main() {
+  group('device-local keys', () {
+    test('are not stamped, and a stamp left on one is not read', () async {
+      final store = _LocalStore();
+      await store.set(store.lastUpdateTsKey, <String, int>{'local': 9}, updateLastUpdateTsOnSet: false);
+      await store.set('local', 1);
+      await store.set('synced', 1);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.lastUpdateTs?.keys, ['synced']);
+    });
+  });
+
   group('MockStore', () {
     late MockStore store;
 

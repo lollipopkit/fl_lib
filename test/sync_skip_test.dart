@@ -136,6 +136,12 @@ final class _FakeSyncer extends SyncIface<_NoopMergeable, String> {
     checkpoint = (remote, local, atMs);
   }
 
+  /// What [lacks] answers.
+  var short = false;
+
+  @override
+  bool lacks(_NoopMergeable downloaded) => short;
+
   /// Run by the merge: an edit made while it runs.
   void Function()? onMerge;
 
@@ -210,6 +216,17 @@ void main() {
 
     // An edit here still goes up.
     syncer.localTag = 'local-2';
+    await runSync();
+    expect(remote.uploadCalls, 2);
+  });
+
+  test('a remote written over with less is written back', () async {
+    remote.tag = 'etag-1';
+    await runSync();
+    remote
+      ..tag = 'etag-2'
+      ..hasFile = true;
+    syncer.short = true;
     await runSync();
     expect(remote.uploadCalls, 2);
   });
