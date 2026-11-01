@@ -80,11 +80,22 @@ class _NestedNavigatorState extends State<NestedNavigator> {
     // swallowing the gesture there would strand the user on a screen the
     // button appears to be for.
     return NavigatorPopHandler(
+      // Every handler on the enclosing route hears a back, so a region that is
+      // not the one in use — a hidden tab, an unfocused pane — has to say so,
+      // or a back meant for one pops them all.
+      enabled: BackScope.of(context),
       // The route may have a PopScope of its own. `pop` removes it regardless
       // of that scope's disposition, which can empty this navigator's only
       // route and leave the region blank. `maybePop` lets the route reject the
       // gesture and deliver its callback instead.
-      onPopWithResult: (_) => _navigatorKey.currentState?.maybePop(),
+      //
+      // `enabled` only makes this scope let a pop through; every scope on the
+      // route is still told of a back another one refused, so the callback
+      // asks again.
+      onPopWithResult: (_) {
+        if (!BackScope.enabledAt(context)) return;
+        _navigatorKey.currentState?.maybePop();
+      },
       child: Navigator(
         key: _navigatorKey,
         observers: widget.observers,
@@ -105,7 +116,7 @@ class _NestedNavigatorState extends State<NestedNavigator> {
         // A `Page`'s child is a value: the outgoing route keeps the one it was
         // given.
         pages: [
-          MaterialPage<void>(
+          AppPage<void>(
             key: ValueKey(_pageKey),
             name: '${widget.rootId}',
             child: Builder(builder: widget.rootBuilder),
