@@ -612,6 +612,7 @@ class SqliteStore extends KvStore {
           return false;
         }
         for (final key in cleared) {
+          if (shouldUpdateLastUpdateTs) _edited(key, null);
           _listeners.notify(key);
         }
         return true;

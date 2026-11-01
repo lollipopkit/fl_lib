@@ -351,6 +351,17 @@ void main() {
       store.remove('a');
       expect(heard, [('edit-test', 'a', '{"x":1}'), ('edit-test', 'a', null)]);
     });
+
+    test('onEdit hears every key a clear removes', () async {
+      final store = SqliteStore('clear-edit-test');
+      store.set('a', 1, updateLastUpdateTsOnSet: false);
+      store.set('b', 2, updateLastUpdateTsOnSet: false);
+      final heard = <(String, String?)>{};
+      KvStore.onEdit = (_, key, json) => heard.add((key, json));
+      addTearDown(() => KvStore.onEdit = null);
+      await store.clear();
+      expect(heard, {('a', null), ('b', null)});
+    });
   });
 
   group('MockStoreProp', () {

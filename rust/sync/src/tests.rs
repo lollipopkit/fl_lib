@@ -36,6 +36,9 @@ fn a_clock_goes_forward_whatever_the_wall_clock_does() {
     // A spent counter borrows the next millisecond.
     let mut full = Clock::resume(7, Hlc { ms: 10, counter: u16::MAX, device: 7 });
     assert_eq!(full.tick(10), Hlc { ms: 11, counter: 0, device: 7 });
+    // At the very last stamp the clock stays there instead of wrapping below.
+    let mut last = Clock::resume(7, Hlc { ms: MAX_MS, counter: u16::MAX, device: 1 });
+    assert_eq!(last.tick(0), Hlc { ms: MAX_MS, counter: u16::MAX, device: 7 });
 }
 
 #[test]

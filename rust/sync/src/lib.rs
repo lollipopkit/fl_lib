@@ -108,9 +108,13 @@ impl Clock {
             self.ms = now;
             self.counter = 0;
         } else if self.counter == u16::MAX {
-            // A millisecond's counter is spent: borrow the next millisecond.
-            self.ms = (self.ms + 1).min(MAX_MS);
-            self.counter = 0;
+            // A millisecond's counter is spent: borrow the next millisecond,
+            // and at the last one stay on the last stamp rather than wrap
+            // below it.
+            if self.ms < MAX_MS {
+                self.ms += 1;
+                self.counter = 0;
+            }
         } else {
             self.counter += 1;
         }
