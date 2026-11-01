@@ -98,16 +98,38 @@ abstract class SyncIface<T extends Mergeable, I> {
     String? remoteTag,
   ) async {
     if (localTag == null || remoteTag == null) return false;
-    final last = await syncCheckpoint;
+    final last = await _believedCheckpoint();
     if (last == null) return false;
-
-    // Ages out — see [syncCheckpointTtl]. Also covers a clock that moved
-    // backwards, where the age reads negative and the checkpoint is dropped:
-    // believing one recorded in the future would be the longer mistake.
-    final age = DateTime.now().millisecondsSinceEpoch - last.$3;
-    if (age < 0 || age > syncCheckpointTtl.inMilliseconds) return false;
-
     return last.$1 == _remoteKey(rs, remoteTag) && last.$2 == localTag;
+  }
+
+  /// [syncCheckpoint], unless it has aged out — see [syncCheckpointTtl]. Also
+  /// covers a clock that moved backwards, where the age reads negative and the
+  /// checkpoint is dropped: believing one recorded in the future would be the
+  /// longer mistake.
+  Future<(String, String, int)?> _believedCheckpoint() async {
+    final last = await syncCheckpoint;
+    if (last == null) return null;
+    final age = DateTime.now().millisecondsSinceEpoch - last.$3;
+    if (age < 0 || age > syncCheckpointTtl.inMilliseconds) return null;
+    return last;
+  }
+
+  /// Whether everything this device holds was already on [rs] at the last
+  /// sync: nothing edited here since, whatever the remote did.
+  ///
+  /// Then a sync merges and does not write back. Two devices that each sync
+  /// on hearing the other's write would otherwise answer every upload with one
+  /// of their own for as long as both run — and comparing what they hold does
+  /// not settle it, since some of it never converges (a theme one device
+  /// cannot install). A remote that writes conditionally only grows past what
+  /// was synced; one that does not is believed for [syncCheckpointTtl], as
+  /// [_skippable] believes it.
+  Future<bool> _uploaded(RemoteStorage<I> rs, String? localTag) async {
+    if (localTag == null) return false;
+    final last = await _believedCheckpoint();
+    if (last == null || last.$2 != localTag) return false;
+    return last.$1.startsWith(_remoteKey(rs, ''));
   }
 
   /// The backend's identity travels with its tag.
@@ -243,6 +265,8 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// Download, merge, upload, record. [beforeRemote] is the remote's tag as
   /// read before, null when not read.
   Future<void> _cycle(RemoteStorage<I> rs, String? beforeRemote) async {
+    final localBefore = await localVersionTag;
+    final uploaded = await _uploaded(rs, localBefore);
     final remoteExists = await rs.exists(Paths.bakName);
 
     // Only try to merge if the remote backup file exists
@@ -254,11 +278,29 @@ abstract class SyncIface<T extends Mergeable, I> {
         return;
       }
 
+      final T dlBak;
       try {
-        final dlBak = await fromFile(Paths.bak);
+        dlBak = await fromFile(Paths.bak);
         await dlBak.merge();
       } catch (e, s) {
         Loggers.app.warning('Merge backup', e, s);
+        return;
+      }
+
+      if (uploaded) {
+        // Both tags as read before: if the remote moved since, the next sync
+        // finds it moved and merges again; if this device was edited during
+        // the merge, the next one finds that and uploads it. Read after, the
+        // first could name a write never merged and the second an edit never
+        // uploaded. A merge that changed this device costs one upload then,
+        // which the other side, edited by nobody, does not answer.
+        if (beforeRemote != null && localBefore != null) {
+          await saveSyncCheckpoint(
+            _remoteKey(rs, beforeRemote),
+            localBefore,
+            DateTime.now().millisecondsSinceEpoch,
+          );
+        }
         return;
       }
     }

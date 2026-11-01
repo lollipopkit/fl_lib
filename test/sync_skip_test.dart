@@ -27,6 +27,9 @@ final class _FakeRemote extends RemoteStorage<String> {
   var existsCalls = 0;
   var uploadCalls = 0;
 
+  /// Whether there is a backup there to download and merge.
+  var hasFile = false;
+
   /// Moved by [upload], so a cycle that really uploaded is distinguishable
   /// from one that returned without doing anything.
   /// Set by a test that models the same file behind a second configuration.
@@ -44,7 +47,7 @@ final class _FakeRemote extends RemoteStorage<String> {
   @override
   Future<bool> exists(String relativePath) async {
     existsCalls++;
-    return false;
+    return hasFile;
   }
 
   @override
@@ -92,8 +95,12 @@ final class _CasRemote extends _FakeRemote implements ConditionalStorage {
 }
 
 final class _NoopMergeable implements Mergeable {
+  _NoopMergeable([this.onMerge]);
+
+  final void Function()? onMerge;
+
   @override
-  Future<void> merge({bool force = false}) async {}
+  Future<void> merge({bool force = false}) async => onMerge?.call();
 }
 
 final class _FakeSyncer extends SyncIface<_NoopMergeable, String> {
@@ -129,8 +136,11 @@ final class _FakeSyncer extends SyncIface<_NoopMergeable, String> {
     checkpoint = (remote, local, atMs);
   }
 
+  /// Run by the merge: an edit made while it runs.
+  void Function()? onMerge;
+
   @override
-  _NoopMergeable fromFile(String path) => _NoopMergeable();
+  _NoopMergeable fromFile(String path) => _NoopMergeable(onMerge);
 
   @override
   void saveToFile() => saveToFileCalls++;
@@ -147,6 +157,7 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp('fl-sync-skip-');
     Paths.doc = tempDir.path;
     Paths.bakName = 'bak.json';
+    Paths.bak = tempDir.path.joinPath('bak.json');
   });
 
   tearDownAll(() async => tempDir.delete(recursive: true));
@@ -178,6 +189,53 @@ void main() {
     expect(remote.existsCalls, 1, reason: 'the second one skipped');
     expect(remote.uploadCalls, 1);
     expect(syncer.checkpoint, after, reason: 'and left the checkpoint alone');
+  });
+
+  test('another device\'s write is merged, not written back', () async {
+    remote.tag = 'etag-1';
+    await runSync();
+    expect(remote.uploadCalls, 1);
+
+    // What a device hears when another one writes.
+    remote
+      ..tag = 'etag-2'
+      ..hasFile = true;
+    await runSync();
+    expect(remote.existsCalls, 2, reason: 'merged');
+    expect(remote.uploadCalls, 1, reason: 'or two listening devices answer each other forever');
+    expect(syncer.checkpoint?.$1, endsWith(':etag-2/1'), reason: 'the version it read');
+
+    await runSync();
+    expect(remote.existsCalls, 2, reason: 'the next one skips');
+
+    // An edit here still goes up.
+    syncer.localTag = 'local-2';
+    await runSync();
+    expect(remote.uploadCalls, 2);
+  });
+
+  test('an edit during the merge is not taken for uploaded', () async {
+    remote.tag = 'etag-1';
+    await runSync();
+    remote
+      ..tag = 'etag-2'
+      ..hasFile = true;
+    syncer.onMerge = () => syncer.localTag = 'local-2';
+    await runSync();
+    expect(remote.uploadCalls, 1);
+    expect(syncer.checkpoint?.$2, 'local-1', reason: 'as read before the merge');
+
+    syncer.onMerge = null;
+    await runSync();
+    expect(remote.uploadCalls, 2, reason: 'the edit goes up');
+  });
+
+  test('without a checkpoint for this backend, a merge is written back', () async {
+    remote
+      ..tag = 'etag-1'
+      ..hasFile = true;
+    await runSync();
+    expect(remote.uploadCalls, 1);
   });
 
   test('a local edit ends the skip', () async {

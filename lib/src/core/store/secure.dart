@@ -65,8 +65,15 @@ final class _RateLimiter {
 
 /// Secure Store Properties
 abstract final class SecureStoreProps {
-  /// Password for the backup.
-  static const bakPwd = SecureProp('bakPwd');
+  /// Password for the backup. In iCloud Keychain on iOS and macOS: every
+  /// device of the person's that syncs the backup needs the same one. One
+  /// set before, or iCloud Keychain refused, stays on the device
+  /// ([SecureProp.legacy]).
+  static const bakPwd = SecureProp(
+    'bakPwd',
+    storage: SecureStore.synced,
+    legacy: SecureStore.storage,
+  );
 
   /// Password of [HiveStore].
   static const hivePwd = SecureProp('hivePwd');
@@ -139,6 +146,29 @@ abstract final class SecureStore {
     ),
     iOptions: _iOptions,
     mOptions: _mOptions,
+  );
+
+  /// The entries iCloud Keychain carries to the person's other Apple
+  /// devices; [storage] everywhere else. Its own account, so [reset] leaves
+  /// them alone: a delete there would reach every device.
+  ///
+  /// Only for what each device needs the same of. Never a token: two devices
+  /// refreshing one end every session, and never the database key, which
+  /// each device's file has its own of.
+  static const synced = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: false),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock,
+      accountName: '${defaultAccountName}_synced',
+      synchronizable: true,
+      groupId: null,
+    ),
+    mOptions: MacOsOptions(
+      accountName: '${defaultAccountName}_synced',
+      synchronizable: true,
+      accessibility: KeychainAccessibility.first_unlock,
+      groupId: null,
+    ),
   );
 
   /// [storage] with the plugin's own reset allowed, for [reset] only.
@@ -243,11 +273,28 @@ final class SecureProp {
   /// Default is [SecureStore.storage].
   final FlutterSecureStorage storage;
 
+  /// Where an older build kept it, and where a value [storage] refuses is
+  /// kept instead. Only on iOS and macOS, where [SecureStore.synced] is a
+  /// store apart; elsewhere the two are one.
+  ///
+  /// Read when [storage] has nothing, never copied there on its own: that
+  /// may only be iCloud Keychain not having brought another device's newer
+  /// value yet, which a copy would replace on every device. A [write] moves
+  /// it.
+  final FlutterSecureStorage? legacy;
+
   /// The key of the property.
   final String key;
 
   /// Creates a [SecureProp] with the given [key] and optional [storage].
-  const SecureProp(this.key, {this.storage = SecureStore.storage});
+  const SecureProp(this.key, {this.storage = SecureStore.storage, this.legacy});
+
+  /// Whether [legacy] is a store apart from [storage]; a test sets it.
+  @visibleForTesting
+  static bool? legacyApart;
+
+  FlutterSecureStorage? get _legacy =>
+      (legacyApart ?? (isIOS || isMacOS)) ? legacy : null;
 
   /// Forgets the reads and writes counted against the rate limits, so each
   /// test starts with the whole allowance.
@@ -264,12 +311,21 @@ final class SecureProp {
         remaining: _RateLimiter.readRemaining(),
       );
     }
-    return storage.read(key: key);
+    final legacy = _legacy;
+    if (legacy == null) return storage.read(key: key);
+    try {
+      final value = await storage.read(key: key);
+      if (value != null) return value;
+    } catch (e) {
+      // Not entitled to iCloud Keychain, say: [write] kept it in [legacy].
+      dprint('SecureProp $key not read from its store: $e');
+    }
+    return legacy.read(key: key);
   }
 
   /// Writes the value of the property.
   /// Throws [RateLimitExceededException] if rate limit is exceeded.
-  Future<void> write(String? value) {
+  Future<void> write(String? value) async {
     if (!_RateLimiter.canWrite()) {
       dprint('SecureProp write rate limit exceeded');
       throw RateLimitExceededException(
@@ -277,6 +333,26 @@ final class SecureProp {
         remaining: _RateLimiter.writeRemaining(),
       );
     }
-    return storage.write(key: key, value: value);
+    final legacy = _legacy;
+    if (legacy == null) return storage.write(key: key, value: value);
+    try {
+      await storage.write(key: key, value: value);
+    } catch (e) {
+      // iCloud Keychain off, or a build not entitled to it: on this device
+      // only, rather than not at all.
+      dprint('SecureProp $key kept on this device: $e');
+      await legacy.write(key: key, value: value);
+      // Or [read] would answer what this replaced.
+      try {
+        await storage.delete(key: key);
+      } catch (_) {}
+      return;
+    }
+    // Or [read] would bring it back once this is cleared. Stored either way.
+    try {
+      await legacy.delete(key: key);
+    } catch (e) {
+      dprint('SecureProp $key: device-only copy not removed: $e');
+    }
   }
 }
