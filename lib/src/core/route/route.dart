@@ -219,7 +219,7 @@ Future<Ret?> _push<Ret>(
     target ?? NavTargetScope.maybeOf(context) ?? NavTarget.nearest,
   );
   return navigator.push<Ret>(
-    route ?? MaterialPageRoute<Ret>(builder: build, settings: settings),
+    route ?? AppPageRoute<Ret>(builder: build, settings: settings),
   );
 }
 
