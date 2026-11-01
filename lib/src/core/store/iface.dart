@@ -187,6 +187,18 @@ sealed class KvStore {
     return await set(lastUpdateTsKey, map, updateLastUpdateTsOnSet: false);
   }
 
+  /// Told of every edit a sync carries, once written: the store, the key, and
+  /// the value as stored (JSON; null for a removal). Not for internal or
+  /// device-local keys, nor for a write that does not stamp (a restore, a
+  /// migration). ServerBox records its sync ops here.
+  static void Function(KvStore store, String key, String? json)? onEdit;
+
+  /// Calls [onEdit] for [key] when it is an edit a sync carries.
+  void _edited(String key, String? json) {
+    if (isInternalKey(key) || isDeviceLocalKey(key)) return;
+    onEdit?.call(this, key, json);
+  }
+
   Future<bool> updateLastUpdateTs({int? ts, required String? key}) =>
       _serializeLastUpdateTsMutation(
         () => _updateLastUpdateTs(ts: ts, key: key),

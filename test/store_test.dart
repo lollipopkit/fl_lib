@@ -339,6 +339,18 @@ void main() {
       expect(store.get<String>(internalKey), 'value');
       expect(store.lastUpdateTs, {'user-key': 1});
     });
+
+    test('onEdit hears the edits a sync carries, and only those', () {
+      final heard = <(String, String, String?)>[];
+      KvStore.onEdit = (store, key, json) => heard.add((store.name, key, json));
+      addTearDown(() => KvStore.onEdit = null);
+      final store = SqliteStore('edit-test');
+      store.set('a', {'x': 1});
+      store.set('quiet', 1, updateLastUpdateTsOnSet: false);
+      store.set('${StoreDefaults.prefixKey}marker', true);
+      store.remove('a');
+      expect(heard, [('edit-test', 'a', '{"x":1}'), ('edit-test', 'a', null)]);
+    });
   });
 
   group('MockStoreProp', () {

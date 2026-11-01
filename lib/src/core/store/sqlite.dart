@@ -526,7 +526,10 @@ class SqliteStore extends KvStore {
       return false;
     }
 
-    if (updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
+    if (updateLastUpdateTsOnSet) {
+      updateLastUpdateTs(key: key);
+      _edited(key, encoded);
+    }
     _listeners.notify(key);
     return true;
   }
@@ -571,7 +574,10 @@ class SqliteStore extends KvStore {
   bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
     _stmt(_sqlRemove).execute([name, key]);
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
+    if (updateLastUpdateTsOnRemove) {
+      updateLastUpdateTs(key: key);
+      _edited(key, null);
+    }
     _listeners.notify(key);
     return true;
   }
