@@ -33,4 +33,11 @@ void main() {
       throwsA(isA<SyncFailure>()),
     );
   });
+
+  test('a blob name is keyed: the same data under another key is another name', () {
+    final a = syncBlobName(secret: 'k1', data: [1, 2, 3]);
+    expect(a, hasLength(64));
+    expect(syncBlobName(secret: 'k1', data: [1, 2, 3]), a);
+    expect(syncBlobName(secret: 'k2', data: [1, 2, 3]), isNot(a));
+  });
 }
