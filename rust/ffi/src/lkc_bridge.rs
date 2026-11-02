@@ -13,13 +13,21 @@ use crate::api::lkc::LkcSyncEvent;
 use crate::frb_generated::StreamSink;
 
 /// The session's keeping in Dart: the JSON of `fl_lkc::Stored`, `None` when
-/// signed out. Dart answers whether it was written.
-pub struct DartStore(pub Arc<dyn Fn(Option<String>) -> DartFnFuture<bool> + Send + Sync>);
+/// signed out. Dart answers whether it was written. And why a session
+/// ended, for its log.
+pub struct DartStore {
+    pub save: Arc<dyn Fn(Option<String>) -> DartFnFuture<bool> + Send + Sync>,
+    pub signed_out: Arc<dyn Fn(String) -> DartFnFuture<()> + Send + Sync>,
+}
 
 impl Store for DartStore {
     async fn save(&self, state: Option<Stored>) -> Result<(), String> {
         let json = state.map(|s| serde_json::to_string(&s).expect("a session serializes"));
-        if (self.0)(json).await { Ok(()) } else { Err("not written".into()) }
+        if (self.save)(json).await { Ok(()) } else { Err("not written".into()) }
+    }
+
+    async fn signed_out(&self, why: String) {
+        (self.signed_out)(why).await;
     }
 }
 

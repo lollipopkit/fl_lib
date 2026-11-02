@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/lkc/auth.dart';
 import 'package:fl_lib/src/core/lkc/model.dart';
 import 'package:fl_lib/src/core/rust.dart';
@@ -179,6 +180,7 @@ final class LkcClient {
       api: baseUrl.toString(),
       stored: saved,
       save: _saveSession,
+      signedOut: (why) => Loggers.app.warning('LK Cloud signed out: $why'),
     );
     // Kept by no build that reads it: a homebase token of the hand-off
     // sign-in (TODO: rm once no such build is around), or a half-written one.
@@ -232,7 +234,7 @@ final class LkcClient {
     try {
       await refresh();
     } on LkcException catch (e) {
-      if (e.isPerm) await forget();
+      if (e.isPerm) await forget('homebase refused the account: ${e.message}');
       rethrow;
     }
   }
@@ -283,22 +285,22 @@ final class LkcClient {
       return u;
     } catch (_) {
       // Nobody to show for it: let the tokens go rather than keep them.
-      if (user.value == null) await session.signOut();
+      if (user.value == null) await session.signOut(why: 'the account could not be read after signing in');
       rethrow;
     }
   }
 
-  /// Sign out here and end the session at the IdP.
-  Future<void> signOut() async {
+  /// Sign out here and end the session at the IdP; [why] is logged.
+  Future<void> signOut([String why = 'signed out by the user']) async {
     await _unregisterDevice();
     _clear();
-    await (await _ensureSession()).signOut();
+    await (await _ensureSession()).signOut(why: why);
   }
 
-  /// Signed out here only: homebase refused the token.
-  Future<void> forget() async {
+  /// Signed out here only: homebase refused the token. [why] is logged.
+  Future<void> forget(String why) async {
     _clear();
-    await _session?.forget();
+    await _session?.forget(why: why);
   }
 
   void _clear() {
@@ -348,7 +350,7 @@ final class LkcClient {
   Future<void> deleteAccount() async {
     await _unregisterDevice();
     await _call('DELETE', '/auth/user');
-    await signOut();
+    await signOut('the account was deleted');
   }
 
   // Push devices

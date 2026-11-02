@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture, frb};
 use fl_lkc::sync::{Condition, Fetched, Kind, LogRead, SyncClient};
-use fl_lkc::{Client, Session, Stored, Tokens};
+use fl_lkc::{Client, Session, Store, Stored, Tokens};
 use tokio::sync::watch;
 
 use crate::frb_generated::{FLUTTER_RUST_BRIDGE_HANDLER, StreamSink};
@@ -70,18 +70,27 @@ pub struct LkcSession(Arc<Session<DartStore>>);
 
 impl LkcSession {
     /// The session [stored] (the JSON [save] last wrote) describes. One saved
-    /// in the middle of a refresh is over, and [save] is told so.
+    /// in the middle of a refresh is over, and [save] is told so. Each time
+    /// the session ends, [signed_out] is told why.
     pub async fn restore(
         issuer: String,
         client_id: String,
         api: String,
         stored: Option<String>,
         save: impl Fn(Option<String>) -> DartFnFuture<bool> + Send + Sync + 'static,
+        signed_out: impl Fn(String) -> DartFnFuture<()> + Send + Sync + 'static,
     ) -> Result<LkcSession, LkcError> {
         let client = Arc::new(Client::with(&issuer, &client_id, &api)?);
-        let store = DartStore(Arc::new(save));
+        let store = DartStore { save: Arc::new(save), signed_out: Arc::new(signed_out) };
         // A session Dart cannot read back is one it never wrote whole.
-        let stored = stored.and_then(|s| serde_json::from_str::<Stored>(&s).ok());
+        let stored = match stored.map(|s| serde_json::from_str::<Stored>(&s)) {
+            Some(Ok(s)) => Some(s),
+            Some(Err(e)) => {
+                store.signed_out(format!("the saved session could not be read: {e}")).await;
+                None
+            }
+            None => None,
+        };
         Ok(Self(Arc::new(Session::restore(client, store, stored).await)))
     }
 
@@ -108,14 +117,16 @@ impl LkcSession {
         Ok(self.0.access_token().await?)
     }
 
-    /// Signed out here only: homebase refused the token.
-    pub async fn forget(&self) {
-        self.0.forget().await;
+    /// Signed out here only: homebase refused the token. [why] goes to
+    /// `signed_out`.
+    pub async fn forget(&self, why: String) {
+        self.0.forget(why).await;
     }
 
-    /// Signed out, the refresh token revoked at the IdP.
-    pub async fn sign_out(&self) {
-        self.0.sign_out().await;
+    /// Signed out, the refresh token revoked at the IdP. [why] goes to
+    /// `signed_out`.
+    pub async fn sign_out(&self, why: String) {
+        self.0.sign_out(why).await;
     }
 }
 

@@ -20,6 +20,13 @@ pub trait Store: Send + Sync + 'static {
     /// Saves [state]; `None` is signed out. A refresh is sent only after the
     /// save of its mark answered `Ok`.
     fn save(&self, state: Option<Stored>) -> impl Future<Output = Result<(), String>> + Send;
+
+    /// The session is over here, and [why]: for the app's log, as nothing
+    /// else says why a person finds themselves signed out.
+    fn signed_out(&self, why: String) -> impl Future<Output = ()> + Send {
+        let _ = why;
+        async {}
+    }
 }
 
 /// A session as saved. The keys are those fl_lib's Dart `LkcTokens` wrote,
@@ -63,6 +70,7 @@ impl<S: Store> Session<S> {
         let tokens = match stored {
             Some(s) if s.refreshing => {
                 let _ = store.save(None).await;
+                store.signed_out("a refresh was under way when the app last stopped; its token may be spent".into()).await;
                 None
             }
             Some(s) => Some(Tokens::stored(s.access, s.refresh, s.expires_at)),
@@ -128,7 +136,7 @@ impl<S: Store> Session<S> {
         }
         if tokens.refresh.is_none() {
             // Due, with nothing to renew it by: it is over.
-            self.drop_session().await;
+            self.drop_session("the access token ran out and there is no refresh token".into()).await;
             return Err(Error::new(Failure::Rejected, "the access token ran out and there is no refresh token"));
         }
         // Not sent when the mark cannot be saved.
@@ -140,7 +148,7 @@ impl<S: Store> Session<S> {
                 if let Err(e) = self.store.save(Some(Stored::of(&fresh, false))).await {
                     // Nothing would hold the renewed token: revoked, and the
                     // one sent is spent.
-                    self.drop_session().await;
+                    self.drop_session(format!("a renewed token could not be saved: {e}")).await;
                     self.revoke(fresh.refresh).await;
                     return Err(Error::new(Failure::Rejected, format!("saving a refresh: {e}")));
                 }
@@ -159,7 +167,7 @@ impl<S: Store> Session<S> {
             // Taken back or run out, or sent with no answer this can use:
             // possibly spent.
             Err(e) => {
-                self.drop_session().await;
+                self.drop_session(format!("the refresh failed ({:?}): {}", e.failure, e.detail)).await;
                 Err(Error::new(Failure::Rejected, e.detail))
             }
         }
@@ -167,22 +175,26 @@ impl<S: Store> Session<S> {
 
     /// Signed out here only: homebase refused the token, which says nothing
     /// a revocation could still reach.
-    pub async fn forget(&self) {
+    pub async fn forget(&self, why: String) {
         let _guard = self.refreshing.lock().await;
-        self.drop_session().await;
+        self.drop_session(why).await;
     }
 
     /// Signed out, and the refresh token revoked at the IdP, best effort.
-    pub async fn sign_out(&self) {
+    pub async fn sign_out(&self, why: String) {
         let _guard = self.refreshing.lock().await;
         let refresh = self.current().and_then(|t| t.refresh);
-        self.drop_session().await;
+        self.drop_session(why).await;
         self.revoke(refresh).await;
     }
 
-    async fn drop_session(&self) {
+    async fn drop_session(&self, why: String) {
+        let was = self.current().is_some();
         self.set(None);
         let _ = self.store.save(None).await;
+        if was {
+            self.store.signed_out(why).await;
+        }
     }
 
     async fn revoke(&self, refresh: Option<String>) {

@@ -15,27 +15,31 @@ abstract class LkcSession implements RustOpaqueInterface {
   /// The access token to send, refreshed first when due.
   Future<String> accessToken();
 
-  /// Signed out here only: homebase refused the token.
-  Future<void> forget();
+  /// Signed out here only: homebase refused the token. [why] goes to
+  /// `signed_out`.
+  Future<void> forget({required String why});
 
   /// The access token when it needs no refresh, without waiting; `None`
   /// asks [LkcSession::access_token].
   String? freshAccessToken();
 
   /// The session [stored] (the JSON [save] last wrote) describes. One saved
-  /// in the middle of a refresh is over, and [save] is told so.
+  /// in the middle of a refresh is over, and [save] is told so. Each time
+  /// the session ends, [signed_out] is told why.
   static Future<LkcSession> restore({
     required String issuer,
     required String clientId,
     required String api,
     String? stored,
     required FutureOr<bool> Function(String?) save,
+    required FutureOr<void> Function(String) signedOut,
   }) => RustLib.instance.api.crateApiLkcLkcSessionRestore(
     issuer: issuer,
     clientId: clientId,
     api: api,
     stored: stored,
     save: save,
+    signedOut: signedOut,
   );
 
   /// The tokens a browser sign-in was granted: [expires_at_ms] is when the
@@ -46,8 +50,9 @@ abstract class LkcSession implements RustOpaqueInterface {
     required PlatformInt64 expiresAtMs,
   });
 
-  /// Signed out, the refresh token revoked at the IdP.
-  Future<void> signOut();
+  /// Signed out, the refresh token revoked at the IdP. [why] goes to
+  /// `signed_out`.
+  Future<void> signOut({required String why});
 
   bool signedIn();
 }
