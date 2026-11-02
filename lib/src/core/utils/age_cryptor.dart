@@ -50,6 +50,31 @@ abstract final class AgeCryptor {
     return ascii.decode(out);
   }
 
+  /// A new X25519 key pair: the identity (`AGE-SECRET-KEY-1…`) and the
+  /// recipient (`age1…`) it opens files for.
+  static Future<({String identity, String recipient})> generateKey() async {
+    final pair = await Rage.generateX25519();
+    return (identity: pair.identity, recipient: pair.recipient);
+  }
+
+  /// The recipient of [identity].
+  static Future<String> recipientOf(String identity) => Rage.recipientOf(identity);
+
+  /// [plain] encrypted to [recipient], binary: no key derivation, for what is
+  /// written often (a sync's batches).
+  static Future<Uint8List> encryptTo(List<int> plain, String recipient) =>
+      Rage.encryptToRecipients(plain, [recipient]);
+
+  /// [data] opened with [identity]. Throws a [FormatException] when it is not
+  /// an age file [identity] opens.
+  static Future<Uint8List> decryptWith(List<int> data, String identity) async {
+    try {
+      return await Rage.decryptWithIdentities(data, [identity]);
+    } on RageError catch (e) {
+      throw FormatException('Not an age file this key opens: ${e.message}');
+    }
+  }
+
   /// [data] opened with [passphrase]: armored or binary age, or `LKFL_ENC`.
   ///
   /// Throws [WrongPasswordException] when [passphrase] does not open it, and

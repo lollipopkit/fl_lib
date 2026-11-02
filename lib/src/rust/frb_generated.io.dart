@@ -89,6 +89,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  LkcSnapshot dco_decode_box_autoadd_lkc_snapshot(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
@@ -99,6 +108,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<LkcBatch> dco_decode_list_lkc_batch(dynamic raw);
 
   @protected
   List<LkcSyncFile> dco_decode_list_lkc_sync_file(dynamic raw);
@@ -119,6 +131,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ThemeVariantInfo> dco_decode_list_theme_variant_info(dynamic raw);
 
   @protected
+  LkcAppended dco_decode_lkc_appended(dynamic raw);
+
+  @protected
+  LkcBatch dco_decode_lkc_batch(dynamic raw);
+
+  @protected
   LkcError dco_decode_lkc_error(dynamic raw);
 
   @protected
@@ -126,6 +144,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LkcFetched dco_decode_lkc_fetched(dynamic raw);
+
+  @protected
+  LkcLogRead dco_decode_lkc_log_read(dynamic raw);
+
+  @protected
+  LkcSnapshot dco_decode_lkc_snapshot(dynamic raw);
 
   @protected
   LkcSyncError dco_decode_lkc_sync_error(dynamic raw);
@@ -144,6 +168,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  LkcSnapshot? dco_decode_opt_box_autoadd_lkc_snapshot(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
   List<ThemeVariantInfo>? dco_decode_opt_list_theme_variant_info(dynamic raw);
@@ -168,6 +201,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ThemeVariantInfo dco_decode_theme_variant_info(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
   @protected
   BigInt dco_decode_u_64(dynamic raw);
@@ -235,6 +271,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  LkcSnapshot sse_decode_box_autoadd_lkc_snapshot(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
@@ -245,6 +290,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<LkcBatch> sse_decode_list_lkc_batch(SseDeserializer deserializer);
 
   @protected
   List<LkcSyncFile> sse_decode_list_lkc_sync_file(SseDeserializer deserializer);
@@ -269,6 +317,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  LkcAppended sse_decode_lkc_appended(SseDeserializer deserializer);
+
+  @protected
+  LkcBatch sse_decode_lkc_batch(SseDeserializer deserializer);
+
+  @protected
   LkcError sse_decode_lkc_error(SseDeserializer deserializer);
 
   @protected
@@ -276,6 +330,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LkcFetched sse_decode_lkc_fetched(SseDeserializer deserializer);
+
+  @protected
+  LkcLogRead sse_decode_lkc_log_read(SseDeserializer deserializer);
+
+  @protected
+  LkcSnapshot sse_decode_lkc_snapshot(SseDeserializer deserializer);
 
   @protected
   LkcSyncError sse_decode_lkc_sync_error(SseDeserializer deserializer);
@@ -294,6 +354,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  LkcSnapshot? sse_decode_opt_box_autoadd_lkc_snapshot(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   List<ThemeVariantInfo>? sse_decode_opt_list_theme_variant_info(
@@ -320,6 +391,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ThemeVariantInfo sse_decode_theme_variant_info(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
@@ -403,6 +477,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_lkc_snapshot(
+    LkcSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
@@ -413,6 +502,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_lkc_batch(List<LkcBatch> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_lkc_sync_file(
@@ -448,6 +540,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_lkc_appended(LkcAppended self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_batch(LkcBatch self, SseSerializer serializer);
+
+  @protected
   void sse_encode_lkc_error(LkcError self, SseSerializer serializer);
 
   @protected
@@ -455,6 +553,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_lkc_fetched(LkcFetched self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_log_read(LkcLogRead self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_snapshot(LkcSnapshot self, SseSerializer serializer);
 
   @protected
   void sse_encode_lkc_sync_error(LkcSyncError self, SseSerializer serializer);
@@ -479,6 +583,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_lkc_snapshot(
+    LkcSnapshot? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_theme_variant_info(
@@ -512,6 +631,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ThemeVariantInfo self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);

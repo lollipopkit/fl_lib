@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
                     default_rust_auto_opaque = RustAutoOpaqueMoi,
                 );
                 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1845071002;
+                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1995047337;
             
 
 // Section: executor
@@ -170,6 +170,26 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         let api_that_guard = api_that_guard.unwrap();
  let output_ok = Ok::<_, ()>(crate::api::lkc::LkcSession::signed_in(&*api_that_guard))?;   std::result::Result::Ok(output_ok)
                 })()) })
+            }fn wire__crate__api__lkc__LkcSync_append_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSync_append", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSync>>>::sse_decode(&mut deserializer);
+let api_key = <String>::sse_decode(&mut deserializer);
+let api_body = <Vec<u8>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::lkc::LkcSyncError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::lkc::LkcSync::append(&*api_that_guard, api_key, api_body).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
             }fn wire__crate__api__lkc__LkcSync_delete_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSync_delete", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -209,6 +229,25 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         }
         let api_that_guard = api_that_guard.unwrap();
  let output_ok = crate::api::lkc::LkcSync::download(&*api_that_guard, api_name, api_to, api_known).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
+            }fn wire__crate__api__lkc__LkcSync_download_snapshot_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSync_download_snapshot", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSync>>>::sse_decode(&mut deserializer);
+let api_to = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::lkc::LkcSyncError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::lkc::LkcSync::download_snapshot(&*api_that_guard, api_to).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__lkc__LkcSync_download_version_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -322,6 +361,47 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         let api_that_guard = api_that_guard.unwrap();
  let output_ok = Ok::<_, ()>(crate::api::lkc::LkcSync::offset_ms(&*api_that_guard))?;   std::result::Result::Ok(output_ok)
                 })()) })
+            }fn wire__crate__api__lkc__LkcSync_put_snapshot_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSync_put_snapshot", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSync>>>::sse_decode(&mut deserializer);
+let api_seq = <i64>::sse_decode(&mut deserializer);
+let api_from = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::lkc::LkcSyncError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::lkc::LkcSync::put_snapshot(&*api_that_guard, api_seq, api_from).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
+            }fn wire__crate__api__lkc__LkcSync_read_log_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSync_read_log", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSync>>>::sse_decode(&mut deserializer);
+let api_after = <i64>::sse_decode(&mut deserializer);
+let api_log = <Option<String>>::sse_decode(&mut deserializer);
+let api_limit = <Option<u32>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::lkc::LkcSyncError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::lkc::LkcSync::read_log(&*api_that_guard, api_after, api_log, api_limit).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
             }fn wire__crate__api__lkc__LkcSync_stop_listening_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSync_stop_listening", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -405,6 +485,15 @@ let api_b = <String>::sse_decode(&mut deserializer);deserializer.end();
                 transform_result_sse::<_, crate::api::theme::ThemeFailure>((move || {
                      let output_ok = crate::api::theme::installed_theme_variants(api_manifest)?;   std::result::Result::Ok(output_ok)
                 })()) })
+            }fn wire__crate__api__lkc__lkc_sync_event_default_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "lkc_sync_event_default", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end(); move |context|  {
+                    transform_result_sse::<_, ()>((move ||  {
+                         let output_ok = Ok::<_, ()>(crate::api::lkc::LkcSyncEvent::default())?;   std::result::Result::Ok(output_ok)
+                    })())
+                } })
             }fn wire__crate__api__theme__parse_theme_catalog_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "parse_theme_catalog", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -640,6 +729,14 @@ flutter_rust_bridge::frb_generated_moi_arc_impl_value!(flutter_rust_bridge::for_
         return ans_;}
                 }
                 
+                impl SseDecode for Vec<crate::api::lkc::LkcBatch> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ { ans_.push(<crate::api::lkc::LkcBatch>::sse_decode(deserializer)); }
+        return ans_;}
+                }
+                
                 impl SseDecode for Vec<crate::api::lkc::LkcSyncFile> {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut len_ = <i32>::sse_decode(deserializer);
@@ -680,6 +777,23 @@ flutter_rust_bridge::frb_generated_moi_arc_impl_value!(flutter_rust_bridge::for_
         return ans_;}
                 }
                 
+                impl SseDecode for crate::api::lkc::LkcAppended {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_log = <String>::sse_decode(deserializer);
+let mut var_seq = <i64>::sse_decode(deserializer);
+let mut var_liveBatches = <i64>::sse_decode(deserializer);
+let mut var_liveBytes = <i64>::sse_decode(deserializer);
+let mut var_compact = <bool>::sse_decode(deserializer);
+return crate::api::lkc::LkcAppended{log: var_log, seq: var_seq, live_batches: var_liveBatches, live_bytes: var_liveBytes, compact: var_compact};}
+                }
+                
+                impl SseDecode for crate::api::lkc::LkcBatch {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_seq = <i64>::sse_decode(deserializer);
+let mut var_body = <Vec<u8>>::sse_decode(deserializer);
+return crate::api::lkc::LkcBatch{seq: var_seq, body: var_body};}
+                }
+                
                 impl SseDecode for crate::api::lkc::LkcError {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_failure = <crate::api::lkc::LkcFailure>::sse_decode(deserializer);
@@ -709,6 +823,24 @@ return crate::api::lkc::LkcError{failure: var_failure, detail: var_detail};}
 let mut var_saved = <bool>::sse_decode(deserializer);
 let mut var_etag = <Option<String>>::sse_decode(deserializer);
 return crate::api::lkc::LkcFetched{missing: var_missing, saved: var_saved, etag: var_etag};}
+                }
+                
+                impl SseDecode for crate::api::lkc::LkcLogRead {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_compacted = <bool>::sse_decode(deserializer);
+let mut var_log = <Option<String>>::sse_decode(deserializer);
+let mut var_batches = <Vec<crate::api::lkc::LkcBatch>>::sse_decode(deserializer);
+let mut var_head = <i64>::sse_decode(deserializer);
+let mut var_snapshotSeq = <i64>::sse_decode(deserializer);
+let mut var_more = <bool>::sse_decode(deserializer);
+return crate::api::lkc::LkcLogRead{compacted: var_compacted, log: var_log, batches: var_batches, head: var_head, snapshot_seq: var_snapshotSeq, more: var_more};}
+                }
+                
+                impl SseDecode for crate::api::lkc::LkcSnapshot {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_log = <String>::sse_decode(deserializer);
+let mut var_seq = <i64>::sse_decode(deserializer);
+return crate::api::lkc::LkcSnapshot{log: var_log, seq: var_seq};}
                 }
                 
                 impl SseDecode for crate::api::lkc::LkcSyncError {
@@ -741,8 +873,9 @@ return crate::api::lkc::LkcSyncError{kind: var_kind, reason: var_reason, detail:
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_connected = <bool>::sse_decode(deserializer);
 let mut var_name = <Option<String>>::sse_decode(deserializer);
 let mut var_etag = <Option<String>>::sse_decode(deserializer);
+let mut var_logSeq = <Option<i64>>::sse_decode(deserializer);
 let mut var_lost = <Option<String>>::sse_decode(deserializer);
-return crate::api::lkc::LkcSyncEvent{connected: var_connected, name: var_name, etag: var_etag, lost: var_lost};}
+return crate::api::lkc::LkcSyncEvent{connected: var_connected, name: var_name, etag: var_etag, log_seq: var_logSeq, lost: var_lost};}
                 }
                 
                 impl SseDecode for crate::api::lkc::LkcSyncFile {
@@ -767,6 +900,33 @@ return crate::api::lkc::LkcSyncVersion{etag: var_etag, size: var_size, written_a
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {if (<bool>::sse_decode(deserializer)) {
                 return Some(<String>::sse_decode(deserializer));
+            } else {
+                return None;
+            }}
+                }
+                
+                impl SseDecode for Option<i64> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {if (<bool>::sse_decode(deserializer)) {
+                return Some(<i64>::sse_decode(deserializer));
+            } else {
+                return None;
+            }}
+                }
+                
+                impl SseDecode for Option<crate::api::lkc::LkcSnapshot> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {if (<bool>::sse_decode(deserializer)) {
+                return Some(<crate::api::lkc::LkcSnapshot>::sse_decode(deserializer));
+            } else {
+                return None;
+            }}
+                }
+                
+                impl SseDecode for Option<u32> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {if (<bool>::sse_decode(deserializer)) {
+                return Some(<u32>::sse_decode(deserializer));
             } else {
                 return None;
             }}
@@ -832,6 +992,11 @@ let mut var_name = <String>::sse_decode(deserializer);
 return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
                 }
                 
+                impl SseDecode for u32 {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {deserializer.cursor.read_u32::<NativeEndian>().unwrap()}
+                }
+                
                 impl SseDecode for u64 {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {deserializer.cursor.read_u64::<NativeEndian>().unwrap()}
@@ -865,15 +1030,20 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
 4 => wire__crate__api__lkc__LkcSession_restore_impl(port, ptr, rust_vec_len, data_len),
 5 => wire__crate__api__lkc__LkcSession_sign_in_impl(port, ptr, rust_vec_len, data_len),
 6 => wire__crate__api__lkc__LkcSession_sign_out_impl(port, ptr, rust_vec_len, data_len),
-8 => wire__crate__api__lkc__LkcSync_delete_impl(port, ptr, rust_vec_len, data_len),
-9 => wire__crate__api__lkc__LkcSync_download_impl(port, ptr, rust_vec_len, data_len),
-10 => wire__crate__api__lkc__LkcSync_download_version_impl(port, ptr, rust_vec_len, data_len),
-11 => wire__crate__api__lkc__LkcSync_head_impl(port, ptr, rust_vec_len, data_len),
-12 => wire__crate__api__lkc__LkcSync_list_impl(port, ptr, rust_vec_len, data_len),
-17 => wire__crate__api__lkc__LkcSync_upload_impl(port, ptr, rust_vec_len, data_len),
-18 => wire__crate__api__lkc__LkcSync_versions_impl(port, ptr, rust_vec_len, data_len),
-24 => wire__crate__api__theme__prepare_theme_files_impl(port, ptr, rust_vec_len, data_len),
-25 => wire__crate__api__theme__prepare_theme_package_impl(port, ptr, rust_vec_len, data_len),
+8 => wire__crate__api__lkc__LkcSync_append_impl(port, ptr, rust_vec_len, data_len),
+9 => wire__crate__api__lkc__LkcSync_delete_impl(port, ptr, rust_vec_len, data_len),
+10 => wire__crate__api__lkc__LkcSync_download_impl(port, ptr, rust_vec_len, data_len),
+11 => wire__crate__api__lkc__LkcSync_download_snapshot_impl(port, ptr, rust_vec_len, data_len),
+12 => wire__crate__api__lkc__LkcSync_download_version_impl(port, ptr, rust_vec_len, data_len),
+13 => wire__crate__api__lkc__LkcSync_head_impl(port, ptr, rust_vec_len, data_len),
+14 => wire__crate__api__lkc__LkcSync_list_impl(port, ptr, rust_vec_len, data_len),
+18 => wire__crate__api__lkc__LkcSync_put_snapshot_impl(port, ptr, rust_vec_len, data_len),
+19 => wire__crate__api__lkc__LkcSync_read_log_impl(port, ptr, rust_vec_len, data_len),
+21 => wire__crate__api__lkc__LkcSync_upload_impl(port, ptr, rust_vec_len, data_len),
+22 => wire__crate__api__lkc__LkcSync_versions_impl(port, ptr, rust_vec_len, data_len),
+26 => wire__crate__api__lkc__lkc_sync_event_default_impl(port, ptr, rust_vec_len, data_len),
+29 => wire__crate__api__theme__prepare_theme_files_impl(port, ptr, rust_vec_len, data_len),
+30 => wire__crate__api__theme__prepare_theme_package_impl(port, ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
                 }
@@ -888,25 +1058,25 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
                     match func_id {
                         3 => wire__crate__api__lkc__LkcSession_fresh_access_token_impl(ptr, rust_vec_len, data_len),
 7 => wire__crate__api__lkc__LkcSession_signed_in_impl(ptr, rust_vec_len, data_len),
-13 => wire__crate__api__lkc__LkcSync_listen_impl(ptr, rust_vec_len, data_len),
-14 => wire__crate__api__lkc__LkcSync_new_impl(ptr, rust_vec_len, data_len),
-15 => wire__crate__api__lkc__LkcSync_offset_ms_impl(ptr, rust_vec_len, data_len),
-16 => wire__crate__api__lkc__LkcSync_stop_listening_impl(ptr, rust_vec_len, data_len),
-19 => wire__crate__api__theme__check_theme_components_impl(ptr, rust_vec_len, data_len),
-20 => wire__crate__api__theme__compare_theme_versions_impl(ptr, rust_vec_len, data_len),
-21 => wire__crate__api__theme__installed_theme_variants_impl(ptr, rust_vec_len, data_len),
-22 => wire__crate__api__theme__parse_theme_catalog_impl(ptr, rust_vec_len, data_len),
-23 => wire__crate__api__theme__parse_theme_listing_impl(ptr, rust_vec_len, data_len),
-26 => wire__crate__api__theme__read_installed_icon_pack_impl(ptr, rust_vec_len, data_len),
-27 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
-28 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
-29 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
-30 => wire__crate__api__sync__sync_later_impl(ptr, rust_vec_len, data_len),
-31 => wire__crate__api__sync__sync_stamp_of_impl(ptr, rust_vec_len, data_len),
-32 => wire__crate__api__sync__sync_tick_impl(ptr, rust_vec_len, data_len),
-33 => wire__crate__api__sync__sync_winners_impl(ptr, rust_vec_len, data_len),
-34 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
-35 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
+15 => wire__crate__api__lkc__LkcSync_listen_impl(ptr, rust_vec_len, data_len),
+16 => wire__crate__api__lkc__LkcSync_new_impl(ptr, rust_vec_len, data_len),
+17 => wire__crate__api__lkc__LkcSync_offset_ms_impl(ptr, rust_vec_len, data_len),
+20 => wire__crate__api__lkc__LkcSync_stop_listening_impl(ptr, rust_vec_len, data_len),
+23 => wire__crate__api__theme__check_theme_components_impl(ptr, rust_vec_len, data_len),
+24 => wire__crate__api__theme__compare_theme_versions_impl(ptr, rust_vec_len, data_len),
+25 => wire__crate__api__theme__installed_theme_variants_impl(ptr, rust_vec_len, data_len),
+27 => wire__crate__api__theme__parse_theme_catalog_impl(ptr, rust_vec_len, data_len),
+28 => wire__crate__api__theme__parse_theme_listing_impl(ptr, rust_vec_len, data_len),
+31 => wire__crate__api__theme__read_installed_icon_pack_impl(ptr, rust_vec_len, data_len),
+32 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
+33 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
+34 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
+35 => wire__crate__api__sync__sync_later_impl(ptr, rust_vec_len, data_len),
+36 => wire__crate__api__sync__sync_stamp_of_impl(ptr, rust_vec_len, data_len),
+37 => wire__crate__api__sync__sync_tick_impl(ptr, rust_vec_len, data_len),
+38 => wire__crate__api__sync__sync_winners_impl(ptr, rust_vec_len, data_len),
+39 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
+40 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
                 }
@@ -945,6 +1115,39 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
         }
 
                 // Codec=Dco (DartCObject based), see doc to use other codecs
+            impl flutter_rust_bridge::IntoDart for crate::api::lkc::LkcAppended {
+                fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+                    [
+                    self.log.into_into_dart().into_dart(),
+self.seq.into_into_dart().into_dart(),
+self.live_batches.into_into_dart().into_dart(),
+self.live_bytes.into_into_dart().into_dart(),
+self.compact.into_into_dart().into_dart()
+                ].into_dart()
+                }
+            }
+            impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::lkc::LkcAppended {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcAppended> for crate::api::lkc::LkcAppended {
+            fn into_into_dart(self) -> crate::api::lkc::LkcAppended {
+                self
+            }
+        }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+            impl flutter_rust_bridge::IntoDart for crate::api::lkc::LkcBatch {
+                fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+                    [
+                    self.seq.into_into_dart().into_dart(),
+self.body.into_into_dart().into_dart()
+                ].into_dart()
+                }
+            }
+            impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::lkc::LkcBatch {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcBatch> for crate::api::lkc::LkcBatch {
+            fn into_into_dart(self) -> crate::api::lkc::LkcBatch {
+                self
+            }
+        }
+// Codec=Dco (DartCObject based), see doc to use other codecs
             impl flutter_rust_bridge::IntoDart for crate::api::lkc::LkcError {
                 fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
                     [
@@ -998,6 +1201,40 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcFetched> for crate::a
             }
         }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+            impl flutter_rust_bridge::IntoDart for crate::api::lkc::LkcLogRead {
+                fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+                    [
+                    self.compacted.into_into_dart().into_dart(),
+self.log.into_into_dart().into_dart(),
+self.batches.into_into_dart().into_dart(),
+self.head.into_into_dart().into_dart(),
+self.snapshot_seq.into_into_dart().into_dart(),
+self.more.into_into_dart().into_dart()
+                ].into_dart()
+                }
+            }
+            impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::lkc::LkcLogRead {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcLogRead> for crate::api::lkc::LkcLogRead {
+            fn into_into_dart(self) -> crate::api::lkc::LkcLogRead {
+                self
+            }
+        }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+            impl flutter_rust_bridge::IntoDart for crate::api::lkc::LkcSnapshot {
+                fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+                    [
+                    self.log.into_into_dart().into_dart(),
+self.seq.into_into_dart().into_dart()
+                ].into_dart()
+                }
+            }
+            impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::lkc::LkcSnapshot {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcSnapshot> for crate::api::lkc::LkcSnapshot {
+            fn into_into_dart(self) -> crate::api::lkc::LkcSnapshot {
+                self
+            }
+        }
+// Codec=Dco (DartCObject based), see doc to use other codecs
             impl flutter_rust_bridge::IntoDart for crate::api::lkc::LkcSyncError {
                 fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
                     [
@@ -1043,6 +1280,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcSyncErrorKind> for cr
                     self.connected.into_into_dart().into_dart(),
 self.name.into_into_dart().into_dart(),
 self.etag.into_into_dart().into_dart(),
+self.log_seq.into_into_dart().into_dart(),
 self.lost.into_into_dart().into_dart()
                 ].into_dart()
                 }
@@ -1265,6 +1503,12 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::theme::ThemeVariantInfo> for 
         for item in self { <String>::sse_encode(item, serializer); }}
                 }
                 
+                impl SseEncode for Vec<crate::api::lkc::LkcBatch> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<i32>::sse_encode(self.len() as _, serializer);
+        for item in self { <crate::api::lkc::LkcBatch>::sse_encode(item, serializer); }}
+                }
+                
                 impl SseEncode for Vec<crate::api::lkc::LkcSyncFile> {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<i32>::sse_encode(self.len() as _, serializer);
@@ -1295,6 +1539,21 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::theme::ThemeVariantInfo> for 
         for item in self { <crate::api::theme::ThemeVariantInfo>::sse_encode(item, serializer); }}
                 }
                 
+                impl SseEncode for crate::api::lkc::LkcAppended {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.log, serializer);
+<i64>::sse_encode(self.seq, serializer);
+<i64>::sse_encode(self.live_batches, serializer);
+<i64>::sse_encode(self.live_bytes, serializer);
+<bool>::sse_encode(self.compact, serializer);}
+                }
+                
+                impl SseEncode for crate::api::lkc::LkcBatch {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<i64>::sse_encode(self.seq, serializer);
+<Vec<u8>>::sse_encode(self.body, serializer);}
+                }
+                
                 impl SseEncode for crate::api::lkc::LkcError {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<crate::api::lkc::LkcFailure>::sse_encode(self.failure, serializer);
@@ -1319,6 +1578,22 @@ crate::api::lkc::LkcFailure::Refused => { 7 }
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.missing, serializer);
 <bool>::sse_encode(self.saved, serializer);
 <Option<String>>::sse_encode(self.etag, serializer);}
+                }
+                
+                impl SseEncode for crate::api::lkc::LkcLogRead {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.compacted, serializer);
+<Option<String>>::sse_encode(self.log, serializer);
+<Vec<crate::api::lkc::LkcBatch>>::sse_encode(self.batches, serializer);
+<i64>::sse_encode(self.head, serializer);
+<i64>::sse_encode(self.snapshot_seq, serializer);
+<bool>::sse_encode(self.more, serializer);}
+                }
+                
+                impl SseEncode for crate::api::lkc::LkcSnapshot {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.log, serializer);
+<i64>::sse_encode(self.seq, serializer);}
                 }
                 
                 impl SseEncode for crate::api::lkc::LkcSyncError {
@@ -1347,6 +1622,7 @@ crate::api::lkc::LkcSyncErrorKind::Invalid => { 8 }
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.connected, serializer);
 <Option<String>>::sse_encode(self.name, serializer);
 <Option<String>>::sse_encode(self.etag, serializer);
+<Option<i64>>::sse_encode(self.log_seq, serializer);
 <Option<String>>::sse_encode(self.lost, serializer);}
                 }
                 
@@ -1371,6 +1647,30 @@ crate::api::lkc::LkcSyncErrorKind::Invalid => { 8 }
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.is_some(), serializer);
                 if let Some(value) = self {
                     <String>::sse_encode(value, serializer);
+                }}
+                }
+                
+                impl SseEncode for Option<i64> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.is_some(), serializer);
+                if let Some(value) = self {
+                    <i64>::sse_encode(value, serializer);
+                }}
+                }
+                
+                impl SseEncode for Option<crate::api::lkc::LkcSnapshot> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.is_some(), serializer);
+                if let Some(value) = self {
+                    <crate::api::lkc::LkcSnapshot>::sse_encode(value, serializer);
+                }}
+                }
+                
+                impl SseEncode for Option<u32> {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<bool>::sse_encode(self.is_some(), serializer);
+                if let Some(value) = self {
+                    <u32>::sse_encode(value, serializer);
                 }}
                 }
                 
@@ -1424,6 +1724,11 @@ crate::api::lkc::LkcSyncErrorKind::Invalid => { 8 }
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.key, serializer);
 <String>::sse_encode(self.name, serializer);}
+                }
+                
+                impl SseEncode for u32 {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {serializer.cursor.write_u32::<NativeEndian>(self).unwrap();}
                 }
                 
                 impl SseEncode for u64 {

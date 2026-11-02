@@ -54,6 +54,10 @@ abstract class LkcSession implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSync>>
 abstract class LkcSync implements RustOpaqueInterface {
+  /// Appends [body] (an age file, up to 256 KiB) to the log once per [key]
+  /// (16 to 64 of `[A-Za-z0-9_-]`).
+  Future<LkcAppended> append({required String key, required List<int> body});
+
   Future<bool> delete({required String name, String? ifMatch});
 
   Future<LkcFetched> download({
@@ -61,6 +65,9 @@ abstract class LkcSync implements RustOpaqueInterface {
     required String to,
     String? known,
   });
+
+  /// The log's snapshot written to [to]; `None` before there is one.
+  Future<LkcSnapshot?> downloadSnapshot({required String to});
 
   Future<LkcFetched> downloadVersion({
     required String name,
@@ -83,6 +90,20 @@ abstract class LkcSync implements RustOpaqueInterface {
   /// Homebase's clock minus this one's, in milliseconds; 0 before an answer.
   PlatformInt64 offsetMs();
 
+  /// [from] as the log's snapshot up to [seq]. Answers its version.
+  Future<String> putSnapshot({
+    required PlatformInt64 seq,
+    required String from,
+  });
+
+  /// The log's batches after [after] of [log] (needed past 0), up to
+  /// [limit] (homebase's default when `None`).
+  Future<LkcLogRead> readLog({
+    required PlatformInt64 after,
+    String? log,
+    int? limit,
+  });
+
   /// Closes the connection [LkcSync::listen] holds.
   void stopListening();
 
@@ -95,6 +116,60 @@ abstract class LkcSync implements RustOpaqueInterface {
   });
 
   Future<List<LkcSyncVersion>> versions({required String name});
+}
+
+/// A batch appended to the log: [seq] of [log]; [compact]: a snapshot is due.
+class LkcAppended {
+  final String log;
+  final PlatformInt64 seq;
+  final PlatformInt64 liveBatches;
+  final PlatformInt64 liveBytes;
+  final bool compact;
+
+  const LkcAppended({
+    required this.log,
+    required this.seq,
+    required this.liveBatches,
+    required this.liveBytes,
+    required this.compact,
+  });
+
+  @override
+  int get hashCode =>
+      log.hashCode ^
+      seq.hashCode ^
+      liveBatches.hashCode ^
+      liveBytes.hashCode ^
+      compact.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LkcAppended &&
+          runtimeType == other.runtimeType &&
+          log == other.log &&
+          seq == other.seq &&
+          liveBatches == other.liveBatches &&
+          liveBytes == other.liveBytes &&
+          compact == other.compact;
+}
+
+class LkcBatch {
+  final PlatformInt64 seq;
+  final Uint8List body;
+
+  const LkcBatch({required this.seq, required this.body});
+
+  @override
+  int get hashCode => seq.hashCode ^ body.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LkcBatch &&
+          runtimeType == other.runtimeType &&
+          seq == other.seq &&
+          body == other.body;
 }
 
 class LkcError implements FrbException {
@@ -151,10 +226,76 @@ class LkcFetched {
           etag == other.etag;
 }
 
+/// A read of the log. [compacted]: the batches after the cursor are gone, or
+/// it is of another log: load the snapshot, then read on from [snapshot_seq]
+/// of [log].
+class LkcLogRead {
+  final bool compacted;
+
+  /// `None` before the log's first batch.
+  final String? log;
+  final List<LkcBatch> batches;
+  final PlatformInt64 head;
+  final PlatformInt64 snapshotSeq;
+
+  /// More batches follow the last: read again after it.
+  final bool more;
+
+  const LkcLogRead({
+    required this.compacted,
+    this.log,
+    required this.batches,
+    required this.head,
+    required this.snapshotSeq,
+    required this.more,
+  });
+
+  @override
+  int get hashCode =>
+      compacted.hashCode ^
+      log.hashCode ^
+      batches.hashCode ^
+      head.hashCode ^
+      snapshotSeq.hashCode ^
+      more.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LkcLogRead &&
+          runtimeType == other.runtimeType &&
+          compacted == other.compacted &&
+          log == other.log &&
+          batches == other.batches &&
+          head == other.head &&
+          snapshotSeq == other.snapshotSeq &&
+          more == other.more;
+}
+
+/// The log's snapshot, up to [seq] of [log].
+class LkcSnapshot {
+  final String log;
+  final PlatformInt64 seq;
+
+  const LkcSnapshot({required this.log, required this.seq});
+
+  @override
+  int get hashCode => log.hashCode ^ seq.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LkcSnapshot &&
+          runtimeType == other.runtimeType &&
+          log == other.log &&
+          seq == other.seq;
+}
+
 class LkcSyncError implements FrbException {
   final LkcSyncErrorKind kind;
 
-  /// `sync_unavailable`, `sync_quota` or `sync_daily_limit` when [kind] is
+  /// `sync_unavailable`, `sync_quota`, `sync_daily_limit`, `sync_log_full`,
+  /// `sync_snapshot_stale` or `sync_key_reused` when [kind] is
   /// [LkcSyncErrorKind::Refused].
   final String? reason;
   final String detail;
@@ -196,6 +337,9 @@ class LkcSyncEvent {
   final String? name;
   final String? etag;
 
+  /// The log reached this seq (this device's appends too): read on.
+  final PlatformInt64? logSeq;
+
   /// Not listening, why: tried again after a wait.
   final String? lost;
 
@@ -203,12 +347,20 @@ class LkcSyncEvent {
     required this.connected,
     this.name,
     this.etag,
+    this.logSeq,
     this.lost,
   });
 
+  static Future<LkcSyncEvent> default_() =>
+      RustLib.instance.api.crateApiLkcLkcSyncEventDefault();
+
   @override
   int get hashCode =>
-      connected.hashCode ^ name.hashCode ^ etag.hashCode ^ lost.hashCode;
+      connected.hashCode ^
+      name.hashCode ^
+      etag.hashCode ^
+      logSeq.hashCode ^
+      lost.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -218,6 +370,7 @@ class LkcSyncEvent {
           connected == other.connected &&
           name == other.name &&
           etag == other.etag &&
+          logSeq == other.logSeq &&
           lost == other.lost;
 }
 

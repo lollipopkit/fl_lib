@@ -97,4 +97,14 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
   });
+
+  test('a key pair seals to its recipient and opens with its identity only', () async {
+    final key = await AgeCryptor.generateKey();
+    expect(await AgeCryptor.recipientOf(key.identity), key.recipient);
+    final sealed = await AgeCryptor.encryptTo(plain, key.recipient);
+    expect(utf8.decode(sealed.take(AgeCryptor.binaryHeader.length).toList()), AgeCryptor.binaryHeader);
+    expect(await AgeCryptor.decryptWith(sealed, key.identity), plain);
+    final other = await AgeCryptor.generateKey();
+    await expectLater(AgeCryptor.decryptWith(sealed, other.identity), throwsA(isA<FormatException>()));
+  });
 }

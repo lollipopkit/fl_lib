@@ -1,13 +1,15 @@
 //! Homebase's sync for real: signs in with a device code (approve it in a
-//! browser), writes, races, reads and removes a file of its own, then revokes
-//! the session. Needs an account whose plan has sync; leaves nothing behind
+//! browser), writes, races, reads and removes a file of its own, appends to and
+//! snapshots a log of an app of its own ([`LOG_APP`]), then revokes the
+//! session. Needs an account whose plan has sync; leaves only that log's
+//! snapshot and the batches it covers, which homebase drops a day later
 //! (never a token printed):
 //! `cargo run -p fl_lkc --example sync_e2e` (from `rust/`).
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use fl_lkc::sync::{Condition, DIRECT_MAX, Event, Fetched, Kind, SyncClient};
+use fl_lkc::sync::{Condition, DIRECT_MAX, Event, Fetched, Kind, LogRead, Snapshot, SyncClient};
 use fl_lkc::{Client, DevicePoll, Failure, Session, Store, Stored};
 use futures_util::StreamExt;
 
@@ -21,6 +23,8 @@ impl Store for Memory {
 }
 
 const APP: &str = "serverbox";
+/// Not ServerBox's: its devices would try to read the batches written here.
+const LOG_APP: &str = "fl-lkc-e2e";
 
 /// An age file's header ahead of [len] bytes: homebase keeps age files only.
 fn age(len: usize, fill: u8) -> Vec<u8> {
@@ -63,7 +67,7 @@ async fn run(session: Arc<Session<Memory>>) {
     let name = format!("e2e-{}.age", fl_lkc::now_ms());
     let large = format!("e2e-{}-large.age", fl_lkc::now_ms());
     let this = Arc::new(SyncClient::new(session.clone(), APP));
-    let other = SyncClient::new(session, APP);
+    let other = SyncClient::new(session.clone(), APP);
 
     let mut events = Box::pin(this.clone().events());
     assert_eq!(next(&mut events).await, Event::Connected);
@@ -110,7 +114,47 @@ async fn run(session: Arc<Session<Memory>>) {
     assert!(this.delete(&large, Some(&e3)).await.unwrap());
     assert_eq!(this.head(&name).await.unwrap(), None);
     println!("removed");
+
+    log(Arc::new(SyncClient::new(session, LOG_APP)), &dir).await;
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+async fn log(sync: Arc<SyncClient<Memory>>, dir: &std::path::Path) {
+    let mut events = Box::pin(sync.clone().events());
+    assert_eq!(next(&mut events).await, Event::Connected);
+    let LogRead::Page { log: before, head, .. } = sync.read_log(0, None, Some(1)).await.expect("read the log") else {
+        panic!("a read from 0 is never compacted")
+    };
+
+    let key = format!("{:016x}{:016x}", fl_lkc::now_ms(), std::process::id());
+    let appended = sync.append(&key, age(150, b'a')).await.expect("append");
+    assert_eq!(appended.seq, head + 1);
+    assert!(before.is_none_or(|l| l == appended.log), "the log changed under the run");
+    assert_eq!(sync.append(&key, age(150, b'a')).await.expect("append again").seq, appended.seq);
+    assert_eq!(sync.append(&key, age(150, b'b')).await.unwrap_err().kind, Kind::Refused("sync_key_reused".into()));
+    assert_eq!(next(&mut events).await, Event::Log { seq: appended.seq });
+    println!("appended once under its key, and heard of");
+
+    let LogRead::Page { log, batches, head, more, .. } = sync.read_log(appended.seq - 1, Some(&appended.log), None).await.expect("read on") else {
+        panic!("compacted right after an append")
+    };
+    assert_eq!((log.as_deref(), head, more), (Some(appended.log.as_str()), appended.seq, false));
+    assert_eq!(batches.len(), 1);
+    assert_eq!((batches[0].seq, &batches[0].body), (appended.seq, &age(150, b'a')));
+    let other = sync.read_log(appended.seq, Some("00000000-0000-0000-0000-000000000000"), None).await.expect("read another log");
+    assert!(matches!(other, LogRead::Compacted { log: Some(ref l), .. } if *l == appended.log), "{other:?}");
+    println!("read back from the cursor; another log's cursor sent to the snapshot");
+
+    let snap = dir.join("snap");
+    std::fs::write(&snap, age(400, b's')).unwrap();
+    sync.put_snapshot(appended.seq, &snap).await.expect("snapshot");
+    sync.put_snapshot(appended.seq, &snap).await.expect("the same snapshot again");
+    std::fs::write(&snap, age(400, b't')).unwrap();
+    assert_eq!(sync.put_snapshot(appended.seq, &snap).await.unwrap_err().kind, Kind::Refused("sync_snapshot_stale".into()));
+    let got = dir.join("got-snap");
+    assert_eq!(sync.download_snapshot(&got).await.expect("read the snapshot"), Some(Snapshot { log: appended.log.clone(), seq: appended.seq }));
+    assert_eq!(std::fs::read(&got).unwrap(), age(400, b's'));
+    println!("snapshot written, retried, a stale one refused, read back");
 }
 
 /// The next event but a lost connection, each of those printed.
