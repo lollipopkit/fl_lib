@@ -125,6 +125,12 @@ fn answer(url: &str, status: u16, body: &[u8]) -> Result<Value, PushError> {
     if status == 409 {
         return error(PushFailure::InFlight, format!("{url}: already pushing this key"));
     }
+    if status >= 500 {
+        return error(PushFailure::Unreachable, format!("{url}: HTTP {status}"));
+    }
+    if status == 429 {
+        return error(PushFailure::RateLimited, format!("{url}: HTTP 429"));
+    }
     let value: Option<Value> = serde_json::from_slice(body).ok();
     let Some(json) = value.filter(Value::is_object) else {
         return error(PushFailure::Unreachable, format!("{url}: HTTP {status}"));
@@ -135,7 +141,6 @@ fn answer(url: &str, status: u16, body: &[u8]) -> Result<Value, PushError> {
         Some(Some(0)) => Ok(json.get("data").cloned().unwrap_or(Value::Null)),
         Some(Some(2)) => error(PushFailure::SignedOut, format!("{url}: perm {reason}")),
         Some(Some(1)) => error(PushFailure::Unreachable, format!("{url}: code 1")),
-        _ if status >= 500 || status == 429 => error(PushFailure::Unreachable, format!("{url}: HTTP {status}")),
         Some(Some(code)) => {
             let failure = match reason.as_str() {
                 "push_sender_unknown" => PushFailure::SenderUnknown,
@@ -166,6 +171,8 @@ mod tests {
         assert_eq!(failure(409, r#"{"code":4,"msg":"Pushing this key already"}"#), PushFailure::InFlight);
         assert_eq!(failure(502, "<html>bad gateway</html>"), PushFailure::Unreachable);
         assert_eq!(failure(200, r#"{"code":1}"#), PushFailure::Unreachable);
+        assert_eq!(failure(503, r#"{"code":0,"data":{}}"#), PushFailure::Unreachable);
+        assert_eq!(failure(429, r#"{"code":0,"data":{}}"#), PushFailure::RateLimited);
     }
 
     #[test]

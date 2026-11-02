@@ -2,6 +2,8 @@
 //! incoming ops win. Stateless: the host keeps its last stamp and its records'
 //! stamps, and passes them in.
 
+use std::collections::HashMap;
+
 use flutter_rust_bridge::frb;
 use fl_sync::{Clock, Hlc, Op};
 
@@ -32,8 +34,9 @@ pub fn sync_tick(device: u64, last: String, now_ms: u64) -> Result<String, SyncF
 #[frb(sync)]
 pub fn sync_later(last: String, seen: String) -> Result<String, SyncFailure> {
     Ok(match (last.is_empty(), seen.is_empty()) {
-        (true, _) => seen,
-        (_, true) => last,
+        (true, true) => String::new(),
+        (true, false) => hlc(&seen)?.to_string(),
+        (false, true) => hlc(&last)?.to_string(),
         _ => hlc(&last)?.max(hlc(&seen)?).to_string(),
     })
 }
@@ -52,7 +55,7 @@ pub fn sync_stamp_of(ms: u64, device: u64) -> String {
 #[frb(sync)]
 pub fn sync_winners(ops_json: String, current_json: String) -> Result<String, SyncFailure> {
     let ops: Vec<Op> = serde_json::from_str(&ops_json).map_err(failure)?;
-    let current: std::collections::HashMap<String, String> = serde_json::from_str(&current_json).map_err(failure)?;
-    let won = fl_sync::winners(|c, id| current.get(&format!("{c}\u{0}{id}")).and_then(|h| h.parse().ok()), &ops);
+    let current: HashMap<String, Hlc> = serde_json::from_str(&current_json).map_err(failure)?;
+    let won = fl_sync::winners(|c, id| current.get(&format!("{c}\u{0}{id}")).copied(), &ops);
     serde_json::to_string(&won).map_err(failure)
 }

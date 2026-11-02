@@ -25,5 +25,12 @@ void main() {
     final held = jsonEncode({'spi\u0000x': b});
     expect(jsonDecode(syncWinners(opsJson: jsonEncode(ops), currentJson: held)), isEmpty);
     expect(() => syncLater(last: 'nope', seen: a), throwsA(isA<SyncFailure>()));
+    expect(() => syncLater(last: 'nope', seen: ''), throwsA(isA<SyncFailure>()));
+    expect(() => syncLater(last: '', seen: 'nope'), throwsA(isA<SyncFailure>()));
+    expect(syncLater(last: '', seen: ''), '');
+    expect(
+      () => syncWinners(opsJson: jsonEncode(ops), currentJson: jsonEncode({'spi\u0000x': 'nope'})),
+      throwsA(isA<SyncFailure>()),
+    );
   });
 }

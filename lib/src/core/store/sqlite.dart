@@ -520,18 +520,29 @@ class SqliteStore extends KvStore {
     }
 
     try {
-      _stmt(_sqlSet).execute([name, key, encoded, SyncClock.now()]);
+      _write(
+        () => _stmt(_sqlSet).execute([name, key, encoded, SyncClock.now()]),
+        updateLastUpdateTsOnSet ? {key: encoded} : const {},
+      );
     } catch (e) {
       dprintWarn('set("$key")', 'write failed: $e');
       return false;
     }
 
-    if (updateLastUpdateTsOnSet) {
-      updateLastUpdateTs(key: key);
-      _edited(key, encoded);
-    }
+    if (updateLastUpdateTsOnSet) updateLastUpdateTs(key: key);
     _listeners.notify(key);
     return true;
+  }
+
+  /// Runs [write] and reports [edits] to [KvStore.onEdit] as one transaction:
+  /// an edit is in the store only once it is recorded, and a failed record
+  /// undoes the write.
+  void _write(void Function() write, Map<String, String?> edits) {
+    if (edits.isEmpty || KvStore.onEdit == null) return write();
+    transact(() {
+      write();
+      edits.forEach(_edited);
+    });
   }
 
   @override
@@ -572,12 +583,17 @@ class SqliteStore extends KvStore {
 
   @override
   bool remove(String key, {bool? updateLastUpdateTsOnRemove}) {
-    _stmt(_sqlRemove).execute([name, key]);
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    if (updateLastUpdateTsOnRemove) {
-      updateLastUpdateTs(key: key);
-      _edited(key, null);
+    try {
+      _write(
+        () => _stmt(_sqlRemove).execute([name, key]),
+        updateLastUpdateTsOnRemove ? {key: null} : const {},
+      );
+    } catch (e) {
+      dprintWarn('remove("$key")', 'write failed: $e');
+      return false;
     }
+    if (updateLastUpdateTsOnRemove) updateLastUpdateTs(key: key);
     _listeners.notify(key);
     return true;
   }
@@ -595,25 +611,27 @@ class SqliteStore extends KvStore {
   Future<bool> clear({bool? updateLastUpdateTsOnClear}) =>
       _serializeLastUpdateTsMutation(() async {
         final cleared = keys();
+        final shouldUpdateLastUpdateTs =
+            updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
         if (cleared.isNotEmpty) {
           // By key rather than one predicate: `_` is a wildcard in `LIKE`, and
           // the internal prefixes both start with one.
           final placeholders = List.filled(cleared.length, '?').join(', ');
-          _db.execute(
-            'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
-            [name, ...cleared],
+          // Recorded with the delete, before any await: a `set` of a cleared
+          // key in between is then recorded after its removal, not before.
+          _write(
+            () => _db.execute(
+              'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
+              [name, ...cleared],
+            ),
+            shouldUpdateLastUpdateTs ? {for (final key in cleared) key: null} : const {},
           );
+          cleared.forEach(_listeners.notify);
         }
 
-        final shouldUpdateLastUpdateTs =
-            updateLastUpdateTsOnClear ?? this.updateLastUpdateTsOnClear;
         if (shouldUpdateLastUpdateTs &&
             !await _updateLastUpdateTs(key: null)) {
           return false;
-        }
-        for (final key in cleared) {
-          if (shouldUpdateLastUpdateTs) _edited(key, null);
-          _listeners.notify(key);
         }
         return true;
       });
