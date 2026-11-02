@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/lkc.dart';
+import 'api/sync.dart';
 import 'api/theme.dart';
 
 import 'dart:async';
@@ -149,6 +150,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PreparedTheme dco_decode_prepared_theme(dynamic raw);
+
+  @protected
+  SyncFailure dco_decode_sync_failure(dynamic raw);
 
   @protected
   ThemeCatalogInfo dco_decode_theme_catalog_info(dynamic raw);
@@ -298,6 +302,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PreparedTheme sse_decode_prepared_theme(SseDeserializer deserializer);
+
+  @protected
+  SyncFailure sse_decode_sync_failure(SseDeserializer deserializer);
 
   @protected
   ThemeCatalogInfo sse_decode_theme_catalog_info(SseDeserializer deserializer);
@@ -481,6 +488,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_prepared_theme(PreparedTheme self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_sync_failure(SyncFailure self, SseSerializer serializer);
 
   @protected
   void sse_encode_theme_catalog_info(

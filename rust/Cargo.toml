@@ -6,7 +6,7 @@
 # of its own (Server Box does) would otherwise have cargo take these crates for
 # unlisted members of that one and refuse to build them.
 [workspace]
-members = ["theme", "lkc", "ffi"]
+members = ["theme", "lkc", "sync", "ffi"]
 resolver = "3"
 
 [profile.release]

@@ -92,6 +92,7 @@ export 'src/core/lkc/model.dart';
 export 'src/core/lkc/reason.dart';
 export 'src/rust/api/lkc.dart'
     show LkcSync, LkcSyncEvent, LkcSyncFile, LkcSyncVersion, LkcFetched, LkcSyncError, LkcSyncErrorKind;
+export 'src/rust/api/sync.dart';
 
 // --- Other Core ---
 // Logging, app links, HTTP overrides, and other core functionality

@@ -187,6 +187,21 @@ sealed class KvStore {
     return await set(lastUpdateTsKey, map, updateLastUpdateTsOnSet: false);
   }
 
+  /// Told by a [SqliteStore] of every edit a sync carries, in the transaction
+  /// that writes it (a throw undoes the write; what it writes to [SqliteDb]
+  /// commits or rolls back with the edit): the store, the key, and the
+  /// value as stored (JSON; null for a removal). Not for internal or
+  /// device-local keys, nor for a write that does not stamp (a restore, a
+  /// migration). [PrefStore] and [HiveStore] hold nothing synced and do not
+  /// report. ServerBox records its sync ops here.
+  static void Function(KvStore store, String key, String? json)? onEdit;
+
+  /// Calls [onEdit] for [key] when it is an edit a sync carries.
+  void _edited(String key, String? json) {
+    if (isInternalKey(key) || isDeviceLocalKey(key)) return;
+    onEdit?.call(this, key, json);
+  }
+
   Future<bool> updateLastUpdateTs({int? ts, required String? key}) =>
       _serializeLastUpdateTsMutation(
         () => _updateLastUpdateTs(ts: ts, key: key),

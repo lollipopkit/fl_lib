@@ -11,6 +11,7 @@
 
 mod error;
 mod session;
+pub mod push;
 pub mod sync;
 
 pub use session::{Session, Store, Stored};
