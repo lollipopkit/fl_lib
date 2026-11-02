@@ -33,9 +33,10 @@ pub async fn forward(sync: Arc<SyncClient<DartStore>>, sink: StreamSink<LkcSyncE
         };
         let Some(event) = event else { break };
         let event = match event {
-            Event::Connected => LkcSyncEvent { connected: true, name: None, etag: None, lost: None },
-            Event::Changed { name, etag } => LkcSyncEvent { connected: false, name: Some(name), etag, lost: None },
-            Event::Lost(detail) => LkcSyncEvent { connected: false, name: None, etag: None, lost: Some(detail) },
+            Event::Connected => LkcSyncEvent { connected: true, ..Default::default() },
+            Event::Changed { name, etag } => LkcSyncEvent { name: Some(name), etag, ..Default::default() },
+            Event::Log { seq } => LkcSyncEvent { log_seq: Some(seq), ..Default::default() },
+            Event::Lost(detail) => LkcSyncEvent { lost: Some(detail), ..Default::default() },
         };
         if sink.add(event).is_err() {
             break;

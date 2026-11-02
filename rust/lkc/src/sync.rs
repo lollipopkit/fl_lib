@@ -6,6 +6,11 @@
 //! reads, merges and writes again. The bodies are age files, encrypted before
 //! they get here; homebase keeps them as they come.
 //!
+//! Each app also has a log (`/v2/sync/{app}/log`): batches homebase numbers
+//! in the order they commit, read from a cursor, and a snapshot covering it up
+//! to a seq ([`SyncClient::append`], [`SyncClient::read_log`],
+//! [`SyncClient::put_snapshot`], [`SyncClient::download_snapshot`]).
+//!
 //! Homebase refuses a request it takes no token for as a `200` carrying
 //! `{"code": 2}`, not as a `401`: a file's own answers always carry an
 //! `ETag`, and one without it is that refusal only when a body says so.
@@ -16,6 +21,8 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::{Stream, StreamExt};
 use reqwest::{Method, StatusCode, header};
 use serde::Deserialize;
@@ -32,6 +39,14 @@ pub const DIRECT_MAX: u64 = 1 << 20;
 pub const MAX_BYTES: u64 = 32 << 20;
 /// What a JSON answer may be.
 const MAX_JSON: usize = 1 << 20;
+/// What a page of the log may be: homebase fills one while the batches
+/// before the last come to under 1 MiB, so up to 1 MiB plus a batch, as
+/// base64 (4/3) in JSON (up to 1000 batches' fields).
+const MAX_LOG_PAGE: usize = 3 << 20;
+/// The largest log batch homebase takes.
+pub const BATCH_MAX: usize = 256 << 10;
+/// The longest `Retry-After` a `503` is waited out for, once.
+const RETRY_AFTER_MAX: Duration = Duration::from_secs(5);
 /// How often a completion the store has not yet seen is asked again.
 const COMPLETE_TRIES: u32 = 8;
 /// The longest wait between two connections of [`SyncClient::events`].
@@ -51,7 +66,8 @@ pub enum Kind {
     /// Not an age file (`415`).
     NotAge,
     /// Homebase's `reason`: `sync_unavailable` (the plan has no sync),
-    /// `sync_quota` or `sync_daily_limit`.
+    /// `sync_quota` or `sync_daily_limit` (`403`); `sync_log_full` (a snapshot
+    /// is due) or `sync_snapshot_stale` (`409`); `sync_key_reused` (`422`).
     Refused(String),
     /// Too many writes this minute, or uploads under way (`429`).
     Busy,
@@ -122,6 +138,72 @@ pub enum Fetched {
     Saved(String),
 }
 
+/// A batch appended to the log.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Appended {
+    /// The log's id: a log made anew numbers from 1 again.
+    pub log: String,
+    pub seq: i64,
+    pub live: Live,
+    /// A snapshot is due.
+    pub compact: bool,
+}
+
+/// What no snapshot covers yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct Live {
+    pub batches: i64,
+    pub bytes: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Batch {
+    pub seq: i64,
+    /// The age file, its digest checked.
+    pub body: Vec<u8>,
+}
+
+/// Where the log is after a read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogRead {
+    Page {
+        /// `None` before the log's first batch.
+        log: Option<String>,
+        batches: Vec<Batch>,
+        head: i64,
+        snapshot_seq: i64,
+        /// More batches follow the last: read again after it.
+        more: bool,
+    },
+    /// The batches after the cursor are gone, or the cursor is of another
+    /// log: load the snapshot, then read on from its seq.
+    Compacted { log: Option<String>, snapshot_seq: i64 },
+}
+
+/// A snapshot downloaded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Snapshot {
+    pub log: String,
+    /// The seq it covers the log up to.
+    pub seq: i64,
+}
+
+#[derive(Deserialize)]
+struct WireBatch {
+    seq: i64,
+    digest: String,
+    body: String,
+}
+
+#[derive(Deserialize)]
+struct WirePage {
+    log: Option<String>,
+    batches: Vec<WireBatch>,
+    head: i64,
+    snapshot_seq: i64,
+    more: bool,
+}
+
 /// What [`SyncClient::events`] says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -129,6 +211,9 @@ pub enum Event {
     Connected,
     /// [name] is now at [etag], or removed (`None`), by another device.
     Changed { name: String, etag: Option<String> },
+    /// The log reached [seq] (this device's own appends too): read on from
+    /// the cursor.
+    Log { seq: i64 },
     /// Not listening: a connection failed or ended, and is tried again after
     /// a wait. For logs; never a token.
     Lost(String),
@@ -226,7 +311,7 @@ impl<S: Store> SyncClient<S> {
     /// new version.
     pub async fn upload(&self, name: &str, from: &Path, condition: Condition) -> Result<String, Error> {
         let path = self.file_path(name)?;
-        let bytes = tokio::fs::read(from).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", from.display())))?;
+        let bytes = bytes::Bytes::from(tokio::fs::read(from).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", from.display())))?);
         let size = bytes.len() as u64;
         if size > MAX_BYTES {
             return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
@@ -237,7 +322,7 @@ impl<S: Store> SyncClient<S> {
                     condition_on(r, &condition)
                         .header(header::CONTENT_TYPE, "application/octet-stream")
                         .header(header::CONTENT_LENGTH, size)
-                        .body(bytes)
+                        .body(bytes.clone())
                 })
                 .await?;
             self.written_version(response).await?
@@ -246,24 +331,30 @@ impl<S: Store> SyncClient<S> {
                 .send(Method::POST, &format!("{path}/uploads"), |r| condition_on(r, &condition).json(&serde_json::json!({ "size": size })))
                 .await?;
             let begun: Begun = self.json(response).await?;
-            // The store's own address: no token goes there.
-            let put = self
-                .session
-                .client()
-                .transfer()
-                .put(&begun.url)
-                .header(header::CONTENT_LENGTH, size)
-                .body(bytes)
-                .send()
-                .await
-                .map_err(|e| Error::new(Kind::Unreachable, unreachable("the store", e).detail))?;
-            if !put.status().is_success() {
-                return Err(Error::new(Kind::Unreachable, format!("the store: HTTP {}", put.status())));
-            }
+            self.store_upload(&begun.url, bytes).await?;
             self.complete(&path, &begun.id).await?
         };
         self.written.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), etag.clone());
         Ok(etag)
+    }
+
+    /// [bytes] to an upload's presigned [url]: the store's own address, so no
+    /// token goes there.
+    async fn store_upload(&self, url: &str, bytes: bytes::Bytes) -> Result<(), Error> {
+        let put = self
+            .session
+            .client()
+            .transfer()
+            .put(url)
+            .header(header::CONTENT_LENGTH, bytes.len())
+            .body(bytes)
+            .send()
+            .await
+            .map_err(|e| Error::new(Kind::Unreachable, unreachable("the store", e).detail))?;
+        if !put.status().is_success() {
+            return Err(Error::new(Kind::Unreachable, format!("the store: HTTP {}", put.status())));
+        }
+        Ok(())
     }
 
     /// Records an upload, asked again while the store has not seen it.
@@ -273,7 +364,13 @@ impl<S: Store> SyncClient<S> {
         let mut wait = Duration::from_millis(500);
         for _ in 0..COMPLETE_TRIES {
             let response = self.send(Method::POST, &format!("{path}/uploads/{id}/complete"), |r| r).await?;
+            // A bare `409` is the store not showing the upload yet; one with a
+            // reason (a snapshot gone stale) is a refusal.
             if response.status() == StatusCode::CONFLICT {
+                let body = read_limited(response, MAX_JSON).await?;
+                if let Some(reason) = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["reason"].as_str().map(str::to_string)) {
+                    return Err(Error::new(Kind::Refused(reason.clone()), format!("HTTP 409 {reason}")));
+                }
                 tokio::time::sleep(wait).await;
                 wait = (wait * 2).min(Duration::from_secs(8));
                 continue;
@@ -312,6 +409,98 @@ impl<S: Store> SyncClient<S> {
     pub async fn versions(&self, name: &str) -> Result<Vec<Version>, Error> {
         let response = self.send(Method::GET, &format!("{}/versions", self.file_path(name)?), |r| r).await?;
         self.json(response).await
+    }
+
+    /// Appends [body] (an age file, up to [`BATCH_MAX`]) to the log, once per
+    /// [key] (16 to 64 of `[A-Za-z0-9_-]`): a retry is answered the seq given.
+    pub async fn append(&self, key: &str, body: Vec<u8>) -> Result<Appended, Error> {
+        if !(16..=64).contains(&key.len()) || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+            return Err(Error::new(Kind::Invalid, "not an idempotency key"));
+        }
+        if body.len() > BATCH_MAX {
+            return Err(Error::new(Kind::TooLarge, format!("{} bytes", body.len())));
+        }
+        let body = bytes::Bytes::from(body);
+        let path = format!("{}/log", self.app_path()?);
+        let response = self
+            .send(Method::POST, &path, |r| {
+                r.header("idempotency-key", key)
+                    .header(header::CONTENT_TYPE, "application/octet-stream")
+                    .header(header::CONTENT_LENGTH, body.len())
+                    .body(body.clone())
+            })
+            .await?;
+        self.json(response).await
+    }
+
+    /// The log's batches after [after] of [log] (needed past 0), up to
+    /// [limit] (homebase's default when `None`).
+    pub async fn read_log(&self, after: i64, log: Option<&str>, limit: Option<u32>) -> Result<LogRead, Error> {
+        let mut query = format!("after={after}");
+        if let Some(log) = log {
+            if !log.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
+                return Err(Error::new(Kind::Invalid, "not a log id"));
+            }
+            query.push_str(&format!("&log={log}"));
+        }
+        if let Some(limit) = limit {
+            query.push_str(&format!("&limit={limit}"));
+        }
+        let response = self.send(Method::GET, &format!("{}/log?{query}", self.app_path()?), |r| r).await?;
+        if response.status() == StatusCode::GONE {
+            let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
+            let snapshot_seq = header("sync-snapshot-seq").and_then(|v| v.parse().ok()).ok_or_else(|| Error::new(Kind::Invalid, "a 410 without Sync-Snapshot-Seq"))?;
+            return Ok(LogRead::Compacted { log: header("sync-log"), snapshot_seq });
+        }
+        let page: WirePage = self.json_within(response, MAX_LOG_PAGE).await?;
+        let mut batches = Vec::with_capacity(page.batches.len());
+        for b in page.batches {
+            let body = BASE64.decode(&b.body).map_err(|e| Error::new(Kind::Invalid, format!("batch {}: {e}", b.seq)))?;
+            if blake3::hash(&body).to_hex().as_str() != b.digest {
+                return Err(Error::new(Kind::Invalid, format!("batch {}: digest mismatch", b.seq)));
+            }
+            batches.push(Batch { seq: b.seq, body });
+        }
+        Ok(LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more })
+    }
+
+    /// [from] as the log's snapshot up to [seq]: further than the last, up to
+    /// the head. Answers its version.
+    pub async fn put_snapshot(&self, seq: i64, from: &Path) -> Result<String, Error> {
+        let path = format!("{}/snapshot", self.app_path()?);
+        let bytes = bytes::Bytes::from(tokio::fs::read(from).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", from.display())))?);
+        let size = bytes.len() as u64;
+        if size > MAX_BYTES {
+            return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
+        }
+        if size <= DIRECT_MAX {
+            let response = self
+                .send(Method::PUT, &format!("{path}?seq={seq}"), |r| {
+                    r.header(header::CONTENT_TYPE, "application/octet-stream").header(header::CONTENT_LENGTH, size).body(bytes.clone())
+                })
+                .await?;
+            return self.written_version(response).await;
+        }
+        let response = self.send(Method::POST, &format!("{path}/uploads?seq={seq}"), |r| r.json(&serde_json::json!({ "size": size }))).await?;
+        let begun: Begun = self.json(response).await?;
+        self.store_upload(&begun.url, bytes).await?;
+        self.complete(&path, &begun.id).await
+    }
+
+    /// The log's snapshot written to [to]; `None` before there is one.
+    pub async fn download_snapshot(&self, to: &Path) -> Result<Option<Snapshot>, Error> {
+        let mut found = None;
+        let fetched = self
+            .fetch_with(&format!("{}/snapshot", self.app_path()?), to, None, |response| {
+                let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
+                found = header("sync-log").zip(header("sync-seq").and_then(|v| v.parse().ok())).map(|(log, seq)| Snapshot { log, seq });
+            })
+            .await?;
+        match fetched {
+            Fetched::Missing => Ok(None),
+            Fetched::Saved(_) => found.map(Some).ok_or_else(|| Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq")),
+            Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a snapshot answered 304")),
+        }
     }
 
     /// What other devices write, as long as it is read: connected again after
@@ -386,7 +575,13 @@ impl<S: Store> SyncClient<S> {
 
     /// An event of this app written by another device.
     fn heard(&self, value: &Value) -> Option<Event> {
-        if value["event"] != "sync" || value["app"] != self.app.as_str() {
+        if value["app"] != self.app.as_str() {
+            return None;
+        }
+        if value["event"] == "log" {
+            return value["seq"].as_i64().map(|seq| Event::Log { seq });
+        }
+        if value["event"] != "sync" {
             return None;
         }
         let name = value["name"].as_str()?.to_string();
@@ -396,6 +591,11 @@ impl<S: Store> SyncClient<S> {
     }
 
     async fn fetch(&self, path: &str, to: &Path, known: Option<&str>) -> Result<Fetched, Error> {
+        self.fetch_with(path, to, known, |_| {}).await
+    }
+
+    /// [fetch], [answered] shown homebase's answer before its body is read.
+    async fn fetch_with(&self, path: &str, to: &Path, known: Option<&str>, answered: impl FnOnce(&reqwest::Response)) -> Result<Fetched, Error> {
         let response = self
             .send(Method::GET, path, |r| match known {
                 Some(etag) => r.header(header::IF_NONE_MATCH, quote(etag)),
@@ -415,6 +615,7 @@ impl<S: Store> SyncClient<S> {
         let Some(etag) = self.etag(&response) else {
             return Err(self.json::<Value>(response).await.err().unwrap_or_else(|| Error::new(Kind::Invalid, "a file without its version")));
         };
+        answered(&response);
         let body = if status == StatusCode::FOUND {
             let location = response
                 .headers()
@@ -452,12 +653,16 @@ impl<S: Store> SyncClient<S> {
     }
 
     async fn json<T: DeserializeOwned>(&self, response: reqwest::Response) -> Result<T, Error> {
+        self.json_within(response, MAX_JSON).await
+    }
+
+    async fn json_within<T: DeserializeOwned>(&self, response: reqwest::Response, max: usize) -> Result<T, Error> {
         let status = response.status();
         if !status.is_success() {
             return Err(refusal(response).await);
         }
         let url = response.url().path().to_string();
-        let body = read_limited(response, MAX_JSON).await?;
+        let body = read_limited(response, max).await?;
         match crate::unwrap(&url, status.as_u16(), &body) {
             Ok(data) => serde_json::from_value(data).map_err(|e| Error::new(Kind::Invalid, format!("{url}: {e}"))),
             Err(e) if e.failure == Failure::Rejected => {
@@ -469,25 +674,41 @@ impl<S: Store> SyncClient<S> {
         }
     }
 
+    /// Sends a request; a `503` homebase asks to be retried shortly
+    /// (`Retry-After` up to [`RETRY_AFTER_MAX`]) is sent once more, when the
+    /// request may be: any but a `POST` without an `Idempotency-Key`.
     async fn send(
         &self,
         method: Method,
         path: &str,
-        build: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
+        build: impl Fn(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
     ) -> Result<reqwest::Response, Error> {
-        let token = self.session.access_token().await.map_err(|e| match e.failure {
-            Failure::Rejected => Error::new(Kind::SignedOut, e.detail),
-            _ => Error::new(Kind::Unreachable, e.detail),
-        })?;
         let client = self.session.client();
         let url = client.api_url(path);
-        let sent = now_ms();
-        let response = build(client.transfer().request(method, &url).bearer_auth(token))
-            .send()
-            .await
-            .map_err(|e| Error::new(Kind::Unreachable, unreachable(&url, e).detail))?;
-        self.clock.record(sent, now_ms(), &response);
-        Ok(response)
+        let mut again = true;
+        loop {
+            let token = self.session.access_token().await.map_err(|e| match e.failure {
+                Failure::Rejected => Error::new(Kind::SignedOut, e.detail),
+                _ => Error::new(Kind::Unreachable, e.detail),
+            })?;
+            let request = build(client.transfer().request(method.clone(), &url).bearer_auth(token));
+            let retryable = method != Method::POST || request.try_clone().and_then(|r| r.build().ok()).is_some_and(|r| r.headers().contains_key("idempotency-key"));
+            let sent = now_ms();
+            let response = request.send().await.map_err(|e| Error::new(Kind::Unreachable, unreachable(&url, e).detail))?;
+            self.clock.record(sent, now_ms(), &response);
+            let wait = (response.status() == StatusCode::SERVICE_UNAVAILABLE)
+                .then(|| response.headers().get(header::RETRY_AFTER)?.to_str().ok()?.parse::<u64>().ok())
+                .flatten()
+                .map(Duration::from_secs)
+                .filter(|w| *w <= RETRY_AFTER_MAX);
+            match wait {
+                Some(wait) if again && retryable => {
+                    again = false;
+                    tokio::time::sleep(wait).await;
+                }
+                _ => return Ok(response),
+            }
+        }
     }
 
     fn etag(&self, response: &reqwest::Response) -> Option<String> {
@@ -507,6 +728,10 @@ impl<S: Store> SyncClient<S> {
 
     fn app_segment(&self) -> Result<&str, Error> {
         valid(&self.app, 64, false).then_some(self.app.as_str()).ok_or_else(|| Error::new(Kind::Invalid, "not an app name"))
+    }
+
+    fn app_path(&self) -> Result<String, Error> {
+        Ok(format!("/v2/sync/{}", self.app_segment()?))
     }
 
     fn file_path(&self, name: &str) -> Result<String, Error> {
@@ -546,10 +771,11 @@ async fn refusal(response: reqwest::Response) -> Error {
         StatusCode::PAYLOAD_TOO_LARGE => Kind::TooLarge,
         StatusCode::UNSUPPORTED_MEDIA_TYPE => Kind::NotAge,
         StatusCode::TOO_MANY_REQUESTS => Kind::Busy,
-        StatusCode::FORBIDDEN => {
+        StatusCode::UNAUTHORIZED => Kind::SignedOut,
+        StatusCode::FORBIDDEN | StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY => {
             let body = read_limited(response, MAX_JSON).await.unwrap_or_default();
             let reason = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["reason"].as_str().map(str::to_string)).unwrap_or_default();
-            return Error::new(Kind::Refused(reason.clone()), format!("HTTP 403 {reason}"));
+            return Error::new(Kind::Refused(reason.clone()), format!("HTTP {status} {reason}"));
         }
         s if s.is_server_error() => Kind::Unreachable,
         _ => Kind::Invalid,

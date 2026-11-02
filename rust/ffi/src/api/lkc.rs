@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture, frb};
-use fl_lkc::sync::{Condition, Fetched, Kind, SyncClient};
+use fl_lkc::sync::{Condition, Fetched, Kind, LogRead, SyncClient};
 use fl_lkc::{Client, Session, Stored, Tokens};
 use tokio::sync::watch;
 
@@ -136,7 +136,8 @@ pub enum LkcSyncErrorKind {
 #[derive(Debug)]
 pub struct LkcSyncError {
     pub kind: LkcSyncErrorKind,
-    /// `sync_unavailable`, `sync_quota` or `sync_daily_limit` when [kind] is
+    /// `sync_unavailable`, `sync_quota`, `sync_daily_limit`, `sync_log_full`,
+    /// `sync_snapshot_stale` or `sync_key_reused` when [kind] is
     /// [LkcSyncErrorKind::Refused].
     pub reason: Option<String>,
     pub detail: String,
@@ -199,12 +200,49 @@ pub struct LkcSyncVersion {
 
 /// What another device did: [name] now at [etag], or removed (`None`).
 /// [connected]: listening (again), so anything written meanwhile was missed.
+#[derive(Default)]
 pub struct LkcSyncEvent {
     pub connected: bool,
     pub name: Option<String>,
     pub etag: Option<String>,
+    /// The log reached this seq (this device's appends too): read on.
+    pub log_seq: Option<i64>,
     /// Not listening, why: tried again after a wait.
     pub lost: Option<String>,
+}
+
+/// A batch appended to the log: [seq] of [log]; [compact]: a snapshot is due.
+pub struct LkcAppended {
+    pub log: String,
+    pub seq: i64,
+    pub live_batches: i64,
+    pub live_bytes: i64,
+    pub compact: bool,
+}
+
+pub struct LkcBatch {
+    pub seq: i64,
+    pub body: Vec<u8>,
+}
+
+/// A read of the log. [compacted]: the batches after the cursor are gone, or
+/// it is of another log: load the snapshot, then read on from [snapshot_seq]
+/// of [log].
+pub struct LkcLogRead {
+    pub compacted: bool,
+    /// `None` before the log's first batch.
+    pub log: Option<String>,
+    pub batches: Vec<LkcBatch>,
+    pub head: i64,
+    pub snapshot_seq: i64,
+    /// More batches follow the last: read again after it.
+    pub more: bool,
+}
+
+/// The log's snapshot, up to [seq] of [log].
+pub struct LkcSnapshot {
+    pub log: String,
+    pub seq: i64,
 }
 
 /// One app's files on homebase, on a session.
@@ -270,6 +308,41 @@ impl LkcSync {
             .into_iter()
             .map(|v| LkcSyncVersion { etag: v.etag, size: v.size, written_at: v.written_at, replaced_at: v.replaced_at })
             .collect())
+    }
+
+    /// Appends [body] (an age file, up to 256 KiB) to the log once per [key]
+    /// (16 to 64 of `[A-Za-z0-9_-]`).
+    pub async fn append(&self, key: String, body: Vec<u8>) -> Result<LkcAppended, LkcSyncError> {
+        let a = self.client.append(&key, body).await?;
+        Ok(LkcAppended { log: a.log, seq: a.seq, live_batches: a.live.batches, live_bytes: a.live.bytes, compact: a.compact })
+    }
+
+    /// The log's batches after [after] of [log] (needed past 0), up to
+    /// [limit] (homebase's default when `None`).
+    pub async fn read_log(&self, after: i64, log: Option<String>, limit: Option<u32>) -> Result<LkcLogRead, LkcSyncError> {
+        Ok(match self.client.read_log(after, log.as_deref(), limit).await? {
+            LogRead::Page { log, batches, head, snapshot_seq, more } => LkcLogRead {
+                compacted: false,
+                log,
+                batches: batches.into_iter().map(|b| LkcBatch { seq: b.seq, body: b.body }).collect(),
+                head,
+                snapshot_seq,
+                more,
+            },
+            LogRead::Compacted { log, snapshot_seq } => {
+                LkcLogRead { compacted: true, log, batches: vec![], head: snapshot_seq, snapshot_seq, more: false }
+            }
+        })
+    }
+
+    /// [from] as the log's snapshot up to [seq]. Answers its version.
+    pub async fn put_snapshot(&self, seq: i64, from: String) -> Result<String, LkcSyncError> {
+        Ok(self.client.put_snapshot(seq, std::path::Path::new(&from)).await?)
+    }
+
+    /// The log's snapshot written to [to]; `None` before there is one.
+    pub async fn download_snapshot(&self, to: String) -> Result<Option<LkcSnapshot>, LkcSyncError> {
+        Ok(self.client.download_snapshot(std::path::Path::new(&to)).await?.map(|s| LkcSnapshot { log: s.log, seq: s.seq }))
     }
 
     /// Other devices' writes, until [LkcSync::stop_listening] or another
