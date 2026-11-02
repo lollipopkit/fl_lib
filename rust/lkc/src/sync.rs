@@ -39,6 +39,10 @@ pub const DIRECT_MAX: u64 = 1 << 20;
 pub const MAX_BYTES: u64 = 32 << 20;
 /// What a JSON answer may be.
 const MAX_JSON: usize = 1 << 20;
+/// What a page of the log may be: homebase fills one while the batches
+/// before the last come to under 1 MiB, so up to 1 MiB plus a batch, as
+/// base64 (4/3) in JSON (up to 1000 batches' fields).
+const MAX_LOG_PAGE: usize = 3 << 20;
 /// The largest log batch homebase takes.
 pub const BATCH_MAX: usize = 256 << 10;
 /// The longest `Retry-After` a `503` is waited out for, once.
@@ -448,7 +452,7 @@ impl<S: Store> SyncClient<S> {
             let snapshot_seq = header("sync-snapshot-seq").and_then(|v| v.parse().ok()).ok_or_else(|| Error::new(Kind::Invalid, "a 410 without Sync-Snapshot-Seq"))?;
             return Ok(LogRead::Compacted { log: header("sync-log"), snapshot_seq });
         }
-        let page: WirePage = self.json(response).await?;
+        let page: WirePage = self.json_within(response, MAX_LOG_PAGE).await?;
         let mut batches = Vec::with_capacity(page.batches.len());
         for b in page.batches {
             let body = BASE64.decode(&b.body).map_err(|e| Error::new(Kind::Invalid, format!("batch {}: {e}", b.seq)))?;
@@ -649,12 +653,16 @@ impl<S: Store> SyncClient<S> {
     }
 
     async fn json<T: DeserializeOwned>(&self, response: reqwest::Response) -> Result<T, Error> {
+        self.json_within(response, MAX_JSON).await
+    }
+
+    async fn json_within<T: DeserializeOwned>(&self, response: reqwest::Response, max: usize) -> Result<T, Error> {
         let status = response.status();
         if !status.is_success() {
             return Err(refusal(response).await);
         }
         let url = response.url().path().to_string();
-        let body = read_limited(response, MAX_JSON).await?;
+        let body = read_limited(response, max).await?;
         match crate::unwrap(&url, status.as_u16(), &body) {
             Ok(data) => serde_json::from_value(data).map_err(|e| Error::new(Kind::Invalid, format!("{url}: {e}"))),
             Err(e) if e.failure == Failure::Rejected => {

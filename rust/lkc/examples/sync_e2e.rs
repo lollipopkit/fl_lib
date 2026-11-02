@@ -122,8 +122,15 @@ async fn run(session: Arc<Session<Memory>>) {
 async fn log(sync: Arc<SyncClient<Memory>>, dir: &std::path::Path) {
     let mut events = Box::pin(sync.clone().events());
     assert_eq!(next(&mut events).await, Event::Connected);
-    let LogRead::Page { log: before, head, .. } = sync.read_log(0, None, Some(1)).await.expect("read the log") else {
-        panic!("a read from 0 is never compacted")
+    // A log an earlier run compacted is read from its snapshot on.
+    let (before, head) = match sync.read_log(0, None, Some(1)).await.expect("read the log") {
+        LogRead::Page { log, head, .. } => (log, head),
+        LogRead::Compacted { log, snapshot_seq } => {
+            let LogRead::Page { log, head, .. } = sync.read_log(snapshot_seq, log.as_deref(), Some(1)).await.expect("read past the snapshot") else {
+                panic!("compacted again at the snapshot's seq")
+            };
+            (log, head)
+        }
     };
 
     let key = format!("{:016x}{:016x}", fl_lkc::now_ms(), std::process::id());

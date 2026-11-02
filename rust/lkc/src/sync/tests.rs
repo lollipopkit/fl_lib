@@ -388,3 +388,12 @@ async fn a_503_asking_for_a_short_wait_is_tried_once_more_when_it_may_be() {
     assert_eq!(sync.list().await.unwrap_err().kind, Kind::Unreachable);
     assert_eq!(fake.requests("/v2/sync/serverbox").len(), 1);
 }
+
+#[tokio::test]
+async fn a_full_page_of_large_batches_is_read() {
+    // Homebase's page: under 1 MiB before the last batch, so five of 256 KiB.
+    let big = vec![9u8; BATCH_MAX];
+    let (_fake, sync) = homebase(move |_| page(&[(1, &big), (2, &big), (3, &big), (4, &big), (5, &big)], 5, false)).await;
+    let LogRead::Page { batches, .. } = sync.read_log(0, None, None).await.unwrap() else { panic!() };
+    assert_eq!(batches.len(), 5);
+}
