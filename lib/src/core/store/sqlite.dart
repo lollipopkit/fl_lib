@@ -619,13 +619,18 @@ class SqliteStore extends KvStore {
           final placeholders = List.filled(cleared.length, '?').join(', ');
           // Recorded with the delete, before any await: a `set` of a cleared
           // key in between is then recorded after its removal, not before.
-          _write(
-            () => _db.execute(
-              'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
-              [name, ...cleared],
-            ),
-            shouldUpdateLastUpdateTs ? {for (final key in cleared) key: null} : const {},
-          );
+          try {
+            _write(
+              () => _db.execute(
+                'DELETE FROM kv WHERE store = ? AND key IN ($placeholders);',
+                [name, ...cleared],
+              ),
+              shouldUpdateLastUpdateTs ? {for (final key in cleared) key: null} : const {},
+            );
+          } catch (e) {
+            dprintWarn('clear()', 'write failed: $e');
+            return false;
+          }
           cleared.forEach(_listeners.notify);
         }
 

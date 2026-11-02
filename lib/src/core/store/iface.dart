@@ -188,7 +188,8 @@ sealed class KvStore {
   }
 
   /// Told by a [SqliteStore] of every edit a sync carries, in the transaction
-  /// that writes it (a throw undoes the write): the store, the key, and the
+  /// that writes it (a throw undoes the write; what it writes to [SqliteDb]
+  /// commits or rolls back with the edit): the store, the key, and the
   /// value as stored (JSON; null for a removal). Not for internal or
   /// device-local keys, nor for a write that does not stamp (a restore, a
   /// migration). [PrefStore] and [HiveStore] hold nothing synced and do not

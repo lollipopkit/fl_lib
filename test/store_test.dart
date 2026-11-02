@@ -363,7 +363,7 @@ void main() {
       expect(heard, {('a', null), ('b', null)});
     });
 
-    test('a write onEdit fails to record is undone', () {
+    test('a write onEdit fails to record is undone', () async {
       final store = SqliteStore('edit-fail-test');
       store.set('a', 1);
       KvStore.onEdit = (_, _, _) => throw StateError('record failed');
@@ -373,6 +373,7 @@ void main() {
       addTearDown(sub.cancel);
       expect(store.set('a', 2), isFalse);
       expect(store.remove('a'), isFalse);
+      expect(await store.clear(), isFalse);
       expect(store.get<int>('a'), 1);
       expect(notified, isEmpty);
     });
