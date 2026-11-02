@@ -59,3 +59,9 @@ pub fn sync_winners(ops_json: String, current_json: String) -> Result<String, Sy
     let won = fl_sync::winners(|c, id| current.get(&format!("{c}\u{0}{id}")).copied(), &ops);
     serde_json::to_string(&won).map_err(failure)
 }
+
+/// `fl_sync::blob_name`: [data]'s name beside the log, keyed by [secret].
+#[frb(sync)]
+pub fn sync_blob_name(secret: String, data: Vec<u8>) -> String {
+    fl_sync::blob_name(&secret, &data)
+}

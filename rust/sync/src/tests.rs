@@ -141,3 +141,13 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn blob_names_follow_the_data_and_the_key() {
+    let a = blob_name("key-a", b"theme");
+    assert_eq!(a.len(), 64);
+    assert_eq!(a, blob_name("key-a", b"theme"));
+    assert_ne!(a, blob_name("key-b", b"theme"));
+    assert_ne!(a, blob_name("key-a", b"other"));
+    assert_ne!(a, blake3::hash(b"theme").to_hex().to_string(), "not the bare hash anyone can compute");
+}

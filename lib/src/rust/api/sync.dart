@@ -42,6 +42,10 @@ String syncWinners({required String opsJson, required String currentJson}) =>
       currentJson: currentJson,
     );
 
+/// `fl_sync::blob_name`: [data]'s name beside the log, keyed by [secret].
+String syncBlobName({required String secret, required List<int> data}) =>
+    RustLib.instance.api.crateApiSyncSyncBlobName(secret: secret, data: data);
+
 /// Why a call could not be answered: a stamp or an op that is not one.
 class SyncFailure implements FrbException {
   final String message;

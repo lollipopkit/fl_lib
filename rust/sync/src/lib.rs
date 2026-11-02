@@ -188,5 +188,14 @@ pub fn newest<'a>(ops: impl IntoIterator<Item = &'a Op>) -> Option<Hlc> {
     ops.into_iter().map(|op| op.h).max()
 }
 
+/// A name for [data] kept beside the log (a large record, a theme package)
+/// that only holders of [secret] (the account's sync key) can derive: equal
+/// data, equal name, and the store cannot tell which known file a person
+/// holds. Hex, 64 characters.
+pub fn blob_name(secret: &str, data: &[u8]) -> String {
+    let key = blake3::derive_key("ServerBox sync blob name v1", secret.as_bytes());
+    blake3::keyed_hash(&key, data).to_hex().to_string()
+}
+
 #[cfg(test)]
 mod tests;
