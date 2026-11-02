@@ -86,7 +86,10 @@ impl LkcSession {
         let stored = match stored.map(|s| serde_json::from_str::<Stored>(&s)) {
             Some(Ok(s)) => Some(s),
             Some(Err(e)) => {
-                store.signed_out(format!("the saved session could not be read: {e}")).await;
+                // Its category and place only: serde's message can quote the
+                // value, a token.
+                let why = format!("the saved session could not be read ({:?} at {}:{})", e.classify(), e.line(), e.column());
+                store.signed_out(why).await;
                 None
             }
             None => None,

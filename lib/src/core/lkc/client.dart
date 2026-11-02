@@ -180,7 +180,12 @@ final class LkcClient {
       api: baseUrl.toString(),
       stored: saved,
       save: _saveSession,
-      signedOut: (why) => Loggers.app.warning('LK Cloud signed out: $why'),
+      // However it ended (the IdP, homebase, a refresh lost): the account
+      // shown goes with it.
+      signedOut: (why) {
+        Loggers.app.warning('LK Cloud signed out: $why');
+        _clear();
+      },
     );
     // Kept by no build that reads it: a homebase token of the hand-off
     // sign-in (TODO: rm once no such build is around), or a half-written one.
@@ -298,7 +303,7 @@ final class LkcClient {
   }
 
   /// Signed out here only: homebase refused the token. [why] is logged.
-  Future<void> forget(String why) async {
+  Future<void> forget([String why = 'homebase refused the session']) async {
     _clear();
     await _session?.forget(why: why);
   }

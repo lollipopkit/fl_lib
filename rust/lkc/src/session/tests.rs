@@ -113,7 +113,7 @@ async fn a_session_saved_marked_is_over() {
     assert!(!session.signed_in());
     assert_eq!(store.last(), Some(None));
     assert!(fake.seen.lock().unwrap().is_empty(), "nothing is sent for it");
-    assert!(store.outs.lock().unwrap()[0].contains("refresh was under way"));
+    assert!(store.outs.lock().unwrap().first().is_some_and(|w| w.contains("refresh was under way")));
 }
 
 #[tokio::test]
@@ -123,7 +123,7 @@ async fn a_refresh_token_the_idp_says_is_gone_signs_out() {
     let session = Session::restore(client(&fake), store.clone(), Some(stored(10))).await;
     assert_eq!(session.access_token().await.unwrap_err().failure, Failure::Rejected);
     assert_eq!(store.last(), Some(None));
-    assert!(store.outs.lock().unwrap()[0].starts_with("the refresh failed"));
+    assert!(store.outs.lock().unwrap().first().is_some_and(|w| w.starts_with("the refresh failed")));
 }
 
 #[tokio::test]
@@ -221,4 +221,13 @@ async fn signing_out_revokes_and_forgetting_does_not() {
     session.sign_out("test".into()).await;
     assert_eq!(store.last(), Some(None));
     assert_eq!(fake.requests("/auth/v1/oidc/token/revoke").len(), 1);
+}
+
+#[tokio::test]
+async fn a_due_token_with_nothing_to_renew_it_signs_out_and_says_why() {
+    let fake = idp(|_| granted()).await;
+    let store = Memory::default();
+    let session = Session::restore(client(&fake), store.clone(), Some(Stored { refresh: None, ..stored(10) })).await;
+    assert_eq!(session.access_token().await.unwrap_err().failure, Failure::Rejected);
+    assert_eq!(*store.outs.lock().unwrap(), ["the access token ran out and there is no refresh token"]);
 }

@@ -380,6 +380,20 @@ void main() {
       expect(api.requests.where((r) => r.path == '/auth/user'), isEmpty);
     });
 
+    test('a session saved mid-refresh is dropped, the account with it, and the log says why', () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'lkcToken': jsonEncode({'access': 'a1', 'refresh': 'r1', 'expires_at': 0, 'refreshing': true}),
+      });
+      final logged = <String>[];
+      final sub = Loggers.app.onRecord.listen((r) => logged.add(r.message));
+      addTearDown(sub.cancel);
+      await client.init();
+      expect(client.signedIn, isFalse);
+      expect(client.user.value, isNull);
+      expect(await SecureStoreProps.lkcToken.read(), isNull);
+      expect(logged, contains(startsWith('LK Cloud signed out: a refresh was under way')));
+    });
+
     // Revoking is the session's (`fl_lkc`'s tests).
     test('signing out drops the session', () async {
       await signedIn();
