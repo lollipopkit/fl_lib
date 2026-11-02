@@ -1,0 +1,13 @@
+[package]
+name = "fl_sync"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Sync as an operation log: hybrid logical clocks, operations and the rule that merges them"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+proptest = "1"

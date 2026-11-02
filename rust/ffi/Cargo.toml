@@ -3,7 +3,7 @@ name = "fl_lib_ffi"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-only"
-description = "fl_lib's Rust (`fl_theme`, `fl_lkc`) bridged to Dart"
+description = "fl_lib's Rust (`fl_theme`, `fl_lkc`, `fl_sync`) bridged to Dart"
 
 [lib]
 name = "fl_lib_ffi"
@@ -13,6 +13,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 flutter_rust_bridge = "=2.13.0"
 fl_theme = { path = "../theme" }
 fl_lkc = { path = "../lkc" }
+fl_sync = { path = "../sync" }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1.53", default-features = false, features = ["sync", "macros"] }
 indexmap = "2"

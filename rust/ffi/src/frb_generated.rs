@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
                     default_rust_auto_opaque = RustAutoOpaqueMoi,
                 );
                 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1440810845;
+                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1845071002;
             
 
 // Section: executor
@@ -475,6 +475,43 @@ let api_icon_files = <Vec<String>>::sse_decode(&mut deserializer);deserializer.e
                 transform_result_sse::<_, crate::api::theme::ThemeFailure>((move || {
                      let output_ok = crate::api::theme::read_theme_repo_archive(api_bytes)?;   std::result::Result::Ok(output_ok)
                 })()) })
+            }fn wire__crate__api__sync__sync_later_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "sync_later", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_last = <String>::sse_decode(&mut deserializer);
+let api_seen = <String>::sse_decode(&mut deserializer);deserializer.end();
+                transform_result_sse::<_, crate::api::sync::SyncFailure>((move || {
+                     let output_ok = crate::api::sync::sync_later(api_last, api_seen)?;   std::result::Result::Ok(output_ok)
+                })()) })
+            }fn wire__crate__api__sync__sync_stamp_of_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "sync_stamp_of", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_ms = <u64>::sse_decode(&mut deserializer);
+let api_device = <u64>::sse_decode(&mut deserializer);deserializer.end();
+                transform_result_sse::<_, ()>((move || {
+                     let output_ok = Ok::<_, ()>(crate::api::sync::sync_stamp_of(api_ms, api_device))?;   std::result::Result::Ok(output_ok)
+                })()) })
+            }fn wire__crate__api__sync__sync_tick_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "sync_tick", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_device = <u64>::sse_decode(&mut deserializer);
+let api_last = <String>::sse_decode(&mut deserializer);
+let api_now_ms = <u64>::sse_decode(&mut deserializer);deserializer.end();
+                transform_result_sse::<_, crate::api::sync::SyncFailure>((move || {
+                     let output_ok = crate::api::sync::sync_tick(api_device, api_last, api_now_ms)?;   std::result::Result::Ok(output_ok)
+                })()) })
+            }fn wire__crate__api__sync__sync_winners_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "sync_winners", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_ops_json = <String>::sse_decode(&mut deserializer);
+let api_current_json = <String>::sse_decode(&mut deserializer);deserializer.end();
+                transform_result_sse::<_, crate::api::sync::SyncFailure>((move || {
+                     let output_ok = crate::api::sync::sync_winners(api_ops_json, api_current_json)?;   std::result::Result::Ok(output_ok)
+                })()) })
             }fn wire__crate__api__theme__theme_format_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "theme_format", port: None, mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -754,6 +791,12 @@ let mut var_files = <Vec<crate::api::theme::ThemeFile>>::sse_decode(deserializer
 return crate::api::theme::PreparedTheme{installation_id: var_installationId, id: var_id, name: var_name, icon_pack: var_iconPack, files: var_files};}
                 }
                 
+                impl SseDecode for crate::api::sync::SyncFailure {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_message = <String>::sse_decode(deserializer);
+return crate::api::sync::SyncFailure{message: var_message};}
+                }
+                
                 impl SseDecode for crate::api::theme::ThemeCatalogInfo {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_name = <Option<String>>::sse_decode(deserializer);
@@ -858,8 +901,12 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
 27 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
 28 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
 29 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
-30 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
-31 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
+30 => wire__crate__api__sync__sync_later_impl(ptr, rust_vec_len, data_len),
+31 => wire__crate__api__sync__sync_stamp_of_impl(ptr, rust_vec_len, data_len),
+32 => wire__crate__api__sync__sync_tick_impl(ptr, rust_vec_len, data_len),
+33 => wire__crate__api__sync__sync_winners_impl(ptr, rust_vec_len, data_len),
+34 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
+35 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
                 }
@@ -1055,6 +1102,20 @@ self.files.into_into_dart().into_dart()
             impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::theme::PreparedTheme {}
 impl flutter_rust_bridge::IntoIntoDart<crate::api::theme::PreparedTheme> for crate::api::theme::PreparedTheme {
             fn into_into_dart(self) -> crate::api::theme::PreparedTheme {
+                self
+            }
+        }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+            impl flutter_rust_bridge::IntoDart for crate::api::sync::SyncFailure {
+                fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+                    [
+                    self.message.into_into_dart().into_dart()
+                ].into_dart()
+                }
+            }
+            impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::sync::SyncFailure {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::sync::SyncFailure> for crate::api::sync::SyncFailure {
+            fn into_into_dart(self) -> crate::api::sync::SyncFailure {
                 self
             }
         }
@@ -1328,6 +1389,11 @@ crate::api::lkc::LkcSyncErrorKind::Invalid => { 8 }
 <String>::sse_encode(self.name, serializer);
 <bool>::sse_encode(self.icon_pack, serializer);
 <Vec<crate::api::theme::ThemeFile>>::sse_encode(self.files, serializer);}
+                }
+                
+                impl SseEncode for crate::api::sync::SyncFailure {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.message, serializer);}
                 }
                 
                 impl SseEncode for crate::api::theme::ThemeCatalogInfo {

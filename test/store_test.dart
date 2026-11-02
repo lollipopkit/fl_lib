@@ -339,6 +339,56 @@ void main() {
       expect(store.get<String>(internalKey), 'value');
       expect(store.lastUpdateTs, {'user-key': 1});
     });
+
+    test('onEdit hears the edits a sync carries, and only those', () {
+      final heard = <(String, String, String?)>[];
+      KvStore.onEdit = (store, key, json) => heard.add((store.name, key, json));
+      addTearDown(() => KvStore.onEdit = null);
+      final store = SqliteStore('edit-test');
+      store.set('a', {'x': 1});
+      store.set('quiet', 1, updateLastUpdateTsOnSet: false);
+      store.set('${StoreDefaults.prefixKey}marker', true);
+      store.remove('a');
+      expect(heard, [('edit-test', 'a', '{"x":1}'), ('edit-test', 'a', null)]);
+    });
+
+    test('onEdit hears every key a clear removes', () async {
+      final store = SqliteStore('clear-edit-test');
+      store.set('a', 1, updateLastUpdateTsOnSet: false);
+      store.set('b', 2, updateLastUpdateTsOnSet: false);
+      final heard = <(String, String?)>{};
+      KvStore.onEdit = (_, key, json) => heard.add((key, json));
+      addTearDown(() => KvStore.onEdit = null);
+      await store.clear();
+      expect(heard, {('a', null), ('b', null)});
+    });
+
+    test('a write onEdit fails to record is undone', () {
+      final store = SqliteStore('edit-fail-test');
+      store.set('a', 1);
+      KvStore.onEdit = (_, _, _) => throw StateError('record failed');
+      addTearDown(() => KvStore.onEdit = null);
+      final notified = <String>[];
+      final sub = store.watch().listen(notified.add);
+      addTearDown(sub.cancel);
+      expect(store.set('a', 2), isFalse);
+      expect(store.remove('a'), isFalse);
+      expect(store.get<int>('a'), 1);
+      expect(notified, isEmpty);
+    });
+
+    test('a set during a clear is heard after the clear removed its key', () async {
+      final store = SqliteStore('clear-race-test');
+      store.set('a', 1, updateLastUpdateTsOnSet: false);
+      final heard = <(String, String?)>[];
+      KvStore.onEdit = (_, key, json) => heard.add((key, json));
+      addTearDown(() => KvStore.onEdit = null);
+      final clearing = store.clear();
+      store.set('a', 2);
+      await clearing;
+      expect(heard, [('a', null), ('a', '2')]);
+      expect(store.get<int>('a'), 2);
+    });
   });
 
   group('MockStoreProp', () {
