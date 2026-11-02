@@ -70,7 +70,8 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSession_forget", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSession>>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSession>>>::sse_decode(&mut deserializer);
+let api_why = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, ()>((move || async move {
                         let mut api_that_guard = None;
 let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
@@ -81,7 +82,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             }
         }
         let api_that_guard = api_that_guard.unwrap();
- let output_ok = Ok::<_, ()>({ crate::api::lkc::LkcSession::forget(&*api_that_guard).await; })?;   std::result::Result::Ok(output_ok)
+ let output_ok = Ok::<_, ()>({ crate::api::lkc::LkcSession::forget(&*api_that_guard, api_why).await; })?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__lkc__LkcSession_fresh_access_token_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
@@ -109,9 +110,10 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
 let api_client_id = <String>::sse_decode(&mut deserializer);
 let api_api = <String>::sse_decode(&mut deserializer);
 let api_stored = <Option<String>>::sse_decode(&mut deserializer);
-let api_save = decode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(<flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer));deserializer.end(); move |context| async move {
+let api_save = decode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(<flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer));
+let api_signed_out = decode_DartFn_Inputs_String_Output_unit_AnyhowException(<flutter_rust_bridge::DartOpaque>::sse_decode(&mut deserializer));deserializer.end(); move |context| async move {
                     transform_result_sse::<_, crate::api::lkc::LkcError>((move || async move {
-                         let output_ok = crate::api::lkc::LkcSession::restore(api_issuer, api_client_id, api_api, api_stored, api_save).await?;   std::result::Result::Ok(output_ok)
+                         let output_ok = crate::api::lkc::LkcSession::restore(api_issuer, api_client_id, api_api, api_stored, api_save, api_signed_out).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__lkc__LkcSession_sign_in_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -139,7 +141,8 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcSession_sign_out", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSession>>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSession>>>::sse_decode(&mut deserializer);
+let api_why = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, ()>((move || async move {
                         let mut api_that_guard = None;
 let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
@@ -150,7 +153,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             }
         }
         let api_that_guard = api_that_guard.unwrap();
- let output_ok = Ok::<_, ()>({ crate::api::lkc::LkcSession::sign_out(&*api_that_guard).await; })?;   std::result::Result::Ok(output_ok)
+ let output_ok = Ok::<_, ()>({ crate::api::lkc::LkcSession::sign_out(&*api_that_guard, api_why).await; })?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__lkc__LkcSession_signed_in_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
@@ -630,7 +633,32 @@ let api_current_json = <String>::sse_decode(&mut deserializer);deserializer.end(
 
 // Section: related_funcs
 
-fn decode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
+fn decode_DartFn_Inputs_String_Output_unit_AnyhowException(
+                    dart_opaque: flutter_rust_bridge::DartOpaque,
+                ) -> impl Fn(String) -> flutter_rust_bridge::DartFnFuture<()> {
+                    use flutter_rust_bridge::IntoDart;
+
+                    async fn body(dart_opaque: flutter_rust_bridge::DartOpaque, arg0: String) -> () {
+                        let args = vec![arg0.into_into_dart().into_dart(),];
+                        let message = FLUTTER_RUST_BRIDGE_HANDLER.dart_fn_invoke(dart_opaque, args).await;
+
+                        let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+                        let action = deserializer.cursor.read_u8().unwrap();
+                        let ans = match action {
+                            0 => std::result::Result::Ok(<()>::sse_decode(&mut deserializer)),
+                            1 => std::result::Result::Err(<flutter_rust_bridge::for_generated::anyhow::Error>::sse_decode(&mut deserializer)),
+                            _ => unreachable!(),
+                        };
+                        deserializer.end();
+                        let ans = ans.expect("Dart throws exception but Rust side assume it is not failable");ans
+                    }
+
+                    move |arg0: String| {
+                        flutter_rust_bridge::for_generated::convert_into_dart_fn_future(body(
+                            dart_opaque.clone(), arg0
+                        ))
+                    }
+                }fn decode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
                     dart_opaque: flutter_rust_bridge::DartOpaque,
                 ) -> impl Fn(Option<String>) -> flutter_rust_bridge::DartFnFuture<bool> {
                     use flutter_rust_bridge::IntoDart;

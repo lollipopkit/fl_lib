@@ -53,7 +53,7 @@ async fn main() {
     session.sign_in(tokens).await.expect("session");
 
     let result = tokio::spawn(run(session.clone())).await;
-    session.sign_out().await;
+    session.sign_out("the e2e run ended".into()).await;
     println!("signed out");
     if let Err(e) = result {
         std::panic::resume_unwind(e.into_panic());

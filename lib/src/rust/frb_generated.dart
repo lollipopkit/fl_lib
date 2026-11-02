@@ -83,7 +83,10 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 abstract class RustLibApi extends BaseApi {
   Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that});
 
-  Future<void> crateApiLkcLkcSessionForget({required LkcSession that});
+  Future<void> crateApiLkcLkcSessionForget({
+    required LkcSession that,
+    required String why,
+  });
 
   String? crateApiLkcLkcSessionFreshAccessToken({required LkcSession that});
 
@@ -93,6 +96,7 @@ abstract class RustLibApi extends BaseApi {
     required String api,
     String? stored,
     required FutureOr<bool> Function(String?) save,
+    required FutureOr<void> Function(String) signedOut,
   });
 
   Future<void> crateApiLkcLkcSessionSignIn({
@@ -102,7 +106,10 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 expiresAtMs,
   });
 
-  Future<void> crateApiLkcLkcSessionSignOut({required LkcSession that});
+  Future<void> crateApiLkcLkcSessionSignOut({
+    required LkcSession that,
+    required String why,
+  });
 
   bool crateApiLkcLkcSessionSignedIn({required LkcSession that});
 
@@ -307,7 +314,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiLkcLkcSessionForget({required LkcSession that}) {
+  Future<void> crateApiLkcLkcSessionForget({
+    required LkcSession that,
+    required String why,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -316,6 +326,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
+          sse_encode_String(why, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -328,14 +339,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiLkcLkcSessionForgetConstMeta,
-        argValues: [that],
+        argValues: [that, why],
         apiImpl: this,
       ),
     );
   }
 
   TaskConstMeta get kCrateApiLkcLkcSessionForgetConstMeta =>
-      const TaskConstMeta(debugName: "LkcSession_forget", argNames: ["that"]);
+      const TaskConstMeta(
+        debugName: "LkcSession_forget",
+        argNames: ["that", "why"],
+      );
 
   @override
   String? crateApiLkcLkcSessionFreshAccessToken({required LkcSession that}) {
@@ -373,6 +387,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required String api,
     String? stored,
     required FutureOr<bool> Function(String?) save,
+    required FutureOr<void> Function(String) signedOut,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -384,6 +399,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_opt_String(stored, serializer);
           sse_encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
             save,
+            serializer,
+          );
+          sse_encode_DartFn_Inputs_String_Output_unit_AnyhowException(
+            signedOut,
             serializer,
           );
           pdeCallFfi(
@@ -399,7 +418,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_lkc_error,
         ),
         constMeta: kCrateApiLkcLkcSessionRestoreConstMeta,
-        argValues: [issuer, clientId, api, stored, save],
+        argValues: [issuer, clientId, api, stored, save, signedOut],
         apiImpl: this,
       ),
     );
@@ -408,7 +427,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiLkcLkcSessionRestoreConstMeta =>
       const TaskConstMeta(
         debugName: "LkcSession_restore",
-        argNames: ["issuer", "clientId", "api", "stored", "save"],
+        argNames: ["issuer", "clientId", "api", "stored", "save", "signedOut"],
       );
 
   @override
@@ -454,7 +473,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<void> crateApiLkcLkcSessionSignOut({required LkcSession that}) {
+  Future<void> crateApiLkcLkcSessionSignOut({
+    required LkcSession that,
+    required String why,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -463,6 +485,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
+          sse_encode_String(why, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -475,14 +498,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiLkcLkcSessionSignOutConstMeta,
-        argValues: [that],
+        argValues: [that, why],
         apiImpl: this,
       ),
     );
   }
 
   TaskConstMeta get kCrateApiLkcLkcSessionSignOutConstMeta =>
-      const TaskConstMeta(debugName: "LkcSession_sign_out", argNames: ["that"]);
+      const TaskConstMeta(
+        debugName: "LkcSession_sign_out",
+        argNames: ["that", "why"],
+      );
 
   @override
   bool crateApiLkcLkcSessionSignedIn({required LkcSession that}) {
@@ -1598,6 +1624,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   Future<void> Function(int, dynamic)
+  encode_DartFn_Inputs_String_Output_unit_AnyhowException(
+    FutureOr<void> Function(String) raw,
+  ) {
+    return (callId, rawArg0) async {
+      final arg0 = dco_decode_String(rawArg0);
+
+      Box<void>? rawOutput;
+      Box<AnyhowException>? rawError;
+      try {
+        rawOutput = Box(await raw(arg0));
+      } catch (e, s) {
+        rawError = Box(AnyhowException("$e\n\n$s"));
+      }
+
+      final serializer = SseSerializer(generalizedFrbRustBinding);
+      assert((rawOutput != null) ^ (rawError != null));
+      if (rawOutput != null) {
+        serializer.buffer.putUint8(0);
+        sse_encode_unit(rawOutput.value, serializer);
+      } else {
+        serializer.buffer.putUint8(1);
+        sse_encode_AnyhowException(rawError!.value, serializer);
+      }
+      final output = serializer.intoRaw();
+
+      generalizedFrbRustBinding.dartFnDeliverOutput(
+        callId: callId,
+        ptr: output.ptr,
+        rustVecLen: output.rustVecLen,
+        dataLen: output.dataLen,
+      );
+    };
+  }
+
+  Future<void> Function(int, dynamic)
   encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
     FutureOr<bool> Function(String?) raw,
   ) {
@@ -1688,6 +1749,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return LkcSyncImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  FutureOr<void> Function(String)
+  dco_decode_DartFn_Inputs_String_Output_unit_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError('');
   }
 
   @protected
@@ -2711,6 +2779,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_DartFn_Inputs_String_Output_unit_AnyhowException(
+    FutureOr<void> Function(String) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_DartOpaque(
+      encode_DartFn_Inputs_String_Output_unit_AnyhowException(self),
+      serializer,
+    );
+  }
+
+  @protected
   void sse_encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
     FutureOr<bool> Function(String?) self,
     SseSerializer serializer,
@@ -3201,9 +3281,10 @@ class LkcSessionImpl extends RustOpaque implements LkcSession {
   Future<String> accessToken() =>
       RustLib.instance.api.crateApiLkcLkcSessionAccessToken(that: this);
 
-  /// Signed out here only: homebase refused the token.
-  Future<void> forget() =>
-      RustLib.instance.api.crateApiLkcLkcSessionForget(that: this);
+  /// Signed out here only: homebase refused the token. [why] goes to
+  /// `signed_out`.
+  Future<void> forget({required String why}) =>
+      RustLib.instance.api.crateApiLkcLkcSessionForget(that: this, why: why);
 
   /// The access token when it needs no refresh, without waiting; `None`
   /// asks [LkcSession::access_token].
@@ -3223,9 +3304,10 @@ class LkcSessionImpl extends RustOpaque implements LkcSession {
     expiresAtMs: expiresAtMs,
   );
 
-  /// Signed out, the refresh token revoked at the IdP.
-  Future<void> signOut() =>
-      RustLib.instance.api.crateApiLkcLkcSessionSignOut(that: this);
+  /// Signed out, the refresh token revoked at the IdP. [why] goes to
+  /// `signed_out`.
+  Future<void> signOut({required String why}) =>
+      RustLib.instance.api.crateApiLkcLkcSessionSignOut(that: this, why: why);
 
   bool signedIn() =>
       RustLib.instance.api.crateApiLkcLkcSessionSignedIn(that: this);

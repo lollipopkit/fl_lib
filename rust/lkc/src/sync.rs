@@ -666,7 +666,7 @@ impl<S: Store> SyncClient<S> {
         match crate::unwrap(&url, status.as_u16(), &body) {
             Ok(data) => serde_json::from_value(data).map_err(|e| Error::new(Kind::Invalid, format!("{url}: {e}"))),
             Err(e) if e.failure == Failure::Rejected => {
-                self.session.forget().await;
+                self.session.forget(format!("homebase refused the session at {url}: {}", e.detail)).await;
                 Err(Error::new(Kind::SignedOut, e.detail))
             }
             Err(e) if e.failure == Failure::Unreachable => Err(Error::new(Kind::Unreachable, e.detail)),

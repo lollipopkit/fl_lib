@@ -20,6 +20,12 @@ pub trait Store: Send + Sync + 'static {
     /// Saves [state]; `None` is signed out. A refresh is sent only after the
     /// save of its mark answered `Ok`.
     fn save(&self, state: Option<Stored>) -> impl Future<Output = Result<(), String>> + Send;
+
+    /// The session is over here, and [why]: for the app's log, as nothing
+    /// else says why a person finds themselves signed out.
+    fn signed_out(&self, _why: String) -> impl Future<Output = ()> + Send {
+        async {}
+    }
 }
 
 /// A session as saved. The keys are those fl_lib's Dart `LkcTokens` wrote,
@@ -62,7 +68,11 @@ impl<S: Store> Session<S> {
     pub async fn restore(client: Arc<Client>, store: S, stored: Option<Stored>) -> Self {
         let tokens = match stored {
             Some(s) if s.refreshing => {
-                let _ = store.save(None).await;
+                let why = "a refresh was under way when the app last stopped; its token may be spent";
+                match store.save(None).await {
+                    Ok(()) => store.signed_out(why.into()).await,
+                    Err(e) => store.signed_out(format!("{why} (not removed from storage: {e})")).await,
+                }
                 None
             }
             Some(s) => Some(Tokens::stored(s.access, s.refresh, s.expires_at)),
@@ -119,34 +129,44 @@ impl<S: Store> Session<S> {
     /// The access token to send, refreshed first when due. Signed out, or
     /// signed out now because the session is over: [`Failure::Rejected`].
     pub async fn access_token(&self) -> Result<String, Error> {
-        let _guard = self.refreshing.lock().await;
+        let (token, ended) = {
+            let _guard = self.refreshing.lock().await;
+            self.access_token_held().await
+        };
+        self.tell(ended).await;
+        token
+    }
+
+    /// [`Session::access_token`] under the lock; and why the session ended,
+    /// if it did, told once the lock is let go.
+    async fn access_token_held(&self) -> (Result<String, Error>, Option<String>) {
         let Some(tokens) = self.current() else {
-            return Err(Error::new(Failure::Rejected, "signed out"));
+            return (Err(Error::new(Failure::Rejected, "signed out")), None);
         };
         if !tokens.due(now_ms()) {
-            return Ok(tokens.access);
+            return (Ok(tokens.access), None);
         }
         if tokens.refresh.is_none() {
             // Due, with nothing to renew it by: it is over.
-            self.drop_session().await;
-            return Err(Error::new(Failure::Rejected, "the access token ran out and there is no refresh token"));
+            let why = "the access token ran out and there is no refresh token";
+            return (Err(Error::new(Failure::Rejected, why)), self.drop_session(why.into()).await);
         }
         // Not sent when the mark cannot be saved.
         if let Err(e) = self.store.save(Some(Stored::of(&tokens, true))).await {
-            return Err(Error::new(Failure::Unreachable, format!("not refreshing, the session cannot be saved: {e}")));
+            return (Err(Error::new(Failure::Unreachable, format!("not refreshing, the session cannot be saved: {e}"))), None);
         }
         match self.client.refresh(&tokens).await {
             Ok(fresh) => {
                 if let Err(e) = self.store.save(Some(Stored::of(&fresh, false))).await {
                     // Nothing would hold the renewed token: revoked, and the
                     // one sent is spent.
-                    self.drop_session().await;
+                    let ended = self.drop_session(format!("a renewed token could not be saved: {e}")).await;
                     self.revoke(fresh.refresh).await;
-                    return Err(Error::new(Failure::Rejected, format!("saving a refresh: {e}")));
+                    return (Err(Error::new(Failure::Rejected, format!("saving a refresh: {e}"))), ended);
                 }
                 let access = fresh.access.clone();
                 self.set(Some(fresh));
-                Ok(access)
+                (Ok(access), None)
             }
             // Never reached the IdP, or refused without saying the token is
             // gone (a clock off, a user disabled for now): the session stays,
@@ -154,35 +174,56 @@ impl<S: Store> Session<S> {
             Err(e) if matches!(e.failure, Failure::Unreachable | Failure::Refused | Failure::Denied | Failure::TooEarly) => {
                 // Left marked, the next start signs out instead: safe either way.
                 let _ = self.store.save(Some(Stored::of(&tokens, false))).await;
-                Ok(tokens.access)
+                (Ok(tokens.access), None)
             }
             // Taken back or run out, or sent with no answer this can use:
             // possibly spent.
             Err(e) => {
-                self.drop_session().await;
-                Err(Error::new(Failure::Rejected, e.detail))
+                let ended = self.drop_session(format!("the refresh failed ({:?}): {}", e.failure, e.detail)).await;
+                (Err(Error::new(Failure::Rejected, e.detail)), ended)
             }
         }
     }
 
     /// Signed out here only: homebase refused the token, which says nothing
     /// a revocation could still reach.
-    pub async fn forget(&self) {
-        let _guard = self.refreshing.lock().await;
-        self.drop_session().await;
+    pub async fn forget(&self, why: String) {
+        let ended = {
+            let _guard = self.refreshing.lock().await;
+            self.drop_session(why).await
+        };
+        self.tell(ended).await;
     }
 
     /// Signed out, and the refresh token revoked at the IdP, best effort.
-    pub async fn sign_out(&self) {
-        let _guard = self.refreshing.lock().await;
-        let refresh = self.current().and_then(|t| t.refresh);
-        self.drop_session().await;
-        self.revoke(refresh).await;
+    pub async fn sign_out(&self, why: String) {
+        let ended = {
+            let _guard = self.refreshing.lock().await;
+            let refresh = self.current().and_then(|t| t.refresh);
+            let ended = self.drop_session(why).await;
+            self.revoke(refresh).await;
+            ended
+        };
+        self.tell(ended).await;
     }
 
-    async fn drop_session(&self) {
+    /// Signed out; [why], when a session was there to end, for [`Session::tell`]
+    /// once the lock is let go: the store's answer is not waited on while
+    /// every request waits on the lock.
+    async fn drop_session(&self, why: String) -> Option<String> {
+        let was = self.current().is_some();
         self.set(None);
-        let _ = self.store.save(None).await;
+        let saved = self.store.save(None).await;
+        was.then(|| match saved {
+            Ok(()) => why,
+            Err(e) => format!("{why} (not removed from storage: {e})"),
+        })
+    }
+
+    async fn tell(&self, ended: Option<String>) {
+        if let Some(why) = ended {
+            self.store.signed_out(why).await;
+        }
     }
 
     async fn revoke(&self, refresh: Option<String>) {

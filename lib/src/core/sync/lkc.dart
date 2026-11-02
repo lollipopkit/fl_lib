@@ -37,7 +37,6 @@ final class LkcRemoteStorage
         _known.remove(relativePath);
         throw RemoteChangedException(relativePath);
       }
-      if (e.kind == LkcSyncErrorKind.signedOut) await client.forget();
       throw e.exception;
     } finally {
       final offset = sync.offsetMs();
