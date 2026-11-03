@@ -37,6 +37,7 @@ class HiveStore extends KvStore {
     /// `~/Documents`. Boxes follow [Paths.doc] there, or they would be the
     /// one part of the app still writing into it.
     Pfs.macos when !Pfs.isMacSandboxed => Paths.doc,
+    Pfs.ios when Paths.iosFilesApp => Paths.doc,
     _ => (await getApplicationDocumentsDirectory()).path,
   };
 

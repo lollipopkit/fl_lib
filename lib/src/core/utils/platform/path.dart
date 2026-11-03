@@ -40,16 +40,36 @@ abstract final class Paths {
   /// - [fileInUserDocuments] keeps user-visible files in the platform's
   ///   documents directory. Disable it when the app provides its own browser
   ///   and needs a permission-free default location.
+  /// - [iosFilesApp] makes [file] the iOS Documents directory itself, which the
+  ///   Files app lists under On My iPhone once the app sets
+  ///   `UIFileSharingEnabled`, and moves [doc] to Application Support so none
+  ///   of the app's own data is listed there. See [adoptIosDocuments].
   static Future<void> init(
     String appName, {
     String? bakName,
     Set<PathDir> dirs = _allDirs,
     bool fileInUserDocuments = true,
+    bool iosFilesApp = false,
   }) async {
-    doc = await _getDoc(appName);
-    file = fileInUserDocuments
-        ? await userFilesPath(appName)
-        : await _initDir('file');
+    if (iosFilesApp && isIOS) {
+      final documents = (await getApplicationDocumentsDirectory()).path;
+      final support = (await getApplicationSupportDirectory()).path.joinPath(
+        appName,
+      );
+      if (await adoptIosDocuments(documents: documents, doc: support)) {
+        _iosFilesApp = true;
+        doc = support;
+        file = documents;
+      } else {
+        doc = documents;
+        file = await _initDir('file');
+      }
+    } else {
+      doc = await _getDoc(appName);
+      file = fileInUserDocuments
+          ? await userFilesPath(appName)
+          : await _initDir('file');
+    }
     for (final dir in dirs) {
       final path = await _dirPath(dir, appName);
       switch (dir) {
@@ -216,6 +236,124 @@ abstract final class Paths {
         if (await staging.exists()) await staging.delete(recursive: true);
       } catch (_) {}
     }
+  }
+
+  static var _iosFilesApp = false;
+
+  /// Whether [doc] is out of the iOS Documents directory: [init] was given
+  /// `iosFilesApp` and the app's data has moved. Anything that kept its data
+  /// in Documents directly follows [doc] instead.
+  static bool get iosFilesApp => _iosFilesApp;
+
+  /// Names in iOS Documents that the system owns: `Inbox` receives the files
+  /// other apps hand over, `.Trash` is the Files app's Recently Deleted.
+  static const _documentsSystem = {'Inbox', '.Trash'};
+  static const _documentsMarker = '.moved-from-documents';
+  static const _filesStaging = '.file-moving';
+
+  /// Moves what a released build kept in iOS [documents] to [doc], then the
+  /// user's files from `Documents/file` up into [documents]. Each entry is one
+  /// rename within the app's container.
+  ///
+  /// The app's data goes into `<doc>.incoming`, marker included, and that
+  /// becomes [doc] in one rename: [doc] is whole or absent. A failure there
+  /// moves everything back and answers false — the caller stays on
+  /// [documents], where the data is — and a launch that died there finds the
+  /// staging directory and carries on.
+  ///
+  /// The user's files go once the app's data is in [doc], and the marker says
+  /// when they are done: from then on a `file` in [documents] is the user's
+  /// own. One that fails is left for the next launch. A name already taken at
+  /// the top stays in `file`.
+  ///
+  /// TODO: remove once no install can still have its data in Documents.
+  @visibleForTesting
+  static Future<bool> adoptIosDocuments({
+    required String documents,
+    required String doc,
+  }) async {
+    final marker = File(doc.joinPath(_documentsMarker));
+    if (!await marker.exists()) {
+      final incoming = Directory('$doc.incoming');
+      try {
+        await incoming.create(recursive: true);
+        await for (final entry in Directory(documents).list(followLinks: false)) {
+          final name = entry.path.getFileName();
+          if (name == null ||
+              name == 'file' ||
+              name == _filesStaging ||
+              _documentsSystem.contains(name)) {
+            continue;
+          }
+          await _renameUnlessTaken(entry, incoming.path.joinPath(name));
+        }
+        await File(
+          incoming.path.joinPath(_documentsMarker),
+        ).writeAsString('', flush: true);
+        final dest = Directory(doc);
+        if (await dest.exists()) {
+          if (!await dest.list().isEmpty) throw StateError('$doc is not empty');
+          await dest.delete();
+        }
+        await incoming.rename(doc);
+      } catch (e, s) {
+        Logger.root.warning('Move $documents -> $doc', e, s);
+        await _moveBack(incoming, documents);
+        return false;
+      }
+    }
+
+    try {
+      if (await marker.readAsString() == 'done') return true;
+      final files = Directory(documents.joinPath('file'));
+      final staging = Directory(documents.joinPath(_filesStaging));
+      if (await files.exists() && !await staging.exists()) {
+        await files.rename(staging.path);
+      }
+      if (await staging.exists()) {
+        await for (final entry in staging.list(followLinks: false)) {
+          final name = entry.path.getFileName();
+          if (name == null) continue;
+          await _renameUnlessTaken(entry, documents.joinPath(name));
+        }
+        if (await staging.list().isEmpty) {
+          await staging.delete();
+        } else if (!await files.exists()) {
+          await staging.rename(files.path);
+        }
+      }
+      await marker.writeAsString('done', flush: true);
+      Logger.root.info('Moved $documents -> $doc');
+    } catch (e, s) {
+      Logger.root.warning('Move ${documents.joinPath('file')} -> $documents', e, s);
+    }
+    return true;
+  }
+
+  static Future<void> _moveBack(Directory incoming, String documents) async {
+    try {
+      if (!await incoming.exists()) return;
+      await for (final entry in incoming.list(followLinks: false)) {
+        final name = entry.path.getFileName();
+        if (name == null || name == _documentsMarker) continue;
+        await _renameUnlessTaken(entry, documents.joinPath(name));
+      }
+      final marker = File(incoming.path.joinPath(_documentsMarker));
+      if (await marker.exists()) await marker.delete();
+      // Not recursive: what could not go back is still the app's data.
+      if (await incoming.list().isEmpty) await incoming.delete();
+    } catch (e, s) {
+      Logger.root.warning('Move ${incoming.path} back', e, s);
+    }
+  }
+
+  static Future<void> _renameUnlessTaken(FileSystemEntity entry, String dest) async {
+    if (await FileSystemEntity.type(dest, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      Logger.root.warning('Keep ${entry.path}: $dest is taken');
+      return;
+    }
+    await entry.rename(dest);
   }
 
   static Future<void> _renameDir(Directory legacy, String to) =>

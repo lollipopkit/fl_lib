@@ -23,7 +23,12 @@ abstract final class StoredPaths {
       settings.appImportedFontPath,
       ...alsoRepair,
     ]) {
-      final moved = rebase(prop.fetch(), doc: Paths.doc);
+      final moved = rebase(
+        prop.fetch(),
+        doc: Paths.doc,
+        // TODO: remove with `Paths.adoptIosDocuments`.
+        formerly: Paths.iosFilesApp ? 'Documents' : null,
+      );
       if (moved == null) continue;
       // Not the user's edit: another device syncing this setting has paths of
       // its own either way.
@@ -31,21 +36,25 @@ abstract final class StoredPaths {
     }
   }
 
-  /// [path] under [doc], by what follows [doc]'s own name in it, when [path]
-  /// is gone and the file is there. Null when there is nothing to move.
+  /// [path] under [doc], by what follows [doc]'s own name in it — or
+  /// [formerly], the name of a directory [doc] used to be — when [path] is
+  /// gone and the file is there. Null when there is nothing to move.
   static String? rebase(
     String path, {
     required String doc,
+    String? formerly,
     bool Function(String path)? exists,
   }) {
     final isFile = exists ?? (p) => File(p).existsSync();
-    final docName = doc.getFileName();
-    if (path.isEmpty || docName == null || isFile(path)) return null;
-    final name = '/$docName/';
-    final at = path.indexOf(name);
-    if (at < 0) return null;
-    final moved = doc.joinPath(path.substring(at + name.length));
-    if (moved == path || !isFile(moved)) return null;
-    return moved;
+    if (path.isEmpty || isFile(path)) return null;
+    for (final dirName in [doc.getFileName(), formerly]) {
+      if (dirName == null) continue;
+      final name = '/$dirName/';
+      final at = path.indexOf(name);
+      if (at < 0) continue;
+      final moved = doc.joinPath(path.substring(at + name.length));
+      if (moved != path && isFile(moved)) return moved;
+    }
+    return null;
   }
 }

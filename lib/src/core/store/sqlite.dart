@@ -451,6 +451,7 @@ class SqliteStore extends KvStore {
         switch (Pfs.type) {
           Pfs.linux || Pfs.windows => Paths.doc,
           Pfs.macos when !Pfs.isMacSandboxed => Paths.doc,
+          Pfs.ios when Paths.iosFilesApp => Paths.doc,
           _ => (await getApplicationDocumentsDirectory()).path,
         };
     await SqliteDb.open(path);
