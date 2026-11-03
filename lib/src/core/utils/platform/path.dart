@@ -357,7 +357,12 @@ abstract final class Paths {
       await for (final entry in incoming.list(followLinks: false)) {
         final name = entry.path.getFileName();
         if (name == null || name == _documentsMarker) continue;
-        await _renameUnlessTaken(entry, documents.joinPath(name));
+        // One that cannot go back stays the app's, and the rest still go.
+        try {
+          await _renameUnlessTaken(entry, documents.joinPath(name));
+        } catch (e, s) {
+          Logger.root.warning('Move ${entry.path} back', e, s);
+        }
       }
       final marker = File(incoming.path.joinPath(_documentsMarker));
       if (await marker.exists()) await marker.delete();

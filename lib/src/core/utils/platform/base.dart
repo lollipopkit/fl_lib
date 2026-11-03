@@ -167,7 +167,7 @@ enum Pfs {
     try {
       switch (type) {
         case Pfs.ios:
-          final url = 'shareddocuments://${Uri.encodeFull(path)}';
+          final url = Uri(scheme: 'shareddocuments', host: '', path: path).toString();
           if (!await url.launchUrl()) Logger.root.warning('reveal path: $url refused');
           break;
         case Pfs.macos:
