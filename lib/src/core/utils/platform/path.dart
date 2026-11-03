@@ -43,7 +43,8 @@ abstract final class Paths {
   /// - [iosFilesApp] makes [file] the iOS Documents directory itself, which the
   ///   Files app lists under On My iPhone once the app sets
   ///   `UIFileSharingEnabled`, and moves [doc] to Application Support so none
-  ///   of the app's own data is listed there. See [adoptIosDocuments].
+  ///   of the app's own data is listed there; [fileInUserDocuments] has no
+  ///   say there. See [adoptIosDocuments].
   static Future<void> init(
     String appName, {
     String? bakName,
@@ -52,10 +53,12 @@ abstract final class Paths {
     bool iosFilesApp = false,
   }) async {
     if (iosFilesApp && isIOS) {
-      final documents = (await getApplicationDocumentsDirectory()).path;
-      final support = (await getApplicationSupportDirectory()).path.joinPath(
-        appName,
-      );
+      final (docs, sup) = await (
+        getApplicationDocumentsDirectory(),
+        getApplicationSupportDirectory(),
+      ).wait;
+      final documents = docs.path;
+      final support = sup.path.joinPath(appName);
       if (await adoptIosDocuments(documents: documents, doc: support)) {
         _iosFilesApp = true;
         doc = support;
@@ -238,6 +241,13 @@ abstract final class Paths {
     }
   }
 
+  /// Where the database is. [doc] everywhere but Android, where [doc] is
+  /// external storage and the database stays in the app's internal documents
+  /// directory, where it always was.
+  static Future<String> get storeDir async => isAndroid
+      ? (await getApplicationDocumentsDirectory()).path
+      : doc;
+
   static var _iosFilesApp = false;
 
   /// Whether [doc] is out of the iOS Documents directory: [init] was given
@@ -281,7 +291,6 @@ abstract final class Paths {
           final name = entry.path.getFileName();
           if (name == null ||
               name == 'file' ||
-              name == _filesStaging ||
               _documentsSystem.contains(name)) {
             continue;
           }
@@ -318,8 +327,10 @@ abstract final class Paths {
         }
         if (await staging.list().isEmpty) {
           await staging.delete();
-        } else if (!await files.exists()) {
-          await staging.rename(files.path);
+        } else {
+          // What a name at the top already took stays together, under a
+          // name the Files app shows.
+          await staging.rename(await _freeName(documents, 'file'));
         }
       }
       await marker.writeAsString('done', flush: true);
@@ -328,6 +339,16 @@ abstract final class Paths {
       Logger.root.warning('Move ${documents.joinPath('file')} -> $documents', e, s);
     }
     return true;
+  }
+
+  /// [name] in [dir], or `name 2`, `name 3`… when that is taken.
+  static Future<String> _freeName(String dir, String name) async {
+    var candidate = dir.joinPath(name);
+    for (var n = 2; await FileSystemEntity.type(candidate, followLinks: false) !=
+        FileSystemEntityType.notFound; n++) {
+      candidate = dir.joinPath('$name $n');
+    }
+    return candidate;
   }
 
   static Future<void> _moveBack(Directory incoming, String documents) async {

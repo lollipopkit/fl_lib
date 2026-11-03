@@ -440,20 +440,10 @@ class SqliteStore extends KvStore {
   /// batch's elements are all *invoked* before any of them is awaited, so it
   /// would reach a database that is still null.
   ///
-  /// [dir] follows the same rule as the boxes did: the unsandboxed macOS
-  /// build's documents directory is the user's own `~/Documents`, so it uses
-  /// [Paths.doc] there rather than being the one part of the app writing into
-  /// it.
+  /// [dir] defaults to [Paths.storeDir], where the boxes were too.
   static Future<void> openDatabase({String? dir}) async {
     if (SqliteDb.isOpen) return;
-    final path =
-        dir ??
-        switch (Pfs.type) {
-          Pfs.linux || Pfs.windows => Paths.doc,
-          Pfs.macos when !Pfs.isMacSandboxed => Paths.doc,
-          Pfs.ios when Paths.iosFilesApp => Paths.doc,
-          _ => (await getApplicationDocumentsDirectory()).path,
-        };
+    final path = dir ?? await Paths.storeDir;
     await SqliteDb.open(path);
   }
 

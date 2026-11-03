@@ -214,6 +214,20 @@ void main() {
       expect(await File('$doc/srv-1/note.txt').exists(), false);
     });
 
+    test('what a name at the top took is kept where the Files app shows it',
+        () async {
+      await write('$documents/file/file/x.txt', 'x');
+      await write('$documents/file/Inbox/mine.txt', 'mine');
+      await write('$documents/Inbox/shared.txt');
+
+      await adopt();
+
+      // `file/file` came up as `file`, so the rest is in `file 2`.
+      expect(await File('$documents/file/x.txt').readAsString(), 'x');
+      expect(await File('$documents/file 2/Inbox/mine.txt').readAsString(), 'mine');
+      expect(await Directory('$documents/.file-moving').exists(), false);
+    });
+
     test('a user file whose name is taken stays in `file`', () async {
       await write('$documents/file/Inbox/mine.txt', 'mine');
       await write('$documents/file/b.txt', 'b');

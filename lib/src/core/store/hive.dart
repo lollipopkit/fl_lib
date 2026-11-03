@@ -29,17 +29,7 @@ class HiveStore extends KvStore {
   /// second copy of this switch, which would be a copy that can disagree.
   ///
   /// TODO: delete with the rest of [HiveStore].
-  static Future<String> get boxDir async => switch (Pfs.type) {
-    /// The default path of Hive is the HOME dir
-    Pfs.linux || Pfs.windows => Paths.doc,
-
-    /// The unsandboxed macOS build's documents directory is the user's own
-    /// `~/Documents`. Boxes follow [Paths.doc] there, or they would be the
-    /// one part of the app still writing into it.
-    Pfs.macos when !Pfs.isMacSandboxed => Paths.doc,
-    Pfs.ios when Paths.iosFilesApp => Paths.doc,
-    _ => (await getApplicationDocumentsDirectory()).path,
-  };
+  static Future<String> get boxDir => Paths.storeDir;
 
   /// Initialize the [HiveStore].
   Future<void> init() async {

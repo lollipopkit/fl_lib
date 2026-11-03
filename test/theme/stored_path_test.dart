@@ -34,12 +34,14 @@ void main() {
       path,
       doc: support,
       formerly: 'Documents',
+      files: doc,
       exists: files.contains,
     );
 
     expect(moved('$oldDoc/$rel', {'$support/$rel'}), '$support/$rel');
-    // The user's files stay in Documents, so none of theirs is found here.
-    expect(moved('$oldDoc/file/a.ttf', {'$doc/a.ttf'}), isNull);
+    // The user's files came up into Documents itself.
+    expect(moved('$oldDoc/file/a.ttf', {'$doc/a.ttf'}), '$doc/a.ttf');
+    expect(moved('$oldDoc/file/a.ttf', {}), isNull);
     expect(moved('$support/$rel', {'$support/$rel'}), isNull);
   });
 }
