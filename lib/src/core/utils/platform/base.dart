@@ -161,10 +161,15 @@ enum Pfs {
 
   /// Reveal file / dir in file app.
   ///
-  /// **Only available on desktop**
+  /// **Desktop, and iOS** for a path in Documents once the app sets
+  /// `UIFileSharingEnabled`: the Files app opens on it.
   static Future<void> revealPath(String path) async {
     try {
       switch (type) {
+        case Pfs.ios:
+          final url = Uri(scheme: 'shareddocuments', host: '', path: path).toString();
+          if (!await url.launchUrl()) Logger.root.warning('reveal path: $url refused');
+          break;
         case Pfs.macos:
           await Process.run('open', ['--reveal', path]);
           break;
