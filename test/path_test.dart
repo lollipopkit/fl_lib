@@ -137,7 +137,7 @@ void main() {
     Future<Set<String>> names(String dir) =>
         Directory(dir).list().map((e) => e.path.split('/').last).toSet();
 
-    Future<bool> adopt() =>
+    Future<void> adopt() =>
         Paths.adoptIosDocuments(documents: documents, doc: doc);
 
     /// What a released build left in Documents.
@@ -160,7 +160,7 @@ void main() {
     test('the app\'s data leaves, the user\'s files come up', () async {
       await released();
 
-      expect(await adopt(), true);
+      await adopt();
 
       expect(await File('$doc/store.db').readAsString(), 'db');
       expect(await File('$doc/store.db-wal').readAsString(), 'wal');
@@ -180,7 +180,7 @@ void main() {
       await write('$documents/logs/mine.txt');
       await write('$documents/file/mine.txt');
 
-      expect(await adopt(), true);
+      await adopt();
 
       expect(await File('$documents/logs/mine.txt').exists(), true);
       expect(await File('$documents/file/mine.txt').exists(), true);
@@ -191,7 +191,7 @@ void main() {
       await Directory('$doc.incoming').create(recursive: true);
       await File('$documents/store.db').rename('$doc.incoming/store.db');
 
-      expect(await adopt(), true);
+      await adopt();
 
       expect(await File('$doc/store.db').readAsString(), 'db');
       expect(await File('$doc/store.db-wal').readAsString(), 'wal');
@@ -206,7 +206,7 @@ void main() {
       await Directory('$documents/.file-moving').create();
       await File('$documents/a.txt').rename('$documents/.file-moving/a.txt');
 
-      expect(await adopt(), true);
+      await adopt();
 
       expect(await File('$documents/a.txt').readAsString(), 'a');
       expect(await File('$documents/srv-1/note.txt').readAsString(), 'note');
@@ -214,17 +214,18 @@ void main() {
       expect(await File('$doc/srv-1/note.txt').exists(), false);
     });
 
-    test('what a name at the top took is kept where the Files app shows it',
-        () async {
+    test('what is kept stays at its path in `file`', () async {
       await write('$documents/file/file/x.txt', 'x');
       await write('$documents/file/Inbox/mine.txt', 'mine');
+      await write('$documents/file/b.txt', 'b');
       await write('$documents/Inbox/shared.txt');
 
       await adopt();
 
-      // `file/file` came up as `file`, so the rest is in `file 2`.
-      expect(await File('$documents/file/x.txt').readAsString(), 'x');
-      expect(await File('$documents/file 2/Inbox/mine.txt').readAsString(), 'mine');
+      expect(await File('$documents/b.txt').readAsString(), 'b');
+      expect(await File('$documents/file/file/x.txt').readAsString(), 'x');
+      expect(await File('$documents/file/Inbox/mine.txt').readAsString(), 'mine');
+      expect(await names(documents), {'b.txt', 'file', 'Inbox'});
       expect(await Directory('$documents/.file-moving').exists(), false);
     });
 
@@ -240,19 +241,19 @@ void main() {
     });
 
     test('a fresh install ends with the marker and an empty Documents', () async {
-      expect(await adopt(), true);
+      await adopt();
 
       expect(await File('$doc/.moved-from-documents').readAsString(), 'done');
       expect(await Directory(documents).list().isEmpty, true);
     });
 
-    test('a failure puts the data back and stays on Documents', () async {
+    test('a failure puts the data back and throws', () async {
       await released();
       // Something already in `doc`: the staging directory cannot take its
       // place.
       await write('$doc/other');
 
-      expect(await adopt(), false);
+      await expectLater(adopt(), throwsStateError);
 
       expect(await File('$documents/store.db').readAsString(), 'db');
       expect(await File('$documents/img/ssh_bg_1.png').exists(), true);

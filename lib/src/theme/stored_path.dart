@@ -38,9 +38,9 @@ abstract final class StoredPaths {
   }
 
   /// [path] under [doc], by what follows [doc]'s own name in it — or
-  /// [formerly], the name of a directory [doc] used to be, whose `file/` is
-  /// [files] now — when [path] is gone and the file is there. Null when there
-  /// is nothing to move.
+  /// [formerly], the name of a directory [doc] used to be, whose `file/` came
+  /// up into [files] but for what is kept in `files/file` — when [path] is
+  /// gone and the file is there. Null when there is nothing to move.
   static String? rebase(
     String path, {
     required String doc,
@@ -63,6 +63,9 @@ abstract final class StoredPaths {
     final inFormer = formerly == null ? null : under(formerly);
     if (inFormer != null) {
       if (files != null && inFormer.startsWith('file/')) {
+        // Kept first: only what stayed is still under `file`, and what came
+        // up in its place at the top is another file.
+        candidates.add(files.joinPath(inFormer));
         candidates.add(files.joinPath(inFormer.substring(5)));
       }
       candidates.add(doc.joinPath(inFormer));

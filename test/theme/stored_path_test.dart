@@ -42,6 +42,13 @@ void main() {
     // The user's files came up into Documents itself.
     expect(moved('$oldDoc/file/a.ttf', {'$doc/a.ttf'}), '$doc/a.ttf');
     expect(moved('$oldDoc/file/a.ttf', {}), isNull);
+    // Kept in `file` for a name taken at the top: that one, not the other.
+    expect(moved('$oldDoc/file/Inbox/a.ttf', {'$doc/file/Inbox/a.ttf'}),
+        '$doc/file/Inbox/a.ttf');
+    expect(
+        moved('$oldDoc/file/Inbox/a.ttf',
+            {'$doc/file/Inbox/a.ttf', '$doc/Inbox/a.ttf'}),
+        '$doc/file/Inbox/a.ttf');
     expect(moved('$support/$rel', {'$support/$rel'}), isNull);
   });
 }
