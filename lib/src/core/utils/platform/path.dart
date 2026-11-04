@@ -59,14 +59,11 @@ abstract final class Paths {
       ).wait;
       final documents = docs.path;
       final support = sup.path.joinPath(appName);
-      if (await adoptIosDocuments(documents: documents, doc: support)) {
-        _iosFilesApp = true;
-        doc = support;
-        file = documents;
-      } else {
-        doc = documents;
-        file = await _initDir('file');
-      }
+      // Throws rather than staying on Documents: the Files app lists it.
+      await adoptIosDocuments(documents: documents, doc: support);
+      _iosFilesApp = true;
+      doc = support;
+      file = documents;
     } else {
       doc = await _getDoc(appName);
       file = fileInUserDocuments
@@ -267,18 +264,18 @@ abstract final class Paths {
   ///
   /// The app's data goes into `<doc>.incoming`, marker included, and that
   /// becomes [doc] in one rename: [doc] is whole or absent. A failure there
-  /// moves everything back and answers false — the caller stays on
-  /// [documents], where the data is — and a launch that died there finds the
-  /// staging directory and carries on.
+  /// moves everything back and throws, so the next launch tries again, and a
+  /// launch that died there finds the staging directory and carries on.
   ///
   /// The user's files go once the app's data is in [doc], and the marker says
   /// when they are done: from then on a `file` in [documents] is the user's
-  /// own. One that fails is left for the next launch. A name already taken at
-  /// the top stays in `file`.
+  /// own. One that fails is left for the next launch. One whose name is taken
+  /// at the top, and one named `file`, stays where it was in `file`, so a path
+  /// into `file/` names it still — see [StoredPaths.rebase].
   ///
   /// TODO: remove once no install can still have its data in Documents.
   @visibleForTesting
-  static Future<bool> adoptIosDocuments({
+  static Future<void> adoptIosDocuments({
     required String documents,
     required String doc,
   }) async {
@@ -308,12 +305,12 @@ abstract final class Paths {
       } catch (e, s) {
         Logger.root.warning('Move $documents -> $doc', e, s);
         await _moveBack(incoming, documents);
-        return false;
+        rethrow;
       }
     }
 
     try {
-      if (await marker.readAsString() == 'done') return true;
+      if (await marker.readAsString() == 'done') return;
       final files = Directory(documents.joinPath('file'));
       final staging = Directory(documents.joinPath(_filesStaging));
       if (await files.exists() && !await staging.exists()) {
@@ -322,14 +319,13 @@ abstract final class Paths {
       if (await staging.exists()) {
         await for (final entry in staging.list(followLinks: false)) {
           final name = entry.path.getFileName();
-          if (name == null) continue;
+          // Up as `file`, it would take the name of what is kept.
+          if (name == null || name == 'file') continue;
           await _renameUnlessTaken(entry, documents.joinPath(name));
         }
         if (await staging.list().isEmpty) {
           await staging.delete();
         } else {
-          // What a name at the top already took stays together, under a
-          // name the Files app shows.
           await staging.rename(await _freeName(documents, 'file'));
         }
       }
@@ -338,7 +334,6 @@ abstract final class Paths {
     } catch (e, s) {
       Logger.root.warning('Move ${documents.joinPath('file')} -> $documents', e, s);
     }
-    return true;
   }
 
   /// [name] in [dir], or `name 2`, `name 3`… when that is taken.
