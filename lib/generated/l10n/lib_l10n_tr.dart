@@ -850,6 +850,9 @@ class LibLocalizationsTr extends LibLocalizations {
   String get loss => 'Kayıp';
 
   @override
+  String get manage => 'Yönet';
+
+  @override
   String get manual => 'Kılavuz';
 
   @override

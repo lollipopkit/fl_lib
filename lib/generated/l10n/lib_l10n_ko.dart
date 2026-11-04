@@ -823,6 +823,9 @@ class LibLocalizationsKo extends LibLocalizations {
   String get loss => '손실';
 
   @override
+  String get manage => '관리';
+
+  @override
   String get manual => '설명서';
 
   @override

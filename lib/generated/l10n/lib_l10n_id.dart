@@ -853,6 +853,9 @@ class LibLocalizationsId extends LibLocalizations {
   String get loss => 'kehilangan';
 
   @override
+  String get manage => 'Kelola';
+
+  @override
   String get manual => 'Manual';
 
   @override

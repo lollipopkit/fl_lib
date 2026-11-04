@@ -823,6 +823,9 @@ class LibLocalizationsZh extends LibLocalizations {
   String get loss => '丢包率';
 
   @override
+  String get manage => '管理';
+
+  @override
   String get manual => '手动';
 
   @override
@@ -2217,6 +2220,9 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get loss => '丟包率';
+
+  @override
+  String get manage => '管理';
 
   @override
   String get manual => '手動';

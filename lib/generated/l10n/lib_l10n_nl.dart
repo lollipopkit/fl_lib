@@ -867,6 +867,9 @@ class LibLocalizationsNl extends LibLocalizations {
   String get loss => 'verlies';
 
   @override
+  String get manage => 'Beheren';
+
+  @override
   String get manual => 'Handleiding';
 
   @override

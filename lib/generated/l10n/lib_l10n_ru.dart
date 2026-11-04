@@ -870,6 +870,9 @@ class LibLocalizationsRu extends LibLocalizations {
   String get loss => 'Потери пакетов';
 
   @override
+  String get manage => 'Управление';
+
+  @override
   String get manual => 'Руководство';
 
   @override
