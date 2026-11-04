@@ -824,6 +824,9 @@ class LibLocalizationsJa extends LibLocalizations {
   String get loss => 'パケットロス';
 
   @override
+  String get manage => '管理';
+
+  @override
   String get manual => 'マニュアル';
 
   @override

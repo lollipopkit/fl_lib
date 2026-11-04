@@ -855,6 +855,9 @@ class LibLocalizationsFa extends LibLocalizations {
   String get loss => 'اتلاف';
 
   @override
+  String get manage => 'مدیریت';
+
+  @override
   String get manual => 'دستی';
 
   @override

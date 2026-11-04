@@ -868,6 +868,9 @@ class LibLocalizationsFr extends LibLocalizations {
   String get loss => 'Perte';
 
   @override
+  String get manage => 'Gérer';
+
+  @override
   String get manual => 'Manuel';
 
   @override

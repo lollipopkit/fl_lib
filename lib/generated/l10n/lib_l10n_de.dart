@@ -871,6 +871,9 @@ class LibLocalizationsDe extends LibLocalizations {
   String get loss => 'Verlust';
 
   @override
+  String get manage => 'Verwalten';
+
+  @override
   String get manual => 'Manuell';
 
   @override

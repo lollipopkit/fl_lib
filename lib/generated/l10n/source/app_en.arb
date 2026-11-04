@@ -1103,6 +1103,10 @@
   "@loss": {
     "description": "Label for loss."
   },
+  "manage": "Manage",
+  "@manage": {
+    "description": "Label for manage."
+  },
   "manual": "Manual",
   "@manual": {
     "description": "Label for manual."

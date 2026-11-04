@@ -1579,6 +1579,12 @@ abstract class LibLocalizations {
   /// **'loss'**
   String get loss;
 
+  /// Label for manage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get manage;
+
   /// Label for manual.
   ///
   /// In en, this message translates to:

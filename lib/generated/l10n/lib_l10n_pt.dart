@@ -858,6 +858,9 @@ class LibLocalizationsPt extends LibLocalizations {
   String get loss => 'Taxa de perda';
 
   @override
+  String get manage => 'Gerenciar';
+
+  @override
   String get manual => 'Manual';
 
   @override

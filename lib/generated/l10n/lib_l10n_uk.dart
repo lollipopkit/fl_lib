@@ -871,6 +871,9 @@ class LibLocalizationsUk extends LibLocalizations {
   String get loss => 'втрата пакетів';
 
   @override
+  String get manage => 'Керування';
+
+  @override
   String get manual => 'Посібник';
 
   @override

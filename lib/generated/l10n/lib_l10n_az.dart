@@ -851,6 +851,9 @@ class LibLocalizationsAz extends LibLocalizations {
   String get loss => 'itki';
 
   @override
+  String get manage => 'İdarə et';
+
+  @override
   String get manual => 'Əl ilə';
 
   @override
