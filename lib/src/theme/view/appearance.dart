@@ -15,7 +15,7 @@ import 'package:fl_lib/src/theme/package.dart';
 import 'package:fl_lib/src/theme/settings.dart';
 import 'package:fl_lib/src/theme/style.dart';
 import 'package:fl_lib/src/theme/view/store/page.dart';
-import 'package:icons_plus/icons_plus.dart';
+import 'package:fl_lib/src/theme/view/theme_mode_tile.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// One row of the appearance settings: [label] is what a search reads and
@@ -966,61 +966,9 @@ final class ThemeAppearance {
     context.popDialog();
   }
 
-  ThemeSettingRow _buildThemeMode() {
-    final label = libL10n.themeMode;
-    final locked = ThemePackages.activeTheme?.lockedMode;
-    return ThemeSettingRow(
-      label,
-      () => ListTile(
-        leading: const Icon(MingCute.moon_stars_fill),
-        title: Text(label),
-        subtitle: locked == null
-            ? null
-            : Text(
-                libL10n.appearanceThemeModeLocked(
-                  _buildThemeModeStr(locked.index),
-                ),
-              ),
-        enabled: locked == null,
-        onTap: locked != null
-            ? null
-            : () async {
-                final selected = await context.showPickSingleDialog(
-                  title: label,
-                  items: List.generate(
-                    ThemeMode.values.length,
-                    (index) => index,
-                  ),
-                  display: (p0) => _buildThemeModeStr(p0),
-                  initial: _setting.themeMode.fetch(),
-                );
-                if (selected != null) {
-                  _setting.themeMode.put(selected);
-                  if (_setting.appThemePreset.fetch() ==
-                      ThemePackages.customPreset) {
-                    _saveCustomTheme();
-                  }
-                  unawaited(RNodes.app.notify());
-                }
-              },
-        trailing: ValBuilder(
-          listenable: _setting.themeMode.listenable(),
-          builder: (val) =>
-              Text(_buildThemeModeStr(locked?.index ?? val), style: UIs.text15),
-        ),
-      ),
-      keywords: '${libL10n.dark} ${libL10n.bright}',
-    );
-  }
-
-  String _buildThemeModeStr(int n) {
-    switch (n) {
-      case 1:
-        return libL10n.bright;
-      case 2:
-        return libL10n.dark;
-      default:
-        return libL10n.auto;
-    }
-  }
+  ThemeSettingRow _buildThemeMode() => ThemeSettingRow(
+    libL10n.themeMode,
+    () => const ThemeModeTile(),
+    keywords: '${libL10n.dark} ${libL10n.bright}',
+  );
 }
