@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   /// Two pages at a given window size, in a given language.
   ///
-  /// [maxWidth] is the content column the bar aligns itself to; the wide bar
-  /// puts labelled buttons in it, so a language with long words is the case
+  /// [maxWidth] is the content column the bar aligns itself to; the bar puts
+  /// labelled buttons in it, so a language with long words is the case
   /// that decides whether the column is wide enough.
   Widget harness(Locale locale, {double maxWidth = UIs.pageColumnWidth}) {
     return MaterialApp(
@@ -31,8 +31,8 @@ void main() {
   }
 
   /// Overflow is reported as an exception rather than a failed frame, so it has
-  /// to be drained explicitly — and drained on both pages, because the bar is
-  /// at its widest on the second, where `previous` sits beside `next`.
+  /// to be drained explicitly — and drained on both pages, because `previous`
+  /// shows on the second.
   List<Object> takeErrors() {
     final errs = <Object>[];
     var e = TestWidgetsFlutterBinding.instance.takeException();
@@ -45,7 +45,7 @@ void main() {
 
   const sizes = [
     Size(1400, 900), // desktop
-    Size(700, 800), // the narrowest window that still gets the wide bar
+    Size(700, 800),
     Size(390, 844), // phone
   ];
 
@@ -60,49 +60,42 @@ void main() {
         await tester.pumpAndSettle();
         expect(takeErrors(), isEmpty, reason: 'page 1');
 
-        final advance = size.width < 600 ? find.byType(IconButton) : find.byType(FilledButton);
-        await tester.tap(advance);
+        await tester.tap(find.byType(FilledButton));
         await tester.pumpAndSettle();
         expect(takeErrors(), isEmpty, reason: 'page 2');
       });
     }
   }
 
-  testWidgets('wide bar puts the progress before the buttons', (tester) async {
-    tester.view.physicalSize = const Size(1400, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  for (final width in [1400.0, 390.0]) {
+    testWidgets('counter centred between the buttons at ${width.toInt()}w', (tester) async {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
 
+      await tester.pumpWidget(harness(const Locale('en')));
+      await tester.pumpAndSettle();
+
+      final counter = tester.getCenter(find.text('1/2', findRichText: true));
+      expect(counter.dx, closeTo(width / 2, 1));
+      final next = tester.getTopRight(find.byType(FilledButton));
+      // Bounded by the content column rather than the window.
+      expect(next.dx, lessThanOrEqualTo(width / 2 + UIs.pageColumnWidth / 2));
+    });
+  }
+
+  testWidgets('previous is hidden on the first page only', (tester) async {
     await tester.pumpWidget(harness(const Locale('en')));
     await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Previous'), findsNothing);
 
-    final progress = tester.getTopLeft(find.text('1'));
-    final next = tester.getTopLeft(find.byType(FilledButton));
-    expect(progress.dx, lessThan(next.dx));
-
-    // Bounded by the content column rather than the window.
-    expect(next.dx, lessThan(1400 / 2 + UIs.pageColumnWidth / 2));
-  });
-
-  testWidgets('compact bar keeps the progress centred', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(harness(const Locale('en')));
+    await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
-
-    expect(find.byType(FilledButton), findsNothing);
-
-    // The counter is two `Text`s so the current page can fade in on its own.
-    final left = tester.getTopLeft(find.text('1')).dx;
-    final right = tester.getBottomRight(find.text(' / 2')).dx;
-    expect((left + right) / 2, closeTo(390 / 2, 12));
+    await tester.tap(find.text('Previous'));
+    await tester.pumpAndSettle();
+    expect(find.text('one'), findsOneWidget);
   });
 
-  /// Both bars, because `_pageCount <= 1` is answered in `_buildProgress`,
-  /// which each of them calls — and this test used to run only at the default
-  /// 800x600 view, i.e. only ever the wide one.
   for (final (label, size) in [
     ('wide', const Size(1400, 900)),
     ('compact', const Size(390, 844)),
@@ -129,7 +122,7 @@ void main() {
       // Asserted alongside, because "no counter" is also what a bar that
       // failed to render at all would look like.
       expect(find.text('only'), findsOneWidget);
-      expect(find.byType(BottomAppBar), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
     });
   }
 }

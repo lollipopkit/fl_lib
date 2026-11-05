@@ -93,17 +93,10 @@ final class _IntroPageState extends State<IntroPage> {
 
   int get _pageCount => _args.pages.length;
 
-  static const _switchDuration = Duration(milliseconds: 300);
-
-  /// Below this the bar has no room for two labelled buttons beside the
-  /// counter, and shows icons instead.
-  ///
-  /// The same number, measured off the same thing, as the `MOBILE` breakpoint
-  /// this used to ask `ResponsiveBreakpoints` for — but read from
-  /// `MediaQuery`, which is always there. Reading an inherited widget that
-  /// only exists when the host app installed `ResponsivePoints.builder` made
-  /// this public page throw for anyone who had not.
-  static const _compactBarWidth = 600.0;
+  static const _switchDuration = Duration(milliseconds: 377);
+  static const _switchCurve = Curves.easeOutCubic;
+  static const _barHeight = 61.6;
+  static const _progressHeight = 3.0;
 
   @override
   void dispose() {
@@ -121,81 +114,51 @@ final class _IntroPageState extends State<IntroPage> {
         onPageChanged: (index) => _currentPage.value = index,
         itemBuilder: (_, index) => _args.pages[index],
       ),
-      bottomNavigationBar: BottomAppBar(
-        // The window, not the bar's own constraints: the bar is inset by its
-        // own padding, which would put the switch a few pixels off from where
-        // every other breakpoint in the app puts it.
-        child: MediaQuery.sizeOf(context).width < _compactBarWidth
-            ? _buildCompactBar(context)
-            : _buildWideBar(context),
-      ),
+      bottomNavigationBar: _buildBar(context),
     );
   }
 
-  /// What the forward button does and looks like, in one place.
-  ///
-  /// Both bars end the intro and both step forward; they differ only in
-  /// chrome. Written twice, the two had already drifted apart on their keys,
-  /// and a change to what "done" means would have had to be made in each.
-  ({VoidCallback onPressed, IconData icon, String label}) _forward(
-    BuildContext context,
-  ) {
-    final libL10n = context.libL10n;
-    return (
-      onPressed: hasNext ? _toNext : () => _args.onDone(context),
-      icon: hasNext ? Icons.arrow_forward : Icons.done,
-      label: hasNext ? libL10n.next : libL10n.done,
-    );
-  }
-
-  /// Progress on the left, navigation grouped on the right, both bounded by
-  /// the content column so they align with the page above.
-  Widget _buildWideBar(BuildContext context) {
-    final libL10n = context.libL10n;
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: _args.maxWidth),
-        child: Row(
+  /// Progress across the top edge, then previous · counter · next in the
+  /// content column. One layout at every width: the labels fit a phone.
+  Widget _buildBar(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             _buildProgress(context),
-            const Spacer(),
-            ListenBuilder(
-              listenable: _currentPage,
-              builder: () {
-                final forward = _forward(context);
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // No back arrow: the label says it, and the one directional
-                    // glyph in the bar belongs to the action that moves
-                    // forward.
-                    if (hasPre) ...[
-                      FadeIn(
-                        child: TextButton(
-                          onPressed: _toPre,
-                          child: Text(libL10n.previous),
-                        ),
-                      ),
-                      UIs.width7,
-                    ],
-                    FadeIn(
-                      key: ValueKey(hasNext),
-                      child: FilledButton(
-                        onPressed: forward.onPressed,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(forward.label),
-                            UIs.width7,
-                            Icon(forward.icon, size: 18),
-                          ],
-                        ),
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: _args.maxWidth),
+                child: SizedBox(
+                  height: _barHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 13),
+                    child: ListenBuilder(
+                      listenable: _currentPage,
+                      builder: () => Row(
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: _buildPrevious(context),
+                            ),
+                          ),
+                          _buildCounter(context),
+                          Expanded(
+                            child: Align(
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: _buildNext(context),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                );
-              },
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -203,88 +166,100 @@ final class _IntroPageState extends State<IntroPage> {
     );
   }
 
-  Widget _buildCompactBar(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        ListenBuilder(
-          listenable: _currentPage,
-          builder: () {
-            if (!hasPre) return UIs.placeholder;
-            return FadeIn(
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                tooltip: context.libL10n.previous,
-                onPressed: _toPre,
-              ),
-            );
-          },
-        ).expanded(),
-        Center(child: _buildProgress(context)).expanded(),
-        ListenBuilder(
-          listenable: _currentPage,
-          builder: () {
-            final forward = _forward(context);
-            return FadeIn(
-              // The same key the wide bar uses, so the two agree on when the
-              // button is a new one to fade in.
-              key: ValueKey(hasNext),
-              child: IconButton(
-                icon: Icon(forward.icon),
-                tooltip: forward.label,
-                onPressed: forward.onPressed,
-              ),
-            );
-          },
-        ).expanded(),
-      ],
+  /// Faded rather than removed on the first page, so the counter and the next
+  /// button do not move when it appears.
+  Widget _buildPrevious(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: hasPre ? 1 : 0,
+      duration: context.motion(Durations.short4),
+      child: IgnorePointer(
+        ignoring: !hasPre,
+        child: ExcludeSemantics(
+          excluding: !hasPre,
+          child: TextButton(
+            onPressed: _toPre,
+            child: Text(context.libL10n.previous, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildProgress(BuildContext context) {
+  Widget _buildNext(BuildContext context) {
+    final libL10n = context.libL10n;
+    return FilledButton(
+      onPressed: hasNext ? _toNext : () => _args.onDone(context),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              hasNext ? libL10n.next : libL10n.done,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          UIs.width7,
+          Icon(hasNext ? Icons.arrow_forward : Icons.done, size: 18),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCounter(BuildContext context) {
     // `1 / 1` states nothing the page doesn't already show.
     if (_pageCount <= 1) return UIs.placeholder;
-
     final scheme = Theme.of(context).colorScheme;
-
-    return ValBuilder(
-      listenable: _currentPage,
-      builder: (idx) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
+    const style = TextStyle(fontSize: 15, fontWeight: FontWeight.w500);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      child: Text.rich(
+        TextSpan(
           children: [
-            FadeIn(
-              key: ValueKey(idx),
-              child: Text(
-                '${idx + 1}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            Text(
-              ' / $_pageCount',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 16,
-                color: scheme.onSurfaceVariant,
-              ),
+            TextSpan(text: '${_currentPage.value + 1}'),
+            TextSpan(
+              text: '/$_pageCount',
+              style: TextStyle(color: scheme.onSurfaceVariant),
             ),
           ],
-        );
-      },
+        ),
+        style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+      ),
+    );
+  }
+
+  /// A track filled to the current page; a hairline when there is one page.
+  Widget _buildProgress(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (_pageCount <= 1) {
+      return Container(height: Hairline.thickness, color: Hairline.color(context));
+    }
+    return ValBuilder(
+      listenable: _currentPage,
+      builder: (idx) => TweenAnimationBuilder<double>(
+        tween: Tween(end: (idx + 1) / _pageCount),
+        duration: context.motion(_switchDuration),
+        curve: _switchCurve,
+        builder: (_, value, _) => Container(
+          height: _progressHeight,
+          color: scheme.surfaceContainerHighest,
+          alignment: AlignmentDirectional.centerStart,
+          child: FractionallySizedBox(
+            widthFactor: value,
+            child: ColoredBox(color: scheme.primary, child: const SizedBox.expand()),
+          ),
+        ),
+      ),
     );
   }
 
   void _toPre() => _pageController.previousPage(
-    duration: _switchDuration,
-    curve: Curves.easeInOut,
+    duration: context.motion(_switchDuration),
+    curve: _switchCurve,
   );
 
   void _toNext() => _pageController.nextPage(
-    duration: _switchDuration,
-    curve: Curves.easeInOut,
+    duration: context.motion(_switchDuration),
+    curve: _switchCurve,
   );
 
   bool get hasPre => _currentPage.value > 0;
