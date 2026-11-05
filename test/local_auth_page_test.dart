@@ -1,13 +1,7 @@
 /// The lock screen's exits.
 ///
 /// It is deliberately hard to leave — `PopScope(canPop: false)` turns the back
-/// gesture into "quit the app" — which makes the case where it *cannot* open
-/// the one that matters. A device with no sensor, nothing enrolled, or no
-/// plugin for its platform answers `notAvail` to every attempt, and the page
-/// used to do nothing with that: the app could only be quit.
-///
-/// Reported as lollipopkit/flutter_server_box#1406, from a phone's backup
-/// restored onto a Linux desktop.
+/// gesture into "quit the app" — and only success opens it.
 library;
 
 import 'dart:async';
@@ -36,7 +30,6 @@ void main() {
   Future<void> openLock(
     WidgetTester tester, {
     VoidCallback? onAuthSuccess,
-    VoidCallback? onUnavailable,
   }) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -51,10 +44,7 @@ void main() {
     unawaited(
       LocalAuthPage.route.go(
         tester.element(find.text('behind')),
-        args: LocalAuthPageArgs(
-          onAuthSuccess: onAuthSuccess,
-          onUnavailable: onUnavailable,
-        ),
+        args: LocalAuthPageArgs(onAuthSuccess: onAuthSuccess),
       ),
     );
     // Past the push, the first attempt, and the pop it may have caused.
@@ -63,53 +53,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets('a device that cannot authenticate is let through', (
+  testWidgets('a device that cannot authenticate stays locked', (
     tester,
   ) async {
-    var unavailable = 0;
+    // Passcode removed or nothing enrolled: letting it through would let
+    // anyone holding the device through.
     var succeeded = 0;
     LocalAuth.goWithResultForTest = ({bool onlyBio = false}) async =>
         AuthResult.notAvail;
 
-    await openLock(
-      tester,
-      onAuthSuccess: () => succeeded++,
-      onUnavailable: () => unavailable++,
-    );
+    await openLock(tester, onAuthSuccess: () => succeeded++);
 
-    expect(unavailable, 1);
-    expect(succeeded, 0, reason: 'unavailable is not success');
-    expect(
-      find.byType(LocalAuthPage),
-      findsNothing,
-      reason: 'the app is still held behind a lock that cannot open',
-    );
-  });
-
-  testWidgets('and a caller that says nothing still gets its app back', (
-    tester,
-  ) async {
-    // `onUnavailable` is optional, and the page letting itself out is what
-    // keeps the omission from bricking the app.
-    LocalAuth.goWithResultForTest = ({bool onlyBio = false}) async =>
-        AuthResult.notAvail;
-
-    await openLock(tester);
-
-    expect(find.byType(LocalAuthPage), findsNothing);
+    expect(succeeded, 0);
+    expect(find.byType(LocalAuthPage), findsOneWidget);
+    expect(find.text(libL10n.notAvailable), findsOneWidget);
   });
 
   testWidgets('a failure keeps the lock, and says so', (tester) async {
     // The other half of the same bug: every non-success result landed in one
     // empty branch, so the screen looked broken rather than unsatisfied.
-    var unavailable = 0;
     LocalAuth.goWithResultForTest = ({bool onlyBio = false}) async =>
         AuthResult.fail;
 
-    await openLock(tester, onUnavailable: () => unavailable++);
+    await openLock(tester);
 
     expect(find.byType(LocalAuthPage), findsOneWidget);
-    expect(unavailable, 0, reason: 'a wrong finger is not a missing sensor');
     expect(find.text(libL10n.fail), findsOneWidget);
   });
 

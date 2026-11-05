@@ -32,4 +32,52 @@ void main() {
     await pump(tester, obscure: true);
     expect(masked(tester), isTrue);
   });
+
+  group('onReveal', () {
+    Future<void> pumpGuarded(
+      WidgetTester tester,
+      Future<bool> Function() onReveal,
+    ) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Input(
+            controller: TextEditingController(text: 'secret'),
+            obscureText: true,
+            onReveal: onReveal,
+          ),
+        ),
+      ),
+    );
+
+    Future<void> tapEye(WidgetTester tester) async {
+      await tester.tap(find.byType(IconButton));
+      await tester.pump();
+    }
+
+    testWidgets('a refusal keeps the value hidden', (tester) async {
+      var asked = 0;
+      await pumpGuarded(tester, () async {
+        asked++;
+        return false;
+      });
+      await tapEye(tester);
+      expect(asked, 1);
+      expect(masked(tester), isTrue);
+    });
+
+    testWidgets('a pass shows it; hiding it again is not asked', (
+      tester,
+    ) async {
+      var asked = 0;
+      await pumpGuarded(tester, () async {
+        asked++;
+        return true;
+      });
+      await tapEye(tester);
+      expect(masked(tester), isFalse);
+      await tapEye(tester);
+      expect(masked(tester), isTrue);
+      expect(asked, 1);
+    });
+  });
 }
