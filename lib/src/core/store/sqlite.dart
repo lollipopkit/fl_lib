@@ -210,6 +210,40 @@ abstract final class SqliteDb {
         StoreUnreadableException.describe(path),
       );
     }
+    // A first read that fails on I/O is retried on a new connection, a few
+    // times over a few seconds: the file is fine, and something else has it
+    // for a moment. On Windows that is a scanner or a sync tool mapping
+    // `-shm` while it is truncated, and SQLite before 3.54.0 failed on it
+    // with SQLITE_IOERR_TRUNCATE (lollipopkit/flutter_server_box#1860).
+    // Never a reason to set it aside.
+    var delay = const Duration(milliseconds: 50);
+    late Database db;
+    for (var attempt = 1; ; attempt++) {
+      try {
+        db = _openKeyed(path, key);
+        break;
+      } on SqliteException catch (e) {
+        final transient =
+            e.resultCode == SqlError.SQLITE_IOERR ||
+            e.resultCode == SqlError.SQLITE_BUSY;
+        if (!transient || attempt >= _openAttempts) rethrow;
+        Loggers.store.warning('Opening the database, attempt $attempt', e);
+        await Future<void>.delayed(delay);
+        delay *= 2;
+      }
+    }
+
+    _db = db;
+    _path = path;
+    return db;
+  }
+
+  /// 50 ms doubling: about 3 s before the error is the app's.
+  static const _openAttempts = 7;
+
+  /// A connection to [path], keyed, read once, and set up; closed again on
+  /// any failure.
+  static Database _openKeyed(String path, Uint8List key) {
     final db = sqlite3.open(path);
 
     try {
@@ -254,8 +288,6 @@ CREATE TABLE IF NOT EXISTS kv (
       rethrow;
     }
 
-    _db = db;
-    _path = path;
     return db;
   }
 
