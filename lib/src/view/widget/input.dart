@@ -39,6 +39,10 @@ class Input extends StatefulWidget {
   final bool autoFocus;
   final void Function(bool)? onViewPwdTap;
 
+  /// Asked before an obscured value is shown; it stays hidden unless this
+  /// returns true. Hiding it again is never asked.
+  final Future<bool> Function()? onReveal;
+
   /// If true, the input will not be wrapped in a [Card] and [Padding].
   ///
   /// Default is `false`.
@@ -71,6 +75,7 @@ class Input extends StatefulWidget {
     this.errorText,
     this.autoFocus = false,
     this.onViewPwdTap,
+    this.onReveal,
     this.noWrap = false,
     this.suffix,
     this.counterBuilder,
@@ -158,7 +163,11 @@ class _InputState extends State<Input> {
       tooltip: libL10n.showPwd,
       isSelected: !obscureText,
       icon: Icon(obscureText ? Icons.visibility : Icons.visibility_off),
-      onPressed: () {
+      onPressed: () async {
+        final onReveal = widget.onReveal;
+        if (obscureText && onReveal != null) {
+          if (!await onReveal() || !mounted) return;
+        }
         _obscureText.value = !obscureText;
         widget.onViewPwdTap?.call(obscureText);
       },
