@@ -10,29 +10,16 @@ final class LocalAuthPageArgs {
   final bool autoReqAuth;
   final void Function()? onAuthSuccess;
 
-  /// Called instead of [onAuthSuccess] when this device cannot authenticate at
-  /// all — no sensor, nothing enrolled, no plugin for the platform.
-  ///
-  /// The page lets itself out in that case, so a caller that supplies nothing
-  /// still gets an app it can use. Supply one to stop asking: the usual way a
-  /// device ends up here is a backup restored from one that *could*
-  /// authenticate, and rediscovering that every launch helps nobody.
-  final void Function()? onUnavailable;
-
-  const LocalAuthPageArgs({
-    this.autoReqAuth = true,
-    this.onAuthSuccess,
-    this.onUnavailable,
-  });
+  const LocalAuthPageArgs({this.autoReqAuth = true, this.onAuthSuccess});
 }
 
 /// Holds the app until the device says who is holding it.
 ///
 /// Deliberately hard to leave: [PopScope] refuses the back gesture and quits
-/// the app instead, so the lock cannot be dismissed into the UI behind it. That
-/// makes the *unavailable* case load-bearing — a device that can never satisfy
-/// the check would otherwise be held here for ever, with quitting as the only
-/// way out. See [LocalAuthPageArgs.onUnavailable].
+/// the app instead, so the lock cannot be dismissed into the UI behind it.
+/// Only [AuthResult.success] opens it — a device that cannot authenticate any
+/// more (passcode removed, nothing enrolled) stays locked, since letting it
+/// through would let anyone holding it through.
 final class LocalAuthPage extends StatefulWidget {
   final LocalAuthPageArgs? args;
 
@@ -90,14 +77,9 @@ final class _LocalAuthPageState extends State<LocalAuthPage> with AfterLayoutMix
     );
   }
 
-  /// One word for every way this can go wrong short of being impossible.
-  ///
-  /// Not spelled out per result: `lockedOut` is the only one worth its own
-  /// sentence — it is the one where trying again does not help — and there is
-  /// no string here that says so without inventing a meaning for one that says
-  /// something else. Better a true "failed" than a confident "timed out".
   String? get _failureText => switch (_lastFailure) {
-    null || AuthResult.success || AuthResult.notAvail => null,
+    null || AuthResult.success => null,
+    AuthResult.notAvail => l10n.notAvailable,
     AuthResult.fail || AuthResult.cancel || AuthResult.lockedOut => l10n.fail,
   };
 
@@ -117,10 +99,6 @@ final class _LocalAuthPageState extends State<LocalAuthPage> with AfterLayoutMix
         context.pop();
         widget.args?.onAuthSuccess?.call();
       case AuthResult.notAvail:
-        // Nothing on this device can answer the question, so holding the app
-        // here protects no one and locks out the one person it is for.
-        context.pop();
-        widget.args?.onUnavailable?.call();
       case AuthResult.fail:
       case AuthResult.cancel:
       case AuthResult.lockedOut:
