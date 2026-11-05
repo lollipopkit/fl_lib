@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/test/test_flutter_secure_storage_platform
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 /// A vault whose every read throws, as Android's does once its key pair no
 /// longer unwraps the stored key (ServerBox #1784).
@@ -152,5 +153,35 @@ void main() {
     FlutterSecureStoragePlatform.instance = vault;
     await SecureStore.reset();
     expect(vault.deleteAllOptions.single['resetOnError'], 'true');
+  });
+
+  test('a first read that finds the file busy is tried again, and opens', () async {
+    await SqliteDb.open(dir.path);
+    await SqliteDb.close();
+
+    // Another connection holding the file, as a scanner holds it on Windows
+    // for a moment (ServerBox #1860).
+    final holder = sqlite3.open(db.path)
+      ..execute('PRAGMA locking_mode = EXCLUSIVE;')
+      ..execute('BEGIN EXCLUSIVE;');
+    final released = Future<void>.delayed(const Duration(milliseconds: 300), holder.close);
+
+    await SqliteDb.open(dir.path);
+    await released;
+    expect(SqliteDb.isOpen, isTrue);
+    expect(db.existsSync(), isTrue);
+  });
+
+  test('a file still busy after the retries is the caller\'s error, and kept', () async {
+    await SqliteDb.open(dir.path);
+    await SqliteDb.close();
+    final holder = sqlite3.open(db.path)
+      ..execute('PRAGMA locking_mode = EXCLUSIVE;')
+      ..execute('BEGIN EXCLUSIVE;');
+    addTearDown(holder.close);
+
+    await expectLater(SqliteDb.open(dir.path), throwsA(isA<SqliteException>()));
+    expect(SqliteDb.isOpen, isFalse);
+    expect(db.existsSync(), isTrue);
   });
 }
