@@ -28,4 +28,5 @@ export 'src/theme/view/splash.dart';
 export 'src/theme/view/store/page.dart';
 export 'src/theme/view/store/preview.dart';
 export 'src/theme/view/store/rows.dart';
+export 'src/theme/view/theme_mode_tile.dart';
 export 'src/theme/view/themed_icon.dart';
