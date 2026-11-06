@@ -51,7 +51,8 @@ class Input extends StatefulWidget {
   final void Function()? onTap;
   final void Function(PointerDownEvent)? onTapOutside;
 
-  /// If null, it uses the [AdaptiveTextSelectionToolbar.editableText].
+  /// If null, the system menu where the platform has one (iOS: its paste
+  /// needs no permission prompt), else [AdaptiveTextSelectionToolbar].
   final EditableTextContextMenuBuilder? contextMenuBuilder;
   final int? maxLength;
   final bool? enabled;
@@ -174,8 +175,13 @@ class _InputState extends State<Input> {
     );
   }
 
-  Widget _ctxMenuBuilder(BuildContext context, EditableTextState state) =>
-      AdaptiveTextSelectionToolbar.editableText(editableTextState: state);
+  // Same as `TextField`'s default, which is private.
+  Widget _ctxMenuBuilder(BuildContext context, EditableTextState state) {
+    if (SystemContextMenu.isSupportedByField(state)) {
+      return SystemContextMenu.editableText(editableTextState: state);
+    }
+    return AdaptiveTextSelectionToolbar.editableText(editableTextState: state);
+  }
 }
 
 /// A choice among [items] in a form, drawn as an [Input] is — the same card,
