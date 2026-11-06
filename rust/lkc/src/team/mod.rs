@@ -435,6 +435,13 @@ impl<S: Store> TeamClient<S> {
         self.call::<Value>(Method::DELETE, &format!("/v2/teams/{id}"), None).await.map(|_| ())
     }
 
+    /// Removes [user_id] from team [id] (or leaves it, the caller's own):
+    /// once the team has a key, it then needs a new one.
+    pub async fn remove_member(&self, id: &str, user_id: &str) -> Result<(), TeamError> {
+        team_bytes(id)?;
+        self.call::<Value>(Method::DELETE, &format!("/v2/teams/{id}/members/{}", user_segment(user_id)?), None).await.map(|_| ())
+    }
+
     pub async fn revoke_invite(&self, id: &str, invite: &str) -> Result<(), TeamError> {
         team_bytes(id)?;
         team_bytes(invite)?;
