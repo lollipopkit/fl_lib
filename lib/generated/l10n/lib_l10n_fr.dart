@@ -1456,4 +1456,336 @@ class LibLocalizationsFr extends LibLocalizations {
   String themeStoreDeleteIconPack(String name) {
     return 'Supprimer « $name » ? Ses fichiers sont supprimés de cet appareil. S’il s’agit du pack d’icônes utilisé, l’app revient aux icônes du thème.';
   }
+
+  @override
+  String get lkcTeams => 'Teams';
+
+  @override
+  String get lkcTeamNew => 'New team';
+
+  @override
+  String get lkcTeamName => 'Team name';
+
+  @override
+  String get lkcTeamNone => 'No teams yet';
+
+  @override
+  String lkcTeamEpoch(int epoch) {
+    return 'Epoch $epoch';
+  }
+
+  @override
+  String lkcTeamMemberCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count members',
+      one: '1 member',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lkcTeamKeyedCount(int count) {
+    return '$count hold the key';
+  }
+
+  @override
+  String get lkcTeamRotationNeeded => 'Needs a new key';
+
+  @override
+  String get lkcTeamAwaitingKey => 'Waiting for the key';
+
+  @override
+  String get lkcTeamMembersAwaitingKey => 'Members waiting for the key';
+
+  @override
+  String get lkcTeamKeyChanged => 'Signing key changed';
+
+  @override
+  String get lkcTeamKeyChanges => 'Key changes to confirm';
+
+  @override
+  String get lkcTeamHoldsKey => 'Holds the key';
+
+  @override
+  String get lkcTeamMigrating => 'Re-encrypting';
+
+  @override
+  String get lkcTeamMigrated => 'All on the current epoch';
+
+  @override
+  String get lkcTeamFirstKeyDue => 'No key yet';
+
+  @override
+  String get lkcTeamStopped => 'Stopped';
+
+  @override
+  String get lkcTeamWaitingApproval => 'Waiting for approval';
+
+  @override
+  String get lkcTeamKeyPassword => 'LK Cloud key password';
+
+  @override
+  String get lkcTeamSetKeyPassword => 'Set the LK Cloud key password';
+
+  @override
+  String get lkcTeamSetKeyPasswordTip =>
+      'Every app of this account opens its teams with it. A lost password can\'t be recovered.';
+
+  @override
+  String get lkcTeamUnlockTitle => 'Unlock the account key';
+
+  @override
+  String get lkcTeamUnlock => 'Unlock';
+
+  @override
+  String get lkcTeamRepeat => 'Repeat';
+
+  @override
+  String get lkcTeamWrongPassword => 'Wrong password';
+
+  @override
+  String get lkcTeamPasswordMismatch => 'The two don\'t match';
+
+  @override
+  String get lkcTeamPasswordShort => 'At least 8 characters';
+
+  @override
+  String get lkcTeamLock => 'Lock';
+
+  @override
+  String get lkcTeamInvite => 'Invite';
+
+  @override
+  String get lkcTeamRotate => 'New key';
+
+  @override
+  String get lkcTeamGrant => 'Give the key';
+
+  @override
+  String get lkcTeamPromote => 'Make admin';
+
+  @override
+  String get lkcTeamDemote => 'Make member';
+
+  @override
+  String get lkcTeamTransfer => 'Hand over the team';
+
+  @override
+  String get lkcTeamRemove => 'Remove from team';
+
+  @override
+  String get lkcTeamLeave => 'Leave team';
+
+  @override
+  String get lkcTeamApprove => 'Approve';
+
+  @override
+  String get lkcTeamCompare => 'Compare fingerprint';
+
+  @override
+  String get lkcTeamFingerprint => 'Fingerprint';
+
+  @override
+  String lkcTeamComparedCheck(String name) {
+    return 'Matches what $name sees, compared in person or another trusted way';
+  }
+
+  @override
+  String get lkcTeamCompared => 'Compared';
+
+  @override
+  String get lkcTeamNotCompared => 'Not compared';
+
+  @override
+  String get lkcTeamMe => 'me';
+
+  @override
+  String get lkcTeamRoleOwner => 'owner';
+
+  @override
+  String get lkcTeamRoleAdmin => 'admin';
+
+  @override
+  String get lkcTeamRoleMember => 'member';
+
+  @override
+  String lkcTeamKeyChangedTitle(String name) {
+    return '$name\'s signing key changed';
+  }
+
+  @override
+  String get lkcTeamKeyChangedTip =>
+      'They may have a new device or key, or the server may be impersonating them.';
+
+  @override
+  String get lkcTeamPrevious => 'Compared before';
+
+  @override
+  String get lkcTeamCurrent => 'Now';
+
+  @override
+  String get lkcTeamTrustNew => 'It\'s their new key';
+
+  @override
+  String get lkcTeamDontTrust => 'Not now';
+
+  @override
+  String get lkcTeamInviteDays => 'Valid for';
+
+  @override
+  String get lkcTeamInviteUses => 'Uses';
+
+  @override
+  String lkcTeamDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count days',
+      one: '1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lkcTeamInviteWithKey => 'Link carries the key';
+
+  @override
+  String get lkcTeamInviteWithoutKey => 'Without the key';
+
+  @override
+  String get lkcTeamCreateLink => 'Create link';
+
+  @override
+  String get lkcTeamInviteLink => 'Invite link';
+
+  @override
+  String get lkcTeamInviteSecretTip =>
+      'What follows # never reaches the server: send the link only over a channel you trust.';
+
+  @override
+  String lkcTeamInviteTerms(String date, int uses) {
+    String _temp0 = intl.Intl.pluralLogic(
+      uses,
+      locale: localeName,
+      other: '$uses uses',
+      one: '1 use',
+    );
+    return 'Until $date · $_temp0';
+  }
+
+  @override
+  String get lkcTeamRotating => 'Making a new key';
+
+  @override
+  String get lkcTeamReencrypting => 'Re-encrypting';
+
+  @override
+  String lkcTeamRotated(int epoch) {
+    return 'On epoch $epoch';
+  }
+
+  @override
+  String get lkcTeamSnapshotNeeded =>
+      'The log is re-encrypted at the next sync';
+
+  @override
+  String lkcTeamUnreadable(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files are',
+      one: '1 file is',
+    );
+    return '$_temp0 left to another admin\'s device';
+  }
+
+  @override
+  String get lkcTeamPromotionNeeded =>
+      'The owner promotes you before you can make a new key';
+
+  @override
+  String get lkcTeamUntrusted =>
+      'The server\'s data doesn\'t check out (an epoch going back, or a bad signature), so this team is stopped';
+
+  @override
+  String get lkcTeamRefetch => 'Fetch again';
+
+  @override
+  String lkcTeamUnconfirmed(String names) {
+    return 'Compare the fingerprints of $names first';
+  }
+
+  @override
+  String lkcTeamNoRecipient(String names) {
+    return '$names haven\'t opened their account key yet';
+  }
+
+  @override
+  String get lkcTeamKeyReplaced =>
+      'Another device replaced the account key: unlock again';
+
+  @override
+  String get lkcTeamFirstKey =>
+      'Compare every member\'s fingerprint, then make the first key';
+
+  @override
+  String get lkcTeamMakeFirstKey => 'Make the first key';
+
+  @override
+  String get lkcTeamAllMatch => 'All match';
+
+  @override
+  String lkcTeamRemoveConfirm(String name) {
+    return 'Remove $name? The team then needs a new key.';
+  }
+
+  @override
+  String lkcTeamLeaveConfirm(String name) {
+    return 'Leave $name?';
+  }
+
+  @override
+  String lkcTeamTransferConfirm(String name) {
+    return '$name becomes the owner and you an admin.';
+  }
+
+  @override
+  String get lkcTeamRotateConfirm =>
+      'Every member gets a new key, and the team\'s files are re-encrypted.';
+
+  @override
+  String get lkcTeamJoin => 'Join a team';
+
+  @override
+  String get lkcTeamJoinLink => 'Invite link';
+
+  @override
+  String lkcTeamJoined(String name) {
+    return 'Joined $name';
+  }
+
+  @override
+  String lkcTeamSkippedEpochs(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count earlier epochs',
+      one: '1 earlier epoch',
+    );
+    return 'Data from $_temp0 can\'t be read here';
+  }
+
+  @override
+  String lkcTeamRecoveryTitle(String name) {
+    return '$name started the team\'s keys anew';
+  }
+
+  @override
+  String get lkcTeamRecoveryTip =>
+      'An owner does this only after losing every key. Accept only once they confirmed it with you.';
+
+  @override
+  String get lkcTeamAcceptRecovery => 'Accept';
 }

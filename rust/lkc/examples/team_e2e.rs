@@ -8,7 +8,9 @@
 //! override for `team:{id}`): the run waits for it. Also makes and deletes a
 //! team of its own. With `LKC_KEY_PASSPHRASE_2`, a second account (signed in
 //! the same way) joins by a keyed invite and is promoted, rotates, is handed
-//! the team and hands it back, then is demoted and removed. Never prints a
+//! the team and hands it back, then is demoted and removed. With
+//! `LKC_E2E_RECREATE` set, the kept team is deleted and made anew first.
+//! Never prints a
 //! token or a password:
 //! `LKC_KEY_PASSPHRASE=$(op read op://Dev/lkc-key-password/password) cargo run -p fl_lkc --example team_e2e` (from `rust/`).
 
@@ -92,6 +94,13 @@ async fn run(session: Arc<Session<Memory>>, me: String, passphrase: String, seco
     let team = match std::env::var("LKC_E2E_TEAM") {
         Ok(id) => id,
         Err(_) => match api.list().await.unwrap().into_iter().find(|t| t.team.name == TEAM_NAME && t.role == "owner") {
+            // `LKC_E2E_RECREATE`: one homebase or this client can no longer
+            // open, deleted and made anew (its overrides then moved to it).
+            Some(t) if std::env::var("LKC_E2E_RECREATE").is_ok() => {
+                api.delete(&t.team.id).await.expect("delete the kept team");
+                println!("deleted the kept team {}", t.team.id);
+                api.create(TEAM_NAME).await.expect("the kept team").id
+            }
             Some(t) => t.team.id,
             None => api.create(TEAM_NAME).await.expect("the kept team").id,
         },

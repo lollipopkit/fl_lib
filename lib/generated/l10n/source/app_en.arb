@@ -1892,5 +1892,230 @@
         "type": "String"
       }
     }
-  }
+  },
+  "lkcTeams": "Teams",
+  "lkcTeamNew": "New team",
+  "lkcTeamName": "Team name",
+  "lkcTeamNone": "No teams yet",
+  "lkcTeamEpoch": "Epoch {epoch}",
+  "@lkcTeamEpoch": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "epoch": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamMemberCount": "{count, plural, =1{1 member} other{{count} members}}",
+  "@lkcTeamMemberCount": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamKeyedCount": "{count} hold the key",
+  "@lkcTeamKeyedCount": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamRotationNeeded": "Needs a new key",
+  "lkcTeamAwaitingKey": "Waiting for the key",
+  "lkcTeamMembersAwaitingKey": "Members waiting for the key",
+  "lkcTeamKeyChanged": "Signing key changed",
+  "lkcTeamKeyChanges": "Key changes to confirm",
+  "lkcTeamHoldsKey": "Holds the key",
+  "lkcTeamMigrating": "Re-encrypting",
+  "lkcTeamMigrated": "All on the current epoch",
+  "lkcTeamFirstKeyDue": "No key yet",
+  "lkcTeamStopped": "Stopped",
+  "lkcTeamWaitingApproval": "Waiting for approval",
+  "lkcTeamKeyPassword": "LK Cloud key password",
+  "lkcTeamSetKeyPassword": "Set the LK Cloud key password",
+  "lkcTeamSetKeyPasswordTip": "Every app of this account opens its teams with it. A lost password can't be recovered.",
+  "lkcTeamUnlockTitle": "Unlock the account key",
+  "lkcTeamUnlock": "Unlock",
+  "lkcTeamRepeat": "Repeat",
+  "lkcTeamWrongPassword": "Wrong password",
+  "lkcTeamPasswordMismatch": "The two don't match",
+  "lkcTeamPasswordShort": "At least 8 characters",
+  "lkcTeamLock": "Lock",
+  "lkcTeamInvite": "Invite",
+  "lkcTeamRotate": "New key",
+  "lkcTeamGrant": "Give the key",
+  "lkcTeamPromote": "Make admin",
+  "lkcTeamDemote": "Make member",
+  "lkcTeamTransfer": "Hand over the team",
+  "lkcTeamRemove": "Remove from team",
+  "lkcTeamLeave": "Leave team",
+  "lkcTeamApprove": "Approve",
+  "lkcTeamCompare": "Compare fingerprint",
+  "lkcTeamFingerprint": "Fingerprint",
+  "lkcTeamComparedCheck": "Matches what {name} sees, compared in person or another trusted way",
+  "@lkcTeamComparedCheck": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamCompared": "Compared",
+  "lkcTeamNotCompared": "Not compared",
+  "lkcTeamMe": "me",
+  "lkcTeamRoleOwner": "owner",
+  "lkcTeamRoleAdmin": "admin",
+  "lkcTeamRoleMember": "member",
+  "lkcTeamKeyChangedTitle": "{name}'s signing key changed",
+  "@lkcTeamKeyChangedTitle": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamKeyChangedTip": "They may have a new device or key, or the server may be impersonating them.",
+  "lkcTeamPrevious": "Compared before",
+  "lkcTeamCurrent": "Now",
+  "lkcTeamTrustNew": "It's their new key",
+  "lkcTeamDontTrust": "Not now",
+  "lkcTeamInviteDays": "Valid for",
+  "lkcTeamInviteUses": "Uses",
+  "lkcTeamDays": "{count, plural, =1{1 day} other{{count} days}}",
+  "@lkcTeamDays": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamInviteWithKey": "Link carries the key",
+  "lkcTeamInviteWithoutKey": "Without the key",
+  "lkcTeamCreateLink": "Create link",
+  "lkcTeamInviteLink": "Invite link",
+  "lkcTeamInviteSecretTip": "What follows # never reaches the server: send the link only over a channel you trust.",
+  "lkcTeamInviteTerms": "Until {date} · {uses, plural, =1{1 use} other{{uses} uses}}",
+  "@lkcTeamInviteTerms": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "uses": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamRotating": "Making a new key",
+  "lkcTeamReencrypting": "Re-encrypting",
+  "lkcTeamRotated": "On epoch {epoch}",
+  "@lkcTeamRotated": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "epoch": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamSnapshotNeeded": "The log is re-encrypted at the next sync",
+  "lkcTeamUnreadable": "{count, plural, =1{1 file is} other{{count} files are}} left to another admin's device",
+  "@lkcTeamUnreadable": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamPromotionNeeded": "The owner promotes you before you can make a new key",
+  "lkcTeamUntrusted": "The server's data doesn't check out (an epoch going back, or a bad signature), so this team is stopped",
+  "lkcTeamRefetch": "Fetch again",
+  "lkcTeamUnconfirmed": "Compare the fingerprints of {names} first",
+  "@lkcTeamUnconfirmed": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamNoRecipient": "{names} haven't opened their account key yet",
+  "@lkcTeamNoRecipient": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamKeyReplaced": "Another device replaced the account key: unlock again",
+  "lkcTeamFirstKey": "Compare every member's fingerprint, then make the first key",
+  "lkcTeamMakeFirstKey": "Make the first key",
+  "lkcTeamAllMatch": "All match",
+  "lkcTeamRemoveConfirm": "Remove {name}? The team then needs a new key.",
+  "@lkcTeamRemoveConfirm": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamLeaveConfirm": "Leave {name}?",
+  "@lkcTeamLeaveConfirm": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamTransferConfirm": "{name} becomes the owner and you an admin.",
+  "@lkcTeamTransferConfirm": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamRotateConfirm": "Every member gets a new key, and the team's files are re-encrypted.",
+  "lkcTeamJoin": "Join a team",
+  "lkcTeamJoinLink": "Invite link",
+  "lkcTeamJoined": "Joined {name}",
+  "@lkcTeamJoined": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamSkippedEpochs": "Data from {count, plural, =1{1 earlier epoch} other{{count} earlier epochs}} can't be read here",
+  "@lkcTeamSkippedEpochs": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lkcTeamRecoveryTitle": "{name} started the team's keys anew",
+  "@lkcTeamRecoveryTitle": {
+    "description": "LK Cloud teams page.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lkcTeamRecoveryTip": "An owner does this only after losing every key. Accept only once they confirmed it with you.",
+  "lkcTeamAcceptRecovery": "Accept"
 }

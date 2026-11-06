@@ -26,11 +26,23 @@ abstract class LkcAccountKey implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>
 abstract class LkcTeamKeys implements RustOpaqueInterface {
+  /// Recovery epoch [epoch] of [team] taken: the person accepted the
+  /// owner's new start ([LkcTeamErrorKind::RecoveryEpoch]).
+  Future<void> acceptRecovery({
+    required String team,
+    required PlatformInt64 epoch,
+    required String userId,
+    required String signingKey,
+  });
+
   /// [signing_key] as [user_id]'s: the person compared it.
   Future<void> acceptSigningKey({
     required String userId,
     required String signingKey,
   });
+
+  /// Lets in [user_id], waiting since they joined.
+  Future<void> approve({required String team, required String userId});
 
   /// The team's first key; [confirmed]: the fingerprints the person
   /// compared. Answers the new epoch.
@@ -60,10 +72,22 @@ abstract class LkcTeamKeys implements RustOpaqueInterface {
   /// Joins by [token]; with the link's [secret], taking the key it carries.
   Future<LkcJoined> join({required String token, String? secret});
 
+  Future<void> leave({required String team});
+
+  /// [fingerprint] compared with [user_id] by the person.
+  Future<void> markCompared({
+    required String team,
+    required String userId,
+    required String fingerprint,
+  });
+
   Future<LkcReencryption> reencrypt({
     required String team,
     required List<String> apps,
   });
+
+  /// Removes [user_id]: the team then needs a new key.
+  Future<void> removeMember({required String team, required String userId});
 
   /// Every team whose keys are wrapped to an older account key of this
   /// account's, asked for a new key and rewrapped. Answers those that
@@ -162,6 +186,9 @@ abstract class LkcTeams implements RustOpaqueInterface {
   /// any device made one.
   Future<LkcAccountKey?> fetchAccountKey({required String passphrase});
 
+  /// Whether a device of the account made its key: asked for, not set.
+  Future<bool> hasAccountKey();
+
   Future<LkcInviteView> invite({required String token});
 
   Future<List<LkcTeam>> list();
@@ -190,6 +217,9 @@ class LkcInviteLink {
   final String id;
   final String token;
 
+  /// The whole link to send, its secret in the fragment when it carries one.
+  final String url;
+
   /// The link's fragment (after `#`) when it carries the key.
   final String? secret;
   final String expiresAt;
@@ -197,13 +227,18 @@ class LkcInviteLink {
   const LkcInviteLink({
     required this.id,
     required this.token,
+    required this.url,
     this.secret,
     required this.expiresAt,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ token.hashCode ^ secret.hashCode ^ expiresAt.hashCode;
+      id.hashCode ^
+      token.hashCode ^
+      url.hashCode ^
+      secret.hashCode ^
+      expiresAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -212,6 +247,7 @@ class LkcInviteLink {
           runtimeType == other.runtimeType &&
           id == other.id &&
           token == other.token &&
+          url == other.url &&
           secret == other.secret &&
           expiresAt == other.expiresAt;
 }
@@ -286,6 +322,15 @@ class LkcMember {
   /// Their signing key is not the one first met.
   final bool changed;
 
+  /// Base64: what [LkcTeamKeys::accept_signing_key] takes when [changed].
+  final String? signingKey;
+
+  /// The person compared [fingerprint] with them.
+  final bool compared;
+
+  /// The fingerprint the person compared before, when it is not this one.
+  final String? previousFingerprint;
+
   const LkcMember({
     required this.userId,
     required this.name,
@@ -295,6 +340,9 @@ class LkcMember {
     this.fingerprint,
     required this.attested,
     required this.changed,
+    this.signingKey,
+    required this.compared,
+    this.previousFingerprint,
   });
 
   @override
@@ -306,7 +354,10 @@ class LkcMember {
       keyed.hashCode ^
       fingerprint.hashCode ^
       attested.hashCode ^
-      changed.hashCode;
+      changed.hashCode ^
+      signingKey.hashCode ^
+      compared.hashCode ^
+      previousFingerprint.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -320,7 +371,10 @@ class LkcMember {
           keyed == other.keyed &&
           fingerprint == other.fingerprint &&
           attested == other.attested &&
-          changed == other.changed;
+          changed == other.changed &&
+          signingKey == other.signingKey &&
+          compared == other.compared &&
+          previousFingerprint == other.previousFingerprint;
 }
 
 enum LkcReencrypted {
@@ -411,6 +465,9 @@ class LkcTeamError implements FrbException {
   final String? reason;
   final List<String> users;
   final String? signingKey;
+
+  /// [signing_key]'s fingerprint to compare, when known.
+  final String? fingerprint;
   final PlatformInt64? epoch;
   final String detail;
 
@@ -419,6 +476,7 @@ class LkcTeamError implements FrbException {
     this.reason,
     required this.users,
     this.signingKey,
+    this.fingerprint,
     this.epoch,
     required this.detail,
   });
@@ -429,6 +487,7 @@ class LkcTeamError implements FrbException {
       reason.hashCode ^
       users.hashCode ^
       signingKey.hashCode ^
+      fingerprint.hashCode ^
       epoch.hashCode ^
       detail.hashCode;
 
@@ -441,6 +500,7 @@ class LkcTeamError implements FrbException {
           reason == other.reason &&
           users == other.users &&
           signingKey == other.signingKey &&
+          fingerprint == other.fingerprint &&
           epoch == other.epoch &&
           detail == other.detail;
 }
@@ -485,6 +545,11 @@ enum LkcTeamErrorKind {
   /// Joined after the current epoch's commit: the next is made by one of
   /// its members, or after the owner's signed promotion.
   promotionNeeded,
+
+  /// Epoch [LkcTeamError::epoch] starts the team's keys anew, made by its
+  /// owner ([LkcTeamError::users]) who lost theirs: taken once the person
+  /// accepts it ([LkcTeamKeys::accept_recovery]).
+  recoveryEpoch,
 
   /// A sync request of the space failed ([LkcTeamError::reason]: its kind).
   sync_,
@@ -596,6 +661,10 @@ class LkcTeamSnapshot {
 }
 
 class LkcTeamStatus {
+  final String name;
+
+  /// This account's: `owner`, `admin` or `member`.
+  final String role;
   final PlatformInt64 epoch;
   final bool migrated;
   final bool rotationNeeded;
@@ -610,6 +679,8 @@ class LkcTeamStatus {
   final Int64List skippedEpochs;
 
   const LkcTeamStatus({
+    required this.name,
+    required this.role,
     required this.epoch,
     required this.migrated,
     required this.rotationNeeded,
@@ -621,6 +692,8 @@ class LkcTeamStatus {
 
   @override
   int get hashCode =>
+      name.hashCode ^
+      role.hashCode ^
       epoch.hashCode ^
       migrated.hashCode ^
       rotationNeeded.hashCode ^
@@ -634,6 +707,8 @@ class LkcTeamStatus {
       identical(this, other) ||
       other is LkcTeamStatus &&
           runtimeType == other.runtimeType &&
+          name == other.name &&
+          role == other.role &&
           epoch == other.epoch &&
           migrated == other.migrated &&
           rotationNeeded == other.rotationNeeded &&

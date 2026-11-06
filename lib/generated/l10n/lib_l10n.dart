@@ -2628,6 +2628,522 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Delete “{name}”? Its files are removed from this device. If it is the icon pack in use, the app returns to the theme\'s icons.'**
   String themeStoreDeleteIconPack(String name);
+
+  /// No description provided for @lkcTeams.
+  ///
+  /// In en, this message translates to:
+  /// **'Teams'**
+  String get lkcTeams;
+
+  /// No description provided for @lkcTeamNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New team'**
+  String get lkcTeamNew;
+
+  /// No description provided for @lkcTeamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Team name'**
+  String get lkcTeamName;
+
+  /// No description provided for @lkcTeamNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No teams yet'**
+  String get lkcTeamNone;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Epoch {epoch}'**
+  String lkcTeamEpoch(int epoch);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 member} other{{count} members}}'**
+  String lkcTeamMemberCount(int count);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hold the key'**
+  String lkcTeamKeyedCount(int count);
+
+  /// No description provided for @lkcTeamRotationNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a new key'**
+  String get lkcTeamRotationNeeded;
+
+  /// No description provided for @lkcTeamAwaitingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the key'**
+  String get lkcTeamAwaitingKey;
+
+  /// No description provided for @lkcTeamMembersAwaitingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Members waiting for the key'**
+  String get lkcTeamMembersAwaitingKey;
+
+  /// No description provided for @lkcTeamKeyChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing key changed'**
+  String get lkcTeamKeyChanged;
+
+  /// No description provided for @lkcTeamKeyChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Key changes to confirm'**
+  String get lkcTeamKeyChanges;
+
+  /// No description provided for @lkcTeamHoldsKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Holds the key'**
+  String get lkcTeamHoldsKey;
+
+  /// No description provided for @lkcTeamMigrating.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-encrypting'**
+  String get lkcTeamMigrating;
+
+  /// No description provided for @lkcTeamMigrated.
+  ///
+  /// In en, this message translates to:
+  /// **'All on the current epoch'**
+  String get lkcTeamMigrated;
+
+  /// No description provided for @lkcTeamFirstKeyDue.
+  ///
+  /// In en, this message translates to:
+  /// **'No key yet'**
+  String get lkcTeamFirstKeyDue;
+
+  /// No description provided for @lkcTeamStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get lkcTeamStopped;
+
+  /// No description provided for @lkcTeamWaitingApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for approval'**
+  String get lkcTeamWaitingApproval;
+
+  /// No description provided for @lkcTeamKeyPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'LK Cloud key password'**
+  String get lkcTeamKeyPassword;
+
+  /// No description provided for @lkcTeamSetKeyPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the LK Cloud key password'**
+  String get lkcTeamSetKeyPassword;
+
+  /// No description provided for @lkcTeamSetKeyPasswordTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Every app of this account opens its teams with it. A lost password can\'t be recovered.'**
+  String get lkcTeamSetKeyPasswordTip;
+
+  /// No description provided for @lkcTeamUnlockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock the account key'**
+  String get lkcTeamUnlockTitle;
+
+  /// No description provided for @lkcTeamUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get lkcTeamUnlock;
+
+  /// No description provided for @lkcTeamRepeat.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat'**
+  String get lkcTeamRepeat;
+
+  /// No description provided for @lkcTeamWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong password'**
+  String get lkcTeamWrongPassword;
+
+  /// No description provided for @lkcTeamPasswordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The two don\'t match'**
+  String get lkcTeamPasswordMismatch;
+
+  /// No description provided for @lkcTeamPasswordShort.
+  ///
+  /// In en, this message translates to:
+  /// **'At least 8 characters'**
+  String get lkcTeamPasswordShort;
+
+  /// No description provided for @lkcTeamLock.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get lkcTeamLock;
+
+  /// No description provided for @lkcTeamInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite'**
+  String get lkcTeamInvite;
+
+  /// No description provided for @lkcTeamRotate.
+  ///
+  /// In en, this message translates to:
+  /// **'New key'**
+  String get lkcTeamRotate;
+
+  /// No description provided for @lkcTeamGrant.
+  ///
+  /// In en, this message translates to:
+  /// **'Give the key'**
+  String get lkcTeamGrant;
+
+  /// No description provided for @lkcTeamPromote.
+  ///
+  /// In en, this message translates to:
+  /// **'Make admin'**
+  String get lkcTeamPromote;
+
+  /// No description provided for @lkcTeamDemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Make member'**
+  String get lkcTeamDemote;
+
+  /// No description provided for @lkcTeamTransfer.
+  ///
+  /// In en, this message translates to:
+  /// **'Hand over the team'**
+  String get lkcTeamTransfer;
+
+  /// No description provided for @lkcTeamRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from team'**
+  String get lkcTeamRemove;
+
+  /// No description provided for @lkcTeamLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave team'**
+  String get lkcTeamLeave;
+
+  /// No description provided for @lkcTeamApprove.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get lkcTeamApprove;
+
+  /// No description provided for @lkcTeamCompare.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare fingerprint'**
+  String get lkcTeamCompare;
+
+  /// No description provided for @lkcTeamFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Fingerprint'**
+  String get lkcTeamFingerprint;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches what {name} sees, compared in person or another trusted way'**
+  String lkcTeamComparedCheck(String name);
+
+  /// No description provided for @lkcTeamCompared.
+  ///
+  /// In en, this message translates to:
+  /// **'Compared'**
+  String get lkcTeamCompared;
+
+  /// No description provided for @lkcTeamNotCompared.
+  ///
+  /// In en, this message translates to:
+  /// **'Not compared'**
+  String get lkcTeamNotCompared;
+
+  /// No description provided for @lkcTeamMe.
+  ///
+  /// In en, this message translates to:
+  /// **'me'**
+  String get lkcTeamMe;
+
+  /// No description provided for @lkcTeamRoleOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'owner'**
+  String get lkcTeamRoleOwner;
+
+  /// No description provided for @lkcTeamRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'admin'**
+  String get lkcTeamRoleAdmin;
+
+  /// No description provided for @lkcTeamRoleMember.
+  ///
+  /// In en, this message translates to:
+  /// **'member'**
+  String get lkcTeamRoleMember;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s signing key changed'**
+  String lkcTeamKeyChangedTitle(String name);
+
+  /// No description provided for @lkcTeamKeyChangedTip.
+  ///
+  /// In en, this message translates to:
+  /// **'They may have a new device or key, or the server may be impersonating them.'**
+  String get lkcTeamKeyChangedTip;
+
+  /// No description provided for @lkcTeamPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Compared before'**
+  String get lkcTeamPrevious;
+
+  /// No description provided for @lkcTeamCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Now'**
+  String get lkcTeamCurrent;
+
+  /// No description provided for @lkcTeamTrustNew.
+  ///
+  /// In en, this message translates to:
+  /// **'It\'s their new key'**
+  String get lkcTeamTrustNew;
+
+  /// No description provided for @lkcTeamDontTrust.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get lkcTeamDontTrust;
+
+  /// No description provided for @lkcTeamInviteDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid for'**
+  String get lkcTeamInviteDays;
+
+  /// No description provided for @lkcTeamInviteUses.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses'**
+  String get lkcTeamInviteUses;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 day} other{{count} days}}'**
+  String lkcTeamDays(int count);
+
+  /// No description provided for @lkcTeamInviteWithKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Link carries the key'**
+  String get lkcTeamInviteWithKey;
+
+  /// No description provided for @lkcTeamInviteWithoutKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Without the key'**
+  String get lkcTeamInviteWithoutKey;
+
+  /// No description provided for @lkcTeamCreateLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Create link'**
+  String get lkcTeamCreateLink;
+
+  /// No description provided for @lkcTeamInviteLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite link'**
+  String get lkcTeamInviteLink;
+
+  /// No description provided for @lkcTeamInviteSecretTip.
+  ///
+  /// In en, this message translates to:
+  /// **'What follows # never reaches the server: send the link only over a channel you trust.'**
+  String get lkcTeamInviteSecretTip;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Until {date} · {uses, plural, =1{1 use} other{{uses} uses}}'**
+  String lkcTeamInviteTerms(String date, int uses);
+
+  /// No description provided for @lkcTeamRotating.
+  ///
+  /// In en, this message translates to:
+  /// **'Making a new key'**
+  String get lkcTeamRotating;
+
+  /// No description provided for @lkcTeamReencrypting.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-encrypting'**
+  String get lkcTeamReencrypting;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'On epoch {epoch}'**
+  String lkcTeamRotated(int epoch);
+
+  /// No description provided for @lkcTeamSnapshotNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'The log is re-encrypted at the next sync'**
+  String get lkcTeamSnapshotNeeded;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file is} other{{count} files are}} left to another admin\'s device'**
+  String lkcTeamUnreadable(int count);
+
+  /// No description provided for @lkcTeamPromotionNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'The owner promotes you before you can make a new key'**
+  String get lkcTeamPromotionNeeded;
+
+  /// No description provided for @lkcTeamUntrusted.
+  ///
+  /// In en, this message translates to:
+  /// **'The server\'s data doesn\'t check out (an epoch going back, or a bad signature), so this team is stopped'**
+  String get lkcTeamUntrusted;
+
+  /// No description provided for @lkcTeamRefetch.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch again'**
+  String get lkcTeamRefetch;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare the fingerprints of {names} first'**
+  String lkcTeamUnconfirmed(String names);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{names} haven\'t opened their account key yet'**
+  String lkcTeamNoRecipient(String names);
+
+  /// No description provided for @lkcTeamKeyReplaced.
+  ///
+  /// In en, this message translates to:
+  /// **'Another device replaced the account key: unlock again'**
+  String get lkcTeamKeyReplaced;
+
+  /// No description provided for @lkcTeamFirstKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare every member\'s fingerprint, then make the first key'**
+  String get lkcTeamFirstKey;
+
+  /// No description provided for @lkcTeamMakeFirstKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Make the first key'**
+  String get lkcTeamMakeFirstKey;
+
+  /// No description provided for @lkcTeamAllMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'All match'**
+  String get lkcTeamAllMatch;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name}? The team then needs a new key.'**
+  String lkcTeamRemoveConfirm(String name);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave {name}?'**
+  String lkcTeamLeaveConfirm(String name);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} becomes the owner and you an admin.'**
+  String lkcTeamTransferConfirm(String name);
+
+  /// No description provided for @lkcTeamRotateConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Every member gets a new key, and the team\'s files are re-encrypted.'**
+  String get lkcTeamRotateConfirm;
+
+  /// No description provided for @lkcTeamJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join a team'**
+  String get lkcTeamJoin;
+
+  /// No description provided for @lkcTeamJoinLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite link'**
+  String get lkcTeamJoinLink;
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined {name}'**
+  String lkcTeamJoined(String name);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'Data from {count, plural, =1{1 earlier epoch} other{{count} earlier epochs}} can\'t be read here'**
+  String lkcTeamSkippedEpochs(int count);
+
+  /// LK Cloud teams page.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} started the team\'s keys anew'**
+  String lkcTeamRecoveryTitle(String name);
+
+  /// No description provided for @lkcTeamRecoveryTip.
+  ///
+  /// In en, this message translates to:
+  /// **'An owner does this only after losing every key. Accept only once they confirmed it with you.'**
+  String get lkcTeamRecoveryTip;
+
+  /// No description provided for @lkcTeamAcceptRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get lkcTeamAcceptRecovery;
 }
 
 class _LibLocalizationsDelegate

@@ -19,6 +19,7 @@ use crate::{Client, now_ms};
 const TEAM: &str = "0b5b1b6e-6f7a-4c1e-9d2a-3e4f5a6b7c8d";
 /// Records a page of `/keys` holds: small, so paging is exercised.
 const PAGE: usize = 2;
+const LOG: &str = "6f1c0000-0000-4000-8000-000000000001";
 
 #[derive(Clone, Default)]
 struct Nowhere;
@@ -63,7 +64,16 @@ struct State {
     epochs: BTreeMap<i64, Value>,
     /// token → (role, epoch, keyed).
     invites: BTreeMap<String, (String, i64, Option<Value>)>,
-    files: BTreeMap<String, (String, Vec<u8>, i64)>,
+    /// name → (etag, body, epoch, signature as listed).
+    files: BTreeMap<String, (String, Vec<u8>, i64, Value)>,
+    /// Each name's highest version.
+    versions: BTreeMap<String, i64>,
+    /// Each user's key records.
+    records: BTreeMap<String, Vec<Value>>,
+    /// Who received an epoch's key after its commit.
+    joins: BTreeMap<i64, Vec<Value>>,
+    /// (seq, body, epoch, idempotency key, signature).
+    log: Vec<(i64, Vec<u8>, i64, String, Value)>,
     etags: u64,
     /// The next commit loses a race to one made meanwhile.
     race: bool,
@@ -132,11 +142,23 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
     match (r.method.as_str(), path.as_str()) {
         ("GET", "/v2/keys") => {
             let k = s.keys.get(&user);
-            ok(json!({ "recipient": k.map(|k| &k.0), "signing_key": k.map(|k| &k.1) }))
+            let records = s.records.get(&user).cloned().unwrap_or_default();
+            let head = records.last();
+            ok(json!({
+                "recipient": k.map(|k| &k.0), "signing_key": k.map(|k| &k.1),
+                "seq": head.map_or(0, |h| h["seq"].as_i64().unwrap()), "reset": head.is_some_and(|h| h["reset"] == true),
+                "next_seq": records.len() + 1, "prev_signing_key": k.map(|k| &k.1),
+            }))
         }
-        ("PUT", "/v2/keys") => {
-            s.keys.insert(user, (body["recipient"].as_str().unwrap().into(), body["signing_key"].as_str().unwrap().into()));
-            ok(Value::Null)
+        ("PUT", "/v2/keys") => match put_key(&mut s, &user, &body) {
+            Ok(()) => ok(Value::Null),
+            Err(r) => r,
+        },
+        ("GET", p) if p.starts_with("/v2/keys/") && p.ends_with("/records") => {
+            let of = p.trim_start_matches("/v2/keys/").trim_end_matches("/records");
+            let since: i64 = query("since").map_or(0, |v| v.parse().unwrap());
+            let records: Vec<Value> = s.records.get(of).cloned().unwrap_or_default().into_iter().filter(|r| r["seq"].as_i64().unwrap() > since).collect();
+            ok(json!({ "records": records, "more": false }))
         }
         ("GET", "/v2/teams") => ok(json!([{
             "id": TEAM, "name": "t", "epoch": s.epoch, "migrated_epoch": s.migrated, "rotation_needed": false,
@@ -164,6 +186,7 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
                 .map(|(e, v)| {
                     let mut v = v.clone();
                     v["roles"] = json!(s.roles.get(e).cloned().unwrap_or_default());
+                    v["joins"] = json!(s.joins.get(e).cloned().unwrap_or_default());
                     v
                 })
                 .collect();
@@ -183,6 +206,9 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
             let prev = s.epochs.get(&s.epoch).map_or(NO_KEY, |r| raw(r["key_id"].as_str().unwrap()));
             if raw(body["prev_key_id"].as_str().unwrap()) != prev {
                 return Response::json(200, json!({ "code": 3, "reason": "team_key_chain" }));
+            }
+            if s.epoch > 0 && body["commit_mac"].as_str().is_none() {
+                return refuse("team_commit_mac");
             }
             let key_id = raw(body["key_id"].as_str().unwrap());
             // Rebuilt from homebase's own members, as homebase does.
@@ -243,6 +269,16 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
                 return refuse("team_signature");
             }
             let signed = Some((user.clone(), s.keys[&user].1.clone(), body["signature"].as_str().unwrap().to_string()));
+            let target_key = s.keys[&target].1.clone();
+            let listed = s.epochs[&epoch]["members"].as_array().unwrap().iter().any(|m| m["user_id"] == json!(target) && m["signing_key"] == json!(target_key));
+            if !listed {
+                let join = json!({
+                    "user_id": target, "recipient": recipient, "signing_key": target_key, "via": "grant", "signed_by": user,
+                    "signer_key": s.keys[&user].1, "signature": body["signature"], "invite": null,
+                });
+                s.joins.entry(epoch).or_default().retain(|j| j["user_id"] != json!(target));
+                s.joins.entry(epoch).or_default().push(join);
+            }
             s.wraps.insert((epoch, target.clone()), W { recipient, wrap: body["wrap"].as_str().unwrap().into(), signed });
             if epoch == s.epoch {
                 s.members.get_mut(&target).unwrap().attestation = body["attestation"].as_str().map(str::to_string);
@@ -325,6 +361,13 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
                     return refuse("team_signature");
                 }
                 m.attestation = k["attestation"].as_str().map(str::to_string);
+                let inv = keyed.unwrap();
+                let join = json!({
+                    "user_id": user, "recipient": recipient, "signing_key": s.keys[&user].1, "via": "invite", "signed_by": user,
+                    "signer_key": s.keys[&user].1, "signature": k["signature"],
+                    "invite": { "signed_by": inv["signed_by"], "signer_key": inv["signing_key"], "role": "member", "recipient": inv["recipient"], "signature": inv["signature"] },
+                });
+                s.joins.entry(epoch).or_default().push(join);
                 let signed = Some((user.clone(), s.keys[&user].1.clone(), k["signature"].as_str().unwrap().to_string()));
                 s.wraps.insert((epoch, user.clone()), W { recipient, wrap: k["wrap"].as_str().unwrap().into(), signed });
             }
@@ -332,22 +375,62 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
             ok(json!({ "team_id": TEAM, "approved": true }))
         }
         ("GET", p) if p == format!("{base}/sync/serverbox") => ok(Value::Array(
-            s.files.iter().map(|(n, f)| json!({ "name": n, "etag": f.0, "size": f.1.len(), "updated_at": "2026-01-01T00:00:00Z", "epoch": f.2 })).collect(),
+            s.files
+                .iter()
+                .map(|(n, f)| {
+                    let mut v = json!({ "name": n, "etag": f.0, "size": f.1.len(), "updated_at": "2026-01-01T00:00:00Z", "epoch": f.2 });
+                    if let Value::Object(sig) = &f.3 {
+                        v.as_object_mut().unwrap().extend(sig.clone());
+                    }
+                    v
+                })
+                .collect(),
         )),
         ("GET", p) if p == format!("{base}/sync/serverbox/snapshot") => match s.files.get(".snapshot") {
-            Some(f) => Response::status(200).header("etag", &format!("\"{}\"", f.0)).header("sync-log", "l").header("sync-seq", "5").body(f.1.clone()),
+            Some(f) => signed_headers(Response::status(200).header("etag", &format!("\"{}\"", f.0)).header("sync-log", "l").header("sync-seq", "5"), &f.3).body(f.1.clone()),
             None => Response::status(404),
         },
         ("PUT", p) if p == format!("{base}/sync/serverbox/snapshot") => {
             let epoch: i64 = r.header("x-team-epoch").unwrap().parse().unwrap();
             assert_eq!(query("seq").as_deref(), Some("5"));
+            let message = crypto::sync_snapshot_message(&format!("team:{TEAM}"), "serverbox", epoch, 5, blake3::hash(&r.body).as_bytes());
+            let Some(sig) = signed_as(&s, &user, &message, r) else { return Response::json(403, json!({ "code": 2, "reason": "sync_signature" })) };
             s.etags += 1;
             let etag = format!("{:032x}", s.etags);
-            s.files.insert(".snapshot".into(), (etag.clone(), r.body.clone(), epoch));
+            s.files.insert(".snapshot".into(), (etag.clone(), r.body.clone(), epoch, sig));
             Response::status(204).header("etag", &format!("\"{etag}\""))
         }
+        ("POST", p) if p == format!("{base}/sync/serverbox/log") => {
+            let epoch: i64 = r.header("x-team-epoch").unwrap().parse().unwrap();
+            if epoch != s.epoch {
+                return Response::json(409, json!({ "code": 4, "reason": "team_epoch_stale" })).header("x-team-epoch", &s.epoch.to_string());
+            }
+            let key = r.header("idempotency-key").unwrap().to_string();
+            let message = crypto::sync_batch_message(&format!("team:{TEAM}"), "serverbox", epoch, blake3::hash(&r.body).as_bytes(), &key);
+            let Some(sig) = signed_as(&s, &user, &message, r) else { return Response::json(403, json!({ "code": 2, "reason": "sync_signature" })) };
+            let seq = s.log.len() as i64 + 1;
+            s.log.push((seq, r.body.clone(), epoch, key, sig));
+            ok(json!({ "log": LOG, "seq": seq, "live": { "batches": seq, "bytes": 0 }, "compact": false }))
+        }
+        ("GET", p) if p == format!("{base}/sync/serverbox/log") => {
+            let after: i64 = query("after").map_or(0, |v| v.parse().unwrap());
+            let batches: Vec<Value> = s
+                .log
+                .iter()
+                .filter(|b| b.0 > after)
+                .map(|(seq, body, epoch, key, sig)| {
+                    let mut v = json!({
+                        "seq": seq, "size": body.len(), "epoch": epoch, "digest": blake3::hash(body).to_hex().as_str(),
+                        "body": b64(body), "idempotency_key": key,
+                    });
+                    v.as_object_mut().unwrap().extend(sig.as_object().unwrap().clone());
+                    v
+                })
+                .collect();
+            ok(json!({ "log": LOG, "batches": batches, "head": s.log.len(), "snapshot_seq": 0, "more": false }))
+        }
         ("GET", p) if p.starts_with(&format!("{base}/sync/serverbox/")) => match s.files.get(p.rsplit('/').next().unwrap()) {
-            Some(f) => Response::status(200).header("etag", &format!("\"{}\"", f.0)).body(f.1.clone()),
+            Some(f) => signed_headers(Response::status(200).header("etag", &format!("\"{}\"", f.0)), &f.3).body(f.1.clone()),
             None => Response::status(404),
         },
         ("PUT", p) if p.starts_with(&format!("{base}/sync/serverbox/")) => {
@@ -361,13 +444,72 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
             if current != wanted {
                 return Response::status(412);
             }
+            if r.header("x-signature").is_none() {
+                return Response::json(403, json!({ "code": 2, "reason": "sync_signature" }));
+            }
+            let highest = s.versions.get(&name).copied().unwrap_or(0);
+            let version: i64 = r.header("x-sync-version").and_then(|v| v.parse().ok()).unwrap_or(0);
+            if version <= highest || version > highest + 1024 {
+                return Response::json(409, json!({ "code": 4, "reason": "sync_version" })).header("x-sync-version", &highest.to_string());
+            }
+            let message = crypto::sync_file_message(&format!("team:{TEAM}"), "serverbox", &name, epoch, version, blake3::hash(&r.body).as_bytes());
+            let Some(mut sig) = signed_as(&s, &user, &message, r) else { return Response::json(403, json!({ "code": 2, "reason": "sync_signature" })) };
+            sig["version"] = json!(version);
+            s.versions.insert(name.clone(), version);
             s.etags += 1;
             let etag = format!("{:032x}", s.etags);
-            s.files.insert(name, (etag.clone(), r.body.clone(), epoch));
+            s.files.insert(name, (etag.clone(), r.body.clone(), epoch, sig));
             Response::status(204).header("etag", &format!("\"{etag}\""))
         }
         _ => Response::status(404),
     }
+}
+
+/// A write's signature, checked against [user]'s signing key, as homebase
+/// lists it.
+fn signed_as(s: &State, user: &str, message: &[u8], r: &Request) -> Option<Value> {
+    let sig = r.header("x-signature")?;
+    verify_as(s, user, message, sig).then(|| json!({ "signer": user, "signing_key": s.keys[user].1, "signature": sig }))
+}
+
+fn signed_headers(mut res: Response, sig: &Value) -> Response {
+    for (h, k) in [("x-signer", "signer"), ("x-signing-key", "signing_key"), ("x-signature", "signature"), ("x-sync-version", "version")] {
+        match &sig[k] {
+            Value::String(v) => res = res.header(h, v),
+            Value::Number(v) => res = res.header(h, &v.to_string()),
+            _ => {}
+        }
+    }
+    res
+}
+
+/// A key record checked as homebase checks it: the next seq, naming the
+/// chain's tail, signed by its key and (unless a reset) the one before.
+fn put_key(s: &mut State, user: &str, body: &Value) -> Result<(), Response> {
+    let records = s.records.entry(user.to_string()).or_default();
+    let seq = body["seq"].as_i64().unwrap();
+    if seq != records.len() as i64 + 1 {
+        return Err(Response::json(409, json!({ "code": 4, "reason": "user_key_seq" })));
+    }
+    let tail = s.keys.get(user).map_or(NO_KEY, |k| raw(&k.1));
+    let recipient = body["recipient"].as_str().unwrap().to_string();
+    let signing_key = body["signing_key"].as_str().unwrap().to_string();
+    let message = crypto::user_key_message(user, seq, &recipient, &raw(&signing_key), &tail);
+    let check = |key: &[u8; 32], sig: &str| crypto::verify(key, &message, &unb64(sig, "t").unwrap(), "t").is_ok();
+    if !check(&raw(&signing_key), body["self_signature"].as_str().unwrap()) {
+        return Err(refuse("user_key_signature"));
+    }
+    let prev_signature = body["prev_signature"].as_str();
+    if prev_signature.is_some_and(|sig| !check(&tail, sig)) {
+        return Err(refuse("user_key_signature"));
+    }
+    records.push(json!({
+        "seq": seq, "recipient": recipient, "signing_key": signing_key,
+        "prev_signing_key": (tail != NO_KEY).then(|| b64(&tail)), "self_signature": body["self_signature"],
+        "prev_signature": prev_signature, "reset": prev_signature.is_none(), "legacy": false, "created_at": "2026-01-01T00:00:00Z",
+    }));
+    s.keys.insert(user.to_string(), (recipient, signing_key));
+    Ok(())
 }
 
 /// A promotion checked as homebase checks it, and kept with its epoch.
@@ -465,7 +607,7 @@ async fn the_first_key_needs_each_member_confirmed() {
     // What was verified is kept before it is used.
     let trust = Trust::from_json(&bob.kept.0.lock().unwrap()).unwrap();
     assert_eq!(trust.seen(TEAM).unwrap().epoch, 1);
-    assert_eq!(trust.known("alice"), [alice.key().signing_public()]);
+    assert_eq!(trust.pinned("alice").unwrap().signing_key, alice.key().signing_public());
 }
 
 #[tokio::test]
@@ -511,8 +653,8 @@ async fn rotation_reencrypts_the_space_and_writes_follow_it() {
     keyed(&state, &alice, &bob).await;
     let space = bob.teams.space(TEAM, "serverbox").await.unwrap();
     space.write("servers", b"hosts", Condition::Absent).await.unwrap();
+    space.put_snapshot(5, b"log").await.unwrap();
     let ring1 = space.ring().await;
-    state.lock().unwrap().files.insert(".snapshot".into(), ("s".into(), ring1.seal(b"log").unwrap(), 1));
 
     // Pages of two records: three epochs read in two.
     for _ in 0..2 {
@@ -628,7 +770,7 @@ async fn an_epoch_shown_lower_or_with_another_key_is_refused() {
     let members = [alice.committed("owner"), bob.committed("member")];
     {
         let mut s = state.lock().unwrap();
-        s.epochs.insert(2, record(2, other.id(), prev, "alice", alice.key(), &members, None));
+        s.epochs.insert(2, record(2, other.id(), prev, "alice", alice.key(), &members, Some(b64(&[0; 32]))));
         s.wraps.insert((2, "bob".into()), W { recipient: bob.key().recipient(), wrap: b64(&other.wrap(&bob.key().recipient()).unwrap()), signed: None });
         s.epoch = 2;
     }
@@ -655,15 +797,24 @@ async fn an_account_key_rotation_keeps_its_teams() {
     let other = Teams::new(client, stale, Trust::default(), Kept::default());
     assert_eq!(other.keyring(TEAM).await.err(), Some(TeamError::AccountKeyReplaced));
 
-    // Alice rotates and commits under her new signing key: her own device
-    // takes it; bob's asks the person, then takes it once accepted.
+    // Alice rotates and commits under her new signing key, which her old
+    // one signed: bob's device follows it on its own.
     let alice2 = person_with(&fake, alice.key().rotated(), alice.kept.clone()).await;
     alice2.teams.rewrap_teams().await.unwrap();
     alice2.teams.rotate(TEAM, &[]).await.unwrap();
-    let changed = bob2.teams.keyring(TEAM).await.err().unwrap();
-    assert_eq!(changed, TeamError::SigningKeyChanged { user_id: "alice".into(), signing_key: alice2.key().signing_public() });
-    bob2.teams.accept_signing_key("alice", &alice2.key().signing_public()).await.unwrap();
     assert_eq!(bob2.teams.keyring(TEAM).await.unwrap().epoch(), 2);
+
+    // A key her old one never signed (a reset) commits nothing: only a
+    // recovery the person accepts starts anew.
+    let reset = person_with(&fake, AccountKey::generate("alice"), Kept::default()).await;
+    {
+        let mut st = state.lock().unwrap();
+        let prev = raw(st.epochs[&2]["key_id"].as_str().unwrap());
+        let members = [reset.committed("owner"), bob2.committed("member")];
+        st.epochs.insert(3, record(3, TeamKey::generate().id(), prev, "alice", reset.key(), &members, Some(b64(&[0; 32]))));
+        st.epoch = 3;
+    }
+    assert!(refused_as_unauthorized(bob2.teams.keyring(TEAM).await));
 }
 
 #[tokio::test]
@@ -686,8 +837,10 @@ async fn a_stale_epoch_names_the_current() {
     let err = sync.upload_bytes("x", body.clone(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.kind, sync::Kind::StaleEpoch(1));
     sync.set_epoch(1);
-    sync.upload_bytes("x", body, Condition::Absent).await.unwrap();
-    assert_eq!(state.lock().unwrap().files["x"].2, 1);
+    // A team's write is signed, or refused.
+    let err = sync.upload_bytes("x", body, Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, sync::Kind::Refused("sync_signature".into()));
+    assert!(!state.lock().unwrap().files.contains_key("x"));
     assert!(fake.requests(&format!("/v2/teams/{TEAM}/sync/serverbox/x")).iter().all(|r| r.header("x-team-epoch").is_some()));
 }
 
@@ -711,14 +864,14 @@ async fn a_file_of_an_epoch_not_held_is_reported() {
     {
         let mut s = state.lock().unwrap();
         s.wraps.get_mut(&(1, "alice".to_string())).unwrap().wrap = b64(&forged.wrap(&alice.key().recipient()).unwrap());
-        s.files.insert("old".into(), ("e".into(), forged.seal(b"x").unwrap(), 1));
+        s.files.insert("old".into(), ("e".into(), forged.seal(b"x").unwrap(), 1, Value::Null));
     }
     assert_eq!(alice.teams.reencrypt(TEAM, &["serverbox"]).await.unwrap(), Reencrypted::Unreadable(vec!["serverbox/old".into()]));
 }
 
 /// Alice signs epoch 2 with her first key, rotates, signs 3 with the next:
-/// bob, who saw only epoch 1, accepts her new key and reads on; a record
-/// past 3 under the key she replaced is refused.
+/// bob, who saw only epoch 1, follows her chain and reads on; a record past
+/// 3 under the key she replaced is refused.
 #[tokio::test]
 async fn a_replaced_signing_key_signs_nothing_after_its_successor() {
     let (state, fake, alice, bob) = setup().await;
@@ -728,8 +881,7 @@ async fn a_replaced_signing_key_signs_nothing_after_its_successor() {
     let alice2 = person_with(&fake, alice.key().rotated(), alice.kept.clone()).await;
     alice2.teams.rewrap_teams().await.unwrap();
     alice2.teams.rotate(TEAM, &[]).await.unwrap();
-    let Err(TeamError::SigningKeyChanged { signing_key, .. }) = bob.teams.keyring(TEAM).await else { panic!("a new key taken") };
-    bob.teams.accept_signing_key("alice", &signing_key).await.unwrap();
+    // Her old key signed the new one: followed without asking.
     assert_eq!(bob.teams.keyring(TEAM).await.unwrap().epoch(), 3);
 
     let prev = raw(state.lock().unwrap().epochs[&3]["key_id"].as_str().unwrap());
@@ -741,7 +893,7 @@ async fn a_replaced_signing_key_signs_nothing_after_its_successor() {
         s.wraps.insert((4, "bob".into()), W { recipient: bob.key().recipient(), wrap: b64(&next.wrap(&bob.key().recipient()).unwrap()), signed: None });
         s.epoch = 4;
     }
-    assert!(matches!(bob.teams.keyring(TEAM).await, Err(TeamError::Untrusted(e)) if e.contains("replaced")));
+    assert!(refused_as_unauthorized(bob.teams.keyring(TEAM).await));
 }
 
 /// Carol joins by a keyed invite after epoch 1's commit; alice promotes her:
@@ -916,4 +1068,129 @@ async fn a_promotion_holds_the_key_it_named() {
     state.lock().unwrap().roles.entry(1).or_default().push(grant);
     state.lock().unwrap().members.get_mut("dave").unwrap().role = "admin".into();
     assert_eq!(dave.teams.rotate(TEAM, &[]).await, Err(TeamError::PromotionNeeded));
+}
+
+/// What a member reads is signed by one who could write under its epoch,
+/// over these bytes, and never older than what this device saw of it.
+#[tokio::test]
+async fn a_team_read_is_checked_signed_and_never_older() {
+    let (state, fake, alice, bob) = setup().await;
+    keyed(&state, &alice, &bob).await;
+    let space = bob.teams.space(TEAM, "serverbox").await.unwrap();
+    let etag = space.write("servers", b"one", Condition::Absent).await.unwrap();
+    let first = state.lock().unwrap().files["servers"].clone();
+    space.write("servers", b"two", Condition::Match(etag)).await.unwrap();
+    assert_eq!(space.read("servers").await.unwrap().unwrap().0, b"two");
+
+    // Homebase serves the version before.
+    let second = state.lock().unwrap().files.insert("servers".into(), first).unwrap();
+    assert!(matches!(space.read("servers").await, Err(TeamError::Untrusted(e)) if e.contains("older")));
+
+    // Other bytes under the signature.
+    let mut tampered = second.clone();
+    tampered.1 = space.ring().await.seal(b"three").unwrap();
+    state.lock().unwrap().files.insert("servers".into(), tampered);
+    assert!(matches!(space.read("servers").await, Err(TeamError::Untrusted(e)) if e.contains("does not verify")));
+
+    // Signed rightly by one not of the team.
+    let eve = person(&fake, "eve").await;
+    let sealed = space.ring().await.seal(b"eve's").unwrap();
+    let message = crypto::sync_file_message(&format!("team:{TEAM}"), "serverbox", "servers", 1, 9, blake3::hash(&sealed).as_bytes());
+    let sig = json!({ "signer": "eve", "signing_key": eve.key().signing_public(), "signature": b64(&crypto::sign(eve.key().signing(), &message)), "version": 9 });
+    state.lock().unwrap().files.insert("servers".into(), ("e".into(), sealed, 1, sig));
+    assert!(matches!(space.read("servers").await, Err(TeamError::Untrusted(e)) if e.contains("could not write")));
+
+    // A version another device wrote past this one's: written after it.
+    state.lock().unwrap().files.insert("servers".into(), second);
+    state.lock().unwrap().versions.insert("servers".into(), 40);
+    let etag = space.read("servers").await.unwrap().unwrap().1;
+    space.write("servers", b"four", Condition::Match(etag)).await.unwrap();
+    assert_eq!(state.lock().unwrap().versions["servers"], 41);
+}
+
+/// Carol joined by a keyed invite after the commit: her writes are hers to
+/// make, and each batch of the log is checked on its own.
+#[tokio::test]
+async fn a_log_batch_is_checked_on_its_own() {
+    let (state, fake, alice, bob) = setup().await;
+    let carol = carol_joined(&state, &fake, &alice, &bob).await;
+    let mine = carol.teams.space(TEAM, "serverbox").await.unwrap();
+    mine.append("0000019a3f2b1c000000000000000001", b"a").await.unwrap();
+    mine.append("0000019a3f2b1c000000000000000002", b"b").await.unwrap();
+    mine.append("0000019a3f2b1c000000000000000003", b"c").await.unwrap();
+    let other = mine.ring().await.seal(b"x").unwrap();
+    {
+        let mut s = state.lock().unwrap();
+        s.log[1].1 = other;
+        s.log[2].3 = "0000019a3f2b1c000000000000000009".into();
+    }
+    let space = bob.teams.space(TEAM, "serverbox").await.unwrap();
+    let TeamLog::Page { batches, unreadable, .. } = space.read_log(0, None, None).await.unwrap() else { panic!("a page") };
+    assert_eq!(batches.iter().map(|b| (b.seq, b.body.as_slice())).collect::<Vec<_>>(), [(1, b"a".as_slice())]);
+    assert_eq!(unreadable, [2, 3]);
+
+    // The first shown again after: a replay.
+    {
+        let mut s = state.lock().unwrap();
+        let mut again = s.log[0].clone();
+        again.0 = 4;
+        s.log.push(again);
+    }
+    let TeamLog::Page { batches, unreadable, .. } = space.read_log(3, Some(LOG), None).await.unwrap() else { panic!("a page") };
+    assert!(batches.is_empty());
+    assert_eq!(unreadable, [4]);
+}
+
+/// An owner who lost every key starts the chain anew: taken only once the
+/// person accepts it.
+#[tokio::test]
+async fn a_recovery_epoch_waits_for_the_person() {
+    let (state, _fake, alice, bob) = setup().await;
+    keyed(&state, &alice, &bob).await;
+    bob.teams.keyring(TEAM).await.unwrap();
+    let next = TeamKey::generate();
+    {
+        let mut s = state.lock().unwrap();
+        let members = [alice.committed("owner"), bob.committed("member")];
+        let mut r = record(2, next.id(), NO_KEY, "alice", alice.key(), &members, None);
+        r["recovery"] = json!(true);
+        s.epochs.insert(2, r);
+        s.wraps.insert((2, "bob".into()), W { recipient: bob.key().recipient(), wrap: b64(&next.wrap(&bob.key().recipient()).unwrap()), signed: None });
+        s.epoch = 2;
+    }
+    // Made by one not owning the team before: refused outright.
+    let by_owner = state.lock().unwrap().epochs[&2].clone();
+    let mut by_bob = record(2, next.id(), NO_KEY, "bob", bob.key(), &[alice.committed("member"), bob.committed("owner")], None);
+    by_bob["recovery"] = json!(true);
+    state.lock().unwrap().epochs.insert(2, by_bob);
+    assert!(matches!(bob.teams.keyring(TEAM).await, Err(TeamError::Untrusted(e)) if e.contains("not owning")));
+    state.lock().unwrap().epochs.insert(2, by_owner);
+    let Some(TeamError::RecoveryEpoch { epoch: 2, committed_by, signing_key, fingerprint }) = bob.teams.keyring(TEAM).await.err() else { panic!("a recovery") };
+    assert_eq!((committed_by.as_str(), fingerprint), ("alice", Some(alice.fingerprint())));
+    bob.teams.accept_recovery(TEAM, 2, &committed_by, &signing_key).await.unwrap();
+    assert_eq!(bob.teams.keyring(TEAM).await.unwrap().epoch(), 2);
+}
+
+/// Carol's device meets bob first in epoch 1's signed record: a key
+/// homebase puts in his place after (with a reset record of its own) is
+/// shown changed, not taken on first sight.
+#[tokio::test]
+async fn a_member_is_first_met_in_a_signed_record() {
+    let (state, fake, alice, bob) = setup().await;
+    let carol = carol_joined(&state, &fake, &alice, &bob).await;
+    let mallory = AccountKey::generate("bob");
+    {
+        let mut s = state.lock().unwrap();
+        let seq = s.records["bob"].len() as i64 + 1;
+        let tail = raw(&s.keys["bob"].1);
+        let message = crypto::user_key_message("bob", seq, &mallory.recipient(), &mallory.signing_raw(), &tail);
+        let record = json!({
+            "seq": seq, "recipient": mallory.recipient(), "signing_key": mallory.signing_public(), "prev_signing_key": b64(&tail),
+            "self_signature": b64(&crypto::sign(mallory.signing(), &message)), "prev_signature": null, "reset": true, "legacy": false,
+        });
+        s.records.get_mut("bob").unwrap().push(record);
+        s.keys.insert("bob".into(), (mallory.recipient(), mallory.signing_public()));
+    }
+    let status = carol.teams.status(TEAM).await.unwrap();
+    assert!(status.members.iter().find(|m| m.user_id == "bob").unwrap().changed);
 }

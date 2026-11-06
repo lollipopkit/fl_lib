@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use super::crypto::{self, CryptoError, identity_text, parse_identity};
-use super::{TeamClient, TeamError};
+use super::verify::raw32;
+use super::{TeamClient, TeamError, b64};
 use crate::session::{Session, Store};
 use crate::sync::{Condition, Kind, SyncClient};
 
@@ -41,6 +42,9 @@ pub struct AccountKey {
     /// The public halves of the signing keys this one replaced, base64:
     /// what this account signed before is still its own.
     signed: Vec<String>,
+    /// The signing key this one replaced: it signs the key record that
+    /// publishes this one, so the account's chain goes on unbroken.
+    previous: Option<SigningKey>,
 }
 
 /// Zeroed when dropped: it holds the secret keys as text.
@@ -54,11 +58,14 @@ struct Text {
     signing: String,
     #[serde(default)]
     signed: Vec<String>,
+    /// The Ed25519 seed of [AccountKey::previous], base64.
+    #[serde(default)]
+    previous: Option<String>,
 }
 
 impl AccountKey {
     pub fn generate(user_id: &str) -> Self {
-        Self { user_id: user_id.to_string(), identities: vec![age::x25519::Identity::generate()], signing: crypto::signing_key(&crypto::random32()), signed: vec![] }
+        Self { user_id: user_id.to_string(), identities: vec![age::x25519::Identity::generate()], signing: crypto::signing_key(&crypto::random32()), signed: vec![], previous: None }
     }
 
     pub fn user_id(&self) -> &str {
@@ -73,6 +80,7 @@ impl AccountKey {
             age: self.identities.iter().map(|i| identity_text(i).to_string()).collect(),
             signing: BASE64.encode(self.signing.to_bytes()),
             signed: self.signed.clone(),
+            previous: self.previous.as_ref().map(|k| BASE64.encode(k.to_bytes())),
         };
         Zeroizing::new(serde_json::to_string(&text).expect("plain JSON"))
     }
@@ -85,7 +93,15 @@ impl AccountKey {
         let identities = t.age.iter().map(|i| parse_identity(i)).collect::<Result<Vec<_>, _>>()?;
         let seed = Zeroizing::new(BASE64.decode(&t.signing).map_err(|_| CryptoError::Malformed("account key: signing".into()))?);
         let seed: [u8; 32] = seed.as_slice().try_into().map_err(|_| CryptoError::Malformed("account key: signing".into()))?;
-        Ok(Self { user_id: t.user_id.clone(), identities, signing: crypto::signing_key(&seed), signed: t.signed.clone() })
+        let previous = match &t.previous {
+            None => None,
+            Some(p) => {
+                let p = Zeroizing::new(BASE64.decode(p).map_err(|_| CryptoError::Malformed("account key: previous".into()))?);
+                let p: [u8; 32] = p.as_slice().try_into().map_err(|_| CryptoError::Malformed("account key: previous".into()))?;
+                Some(crypto::signing_key(&p))
+            }
+        };
+        Ok(Self { user_id: t.user_id.clone(), identities, signing: crypto::signing_key(&seed), signed: t.signed.clone(), previous })
     }
 
     pub fn seal(&self, passphrase: &str) -> Result<Vec<u8>, CryptoError> {
@@ -142,7 +158,7 @@ impl AccountKey {
         let mut identities = vec![age::x25519::Identity::generate()];
         identities.extend(self.identities.iter().take(HISTORY).cloned());
         let signed = self.signing_history().collect();
-        Self { user_id: self.user_id.clone(), identities, signing: crypto::signing_key(&crypto::random32()), signed }
+        Self { user_id: self.user_id.clone(), identities, signing: crypto::signing_key(&crypto::random32()), signed, previous: Some(self.signing.clone()) }
     }
 }
 
@@ -157,9 +173,14 @@ impl<S: Store> AccountKeyFile<S> {
         Self { sync: SyncClient::new(session, APP), user_id: user_id.to_string() }
     }
 
+    /// Whether a device of the account made its key: one to open, not to set.
+    pub async fn exists(&self) -> Result<bool, TeamError> {
+        Ok(self.sync.head(FILE).await?.is_some())
+    }
+
     /// The key and its version; `None` before any device made one.
     pub async fn fetch(&self, passphrase: &str) -> Result<Option<(AccountKey, String)>, TeamError> {
-        let Some((sealed, etag)) = self.sync.download_bytes(FILE).await? else { return Ok(None) };
+        let Some((sealed, etag, _)) = self.sync.download_bytes(FILE).await? else { return Ok(None) };
         let key = AccountKey::open(&sealed, passphrase)?;
         if key.user_id != self.user_id {
             return Err(TeamError::Untrusted("the account key is of another account".into()));
@@ -209,20 +230,40 @@ impl<S: Store> AccountKeyFile<S> {
 }
 
 impl<S: Store> TeamClient<S> {
-    /// Public halves read from `/v2/keys` before, published again.
-    pub async fn restore_user_key(&self, recipient: &str, signing_key: &str) -> Result<(), TeamError> {
-        self.set_user_key(recipient, signing_key).await
-    }
-
-    /// [key]'s public halves on `/v2/keys`, unless already there. Homebase
-    /// tells the teams, whose devices check the new attestation.
+    /// [key]'s public halves on `/v2/keys` as the account's next key
+    /// record, unless already its head. Signed by the key, and by the key
+    /// before when this one replaced it ([AccountKey::rotated]); otherwise
+    /// a reset, which every member is asked to confirm. Homebase tells the
+    /// teams.
     pub async fn publish(&self, key: &AccountKey) -> Result<(), TeamError> {
-        let published = self.user_key().await?;
-        let (recipient, signing_key) = (key.recipient(), key.signing_public());
-        if published.recipient.as_deref() == Some(&recipient) && published.signing_key.as_deref() == Some(&signing_key) {
-            return Ok(());
+        for again in [true, false] {
+            let head = self.user_key().await?;
+            let (recipient, signing_key) = (key.recipient(), key.signing_public());
+            if head.recipient.as_deref() == Some(&recipient) && head.signing_key.as_deref() == Some(&signing_key) {
+                return Ok(());
+            }
+            let seq = head.next_seq.max(1);
+            let tail = match &head.prev_signing_key {
+                Some(k) => raw32(k, "prev_signing_key")?,
+                None => crypto::NO_KEY,
+            };
+            let message = crypto::user_key_message(key.user_id(), seq, &recipient, &key.signing_raw(), &tail);
+            // The key before signs only when it is the chain's tail.
+            let prev = key.previous.as_ref().filter(|p| p.verifying_key().to_bytes() == tail);
+            let body = serde_json::json!({
+                "seq": seq,
+                "recipient": recipient,
+                "signing_key": signing_key,
+                "self_signature": b64(&crypto::sign(key.signing(), &message)),
+                "prev_signature": prev.map(|p| b64(&crypto::sign(p, &message))),
+            });
+            match self.put_user_key(&body).await {
+                // Another device published meanwhile: read the head again.
+                Err(TeamError::Refused(r)) if again && r == "user_key_seq" => continue,
+                other => return other,
+            }
         }
-        self.set_user_key(&recipient, &signing_key).await
+        Err(TeamError::Refused("user_key_seq".into()))
     }
 }
 
