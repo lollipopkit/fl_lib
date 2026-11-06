@@ -4,9 +4,10 @@
 use std::sync::Arc;
 
 use fl_lkc::sync::{Event, SyncClient};
+use fl_lkc::team::Keeper;
 use fl_lkc::{Store, Stored};
 use flutter_rust_bridge::DartFnFuture;
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 use tokio::sync::watch;
 
 use crate::api::lkc::LkcSyncEvent;
@@ -32,8 +33,13 @@ impl Store for DartStore {
 }
 
 /// [sync]'s events into [sink] until [stopped] says so or Dart stops reading.
-pub async fn forward(sync: Arc<SyncClient<DartStore>>, sink: StreamSink<LkcSyncEvent>, mut stopped: watch::Receiver<bool>) {
-    let mut events = Box::pin(sync.events());
+pub async fn forward(sync: Arc<SyncClient<DartStore>>, sink: StreamSink<LkcSyncEvent>, stopped: watch::Receiver<bool>) {
+    forward_events(sync.events(), sink, stopped).await;
+}
+
+/// [events] into [sink] until [stopped] says so or Dart stops reading.
+pub async fn forward_events(events: impl Stream<Item = Event> + Send, sink: StreamSink<LkcSyncEvent>, mut stopped: watch::Receiver<bool>) {
+    let mut events = Box::pin(events);
     loop {
         let event = tokio::select! {
             _ = stopped.changed() => break,
@@ -44,10 +50,23 @@ pub async fn forward(sync: Arc<SyncClient<DartStore>>, sink: StreamSink<LkcSyncE
             Event::Connected => LkcSyncEvent { connected: true, ..Default::default() },
             Event::Changed { name, etag } => LkcSyncEvent { name: Some(name), etag, ..Default::default() },
             Event::Log { seq } => LkcSyncEvent { log_seq: Some(seq), ..Default::default() },
+            Event::Team { change } => LkcSyncEvent { team_change: Some(change), ..Default::default() },
             Event::Lost(detail) => LkcSyncEvent { lost: Some(detail), ..Default::default() },
         };
         if sink.add(event).is_err() {
             break;
         }
+    }
+}
+
+/// The teams' trust in Dart: its JSON written to the keychain, answering
+/// whether it was.
+pub struct DartKeeper {
+    pub save: Arc<dyn Fn(String) -> DartFnFuture<bool> + Send + Sync>,
+}
+
+impl Keeper for DartKeeper {
+    async fn save(&self, json: String) -> Result<(), String> {
+        if (self.save)(json).await { Ok(()) } else { Err("not written".into()) }
     }
 }

@@ -298,7 +298,7 @@ async fn a_page_is_read_from_the_cursor_with_its_digests_checked() {
     .await;
     let LogRead::Page { log, batches, head, more, .. } = sync.read_log(0, None, None).await.unwrap() else { panic!() };
     assert_eq!((log.as_deref(), head, more), (Some("6f1c"), 3, true));
-    assert_eq!(batches, vec![Batch { seq: 1, body: b"one".to_vec() }, Batch { seq: 2, body: b"two".to_vec() }]);
+    assert_eq!(batches, vec![Batch { seq: 1, body: b"one".to_vec(), epoch: None }, Batch { seq: 2, body: b"two".to_vec(), epoch: None }]);
     let LogRead::Page { batches, more, .. } = sync.read_log(2, Some("6f1c"), Some(1)).await.unwrap() else { panic!() };
     assert_eq!((batches.len(), more), (1, false));
 

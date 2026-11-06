@@ -13,6 +13,7 @@ mod error;
 mod session;
 pub mod push;
 pub mod sync;
+pub mod team;
 
 pub use session::{Session, Store, Stored};
 

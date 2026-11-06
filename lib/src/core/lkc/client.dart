@@ -8,6 +8,7 @@ import 'package:fl_lib/src/core/lkc/auth.dart';
 import 'package:fl_lib/src/core/lkc/model.dart';
 import 'package:fl_lib/src/core/rust.dart';
 import 'package:fl_lib/src/rust/api/lkc.dart';
+import 'package:fl_lib/src/rust/api/team.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
@@ -218,6 +219,21 @@ final class LkcClient {
 
   final _syncs = <String, Future<LkcSync>>{};
 
+  /// The signed-in account's teams and its key ([LkcTeams]), on this
+  /// session; see [LkcTeamAccount].
+  Future<LkcTeams> teams() => _teams ??= _ensureSession()
+      .then((session) {
+        final id = user.value?.id;
+        if (id == null) throw StateError('LK Cloud: not signed in');
+        return LkcTeams(session: session, userId: id);
+      })
+      .catchError((Object e, StackTrace s) {
+        _teams = null;
+        Error.throwWithStackTrace(e, s);
+      });
+
+  Future<LkcTeams>? _teams;
+
   /// Load the saved session and its user. A session the IdP or homebase
   /// refuses is dropped; on any other error it is kept, and the error thrown.
   Future<void> init() async {
@@ -309,6 +325,8 @@ final class LkcClient {
   }
 
   void _clear() {
+    // Of the account signed in: another's teams are not this one's.
+    _teams = null;
     _refreshedAt = null;
     usage.value = null;
     user.value = null;

@@ -66,7 +66,7 @@ impl std::fmt::Debug for LkcFailure {
 
 /// A signed-in (or signed-out) session of one app.
 #[frb(opaque)]
-pub struct LkcSession(Arc<Session<DartStore>>);
+pub struct LkcSession(pub(crate) Arc<Session<DartStore>>);
 
 impl LkcSession {
     /// The session [stored] (the JSON [save] last wrote) describes. One saved
@@ -142,6 +142,8 @@ pub enum LkcSyncErrorKind {
     /// Homebase's `reason` in [LkcSyncError::reason].
     Refused,
     Busy,
+    /// A team's write under a replaced key: the current in [LkcSyncError::epoch].
+    StaleEpoch,
     SignedOut,
     Unreachable,
     Invalid,
@@ -154,6 +156,8 @@ pub struct LkcSyncError {
     /// `sync_snapshot_stale` or `sync_key_reused` when [kind] is
     /// [LkcSyncErrorKind::Refused].
     pub reason: Option<String>,
+    /// The team's current epoch, when [kind] is [LkcSyncErrorKind::StaleEpoch].
+    pub epoch: Option<i64>,
     pub detail: String,
 }
 
@@ -166,6 +170,7 @@ impl std::fmt::Debug for LkcSyncErrorKind {
             Self::NotAge => "NotAge",
             Self::Refused => "Refused",
             Self::Busy => "Busy",
+            Self::StaleEpoch => "StaleEpoch",
             Self::SignedOut => "SignedOut",
             Self::Unreachable => "Unreachable",
             Self::Invalid => "Invalid",
@@ -175,6 +180,10 @@ impl std::fmt::Debug for LkcSyncErrorKind {
 
 impl From<fl_lkc::sync::Error> for LkcSyncError {
     fn from(e: fl_lkc::sync::Error) -> Self {
+        let epoch = match e.kind {
+            Kind::StaleEpoch(epoch) => Some(epoch),
+            _ => None,
+        };
         let (kind, reason) = match e.kind {
             Kind::Changed => (LkcSyncErrorKind::Changed, None),
             Kind::Missing => (LkcSyncErrorKind::Missing, None),
@@ -182,11 +191,12 @@ impl From<fl_lkc::sync::Error> for LkcSyncError {
             Kind::NotAge => (LkcSyncErrorKind::NotAge, None),
             Kind::Refused(r) => (LkcSyncErrorKind::Refused, Some(r).filter(|r| !r.is_empty())),
             Kind::Busy => (LkcSyncErrorKind::Busy, None),
+            Kind::StaleEpoch(_) => (LkcSyncErrorKind::StaleEpoch, None),
             Kind::SignedOut => (LkcSyncErrorKind::SignedOut, None),
             Kind::Unreachable => (LkcSyncErrorKind::Unreachable, None),
             Kind::Invalid => (LkcSyncErrorKind::Invalid, None),
         };
-        Self { kind, reason, detail: e.detail }
+        Self { kind, reason, epoch, detail: e.detail }
     }
 }
 
@@ -203,6 +213,8 @@ pub struct LkcSyncFile {
     pub etag: String,
     pub size: u64,
     pub updated_at: String,
+    /// A team's: the key epoch it was written under.
+    pub epoch: Option<i64>,
 }
 
 pub struct LkcSyncVersion {
@@ -223,6 +235,9 @@ pub struct LkcSyncEvent {
     pub log_seq: Option<i64>,
     /// Not listening, why: tried again after a wait.
     pub lost: Option<String>,
+    /// A team's members or key changed (`key`, `members`, `rotation_needed`,
+    /// …): its keys are read again.
+    pub team_change: Option<String>,
 }
 
 /// A batch appended to the log: [seq] of [log]; [compact]: a snapshot is due.
@@ -237,6 +252,8 @@ pub struct LkcAppended {
 pub struct LkcBatch {
     pub seq: i64,
     pub body: Vec<u8>,
+    /// A team's: the key epoch it was sealed under.
+    pub epoch: Option<i64>,
 }
 
 /// A read of the log. [compacted]: the batches after the cursor are gone, or
@@ -310,7 +327,7 @@ impl LkcSync {
             .list()
             .await?
             .into_iter()
-            .map(|f| LkcSyncFile { name: f.name, etag: f.etag, size: f.size, updated_at: f.updated_at })
+            .map(|f| LkcSyncFile { name: f.name, etag: f.etag, size: f.size, updated_at: f.updated_at, epoch: f.epoch })
             .collect())
     }
 
@@ -338,7 +355,7 @@ impl LkcSync {
             LogRead::Page { log, batches, head, snapshot_seq, more } => LkcLogRead {
                 compacted: false,
                 log,
-                batches: batches.into_iter().map(|b| LkcBatch { seq: b.seq, body: b.body }).collect(),
+                batches: batches.into_iter().map(|b| LkcBatch { seq: b.seq, body: b.body, epoch: b.epoch }).collect(),
                 head,
                 snapshot_seq,
                 more,

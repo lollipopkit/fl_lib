@@ -5,6 +5,7 @@
 
 import 'api/lkc.dart';
 import 'api/sync.dart';
+import 'api/team.dart';
 import 'api/theme.dart';
 
 import 'dart:async';
@@ -69,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 34656061;
+  int get rustContentHash => 1701181741;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +82,14 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  String crateApiTeamLkcAccountKeyFingerprint({required LkcAccountKey that});
+
+  LkcAccountKey crateApiTeamLkcAccountKeyFromText({required String text});
+
+  String crateApiTeamLkcAccountKeyToText({required LkcAccountKey that});
+
+  String crateApiTeamLkcAccountKeyUserId({required LkcAccountKey that});
+
   Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that});
 
   Future<void> crateApiLkcLkcSessionForget({
@@ -187,6 +196,201 @@ abstract class RustLibApi extends BaseApi {
     required String name,
   });
 
+  Future<void> crateApiTeamLkcTeamKeysAcceptSigningKey({
+    required LkcTeamKeys that,
+    required String userId,
+    required String signingKey,
+  });
+
+  Future<PlatformInt64> crateApiTeamLkcTeamKeysCommitFirst({
+    required LkcTeamKeys that,
+    required String team,
+    required List<String> confirmed,
+  });
+
+  Future<LkcInviteLink> crateApiTeamLkcTeamKeysCreateInvite({
+    required LkcTeamKeys that,
+    required String team,
+    required String role,
+    required int uses,
+    required PlatformInt64 days,
+    required bool keyed,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysForgetTeam({
+    required LkcTeamKeys that,
+    required String team,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysGrant({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String fingerprint,
+  });
+
+  Future<LkcJoined> crateApiTeamLkcTeamKeysJoin({
+    required LkcTeamKeys that,
+    required String token,
+    String? secret,
+  });
+
+  Future<LkcReencryption> crateApiTeamLkcTeamKeysReencrypt({
+    required LkcTeamKeys that,
+    required String team,
+    required List<String> apps,
+  });
+
+  Future<List<LkcTeamFailure>> crateApiTeamLkcTeamKeysRewrapTeams({
+    required LkcTeamKeys that,
+  });
+
+  Future<PlatformInt64> crateApiTeamLkcTeamKeysRotate({
+    required LkcTeamKeys that,
+    required String team,
+    required List<String> confirmed,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysSetRole({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String role,
+    required String fingerprint,
+  });
+
+  Future<LkcTeamSpace> crateApiTeamLkcTeamKeysSpace({
+    required LkcTeamKeys that,
+    required String team,
+    required String app,
+  });
+
+  Future<LkcTeamStatus> crateApiTeamLkcTeamKeysStatus({
+    required LkcTeamKeys that,
+    required String team,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysTransfer({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String fingerprint,
+  });
+
+  LkcTeamKeys crateApiTeamLkcTeamKeysWithKey({
+    required LkcTeamKeys that,
+    required LkcAccountKey key,
+  });
+
+  Future<LkcAppended> crateApiTeamLkcTeamSpaceAppend({
+    required LkcTeamSpace that,
+    required String key,
+    required List<int> plain,
+  });
+
+  Future<bool> crateApiTeamLkcTeamSpaceDelete({
+    required LkcTeamSpace that,
+    required String name,
+    String? ifMatch,
+  });
+
+  Future<PlatformInt64> crateApiTeamLkcTeamSpaceEpoch({
+    required LkcTeamSpace that,
+  });
+
+  Future<List<LkcSyncFile>> crateApiTeamLkcTeamSpaceList({
+    required LkcTeamSpace that,
+  });
+
+  Stream<LkcSyncEvent> crateApiTeamLkcTeamSpaceListen({
+    required LkcTeamSpace that,
+  });
+
+  Future<String> crateApiTeamLkcTeamSpacePutSnapshot({
+    required LkcTeamSpace that,
+    required PlatformInt64 seq,
+    required List<int> plain,
+  });
+
+  Future<LkcTeamFile?> crateApiTeamLkcTeamSpaceRead({
+    required LkcTeamSpace that,
+    required String name,
+  });
+
+  Future<LkcTeamLog> crateApiTeamLkcTeamSpaceReadLog({
+    required LkcTeamSpace that,
+    required PlatformInt64 after,
+    String? log,
+    int? limit,
+  });
+
+  Future<PlatformInt64> crateApiTeamLkcTeamSpaceRefresh({
+    required LkcTeamSpace that,
+  });
+
+  Future<LkcTeamSnapshot?> crateApiTeamLkcTeamSpaceSnapshot({
+    required LkcTeamSpace that,
+  });
+
+  void crateApiTeamLkcTeamSpaceStopListening({required LkcTeamSpace that});
+
+  Future<String> crateApiTeamLkcTeamSpaceWrite({
+    required LkcTeamSpace that,
+    required String name,
+    required List<int> plain,
+    String? ifMatch,
+  });
+
+  Future<LkcAccountKey> crateApiTeamLkcTeamsAccountKey({
+    required LkcTeams that,
+    required String passphrase,
+  });
+
+  Future<void> crateApiTeamLkcTeamsChangeKeyPassphrase({
+    required LkcTeams that,
+    required String old,
+    required String new_,
+  });
+
+  Future<String> crateApiTeamLkcTeamsCreate({
+    required LkcTeams that,
+    required String name,
+  });
+
+  Future<void> crateApiTeamLkcTeamsDelete({
+    required LkcTeams that,
+    required String id,
+  });
+
+  Future<LkcAccountKey?> crateApiTeamLkcTeamsFetchAccountKey({
+    required LkcTeams that,
+    required String passphrase,
+  });
+
+  Future<LkcInviteView> crateApiTeamLkcTeamsInvite({
+    required LkcTeams that,
+    required String token,
+  });
+
+  Future<List<LkcTeam>> crateApiTeamLkcTeamsList({required LkcTeams that});
+
+  LkcTeams crateApiTeamLkcTeamsNew({
+    required LkcSession session,
+    required String userId,
+  });
+
+  Future<LkcTeamKeys> crateApiTeamLkcTeamsOpen({
+    required LkcTeams that,
+    required LkcAccountKey key,
+    required String trust,
+    required FutureOr<bool> Function(String) save,
+  });
+
+  Future<LkcAccountKey> crateApiTeamLkcTeamsRotateAccountKey({
+    required LkcTeams that,
+    required String passphrase,
+  });
+
   String crateApiThemeCheckThemeComponents({
     String? components,
     String? layout,
@@ -257,6 +461,15 @@ abstract class RustLibApi extends BaseApi {
   String crateApiThemeThemeRepoArchiveUrl({required String address});
 
   RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcAccountKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcAccountKey;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcAccountKeyPtr;
+
+  RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LkcSession;
 
   RustArcDecrementStrongCountFnType
@@ -269,6 +482,30 @@ abstract class RustLibApi extends BaseApi {
   RustArcDecrementStrongCountFnType get rust_arc_decrement_strong_count_LkcSync;
 
   CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LkcSyncPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcTeamKeys;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcTeamKeys;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LkcTeamKeysPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcTeamSpace;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcTeamSpace;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LkcTeamSpacePtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcTeams;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcTeams;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_LkcTeamsPtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -278,6 +515,120 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @override
+  String crateApiTeamLkcAccountKeyFingerprint({required LkcAccountKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcAccountKeyFingerprintConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcAccountKeyFingerprintConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcAccountKey_fingerprint",
+        argNames: ["that"],
+      );
+
+  @override
+  LkcAccountKey crateApiTeamLkcAccountKeyFromText({required String text}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(text, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcAccountKeyFromTextConstMeta,
+        argValues: [text],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcAccountKeyFromTextConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcAccountKey_from_text",
+        argNames: ["text"],
+      );
+
+  @override
+  String crateApiTeamLkcAccountKeyToText({required LkcAccountKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcAccountKeyToTextConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcAccountKeyToTextConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcAccountKey_to_text",
+        argNames: ["that"],
+      );
+
+  @override
+  String crateApiTeamLkcAccountKeyUserId({required LkcAccountKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcAccountKeyUserIdConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcAccountKeyUserIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcAccountKey_user_id",
+        argNames: ["that"],
+      );
 
   @override
   Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that}) {
@@ -292,7 +643,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 5,
             port: port_,
           );
         },
@@ -330,7 +681,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 6,
             port: port_,
           );
         },
@@ -361,7 +712,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -408,7 +759,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 8,
             port: port_,
           );
         },
@@ -451,7 +802,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 9,
             port: port_,
           );
         },
@@ -489,7 +840,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 10,
             port: port_,
           );
         },
@@ -520,7 +871,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -558,7 +909,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 12,
             port: port_,
           );
         },
@@ -597,7 +948,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 13,
             port: port_,
           );
         },
@@ -638,7 +989,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 14,
             port: port_,
           );
         },
@@ -675,7 +1026,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 15,
             port: port_,
           );
         },
@@ -717,7 +1068,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 16,
             port: port_,
           );
         },
@@ -755,7 +1106,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 17,
             port: port_,
           );
         },
@@ -788,7 +1139,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 18,
             port: port_,
           );
         },
@@ -818,7 +1169,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_StreamSink_lkc_sync_event_Sse(sink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -851,7 +1202,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(app, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -880,7 +1231,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_i_64,
@@ -915,7 +1266,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 22,
             port: port_,
           );
         },
@@ -957,7 +1308,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 23,
             port: port_,
           );
         },
@@ -987,7 +1338,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1027,7 +1378,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1064,7 +1415,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1085,6 +1436,1393 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<void> crateApiTeamLkcTeamKeysAcceptSigningKey({
+    required LkcTeamKeys that,
+    required String userId,
+    required String signingKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(userId, serializer);
+          sse_encode_String(signingKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysAcceptSigningKeyConstMeta,
+        argValues: [that, userId, signingKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysAcceptSigningKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_accept_signing_key",
+        argNames: ["that", "userId", "signingKey"],
+      );
+
+  @override
+  Future<PlatformInt64> crateApiTeamLkcTeamKeysCommitFirst({
+    required LkcTeamKeys that,
+    required String team,
+    required List<String> confirmed,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_list_String(confirmed, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 28,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysCommitFirstConstMeta,
+        argValues: [that, team, confirmed],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysCommitFirstConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_commit_first",
+        argNames: ["that", "team", "confirmed"],
+      );
+
+  @override
+  Future<LkcInviteLink> crateApiTeamLkcTeamKeysCreateInvite({
+    required LkcTeamKeys that,
+    required String team,
+    required String role,
+    required int uses,
+    required PlatformInt64 days,
+    required bool keyed,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(role, serializer);
+          sse_encode_i_32(uses, serializer);
+          sse_encode_i_64(days, serializer);
+          sse_encode_bool(keyed, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 29,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_invite_link,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysCreateInviteConstMeta,
+        argValues: [that, team, role, uses, days, keyed],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysCreateInviteConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_create_invite",
+        argNames: ["that", "team", "role", "uses", "days", "keyed"],
+      );
+
+  @override
+  Future<void> crateApiTeamLkcTeamKeysForgetTeam({
+    required LkcTeamKeys that,
+    required String team,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 30,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysForgetTeamConstMeta,
+        argValues: [that, team],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysForgetTeamConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_forget_team",
+        argNames: ["that", "team"],
+      );
+
+  @override
+  Future<void> crateApiTeamLkcTeamKeysGrant({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String fingerprint,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(fingerprint, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 31,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysGrantConstMeta,
+        argValues: [that, team, userId, fingerprint],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysGrantConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_grant",
+        argNames: ["that", "team", "userId", "fingerprint"],
+      );
+
+  @override
+  Future<LkcJoined> crateApiTeamLkcTeamKeysJoin({
+    required LkcTeamKeys that,
+    required String token,
+    String? secret,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(token, serializer);
+          sse_encode_opt_String(secret, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 32,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_joined,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysJoinConstMeta,
+        argValues: [that, token, secret],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysJoinConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_join",
+        argNames: ["that", "token", "secret"],
+      );
+
+  @override
+  Future<LkcReencryption> crateApiTeamLkcTeamKeysReencrypt({
+    required LkcTeamKeys that,
+    required String team,
+    required List<String> apps,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_list_String(apps, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 33,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_reencryption,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysReencryptConstMeta,
+        argValues: [that, team, apps],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysReencryptConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_reencrypt",
+        argNames: ["that", "team", "apps"],
+      );
+
+  @override
+  Future<List<LkcTeamFailure>> crateApiTeamLkcTeamKeysRewrapTeams({
+    required LkcTeamKeys that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 34,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_lkc_team_failure,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysRewrapTeamsConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysRewrapTeamsConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_rewrap_teams",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<PlatformInt64> crateApiTeamLkcTeamKeysRotate({
+    required LkcTeamKeys that,
+    required String team,
+    required List<String> confirmed,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_list_String(confirmed, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 35,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysRotateConstMeta,
+        argValues: [that, team, confirmed],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysRotateConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_rotate",
+        argNames: ["that", "team", "confirmed"],
+      );
+
+  @override
+  Future<void> crateApiTeamLkcTeamKeysSetRole({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String role,
+    required String fingerprint,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(role, serializer);
+          sse_encode_String(fingerprint, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 36,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysSetRoleConstMeta,
+        argValues: [that, team, userId, role, fingerprint],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysSetRoleConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_set_role",
+        argNames: ["that", "team", "userId", "role", "fingerprint"],
+      );
+
+  @override
+  Future<LkcTeamSpace> crateApiTeamLkcTeamKeysSpace({
+    required LkcTeamKeys that,
+    required String team,
+    required String app,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(app, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 37,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysSpaceConstMeta,
+        argValues: [that, team, app],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysSpaceConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_space",
+        argNames: ["that", "team", "app"],
+      );
+
+  @override
+  Future<LkcTeamStatus> crateApiTeamLkcTeamKeysStatus({
+    required LkcTeamKeys that,
+    required String team,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 38,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_team_status,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysStatusConstMeta,
+        argValues: [that, team],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_status",
+        argNames: ["that", "team"],
+      );
+
+  @override
+  Future<void> crateApiTeamLkcTeamKeysTransfer({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String fingerprint,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(fingerprint, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 39,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysTransferConstMeta,
+        argValues: [that, team, userId, fingerprint],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysTransferConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_transfer",
+        argNames: ["that", "team", "userId", "fingerprint"],
+      );
+
+  @override
+  LkcTeamKeys crateApiTeamLkcTeamKeysWithKey({
+    required LkcTeamKeys that,
+    required LkcAccountKey key,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            key,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysWithKeyConstMeta,
+        argValues: [that, key],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysWithKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_with_key",
+        argNames: ["that", "key"],
+      );
+
+  @override
+  Future<LkcAppended> crateApiTeamLkcTeamSpaceAppend({
+    required LkcTeamSpace that,
+    required String key,
+    required List<int> plain,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_String(key, serializer);
+          sse_encode_list_prim_u_8_loose(plain, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 41,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_appended,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceAppendConstMeta,
+        argValues: [that, key, plain],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceAppendConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_append",
+        argNames: ["that", "key", "plain"],
+      );
+
+  @override
+  Future<bool> crateApiTeamLkcTeamSpaceDelete({
+    required LkcTeamSpace that,
+    required String name,
+    String? ifMatch,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_opt_String(ifMatch, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 42,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceDeleteConstMeta,
+        argValues: [that, name, ifMatch],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceDeleteConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_delete",
+        argNames: ["that", "name", "ifMatch"],
+      );
+
+  @override
+  Future<PlatformInt64> crateApiTeamLkcTeamSpaceEpoch({
+    required LkcTeamSpace that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 43,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceEpochConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceEpochConstMeta =>
+      const TaskConstMeta(debugName: "LkcTeamSpace_epoch", argNames: ["that"]);
+
+  @override
+  Future<List<LkcSyncFile>> crateApiTeamLkcTeamSpaceList({
+    required LkcTeamSpace that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 44,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_lkc_sync_file,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceListConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceListConstMeta =>
+      const TaskConstMeta(debugName: "LkcTeamSpace_list", argNames: ["that"]);
+
+  @override
+  Stream<LkcSyncEvent> crateApiTeamLkcTeamSpaceListen({
+    required LkcTeamSpace that,
+  }) {
+    final sink = RustStreamSink<LkcSyncEvent>();
+    handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_StreamSink_lkc_sync_event_Sse(sink, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceListenConstMeta,
+        argValues: [that, sink],
+        apiImpl: this,
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceListenConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_listen",
+        argNames: ["that", "sink"],
+      );
+
+  @override
+  Future<String> crateApiTeamLkcTeamSpacePutSnapshot({
+    required LkcTeamSpace that,
+    required PlatformInt64 seq,
+    required List<int> plain,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_i_64(seq, serializer);
+          sse_encode_list_prim_u_8_loose(plain, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 46,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpacePutSnapshotConstMeta,
+        argValues: [that, seq, plain],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpacePutSnapshotConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_put_snapshot",
+        argNames: ["that", "seq", "plain"],
+      );
+
+  @override
+  Future<LkcTeamFile?> crateApiTeamLkcTeamSpaceRead({
+    required LkcTeamSpace that,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 47,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_lkc_team_file,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceReadConstMeta,
+        argValues: [that, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceReadConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_read",
+        argNames: ["that", "name"],
+      );
+
+  @override
+  Future<LkcTeamLog> crateApiTeamLkcTeamSpaceReadLog({
+    required LkcTeamSpace that,
+    required PlatformInt64 after,
+    String? log,
+    int? limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_i_64(after, serializer);
+          sse_encode_opt_String(log, serializer);
+          sse_encode_opt_box_autoadd_u_32(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 48,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_team_log,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceReadLogConstMeta,
+        argValues: [that, after, log, limit],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceReadLogConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_read_log",
+        argNames: ["that", "after", "log", "limit"],
+      );
+
+  @override
+  Future<PlatformInt64> crateApiTeamLkcTeamSpaceRefresh({
+    required LkcTeamSpace that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 49,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceRefreshConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceRefreshConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_refresh",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<LkcTeamSnapshot?> crateApiTeamLkcTeamSpaceSnapshot({
+    required LkcTeamSpace that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 50,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_lkc_team_snapshot,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceSnapshotConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceSnapshotConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_snapshot",
+        argNames: ["that"],
+      );
+
+  @override
+  void crateApiTeamLkcTeamSpaceStopListening({required LkcTeamSpace that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceStopListeningConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceStopListeningConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_stop_listening",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<String> crateApiTeamLkcTeamSpaceWrite({
+    required LkcTeamSpace that,
+    required String name,
+    required List<int> plain,
+    String? ifMatch,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_list_prim_u_8_loose(plain, serializer);
+          sse_encode_opt_String(ifMatch, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 52,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamSpaceWriteConstMeta,
+        argValues: [that, name, plain, ifMatch],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamSpaceWriteConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamSpace_write",
+        argNames: ["that", "name", "plain", "ifMatch"],
+      );
+
+  @override
+  Future<LkcAccountKey> crateApiTeamLkcTeamsAccountKey({
+    required LkcTeams that,
+    required String passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 53,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsAccountKeyConstMeta,
+        argValues: [that, passphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsAccountKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeams_account_key",
+        argNames: ["that", "passphrase"],
+      );
+
+  @override
+  Future<void> crateApiTeamLkcTeamsChangeKeyPassphrase({
+    required LkcTeams that,
+    required String old,
+    required String new_,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(old, serializer);
+          sse_encode_String(new_, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 54,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsChangeKeyPassphraseConstMeta,
+        argValues: [that, old, new_],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsChangeKeyPassphraseConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeams_change_key_passphrase",
+        argNames: ["that", "old", "new_"],
+      );
+
+  @override
+  Future<String> crateApiTeamLkcTeamsCreate({
+    required LkcTeams that,
+    required String name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 55,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsCreateConstMeta,
+        argValues: [that, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsCreateConstMeta => const TaskConstMeta(
+    debugName: "LkcTeams_create",
+    argNames: ["that", "name"],
+  );
+
+  @override
+  Future<void> crateApiTeamLkcTeamsDelete({
+    required LkcTeams that,
+    required String id,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 56,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsDeleteConstMeta,
+        argValues: [that, id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsDeleteConstMeta => const TaskConstMeta(
+    debugName: "LkcTeams_delete",
+    argNames: ["that", "id"],
+  );
+
+  @override
+  Future<LkcAccountKey?> crateApiTeamLkcTeamsFetchAccountKey({
+    required LkcTeams that,
+    required String passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 57,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsFetchAccountKeyConstMeta,
+        argValues: [that, passphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsFetchAccountKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeams_fetch_account_key",
+        argNames: ["that", "passphrase"],
+      );
+
+  @override
+  Future<LkcInviteView> crateApiTeamLkcTeamsInvite({
+    required LkcTeams that,
+    required String token,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(token, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 58,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_lkc_invite_view,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsInviteConstMeta,
+        argValues: [that, token],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsInviteConstMeta => const TaskConstMeta(
+    debugName: "LkcTeams_invite",
+    argNames: ["that", "token"],
+  );
+
+  @override
+  Future<List<LkcTeam>> crateApiTeamLkcTeamsList({required LkcTeams that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 59,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_lkc_team,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsListConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsListConstMeta =>
+      const TaskConstMeta(debugName: "LkcTeams_list", argNames: ["that"]);
+
+  @override
+  LkcTeams crateApiTeamLkcTeamsNew({
+    required LkcSession session,
+    required String userId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
+            session,
+            serializer,
+          );
+          sse_encode_String(userId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsNewConstMeta,
+        argValues: [session, userId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsNewConstMeta => const TaskConstMeta(
+    debugName: "LkcTeams_new",
+    argNames: ["session", "userId"],
+  );
+
+  @override
+  Future<LkcTeamKeys> crateApiTeamLkcTeamsOpen({
+    required LkcTeams that,
+    required LkcAccountKey key,
+    required String trust,
+    required FutureOr<bool> Function(String) save,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            key,
+            serializer,
+          );
+          sse_encode_String(trust, serializer);
+          sse_encode_DartFn_Inputs_String_Output_bool_AnyhowException(
+            save,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 61,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsOpenConstMeta,
+        argValues: [that, key, trust, save],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsOpenConstMeta => const TaskConstMeta(
+    debugName: "LkcTeams_open",
+    argNames: ["that", "key", "trust", "save"],
+  );
+
+  @override
+  Future<LkcAccountKey> crateApiTeamLkcTeamsRotateAccountKey({
+    required LkcTeams that,
+    required String passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          sse_encode_String(passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 62,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsRotateAccountKeyConstMeta,
+        argValues: [that, passphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsRotateAccountKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeams_rotate_account_key",
+        argNames: ["that", "passphrase"],
+      );
+
+  @override
   String crateApiThemeCheckThemeComponents({
     String? components,
     String? layout,
@@ -1095,7 +2833,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_opt_String(components, serializer);
           sse_encode_opt_String(layout, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1125,7 +2863,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(a, serializer);
           sse_encode_String(b, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_i_32,
@@ -1153,7 +2891,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_list_theme_variant_info,
@@ -1181,7 +2919,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 66,
             port: port_,
           );
         },
@@ -1210,7 +2948,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(bytes, serializer);
           sse_encode_opt_String(base, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_theme_catalog_info,
@@ -1240,7 +2978,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
           sse_encode_String(path, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1271,7 +3009,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 69,
             port: port_,
           );
         },
@@ -1304,7 +3042,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 70,
             port: port_,
           );
         },
@@ -1336,7 +3074,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
           sse_encode_list_String(iconFiles, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1366,7 +3104,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
           sse_encode_list_String(iconFiles, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1392,7 +3130,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_theme_file(files, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_theme_repo_tree,
@@ -1417,7 +3155,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(bytes, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_theme_file,
@@ -1447,7 +3185,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(secret, serializer);
           sse_encode_list_prim_u_8_loose(data, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1473,7 +3211,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(last, serializer);
           sse_encode_String(seen, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1497,7 +3235,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_64(ms, serializer);
           sse_encode_u_64(device, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1528,7 +3266,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_64(device, serializer);
           sse_encode_String(last, serializer);
           sse_encode_u_64(nowMs, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1557,7 +3295,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(opsJson, serializer);
           sse_encode_String(currentJson, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1581,7 +3319,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1604,7 +3342,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(address, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 41)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1622,6 +3360,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "theme_repo_archive_url",
         argNames: ["address"],
       );
+
+  Future<void> Function(int, dynamic)
+  encode_DartFn_Inputs_String_Output_bool_AnyhowException(
+    FutureOr<bool> Function(String) raw,
+  ) {
+    return (callId, rawArg0) async {
+      final arg0 = dco_decode_String(rawArg0);
+
+      Box<bool>? rawOutput;
+      Box<AnyhowException>? rawError;
+      try {
+        rawOutput = Box(await raw(arg0));
+      } catch (e, s) {
+        rawError = Box(AnyhowException("$e\n\n$s"));
+      }
+
+      final serializer = SseSerializer(generalizedFrbRustBinding);
+      assert((rawOutput != null) ^ (rawError != null));
+      if (rawOutput != null) {
+        serializer.buffer.putUint8(0);
+        sse_encode_bool(rawOutput.value, serializer);
+      } else {
+        serializer.buffer.putUint8(1);
+        sse_encode_AnyhowException(rawError!.value, serializer);
+      }
+      final output = serializer.intoRaw();
+
+      generalizedFrbRustBinding.dartFnDeliverOutput(
+        callId: callId,
+        ptr: output.ptr,
+        rustVecLen: output.rustVecLen,
+        dataLen: output.dataLen,
+      );
+    };
+  }
 
   Future<void> Function(int, dynamic)
   encode_DartFn_Inputs_String_Output_unit_AnyhowException(
@@ -1694,6 +3467,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcAccountKey => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcAccountKey => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey;
+
+  RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LkcSession => wire
       .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession;
 
@@ -1709,10 +3490,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   get rust_arc_decrement_strong_count_LkcSync => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync;
 
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcTeamKeys => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcTeamKeys => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcTeamSpace => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcTeamSpace => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcTeams => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcTeams => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams;
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return AnyhowException(raw as String);
+  }
+
+  @protected
+  LkcAccountKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -1734,6 +3548,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcTeamKeys
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamKeysImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeamSpace
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamSpaceImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeams
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamsImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcAccountKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
   LkcSession
   dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     dynamic raw,
@@ -1749,6 +3599,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return LkcSyncImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeamKeys
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamKeysImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeamSpace
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamSpaceImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeams
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamsImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  FutureOr<bool> Function(String)
+  dco_decode_DartFn_Inputs_String_Output_bool_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError('');
   }
 
   @protected
@@ -1772,6 +3656,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcAccountKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
   LkcSession
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     dynamic raw,
@@ -1787,6 +3680,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return LkcSyncImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeamKeys
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamKeysImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeamSpace
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamSpaceImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcTeams
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamsImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -1810,6 +3730,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcAccountKey
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      raw,
+    );
+  }
+
+  @protected
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_i_64(raw);
@@ -1819,6 +3750,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcSnapshot dco_decode_box_autoadd_lkc_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_lkc_snapshot(raw);
+  }
+
+  @protected
+  LkcTeamFile dco_decode_box_autoadd_lkc_team_file(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_lkc_team_file(raw);
+  }
+
+  @protected
+  LkcTeamSnapshot dco_decode_box_autoadd_lkc_team_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_lkc_team_snapshot(raw);
   }
 
   @protected
@@ -1858,6 +3801,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<LkcMember> dco_decode_list_lkc_member(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_lkc_member).toList();
+  }
+
+  @protected
   List<LkcSyncFile> dco_decode_list_lkc_sync_file(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_lkc_sync_file).toList();
@@ -1867,6 +3816,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<LkcSyncVersion> dco_decode_list_lkc_sync_version(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_lkc_sync_version).toList();
+  }
+
+  @protected
+  List<LkcTeam> dco_decode_list_lkc_team(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_lkc_team).toList();
+  }
+
+  @protected
+  List<LkcTeamFailure> dco_decode_list_lkc_team_failure(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_lkc_team_failure).toList();
+  }
+
+  @protected
+  Int64List dco_decode_list_prim_i_64_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeInt64List(raw);
   }
 
   @protected
@@ -1912,11 +3879,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcBatch dco_decode_lkc_batch(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return LkcBatch(
       seq: dco_decode_i_64(arr[0]),
       body: dco_decode_list_prim_u_8_strict(arr[1]),
+      epoch: dco_decode_opt_box_autoadd_i_64(arr[2]),
     );
   }
 
@@ -1952,6 +3920,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcInviteLink dco_decode_lkc_invite_link(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return LkcInviteLink(
+      id: dco_decode_String(arr[0]),
+      token: dco_decode_String(arr[1]),
+      secret: dco_decode_opt_String(arr[2]),
+      expiresAt: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  LkcInviteView dco_decode_lkc_invite_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return LkcInviteView(
+      teamId: dco_decode_String(arr[0]),
+      teamName: dco_decode_String(arr[1]),
+      role: dco_decode_String(arr[2]),
+      approvalRequired: dco_decode_bool(arr[3]),
+      keyed: dco_decode_bool(arr[4]),
+    );
+  }
+
+  @protected
+  LkcJoined dco_decode_lkc_joined(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return LkcJoined(
+      teamId: dco_decode_String(arr[0]),
+      approved: dco_decode_bool(arr[1]),
+    );
+  }
+
+  @protected
   LkcLogRead dco_decode_lkc_log_read(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1964,6 +3973,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       head: dco_decode_i_64(arr[3]),
       snapshotSeq: dco_decode_i_64(arr[4]),
       more: dco_decode_bool(arr[5]),
+    );
+  }
+
+  @protected
+  LkcMember dco_decode_lkc_member(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return LkcMember(
+      userId: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      role: dco_decode_String(arr[2]),
+      approved: dco_decode_bool(arr[3]),
+      keyed: dco_decode_bool(arr[4]),
+      fingerprint: dco_decode_opt_String(arr[5]),
+      attested: dco_decode_bool(arr[6]),
+      changed: dco_decode_bool(arr[7]),
+    );
+  }
+
+  @protected
+  LkcReencrypted dco_decode_lkc_reencrypted(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcReencrypted.values[raw as int];
+  }
+
+  @protected
+  LkcReencryption dco_decode_lkc_reencryption(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return LkcReencryption(
+      outcome: dco_decode_lkc_reencrypted(arr[0]),
+      unreadable: dco_decode_list_String(arr[1]),
     );
   }
 
@@ -1983,12 +4028,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcSyncError dco_decode_lkc_sync_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return LkcSyncError(
       kind: dco_decode_lkc_sync_error_kind(arr[0]),
       reason: dco_decode_opt_String(arr[1]),
-      detail: dco_decode_String(arr[2]),
+      epoch: dco_decode_opt_box_autoadd_i_64(arr[2]),
+      detail: dco_decode_String(arr[3]),
     );
   }
 
@@ -2002,14 +4048,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcSyncEvent dco_decode_lkc_sync_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return LkcSyncEvent(
       connected: dco_decode_bool(arr[0]),
       name: dco_decode_opt_String(arr[1]),
       etag: dco_decode_opt_String(arr[2]),
       logSeq: dco_decode_opt_box_autoadd_i_64(arr[3]),
       lost: dco_decode_opt_String(arr[4]),
+      teamChange: dco_decode_opt_String(arr[5]),
     );
   }
 
@@ -2017,13 +4064,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcSyncFile dco_decode_lkc_sync_file(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return LkcSyncFile(
       name: dco_decode_String(arr[0]),
       etag: dco_decode_String(arr[1]),
       size: dco_decode_u_64(arr[2]),
       updatedAt: dco_decode_String(arr[3]),
+      epoch: dco_decode_opt_box_autoadd_i_64(arr[4]),
     );
   }
 
@@ -2042,9 +4090,134 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcTeam dco_decode_lkc_team(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return LkcTeam(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      epoch: dco_decode_i_64(arr[2]),
+      migratedEpoch: dco_decode_i_64(arr[3]),
+      rotationNeeded: dco_decode_bool(arr[4]),
+      approvalRequired: dco_decode_bool(arr[5]),
+      role: dco_decode_String(arr[6]),
+      approved: dco_decode_bool(arr[7]),
+      memberCount: dco_decode_i_64(arr[8]),
+    );
+  }
+
+  @protected
+  LkcTeamError dco_decode_lkc_team_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return LkcTeamError(
+      kind: dco_decode_lkc_team_error_kind(arr[0]),
+      reason: dco_decode_opt_String(arr[1]),
+      users: dco_decode_list_String(arr[2]),
+      signingKey: dco_decode_opt_String(arr[3]),
+      epoch: dco_decode_opt_box_autoadd_i_64(arr[4]),
+      detail: dco_decode_String(arr[5]),
+    );
+  }
+
+  @protected
+  LkcTeamErrorKind dco_decode_lkc_team_error_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcTeamErrorKind.values[raw as int];
+  }
+
+  @protected
+  LkcTeamFailure dco_decode_lkc_team_failure(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return LkcTeamFailure(
+      team: dco_decode_String(arr[0]),
+      error: dco_decode_lkc_team_error(arr[1]),
+    );
+  }
+
+  @protected
+  LkcTeamFile dco_decode_lkc_team_file(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return LkcTeamFile(
+      plain: dco_decode_list_prim_u_8_strict(arr[0]),
+      etag: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  LkcTeamLog dco_decode_lkc_team_log(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return LkcTeamLog(
+      compacted: dco_decode_bool(arr[0]),
+      log: dco_decode_opt_String(arr[1]),
+      batches: dco_decode_list_lkc_batch(arr[2]),
+      unreadable: dco_decode_list_prim_i_64_strict(arr[3]),
+      head: dco_decode_i_64(arr[4]),
+      snapshotSeq: dco_decode_i_64(arr[5]),
+      more: dco_decode_bool(arr[6]),
+    );
+  }
+
+  @protected
+  LkcTeamSnapshot dco_decode_lkc_team_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return LkcTeamSnapshot(
+      log: dco_decode_String(arr[0]),
+      seq: dco_decode_i_64(arr[1]),
+      plain: dco_decode_list_prim_u_8_strict(arr[2]),
+    );
+  }
+
+  @protected
+  LkcTeamStatus dco_decode_lkc_team_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return LkcTeamStatus(
+      epoch: dco_decode_i_64(arr[0]),
+      migrated: dco_decode_bool(arr[1]),
+      rotationNeeded: dco_decode_bool(arr[2]),
+      staleOwn: dco_decode_bool(arr[3]),
+      mayCommit: dco_decode_bool(arr[4]),
+      members: dco_decode_list_lkc_member(arr[5]),
+      skippedEpochs: dco_decode_list_prim_i_64_strict(arr[6]),
+    );
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  LkcAccountKey?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            raw,
+          );
   }
 
   @protected
@@ -2057,6 +4230,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcSnapshot? dco_decode_opt_box_autoadd_lkc_snapshot(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_lkc_snapshot(raw);
+  }
+
+  @protected
+  LkcTeamFile? dco_decode_opt_box_autoadd_lkc_team_file(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_lkc_team_file(raw);
+  }
+
+  @protected
+  LkcTeamSnapshot? dco_decode_opt_box_autoadd_lkc_team_snapshot(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_lkc_team_snapshot(raw);
   }
 
   @protected
@@ -2191,6 +4376,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcAccountKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
   LkcSession
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     SseDeserializer deserializer,
@@ -2209,6 +4406,54 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return LkcSyncImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeamKeys
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamKeysImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeamSpace
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamSpaceImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeams
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamsImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcAccountKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcAccountKeyImpl.frbInternalSseDecode(
       sse_decode_usize(deserializer),
       sse_decode_i_32(deserializer),
     );
@@ -2239,10 +4484,58 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcTeamKeys
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamKeysImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeamSpace
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamSpaceImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeams
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamsImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
   Object sse_decode_DartOpaque(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final inner = sse_decode_isize(deserializer);
     return decodeDartOpaque(inner, generalizedFrbRustBinding);
+  }
+
+  @protected
+  LkcAccountKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
@@ -2270,6 +4563,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcTeamKeys
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamKeysImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeamSpace
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamSpaceImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcTeams
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcTeamsImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
   RustStreamSink<LkcSyncEvent> sse_decode_StreamSink_lkc_sync_event_Sse(
     SseDeserializer deserializer,
   ) {
@@ -2291,6 +4620,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcAccountKey
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      deserializer,
+    );
+  }
+
+  @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return sse_decode_i_64(deserializer);
@@ -2302,6 +4642,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return sse_decode_lkc_snapshot(deserializer);
+  }
+
+  @protected
+  LkcTeamFile sse_decode_box_autoadd_lkc_team_file(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return sse_decode_lkc_team_file(deserializer);
+  }
+
+  @protected
+  LkcTeamSnapshot sse_decode_box_autoadd_lkc_team_snapshot(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return sse_decode_lkc_team_snapshot(deserializer);
   }
 
   @protected
@@ -2353,6 +4709,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<LkcMember> sse_decode_list_lkc_member(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <LkcMember>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_lkc_member(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<LkcSyncFile> sse_decode_list_lkc_sync_file(
     SseDeserializer deserializer,
   ) {
@@ -2378,6 +4746,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       ans_.add(sse_decode_lkc_sync_version(deserializer));
     }
     return ans_;
+  }
+
+  @protected
+  List<LkcTeam> sse_decode_list_lkc_team(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <LkcTeam>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_lkc_team(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<LkcTeamFailure> sse_decode_list_lkc_team_failure(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    final len_ = sse_decode_i_32(deserializer);
+    final ans_ = <LkcTeamFailure>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_lkc_team_failure(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getInt64List(len_);
   }
 
   @protected
@@ -2442,7 +4843,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_seq = sse_decode_i_64(deserializer);
     final var_body = sse_decode_list_prim_u_8_strict(deserializer);
-    return LkcBatch(seq: var_seq, body: var_body);
+    final var_epoch = sse_decode_opt_box_autoadd_i_64(deserializer);
+    return LkcBatch(seq: var_seq, body: var_body, epoch: var_epoch);
   }
 
   @protected
@@ -2470,6 +4872,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcInviteLink sse_decode_lkc_invite_link(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_id = sse_decode_String(deserializer);
+    final var_token = sse_decode_String(deserializer);
+    final var_secret = sse_decode_opt_String(deserializer);
+    final var_expiresAt = sse_decode_String(deserializer);
+    return LkcInviteLink(
+      id: var_id,
+      token: var_token,
+      secret: var_secret,
+      expiresAt: var_expiresAt,
+    );
+  }
+
+  @protected
+  LkcInviteView sse_decode_lkc_invite_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_teamId = sse_decode_String(deserializer);
+    final var_teamName = sse_decode_String(deserializer);
+    final var_role = sse_decode_String(deserializer);
+    final var_approvalRequired = sse_decode_bool(deserializer);
+    final var_keyed = sse_decode_bool(deserializer);
+    return LkcInviteView(
+      teamId: var_teamId,
+      teamName: var_teamName,
+      role: var_role,
+      approvalRequired: var_approvalRequired,
+      keyed: var_keyed,
+    );
+  }
+
+  @protected
+  LkcJoined sse_decode_lkc_joined(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_teamId = sse_decode_String(deserializer);
+    final var_approved = sse_decode_bool(deserializer);
+    return LkcJoined(teamId: var_teamId, approved: var_approved);
+  }
+
+  @protected
   LkcLogRead sse_decode_lkc_log_read(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_compacted = sse_decode_bool(deserializer);
@@ -2489,6 +4931,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcMember sse_decode_lkc_member(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_userId = sse_decode_String(deserializer);
+    final var_name = sse_decode_String(deserializer);
+    final var_role = sse_decode_String(deserializer);
+    final var_approved = sse_decode_bool(deserializer);
+    final var_keyed = sse_decode_bool(deserializer);
+    final var_fingerprint = sse_decode_opt_String(deserializer);
+    final var_attested = sse_decode_bool(deserializer);
+    final var_changed = sse_decode_bool(deserializer);
+    return LkcMember(
+      userId: var_userId,
+      name: var_name,
+      role: var_role,
+      approved: var_approved,
+      keyed: var_keyed,
+      fingerprint: var_fingerprint,
+      attested: var_attested,
+      changed: var_changed,
+    );
+  }
+
+  @protected
+  LkcReencrypted sse_decode_lkc_reencrypted(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return LkcReencrypted.values[inner];
+  }
+
+  @protected
+  LkcReencryption sse_decode_lkc_reencryption(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_outcome = sse_decode_lkc_reencrypted(deserializer);
+    final var_unreadable = sse_decode_list_String(deserializer);
+    return LkcReencryption(outcome: var_outcome, unreadable: var_unreadable);
+  }
+
+  @protected
   LkcSnapshot sse_decode_lkc_snapshot(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_log = sse_decode_String(deserializer);
@@ -2501,8 +4981,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_kind = sse_decode_lkc_sync_error_kind(deserializer);
     final var_reason = sse_decode_opt_String(deserializer);
+    final var_epoch = sse_decode_opt_box_autoadd_i_64(deserializer);
     final var_detail = sse_decode_String(deserializer);
-    return LkcSyncError(kind: var_kind, reason: var_reason, detail: var_detail);
+    return LkcSyncError(
+      kind: var_kind,
+      reason: var_reason,
+      epoch: var_epoch,
+      detail: var_detail,
+    );
   }
 
   @protected
@@ -2522,12 +5008,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_etag = sse_decode_opt_String(deserializer);
     final var_logSeq = sse_decode_opt_box_autoadd_i_64(deserializer);
     final var_lost = sse_decode_opt_String(deserializer);
+    final var_teamChange = sse_decode_opt_String(deserializer);
     return LkcSyncEvent(
       connected: var_connected,
       name: var_name,
       etag: var_etag,
       logSeq: var_logSeq,
       lost: var_lost,
+      teamChange: var_teamChange,
     );
   }
 
@@ -2538,11 +5026,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_etag = sse_decode_String(deserializer);
     final var_size = sse_decode_u_64(deserializer);
     final var_updatedAt = sse_decode_String(deserializer);
+    final var_epoch = sse_decode_opt_box_autoadd_i_64(deserializer);
     return LkcSyncFile(
       name: var_name,
       etag: var_etag,
       size: var_size,
       updatedAt: var_updatedAt,
+      epoch: var_epoch,
     );
   }
 
@@ -2562,11 +5052,147 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcTeam sse_decode_lkc_team(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_id = sse_decode_String(deserializer);
+    final var_name = sse_decode_String(deserializer);
+    final var_epoch = sse_decode_i_64(deserializer);
+    final var_migratedEpoch = sse_decode_i_64(deserializer);
+    final var_rotationNeeded = sse_decode_bool(deserializer);
+    final var_approvalRequired = sse_decode_bool(deserializer);
+    final var_role = sse_decode_String(deserializer);
+    final var_approved = sse_decode_bool(deserializer);
+    final var_memberCount = sse_decode_i_64(deserializer);
+    return LkcTeam(
+      id: var_id,
+      name: var_name,
+      epoch: var_epoch,
+      migratedEpoch: var_migratedEpoch,
+      rotationNeeded: var_rotationNeeded,
+      approvalRequired: var_approvalRequired,
+      role: var_role,
+      approved: var_approved,
+      memberCount: var_memberCount,
+    );
+  }
+
+  @protected
+  LkcTeamError sse_decode_lkc_team_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_kind = sse_decode_lkc_team_error_kind(deserializer);
+    final var_reason = sse_decode_opt_String(deserializer);
+    final var_users = sse_decode_list_String(deserializer);
+    final var_signingKey = sse_decode_opt_String(deserializer);
+    final var_epoch = sse_decode_opt_box_autoadd_i_64(deserializer);
+    final var_detail = sse_decode_String(deserializer);
+    return LkcTeamError(
+      kind: var_kind,
+      reason: var_reason,
+      users: var_users,
+      signingKey: var_signingKey,
+      epoch: var_epoch,
+      detail: var_detail,
+    );
+  }
+
+  @protected
+  LkcTeamErrorKind sse_decode_lkc_team_error_kind(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final inner = sse_decode_i_32(deserializer);
+    return LkcTeamErrorKind.values[inner];
+  }
+
+  @protected
+  LkcTeamFailure sse_decode_lkc_team_failure(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_team = sse_decode_String(deserializer);
+    final var_error = sse_decode_lkc_team_error(deserializer);
+    return LkcTeamFailure(team: var_team, error: var_error);
+  }
+
+  @protected
+  LkcTeamFile sse_decode_lkc_team_file(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_plain = sse_decode_list_prim_u_8_strict(deserializer);
+    final var_etag = sse_decode_String(deserializer);
+    return LkcTeamFile(plain: var_plain, etag: var_etag);
+  }
+
+  @protected
+  LkcTeamLog sse_decode_lkc_team_log(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_compacted = sse_decode_bool(deserializer);
+    final var_log = sse_decode_opt_String(deserializer);
+    final var_batches = sse_decode_list_lkc_batch(deserializer);
+    final var_unreadable = sse_decode_list_prim_i_64_strict(deserializer);
+    final var_head = sse_decode_i_64(deserializer);
+    final var_snapshotSeq = sse_decode_i_64(deserializer);
+    final var_more = sse_decode_bool(deserializer);
+    return LkcTeamLog(
+      compacted: var_compacted,
+      log: var_log,
+      batches: var_batches,
+      unreadable: var_unreadable,
+      head: var_head,
+      snapshotSeq: var_snapshotSeq,
+      more: var_more,
+    );
+  }
+
+  @protected
+  LkcTeamSnapshot sse_decode_lkc_team_snapshot(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_log = sse_decode_String(deserializer);
+    final var_seq = sse_decode_i_64(deserializer);
+    final var_plain = sse_decode_list_prim_u_8_strict(deserializer);
+    return LkcTeamSnapshot(log: var_log, seq: var_seq, plain: var_plain);
+  }
+
+  @protected
+  LkcTeamStatus sse_decode_lkc_team_status(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_epoch = sse_decode_i_64(deserializer);
+    final var_migrated = sse_decode_bool(deserializer);
+    final var_rotationNeeded = sse_decode_bool(deserializer);
+    final var_staleOwn = sse_decode_bool(deserializer);
+    final var_mayCommit = sse_decode_bool(deserializer);
+    final var_members = sse_decode_list_lkc_member(deserializer);
+    final var_skippedEpochs = sse_decode_list_prim_i_64_strict(deserializer);
+    return LkcTeamStatus(
+      epoch: var_epoch,
+      migrated: var_migrated,
+      rotationNeeded: var_rotationNeeded,
+      staleOwn: var_staleOwn,
+      mayCommit: var_mayCommit,
+      members: var_members,
+      skippedEpochs: var_skippedEpochs,
+    );
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
       return sse_decode_String(deserializer);
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  LkcAccountKey?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+        deserializer,
+      );
     } else {
       return null;
     }
@@ -2591,6 +5217,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return sse_decode_box_autoadd_lkc_snapshot(deserializer);
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  LkcTeamFile? sse_decode_opt_box_autoadd_lkc_team_file(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return sse_decode_box_autoadd_lkc_team_file(deserializer);
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  LkcTeamSnapshot? sse_decode_opt_box_autoadd_lkc_team_snapshot(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return sse_decode_box_autoadd_lkc_team_snapshot(deserializer);
     } else {
       return null;
     }
@@ -2728,6 +5380,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcAccountKeyImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -2754,6 +5419,58 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    LkcTeamKeys self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamKeysImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    LkcTeamSpace self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamSpaceImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    LkcTeams self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamsImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcAccountKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -2774,6 +5491,57 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as LkcSyncImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    LkcTeamKeys self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamKeysImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    LkcTeamSpace self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamSpaceImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    LkcTeams self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamsImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_DartFn_Inputs_String_Output_bool_AnyhowException(
+    FutureOr<bool> Function(String) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_DartOpaque(
+      encode_DartFn_Inputs_String_Output_bool_AnyhowException(self),
       serializer,
     );
   }
@@ -2819,6 +5587,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcAccountKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -2839,6 +5620,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as LkcSyncImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    LkcTeamKeys self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamKeysImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    LkcTeamSpace self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamSpaceImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    LkcTeams self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcTeamsImpl).frbInternalSseEncode(move: null),
       serializer,
     );
   }
@@ -2873,6 +5693,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      self,
+      serializer,
+    );
+  }
+
+  @protected
   void sse_encode_box_autoadd_i_64(
     PlatformInt64 self,
     SseSerializer serializer,
@@ -2888,6 +5721,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_lkc_snapshot(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_lkc_team_file(
+    LkcTeamFile self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lkc_team_file(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_lkc_team_snapshot(
+    LkcTeamSnapshot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lkc_team_snapshot(self, serializer);
   }
 
   @protected
@@ -2936,6 +5787,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_lkc_member(
+    List<LkcMember> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_lkc_member(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_lkc_sync_file(
     List<LkcSyncFile> self,
     SseSerializer serializer,
@@ -2957,6 +5820,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     for (final item in self) {
       sse_encode_lkc_sync_version(item, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_list_lkc_team(List<LkcTeam> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_lkc_team(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_lkc_team_failure(
+    List<LkcTeamFailure> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_lkc_team_failure(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_prim_i_64_strict(
+    Int64List self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putInt64List(self);
   }
 
   @protected
@@ -3020,6 +5914,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_64(self.seq, serializer);
     sse_encode_list_prim_u_8_strict(self.body, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.epoch, serializer);
   }
 
   @protected
@@ -3044,6 +5939,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_lkc_invite_link(
+    LkcInviteLink self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.token, serializer);
+    sse_encode_opt_String(self.secret, serializer);
+    sse_encode_String(self.expiresAt, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_invite_view(
+    LkcInviteView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.teamId, serializer);
+    sse_encode_String(self.teamName, serializer);
+    sse_encode_String(self.role, serializer);
+    sse_encode_bool(self.approvalRequired, serializer);
+    sse_encode_bool(self.keyed, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_joined(LkcJoined self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.teamId, serializer);
+    sse_encode_bool(self.approved, serializer);
+  }
+
+  @protected
   void sse_encode_lkc_log_read(LkcLogRead self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.compacted, serializer);
@@ -3052,6 +5979,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_64(self.head, serializer);
     sse_encode_i_64(self.snapshotSeq, serializer);
     sse_encode_bool(self.more, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_member(LkcMember self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.userId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.role, serializer);
+    sse_encode_bool(self.approved, serializer);
+    sse_encode_bool(self.keyed, serializer);
+    sse_encode_opt_String(self.fingerprint, serializer);
+    sse_encode_bool(self.attested, serializer);
+    sse_encode_bool(self.changed, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_reencrypted(
+    LkcReencrypted self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_reencryption(
+    LkcReencryption self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lkc_reencrypted(self.outcome, serializer);
+    sse_encode_list_String(self.unreadable, serializer);
   }
 
   @protected
@@ -3066,6 +6025,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_lkc_sync_error_kind(self.kind, serializer);
     sse_encode_opt_String(self.reason, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.epoch, serializer);
     sse_encode_String(self.detail, serializer);
   }
 
@@ -3086,6 +6046,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.etag, serializer);
     sse_encode_opt_box_autoadd_i_64(self.logSeq, serializer);
     sse_encode_opt_String(self.lost, serializer);
+    sse_encode_opt_String(self.teamChange, serializer);
   }
 
   @protected
@@ -3095,6 +6056,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.etag, serializer);
     sse_encode_u_64(self.size, serializer);
     sse_encode_String(self.updatedAt, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.epoch, serializer);
   }
 
   @protected
@@ -3110,12 +6072,118 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_lkc_team(LkcTeam self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_i_64(self.epoch, serializer);
+    sse_encode_i_64(self.migratedEpoch, serializer);
+    sse_encode_bool(self.rotationNeeded, serializer);
+    sse_encode_bool(self.approvalRequired, serializer);
+    sse_encode_String(self.role, serializer);
+    sse_encode_bool(self.approved, serializer);
+    sse_encode_i_64(self.memberCount, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_error(LkcTeamError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_lkc_team_error_kind(self.kind, serializer);
+    sse_encode_opt_String(self.reason, serializer);
+    sse_encode_list_String(self.users, serializer);
+    sse_encode_opt_String(self.signingKey, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.epoch, serializer);
+    sse_encode_String(self.detail, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_error_kind(
+    LkcTeamErrorKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_failure(
+    LkcTeamFailure self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.team, serializer);
+    sse_encode_lkc_team_error(self.error, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_file(LkcTeamFile self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.plain, serializer);
+    sse_encode_String(self.etag, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_log(LkcTeamLog self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.compacted, serializer);
+    sse_encode_opt_String(self.log, serializer);
+    sse_encode_list_lkc_batch(self.batches, serializer);
+    sse_encode_list_prim_i_64_strict(self.unreadable, serializer);
+    sse_encode_i_64(self.head, serializer);
+    sse_encode_i_64(self.snapshotSeq, serializer);
+    sse_encode_bool(self.more, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_snapshot(
+    LkcTeamSnapshot self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.log, serializer);
+    sse_encode_i_64(self.seq, serializer);
+    sse_encode_list_prim_u_8_strict(self.plain, serializer);
+  }
+
+  @protected
+  void sse_encode_lkc_team_status(
+    LkcTeamStatus self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.epoch, serializer);
+    sse_encode_bool(self.migrated, serializer);
+    sse_encode_bool(self.rotationNeeded, serializer);
+    sse_encode_bool(self.staleOwn, serializer);
+    sse_encode_bool(self.mayCommit, serializer);
+    sse_encode_list_lkc_member(self.members, serializer);
+    sse_encode_list_prim_i_64_strict(self.skippedEpochs, serializer);
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+        self,
+        serializer,
+      );
     }
   }
 
@@ -3142,6 +6210,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_lkc_snapshot(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_lkc_team_file(
+    LkcTeamFile? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_lkc_team_file(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_lkc_team_snapshot(
+    LkcTeamSnapshot? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_lkc_team_snapshot(self, serializer);
     }
   }
 
@@ -3256,6 +6350,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putBigUint64(self);
   }
+}
+
+@sealed
+class LkcAccountKeyImpl extends RustOpaque implements LkcAccountKey {
+  // Not to be used by end users
+  LkcAccountKeyImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcAccountKeyImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcAccountKey,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcAccountKey,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcAccountKeyPtr,
+  );
+
+  /// What this account's members compare ([LkcMember::fingerprint]).
+  String fingerprint() =>
+      RustLib.instance.api.crateApiTeamLkcAccountKeyFingerprint(that: this);
+
+  String toText() =>
+      RustLib.instance.api.crateApiTeamLkcAccountKeyToText(that: this);
+
+  String userId() =>
+      RustLib.instance.api.crateApiTeamLkcAccountKeyUserId(that: this);
 }
 
 @sealed
@@ -3431,4 +6555,317 @@ class LkcSyncImpl extends RustOpaque implements LkcSync {
 
   Future<List<LkcSyncVersion>> versions({required String name}) =>
       RustLib.instance.api.crateApiLkcLkcSyncVersions(that: this, name: name);
+}
+
+@sealed
+class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
+  // Not to be used by end users
+  LkcTeamKeysImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcTeamKeysImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcTeamKeys,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamKeys,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamKeysPtr,
+  );
+
+  /// [signing_key] as [user_id]'s: the person compared it.
+  Future<void> acceptSigningKey({
+    required String userId,
+    required String signingKey,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysAcceptSigningKey(
+    that: this,
+    userId: userId,
+    signingKey: signingKey,
+  );
+
+  /// The team's first key; [confirmed]: the fingerprints the person
+  /// compared. Answers the new epoch.
+  Future<PlatformInt64> commitFirst({
+    required String team,
+    required List<String> confirmed,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysCommitFirst(
+    that: this,
+    team: team,
+    confirmed: confirmed,
+  );
+
+  Future<LkcInviteLink> createInvite({
+    required String team,
+    required String role,
+    required int uses,
+    required PlatformInt64 days,
+    required bool keyed,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysCreateInvite(
+    that: this,
+    team: team,
+    role: role,
+    uses: uses,
+    days: days,
+    keyed: keyed,
+  );
+
+  /// Team [team] forgotten here: left, or deleted.
+  Future<void> forgetTeam({required String team}) => RustLib.instance.api
+      .crateApiTeamLkcTeamKeysForgetTeam(that: this, team: team);
+
+  /// The current key to [user_id], whose [fingerprint] the person compared.
+  Future<void> grant({
+    required String team,
+    required String userId,
+    required String fingerprint,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysGrant(
+    that: this,
+    team: team,
+    userId: userId,
+    fingerprint: fingerprint,
+  );
+
+  /// Joins by [token]; with the link's [secret], taking the key it carries.
+  Future<LkcJoined> join({required String token, String? secret}) => RustLib
+      .instance
+      .api
+      .crateApiTeamLkcTeamKeysJoin(that: this, token: token, secret: secret);
+
+  Future<LkcReencryption> reencrypt({
+    required String team,
+    required List<String> apps,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysReencrypt(
+    that: this,
+    team: team,
+    apps: apps,
+  );
+
+  /// Every team whose keys are wrapped to an older account key of this
+  /// account's, asked for a new key and rewrapped. Answers those that
+  /// failed, to run again.
+  Future<List<LkcTeamFailure>> rewrapTeams() =>
+      RustLib.instance.api.crateApiTeamLkcTeamKeysRewrapTeams(that: this);
+
+  /// A new key in place of the current. Answers the new epoch.
+  Future<PlatformInt64> rotate({
+    required String team,
+    required List<String> confirmed,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysRotate(
+    that: this,
+    team: team,
+    confirmed: confirmed,
+  );
+
+  /// Approved member [user_id], whose [fingerprint] the person compared,
+  /// made [role] (`admin`, or `member` again): the owner's.
+  Future<void> setRole({
+    required String team,
+    required String userId,
+    required String role,
+    required String fingerprint,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysSetRole(
+    that: this,
+    team: team,
+    userId: userId,
+    role: role,
+    fingerprint: fingerprint,
+  );
+
+  Future<LkcTeamSpace> space({required String team, required String app}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamKeysSpace(
+        that: this,
+        team: team,
+        app: app,
+      );
+
+  Future<LkcTeamStatus> status({required String team}) => RustLib.instance.api
+      .crateApiTeamLkcTeamKeysStatus(that: this, team: team);
+
+  /// The team handed to [user_id], whose [fingerprint] the person compared.
+  Future<void> transfer({
+    required String team,
+    required String userId,
+    required String fingerprint,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysTransfer(
+    that: this,
+    team: team,
+    userId: userId,
+    fingerprint: fingerprint,
+  );
+
+  /// The same teams under [key], the account's next (after
+  /// [LkcTeams::rotate_account_key]): one trust between them.
+  LkcTeamKeys withKey({required LkcAccountKey key}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamKeysWithKey(that: this, key: key);
+}
+
+@sealed
+class LkcTeamSpaceImpl extends RustOpaque implements LkcTeamSpace {
+  // Not to be used by end users
+  LkcTeamSpaceImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcTeamSpaceImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcTeamSpace,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamSpace,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamSpacePtr,
+  );
+
+  Future<LkcAppended> append({required String key, required List<int> plain}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceAppend(
+        that: this,
+        key: key,
+        plain: plain,
+      );
+
+  Future<bool> delete({required String name, String? ifMatch}) => RustLib
+      .instance
+      .api
+      .crateApiTeamLkcTeamSpaceDelete(that: this, name: name, ifMatch: ifMatch);
+
+  Future<PlatformInt64> epoch() =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceEpoch(that: this);
+
+  Future<List<LkcSyncFile>> list() =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceList(that: this);
+
+  /// Other devices' writes to this space, and the team's changes
+  /// ([LkcSyncEvent::team_change], then [LkcTeamSpace::refresh]), until
+  /// [LkcTeamSpace::stop_listening].
+  Stream<LkcSyncEvent> listen() =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceListen(that: this);
+
+  Future<String> putSnapshot({
+    required PlatformInt64 seq,
+    required List<int> plain,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamSpacePutSnapshot(
+    that: this,
+    seq: seq,
+    plain: plain,
+  );
+
+  Future<LkcTeamFile?> read({required String name}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceRead(that: this, name: name);
+
+  /// The log's batches after [after] of [log], opened.
+  Future<LkcTeamLog> readLog({
+    required PlatformInt64 after,
+    String? log,
+    int? limit,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamSpaceReadLog(
+    that: this,
+    after: after,
+    log: log,
+    limit: limit,
+  );
+
+  /// The keys read and checked again: after a `team` event. Answers the
+  /// epoch.
+  Future<PlatformInt64> refresh() =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceRefresh(that: this);
+
+  Future<LkcTeamSnapshot?> snapshot() =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceSnapshot(that: this);
+
+  void stopListening() =>
+      RustLib.instance.api.crateApiTeamLkcTeamSpaceStopListening(that: this);
+
+  /// [plain] as [name]'s new version: if it is at [if_match], or, `None`,
+  /// if there is none. Answers the new version.
+  Future<String> write({
+    required String name,
+    required List<int> plain,
+    String? ifMatch,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamSpaceWrite(
+    that: this,
+    name: name,
+    plain: plain,
+    ifMatch: ifMatch,
+  );
+}
+
+@sealed
+class LkcTeamsImpl extends RustOpaque implements LkcTeams {
+  // Not to be used by end users
+  LkcTeamsImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcTeamsImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcTeams,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeams,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamsPtr,
+  );
+
+  /// The account key, made now if no device has, and published.
+  Future<LkcAccountKey> accountKey({required String passphrase}) => RustLib
+      .instance
+      .api
+      .crateApiTeamLkcTeamsAccountKey(that: this, passphrase: passphrase);
+
+  Future<void> changeKeyPassphrase({
+    required String old,
+    required String new_,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamsChangeKeyPassphrase(
+    that: this,
+    old: old,
+    new_: new_,
+  );
+
+  Future<String> create({required String name}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamsCreate(that: this, name: name);
+
+  Future<void> delete({required String id}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamsDelete(that: this, id: id);
+
+  /// The account key opened with the LK Cloud key password; `None` before
+  /// any device made one.
+  Future<LkcAccountKey?> fetchAccountKey({required String passphrase}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamsFetchAccountKey(
+        that: this,
+        passphrase: passphrase,
+      );
+
+  Future<LkcInviteView> invite({required String token}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamsInvite(that: this, token: token);
+
+  Future<List<LkcTeam>> list() =>
+      RustLib.instance.api.crateApiTeamLkcTeamsList(that: this);
+
+  /// [key] open for every team: [trust] as last kept (empty the first
+  /// time), each change of it handed to [save] (the keychain) before use.
+  Future<LkcTeamKeys> open({
+    required LkcAccountKey key,
+    required String trust,
+    required FutureOr<bool> Function(String) save,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamsOpen(
+    that: this,
+    key: key,
+    trust: trust,
+    save: save,
+  );
+
+  /// New account keys in place of these, written and published: a device
+  /// lost trust. Then open them and [LkcTeamKeys::rewrap_teams].
+  Future<LkcAccountKey> rotateAccountKey({required String passphrase}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamsRotateAccountKey(
+        that: this,
+        passphrase: passphrase,
+      );
 }
