@@ -200,6 +200,21 @@ void main() {
     expect(find.byType(CustomAppBar), findsOneWidget);
   });
 
+  testWidgets('leave removes the pages that agreed and keeps the rest', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await push(tester, guarded('dirty', answer: true), 'dirty');
+    await push(tester, const Scaffold(body: Text('clean')), 'clean');
+
+    expect(await PopGuard.leave(navKey.currentState!), isTrue);
+    await tester.pumpAndSettle();
+
+    expect(asked, ['dirty']);
+    expect(find.text('dirty', skipOffstage: false), findsNothing);
+    expect(find.text('clean'), findsOneWidget);
+  });
+
   testWidgets('the plain editor asks only once something changed', (
     tester,
   ) async {
