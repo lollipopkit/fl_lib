@@ -75,6 +75,9 @@ pub enum Kind {
     Busy,
     /// A team's write under a replaced key (`409`): the current epoch.
     StaleEpoch(i64),
+    /// A file's version not past the highest homebase knows of it (`409`):
+    /// that highest.
+    Version(i64),
     /// Not signed in, or homebase no longer takes the session.
     SignedOut,
     /// Nothing reached homebase, or no answer: worth trying later.
@@ -123,6 +126,52 @@ pub struct File {
     /// A team's: the key epoch it was written under.
     #[serde(default)]
     pub epoch: Option<i64>,
+    /// Its writer's signature, when signed.
+    #[serde(flatten)]
+    pub signed: Option<Signed>,
+}
+
+/// A write's signature as homebase keeps it: [signer] (a user id) under
+/// [signing_key], [signature] (both base64), a file's [version].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Signed {
+    pub signer: String,
+    pub signing_key: String,
+    pub signature: String,
+    #[serde(default)]
+    pub version: Option<i64>,
+}
+
+impl Signed {
+    fn of(response: &reqwest::Response) -> Option<Self> {
+        let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
+        Some(Self {
+            signer: header("x-signer")?,
+            signing_key: header("x-signing-key")?,
+            signature: header("x-signature")?,
+            version: header("x-sync-version").and_then(|v| v.parse().ok()),
+        })
+    }
+}
+
+/// What a signed write sends: the signature (base64) and a file's version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WriteSig {
+    pub signature: String,
+    pub version: Option<i64>,
+}
+
+fn signed_by(request: reqwest::RequestBuilder, sig: Option<&WriteSig>) -> reqwest::RequestBuilder {
+    match sig {
+        None => request,
+        Some(s) => {
+            let request = request.header("x-signature", &s.signature);
+            match s.version {
+                Some(v) => request.header("x-sync-version", v),
+                None => request,
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -170,6 +219,10 @@ pub struct Batch {
     pub body: Vec<u8>,
     /// A team's: the key epoch it was sealed under.
     pub epoch: Option<i64>,
+    /// What it was appended once by: its signature covers it.
+    pub idempotency_key: Option<String>,
+    /// Its writer's signature, when signed.
+    pub signed: Option<Signed>,
 }
 
 /// Where the log is after a read.
@@ -195,6 +248,8 @@ pub struct Snapshot {
     pub log: String,
     /// The seq it covers the log up to.
     pub seq: i64,
+    /// Its writer's signature, when signed.
+    pub signed: Option<Signed>,
 }
 
 #[derive(Deserialize)]
@@ -204,6 +259,10 @@ struct WireBatch {
     body: String,
     #[serde(default)]
     epoch: Option<i64>,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+    #[serde(flatten)]
+    signed: Option<Signed>,
 }
 
 #[derive(Deserialize)]
@@ -343,10 +402,13 @@ impl<S: Store> SyncClient<S> {
     }
 
     /// [name]'s bytes and version; `None` when there is no such file.
-    pub async fn download_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String)>, Error> {
+    /// [name]'s bytes, version and its writer's signature (when signed);
+    /// `None` when there is no such file.
+    pub async fn download_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
         let mut body = Vec::new();
-        match self.fetch_with(&self.file_path(name)?, Target::Memory(&mut body), None, |_| {}).await? {
-            Fetched::Saved(etag) => Ok(Some((body, etag))),
+        let mut signed = None;
+        match self.fetch_with(&self.file_path(name)?, Target::Memory(&mut body), None, |r| signed = Signed::of(r)).await? {
+            Fetched::Saved(etag) => Ok(Some((body, etag, signed))),
             Fetched::Missing => Ok(None),
             Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a file answered 304")),
         }
@@ -368,6 +430,11 @@ impl<S: Store> SyncClient<S> {
 
     /// [body] as [name]'s new version, if [condition] still holds.
     pub async fn upload_bytes(&self, name: &str, body: Vec<u8>, condition: Condition) -> Result<String, Error> {
+        self.upload_signed(name, body, condition, None).await
+    }
+
+    /// [upload_bytes], signed by its writer ([sig]): a team's every write is.
+    pub async fn upload_signed(&self, name: &str, body: Vec<u8>, condition: Condition, sig: Option<&WriteSig>) -> Result<String, Error> {
         let path = self.file_path(name)?;
         let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
@@ -377,7 +444,7 @@ impl<S: Store> SyncClient<S> {
         let etag = if size <= DIRECT_MAX {
             let response = self
                 .send(Method::PUT, &path, |r| {
-                    condition_on(r, &condition)
+                    signed_by(condition_on(r, &condition), sig)
                         .header(header::CONTENT_TYPE, "application/octet-stream")
                         .header(header::CONTENT_LENGTH, size)
                         .body(bytes.clone())
@@ -386,7 +453,7 @@ impl<S: Store> SyncClient<S> {
             self.written_version(response).await?
         } else {
             let response = self
-                .send(Method::POST, &format!("{path}/uploads"), |r| condition_on(r, &condition).json(&serde_json::json!({ "size": size })))
+                .send(Method::POST, &format!("{path}/uploads"), |r| signed_by(condition_on(r, &condition), sig).json(&serde_json::json!({ "size": size })))
                 .await?;
             let begun: Begun = self.json(response).await?;
             self.store_upload(&begun.url, bytes).await?;
@@ -475,6 +542,11 @@ impl<S: Store> SyncClient<S> {
     /// Appends [body] (an age file, up to [`BATCH_MAX`]) to the log, once per
     /// [key] (16 to 64 of `[A-Za-z0-9_-]`): a retry is answered the seq given.
     pub async fn append(&self, key: &str, body: Vec<u8>) -> Result<Appended, Error> {
+        self.append_signed(key, body, None).await
+    }
+
+    /// [append], signed by its writer ([sig], no version).
+    pub async fn append_signed(&self, key: &str, body: Vec<u8>, sig: Option<&WriteSig>) -> Result<Appended, Error> {
         if !(16..=64).contains(&key.len()) || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
             return Err(Error::new(Kind::Invalid, "not an idempotency key"));
         }
@@ -485,7 +557,8 @@ impl<S: Store> SyncClient<S> {
         let path = format!("{}/log", self.app_path()?);
         let response = self
             .send(Method::POST, &path, |r| {
-                r.header("idempotency-key", key)
+                signed_by(r, sig)
+                    .header("idempotency-key", key)
                     .header(header::CONTENT_TYPE, "application/octet-stream")
                     .header(header::CONTENT_LENGTH, body.len())
                     .body(body.clone())
@@ -520,7 +593,7 @@ impl<S: Store> SyncClient<S> {
             if blake3::hash(&body).to_hex().as_str() != b.digest {
                 return Err(Error::new(Kind::Invalid, format!("batch {}: digest mismatch", b.seq)));
             }
-            batches.push(Batch { seq: b.seq, body, epoch: b.epoch });
+            batches.push(Batch { seq: b.seq, body, epoch: b.epoch, idempotency_key: b.idempotency_key, signed: b.signed });
         }
         Ok(LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more })
     }
@@ -533,6 +606,11 @@ impl<S: Store> SyncClient<S> {
 
     /// [body] as the log's snapshot up to [seq].
     pub async fn put_snapshot_bytes(&self, seq: i64, body: Vec<u8>) -> Result<String, Error> {
+        self.put_snapshot_signed(seq, body, None).await
+    }
+
+    /// [put_snapshot_bytes], signed by its writer ([sig], no version).
+    pub async fn put_snapshot_signed(&self, seq: i64, body: Vec<u8>, sig: Option<&WriteSig>) -> Result<String, Error> {
         let path = format!("{}/snapshot", self.app_path()?);
         let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
@@ -542,12 +620,12 @@ impl<S: Store> SyncClient<S> {
         if size <= DIRECT_MAX {
             let response = self
                 .send(Method::PUT, &format!("{path}?seq={seq}"), |r| {
-                    r.header(header::CONTENT_TYPE, "application/octet-stream").header(header::CONTENT_LENGTH, size).body(bytes.clone())
+                    signed_by(r, sig).header(header::CONTENT_TYPE, "application/octet-stream").header(header::CONTENT_LENGTH, size).body(bytes.clone())
                 })
                 .await?;
             return self.written_version(response).await;
         }
-        let response = self.send(Method::POST, &format!("{path}/uploads?seq={seq}"), |r| r.json(&serde_json::json!({ "size": size }))).await?;
+        let response = self.send(Method::POST, &format!("{path}/uploads?seq={seq}"), |r| signed_by(r, sig).json(&serde_json::json!({ "size": size }))).await?;
         let begun: Begun = self.json(response).await?;
         self.store_upload(&begun.url, bytes).await?;
         self.complete(&path, &begun.id).await
@@ -569,7 +647,7 @@ impl<S: Store> SyncClient<S> {
         let fetched = self
             .fetch_with(&format!("{}/snapshot", self.app_path()?), into, None, |response| {
                 let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
-                found = header("sync-log").zip(header("sync-seq").and_then(|v| v.parse().ok())).map(|(log, seq)| Snapshot { log, seq });
+                found = header("sync-log").zip(header("sync-seq").and_then(|v| v.parse().ok())).map(|(log, seq)| Snapshot { log, seq, signed: Signed::of(response) });
             })
             .await?;
         match fetched {
@@ -879,10 +957,14 @@ async fn refusal(response: reqwest::Response) -> Error {
         StatusCode::UNAUTHORIZED => Kind::SignedOut,
         StatusCode::FORBIDDEN | StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY => {
             let current = response.headers().get("x-team-epoch").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
+            let highest = response.headers().get("x-sync-version").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
             let body = read_limited(response, MAX_JSON).await.unwrap_or_default();
             let reason = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["reason"].as_str().map(str::to_string)).unwrap_or_default();
             if let (STALE_EPOCH, Some(current)) = (reason.as_str(), current) {
                 return Error::new(Kind::StaleEpoch(current), format!("HTTP {status} {STALE_EPOCH}"));
+            }
+            if let ("sync_version", Some(highest)) = (reason.as_str(), highest) {
+                return Error::new(Kind::Version(highest), format!("HTTP {status} sync_version"));
             }
             return Error::new(Kind::Refused(reason.clone()), format!("HTTP {status} {reason}"));
         }

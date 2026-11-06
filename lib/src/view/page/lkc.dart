@@ -3,10 +3,13 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+part 'lkc_team.dart';
 
 final class LkcPageArgs {
   final LkcClient client;
@@ -14,7 +17,11 @@ final class LkcPageArgs {
   /// Shown inside a page that has a title bar of its own: no second one.
   final bool embedded;
 
-  const LkcPageArgs(this.client, {this.embedded = false});
+  /// The apps whose files a team's space holds, re-encrypted after a
+  /// rotation (`serverbox`, …).
+  final List<String> teamApps;
+
+  const LkcPageArgs(this.client, {this.embedded = false, this.teamApps = const []});
 }
 
 /// The LK Cloud account: sign-in, the plans held and on sale, and the account itself.
@@ -399,6 +406,14 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     );
   }
 
+  void _openTeams() {
+    LkcTeamsPage.route.go(
+      context,
+      LkcPageArgs(_client, teamApps: widget.args.teamApps),
+      target: widget.args.embedded ? NavTarget.root : NavTarget.nearest,
+    );
+  }
+
   void _openFiles() {
     // Over the whole window from a page embedded in another: in its pane it
     // would draw a second title bar under the host's.
@@ -427,6 +442,12 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
             trailing: const _Chevron(icon: Icons.open_in_new),
             onTap: () => context._runLkc(_client.openPortal),
           ),
+        _LkcTile(
+          icon: Icons.group,
+          title: l10n.lkcTeams,
+          trailing: const _Chevron(),
+          onTap: _openTeams,
+        ),
         _LkcTile(icon: Icons.logout, title: l10n.logout, onTap: _signOut),
         _LkcTile(
           icon: Icons.delete_forever,

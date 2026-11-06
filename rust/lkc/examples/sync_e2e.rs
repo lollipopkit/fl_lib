@@ -159,7 +159,7 @@ async fn log(sync: Arc<SyncClient<Memory>>, dir: &std::path::Path) {
     std::fs::write(&snap, age(400, b't')).unwrap();
     assert_eq!(sync.put_snapshot(appended.seq, &snap).await.unwrap_err().kind, Kind::Refused("sync_snapshot_stale".into()));
     let got = dir.join("got-snap");
-    assert_eq!(sync.download_snapshot(&got).await.expect("read the snapshot"), Some(Snapshot { log: appended.log.clone(), seq: appended.seq }));
+    assert_eq!(sync.download_snapshot(&got).await.expect("read the snapshot"), Some(Snapshot { log: appended.log.clone(), seq: appended.seq, signed: None }));
     assert_eq!(std::fs::read(&got).unwrap(), age(400, b's'));
     println!("snapshot written, retried, a stale one refused, read back");
 }

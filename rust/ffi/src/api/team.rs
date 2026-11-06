@@ -50,6 +50,10 @@ pub enum LkcTeamErrorKind {
     /// Joined after the current epoch's commit: the next is made by one of
     /// its members, or after the owner's signed promotion.
     PromotionNeeded,
+    /// Epoch [LkcTeamError::epoch] starts the team's keys anew, made by its
+    /// owner ([LkcTeamError::users]) who lost theirs: taken once the person
+    /// accepts it ([LkcTeamKeys::accept_recovery]).
+    RecoveryEpoch,
     /// A sync request of the space failed ([LkcTeamError::reason]: its kind).
     Sync,
 }
@@ -73,6 +77,7 @@ impl std::fmt::Debug for LkcTeamErrorKind {
             Self::StaleEpoch => "StaleEpoch",
             Self::Unkeyed => "Unkeyed",
             Self::PromotionNeeded => "PromotionNeeded",
+            Self::RecoveryEpoch => "RecoveryEpoch",
             Self::Sync => "Sync",
         })
     }
@@ -84,6 +89,8 @@ pub struct LkcTeamError {
     pub reason: Option<String>,
     pub users: Vec<String>,
     pub signing_key: Option<String>,
+    /// [signing_key]'s fingerprint to compare, when known.
+    pub fingerprint: Option<String>,
     pub epoch: Option<i64>,
     pub detail: String,
 }
@@ -92,7 +99,7 @@ impl From<TeamError> for LkcTeamError {
     fn from(e: TeamError) -> Self {
         use LkcTeamErrorKind as K;
         let detail = e.to_string();
-        let mut out = Self { kind: K::Invalid, reason: None, users: vec![], signing_key: None, epoch: None, detail };
+        let mut out = Self { kind: K::Invalid, reason: None, users: vec![], signing_key: None, fingerprint: None, epoch: None, detail };
         out.kind = match e {
             TeamError::Refused(r) => {
                 out.reason = Some(r);
@@ -106,9 +113,10 @@ impl From<TeamError> for LkcTeamError {
             TeamError::WrongPassphrase => K::WrongPassphrase,
             TeamError::Crypto(_) => K::Crypto,
             TeamError::Untrusted(_) => K::Untrusted,
-            TeamError::SigningKeyChanged { user_id, signing_key } => {
+            TeamError::SigningKeyChanged { user_id, signing_key, fingerprint } => {
                 out.users = vec![user_id];
                 out.signing_key = Some(signing_key);
+                out.fingerprint = fingerprint;
                 K::SigningKeyChanged
             }
             TeamError::Unconfirmed(users) => {
@@ -126,6 +134,13 @@ impl From<TeamError> for LkcTeamError {
             }
             TeamError::Unkeyed => K::Unkeyed,
             TeamError::PromotionNeeded => K::PromotionNeeded,
+            TeamError::RecoveryEpoch { epoch, committed_by, signing_key, fingerprint } => {
+                out.epoch = Some(epoch);
+                out.users = vec![committed_by];
+                out.signing_key = Some(signing_key);
+                out.fingerprint = fingerprint;
+                K::RecoveryEpoch
+            }
             TeamError::Sync(kind, _) => {
                 if let Kind::StaleEpoch(epoch) = kind {
                     out.epoch = Some(epoch);
@@ -207,9 +222,18 @@ pub struct LkcMember {
     pub attested: bool,
     /// Their signing key is not the one first met.
     pub changed: bool,
+    /// Base64: what [LkcTeamKeys::accept_signing_key] takes when [changed].
+    pub signing_key: Option<String>,
+    /// The person compared [fingerprint] with them.
+    pub compared: bool,
+    /// The fingerprint the person compared before, when it is not this one.
+    pub previous_fingerprint: Option<String>,
 }
 
 pub struct LkcTeamStatus {
+    pub name: String,
+    /// This account's: `owner`, `admin` or `member`.
+    pub role: String,
     pub epoch: i64,
     pub migrated: bool,
     pub rotation_needed: bool,
@@ -225,6 +249,8 @@ pub struct LkcTeamStatus {
 pub struct LkcInviteLink {
     pub id: String,
     pub token: String,
+    /// The whole link to send, its secret in the fragment when it carries one.
+    pub url: String,
     /// The link's fragment (after `#`) when it carries the key.
     pub secret: Option<String>,
     pub expires_at: String,
@@ -275,6 +301,11 @@ impl LkcTeams {
 
     fn api(&self) -> TeamClient<DartStore> {
         TeamClient::new(self.client.clone())
+    }
+
+    /// Whether a device of the account made its key: asked for, not set.
+    pub async fn has_account_key(&self) -> Result<bool, LkcTeamError> {
+        Ok(self.files.exists().await?)
     }
 
     /// The account key opened with the LK Cloud key password; `None` before
@@ -342,6 +373,8 @@ impl LkcTeamKeys {
     pub async fn status(&self, team: String) -> Result<LkcTeamStatus, LkcTeamError> {
         let s = self.0.status(&team).await?;
         Ok(LkcTeamStatus {
+            name: s.name,
+            role: s.role,
             epoch: s.epoch,
             migrated: s.migrated,
             rotation_needed: s.rotation_needed,
@@ -350,7 +383,19 @@ impl LkcTeamKeys {
             members: s
                 .members
                 .into_iter()
-                .map(|m| LkcMember { user_id: m.user_id, name: m.name, role: m.role, approved: m.approved, keyed: m.keyed, fingerprint: m.fingerprint, attested: m.attested, changed: m.changed })
+                .map(|m| LkcMember {
+                    user_id: m.user_id,
+                    name: m.name,
+                    role: m.role,
+                    approved: m.approved,
+                    keyed: m.keyed,
+                    fingerprint: m.fingerprint,
+                    attested: m.attested,
+                    changed: m.changed,
+                    signing_key: m.signing_key,
+                    compared: m.compared,
+                    previous_fingerprint: m.previous_fingerprint,
+                })
                 .collect(),
             skipped_epochs: s.skipped_epochs,
         })
@@ -400,7 +445,8 @@ impl LkcTeamKeys {
 
     pub async fn create_invite(&self, team: String, role: String, uses: i32, days: i64, keyed: bool) -> Result<LkcInviteLink, LkcTeamError> {
         let link = self.0.create_invite(&team, &InviteTerms { role, uses, days }, keyed).await?;
-        Ok(LkcInviteLink { id: link.made.invite.id, token: link.made.token, secret: link.secret, expires_at: link.made.invite.expires_at })
+        let url = self.0.client().invite_url(&link.made.token, link.secret.as_deref());
+        Ok(LkcInviteLink { id: link.made.invite.id, token: link.made.token, url, secret: link.secret, expires_at: link.made.invite.expires_at })
     }
 
     /// Joins by [token]; with the link's [secret], taking the key it carries.
@@ -422,6 +468,31 @@ impl LkcTeamKeys {
     /// [signing_key] as [user_id]'s: the person compared it.
     pub async fn accept_signing_key(&self, user_id: String, signing_key: String) -> Result<(), LkcTeamError> {
         Ok(self.0.accept_signing_key(&user_id, &signing_key).await?)
+    }
+
+    /// [fingerprint] compared with [user_id] by the person.
+    pub async fn mark_compared(&self, team: String, user_id: String, fingerprint: String) -> Result<(), LkcTeamError> {
+        Ok(self.0.mark_compared(&team, &user_id, &fingerprint).await?)
+    }
+
+    /// Recovery epoch [epoch] of [team] taken: the person accepted the
+    /// owner's new start ([LkcTeamErrorKind::RecoveryEpoch]).
+    pub async fn accept_recovery(&self, team: String, epoch: i64, user_id: String, signing_key: String) -> Result<(), LkcTeamError> {
+        Ok(self.0.accept_recovery(&team, epoch, &user_id, &signing_key).await?)
+    }
+
+    /// Lets in [user_id], waiting since they joined.
+    pub async fn approve(&self, team: String, user_id: String) -> Result<(), LkcTeamError> {
+        Ok(self.0.approve(&team, &user_id).await?)
+    }
+
+    /// Removes [user_id]: the team then needs a new key.
+    pub async fn remove_member(&self, team: String, user_id: String) -> Result<(), LkcTeamError> {
+        Ok(self.0.remove_member(&team, &user_id).await?)
+    }
+
+    pub async fn leave(&self, team: String) -> Result<(), LkcTeamError> {
+        Ok(self.0.leave(&team).await?)
     }
 
     /// Team [team] forgotten here: left, or deleted.

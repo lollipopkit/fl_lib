@@ -70,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1701181741;
+  int get rustContentHash => 1604096408;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -196,10 +196,24 @@ abstract class RustLibApi extends BaseApi {
     required String name,
   });
 
+  Future<void> crateApiTeamLkcTeamKeysAcceptRecovery({
+    required LkcTeamKeys that,
+    required String team,
+    required PlatformInt64 epoch,
+    required String userId,
+    required String signingKey,
+  });
+
   Future<void> crateApiTeamLkcTeamKeysAcceptSigningKey({
     required LkcTeamKeys that,
     required String userId,
     required String signingKey,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysApprove({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
   });
 
   Future<PlatformInt64> crateApiTeamLkcTeamKeysCommitFirst({
@@ -235,10 +249,28 @@ abstract class RustLibApi extends BaseApi {
     String? secret,
   });
 
+  Future<void> crateApiTeamLkcTeamKeysLeave({
+    required LkcTeamKeys that,
+    required String team,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysMarkCompared({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String fingerprint,
+  });
+
   Future<LkcReencryption> crateApiTeamLkcTeamKeysReencrypt({
     required LkcTeamKeys that,
     required String team,
     required List<String> apps,
+  });
+
+  Future<void> crateApiTeamLkcTeamKeysRemoveMember({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
   });
 
   Future<List<LkcTeamFailure>> crateApiTeamLkcTeamKeysRewrapTeams({
@@ -366,6 +398,8 @@ abstract class RustLibApi extends BaseApi {
     required LkcTeams that,
     required String passphrase,
   });
+
+  Future<bool> crateApiTeamLkcTeamsHasAccountKey({required LkcTeams that});
 
   Future<LkcInviteView> crateApiTeamLkcTeamsInvite({
     required LkcTeams that,
@@ -1436,6 +1470,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<void> crateApiTeamLkcTeamKeysAcceptRecovery({
+    required LkcTeamKeys that,
+    required String team,
+    required PlatformInt64 epoch,
+    required String userId,
+    required String signingKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_i_64(epoch, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(signingKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysAcceptRecoveryConstMeta,
+        argValues: [that, team, epoch, userId, signingKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysAcceptRecoveryConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_accept_recovery",
+        argNames: ["that", "team", "epoch", "userId", "signingKey"],
+      );
+
+  @override
   Future<void> crateApiTeamLkcTeamKeysAcceptSigningKey({
     required LkcTeamKeys that,
     required String userId,
@@ -1454,7 +1532,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 28,
             port: port_,
           );
         },
@@ -1476,6 +1554,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiTeamLkcTeamKeysApprove({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 29,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysApproveConstMeta,
+        argValues: [that, team, userId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysApproveConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_approve",
+        argNames: ["that", "team", "userId"],
+      );
+
+  @override
   Future<PlatformInt64> crateApiTeamLkcTeamKeysCommitFirst({
     required LkcTeamKeys that,
     required String team,
@@ -1494,7 +1612,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1540,7 +1658,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1578,7 +1696,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 32,
             port: port_,
           );
         },
@@ -1620,7 +1738,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1660,7 +1778,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1682,6 +1800,86 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiTeamLkcTeamKeysLeave({
+    required LkcTeamKeys that,
+    required String team,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 35,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysLeaveConstMeta,
+        argValues: [that, team],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysLeaveConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_leave",
+        argNames: ["that", "team"],
+      );
+
+  @override
+  Future<void> crateApiTeamLkcTeamKeysMarkCompared({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+    required String fingerprint,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(fingerprint, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 36,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysMarkComparedConstMeta,
+        argValues: [that, team, userId, fingerprint],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysMarkComparedConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_mark_compared",
+        argNames: ["that", "team", "userId", "fingerprint"],
+      );
+
+  @override
   Future<LkcReencryption> crateApiTeamLkcTeamKeysReencrypt({
     required LkcTeamKeys that,
     required String team,
@@ -1700,7 +1898,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1722,6 +1920,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiTeamLkcTeamKeysRemoveMember({
+    required LkcTeamKeys that,
+    required String team,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(team, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 38,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamKeysRemoveMemberConstMeta,
+        argValues: [that, team, userId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamKeysRemoveMemberConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeamKeys_remove_member",
+        argNames: ["that", "team", "userId"],
+      );
+
+  @override
   Future<List<LkcTeamFailure>> crateApiTeamLkcTeamKeysRewrapTeams({
     required LkcTeamKeys that,
   }) {
@@ -1736,7 +1974,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1776,7 +2014,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 40,
             port: port_,
           );
         },
@@ -1820,7 +2058,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 41,
             port: port_,
           );
         },
@@ -1860,7 +2098,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 42,
             port: port_,
           );
         },
@@ -1899,7 +2137,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 43,
             port: port_,
           );
         },
@@ -1941,7 +2179,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 39,
+            funcId: 44,
             port: port_,
           );
         },
@@ -1979,7 +2217,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             key,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -2018,7 +2256,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 46,
             port: port_,
           );
         },
@@ -2058,7 +2296,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 47,
             port: port_,
           );
         },
@@ -2094,7 +2332,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 43,
+            funcId: 48,
             port: port_,
           );
         },
@@ -2127,7 +2365,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 44,
+            funcId: 49,
             port: port_,
           );
         },
@@ -2159,7 +2397,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_StreamSink_lkc_sync_event_Sse(sink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2198,7 +2436,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 46,
+            funcId: 51,
             port: port_,
           );
         },
@@ -2236,7 +2474,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 52,
             port: port_,
           );
         },
@@ -2278,7 +2516,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 48,
+            funcId: 53,
             port: port_,
           );
         },
@@ -2314,7 +2552,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 49,
+            funcId: 54,
             port: port_,
           );
         },
@@ -2350,7 +2588,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 50,
+            funcId: 55,
             port: port_,
           );
         },
@@ -2381,7 +2619,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2421,7 +2659,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 52,
+            funcId: 57,
             port: port_,
           );
         },
@@ -2459,7 +2697,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 53,
+            funcId: 58,
             port: port_,
           );
         },
@@ -2500,7 +2738,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 54,
+            funcId: 59,
             port: port_,
           );
         },
@@ -2538,7 +2776,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2575,7 +2813,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2612,7 +2850,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 62,
             port: port_,
           );
         },
@@ -2635,6 +2873,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool> crateApiTeamLkcTeamsHasAccountKey({required LkcTeams that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 63,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_lkc_team_error,
+        ),
+        constMeta: kCrateApiTeamLkcTeamsHasAccountKeyConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcTeamsHasAccountKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcTeams_has_account_key",
+        argNames: ["that"],
+      );
+
+  @override
   Future<LkcInviteView> crateApiTeamLkcTeamsInvite({
     required LkcTeams that,
     required String token,
@@ -2651,7 +2923,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 64,
             port: port_,
           );
         },
@@ -2684,7 +2956,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 65,
             port: port_,
           );
         },
@@ -2716,7 +2988,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(userId, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -2762,7 +3034,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 61,
+            funcId: 67,
             port: port_,
           );
         },
@@ -2800,7 +3072,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 68,
             port: port_,
           );
         },
@@ -2833,7 +3105,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_opt_String(components, serializer);
           sse_encode_opt_String(layout, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -2863,7 +3135,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(a, serializer);
           sse_encode_String(b, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_i_32,
@@ -2891,7 +3163,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_list_theme_variant_info,
@@ -2919,7 +3191,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 66,
+            funcId: 72,
             port: port_,
           );
         },
@@ -2948,7 +3220,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(bytes, serializer);
           sse_encode_opt_String(base, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_theme_catalog_info,
@@ -2978,7 +3250,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
           sse_encode_String(path, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3009,7 +3281,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 69,
+            funcId: 75,
             port: port_,
           );
         },
@@ -3042,7 +3314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 70,
+            funcId: 76,
             port: port_,
           );
         },
@@ -3074,7 +3346,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
           sse_encode_list_String(iconFiles, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3104,7 +3376,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(manifest, serializer);
           sse_encode_list_String(iconFiles, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3130,7 +3402,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_theme_file(files, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_theme_repo_tree,
@@ -3155,7 +3427,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(bytes, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_theme_file,
@@ -3185,7 +3457,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(secret, serializer);
           sse_encode_list_prim_u_8_loose(data, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3211,7 +3483,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(last, serializer);
           sse_encode_String(seen, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3235,7 +3507,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_64(ms, serializer);
           sse_encode_u_64(device, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3266,7 +3538,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_64(device, serializer);
           sse_encode_String(last, serializer);
           sse_encode_u_64(nowMs, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 84)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3295,7 +3567,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(opsJson, serializer);
           sse_encode_String(currentJson, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3319,7 +3591,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 86)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3342,7 +3614,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(address, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3923,13 +4195,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcInviteLink dco_decode_lkc_invite_link(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return LkcInviteLink(
       id: dco_decode_String(arr[0]),
       token: dco_decode_String(arr[1]),
-      secret: dco_decode_opt_String(arr[2]),
-      expiresAt: dco_decode_String(arr[3]),
+      url: dco_decode_String(arr[2]),
+      secret: dco_decode_opt_String(arr[3]),
+      expiresAt: dco_decode_String(arr[4]),
     );
   }
 
@@ -3980,8 +4253,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcMember dco_decode_lkc_member(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return LkcMember(
       userId: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -3991,6 +4264,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       fingerprint: dco_decode_opt_String(arr[5]),
       attested: dco_decode_bool(arr[6]),
       changed: dco_decode_bool(arr[7]),
+      signingKey: dco_decode_opt_String(arr[8]),
+      compared: dco_decode_bool(arr[9]),
+      previousFingerprint: dco_decode_opt_String(arr[10]),
     );
   }
 
@@ -4112,15 +4388,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcTeamError dco_decode_lkc_team_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return LkcTeamError(
       kind: dco_decode_lkc_team_error_kind(arr[0]),
       reason: dco_decode_opt_String(arr[1]),
       users: dco_decode_list_String(arr[2]),
       signingKey: dco_decode_opt_String(arr[3]),
-      epoch: dco_decode_opt_box_autoadd_i_64(arr[4]),
-      detail: dco_decode_String(arr[5]),
+      fingerprint: dco_decode_opt_String(arr[4]),
+      epoch: dco_decode_opt_box_autoadd_i_64(arr[5]),
+      detail: dco_decode_String(arr[6]),
     );
   }
 
@@ -4188,16 +4465,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcTeamStatus dco_decode_lkc_team_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return LkcTeamStatus(
-      epoch: dco_decode_i_64(arr[0]),
-      migrated: dco_decode_bool(arr[1]),
-      rotationNeeded: dco_decode_bool(arr[2]),
-      staleOwn: dco_decode_bool(arr[3]),
-      mayCommit: dco_decode_bool(arr[4]),
-      members: dco_decode_list_lkc_member(arr[5]),
-      skippedEpochs: dco_decode_list_prim_i_64_strict(arr[6]),
+      name: dco_decode_String(arr[0]),
+      role: dco_decode_String(arr[1]),
+      epoch: dco_decode_i_64(arr[2]),
+      migrated: dco_decode_bool(arr[3]),
+      rotationNeeded: dco_decode_bool(arr[4]),
+      staleOwn: dco_decode_bool(arr[5]),
+      mayCommit: dco_decode_bool(arr[6]),
+      members: dco_decode_list_lkc_member(arr[7]),
+      skippedEpochs: dco_decode_list_prim_i_64_strict(arr[8]),
     );
   }
 
@@ -4876,11 +5155,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_id = sse_decode_String(deserializer);
     final var_token = sse_decode_String(deserializer);
+    final var_url = sse_decode_String(deserializer);
     final var_secret = sse_decode_opt_String(deserializer);
     final var_expiresAt = sse_decode_String(deserializer);
     return LkcInviteLink(
       id: var_id,
       token: var_token,
+      url: var_url,
       secret: var_secret,
       expiresAt: var_expiresAt,
     );
@@ -4941,6 +5222,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_fingerprint = sse_decode_opt_String(deserializer);
     final var_attested = sse_decode_bool(deserializer);
     final var_changed = sse_decode_bool(deserializer);
+    final var_signingKey = sse_decode_opt_String(deserializer);
+    final var_compared = sse_decode_bool(deserializer);
+    final var_previousFingerprint = sse_decode_opt_String(deserializer);
     return LkcMember(
       userId: var_userId,
       name: var_name,
@@ -4950,6 +5234,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       fingerprint: var_fingerprint,
       attested: var_attested,
       changed: var_changed,
+      signingKey: var_signingKey,
+      compared: var_compared,
+      previousFingerprint: var_previousFingerprint,
     );
   }
 
@@ -5083,6 +5370,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_reason = sse_decode_opt_String(deserializer);
     final var_users = sse_decode_list_String(deserializer);
     final var_signingKey = sse_decode_opt_String(deserializer);
+    final var_fingerprint = sse_decode_opt_String(deserializer);
     final var_epoch = sse_decode_opt_box_autoadd_i_64(deserializer);
     final var_detail = sse_decode_String(deserializer);
     return LkcTeamError(
@@ -5090,6 +5378,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       reason: var_reason,
       users: var_users,
       signingKey: var_signingKey,
+      fingerprint: var_fingerprint,
       epoch: var_epoch,
       detail: var_detail,
     );
@@ -5153,6 +5442,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   LkcTeamStatus sse_decode_lkc_team_status(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_name = sse_decode_String(deserializer);
+    final var_role = sse_decode_String(deserializer);
     final var_epoch = sse_decode_i_64(deserializer);
     final var_migrated = sse_decode_bool(deserializer);
     final var_rotationNeeded = sse_decode_bool(deserializer);
@@ -5161,6 +5452,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     final var_members = sse_decode_list_lkc_member(deserializer);
     final var_skippedEpochs = sse_decode_list_prim_i_64_strict(deserializer);
     return LkcTeamStatus(
+      name: var_name,
+      role: var_role,
       epoch: var_epoch,
       migrated: var_migrated,
       rotationNeeded: var_rotationNeeded,
@@ -5946,6 +6239,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.token, serializer);
+    sse_encode_String(self.url, serializer);
     sse_encode_opt_String(self.secret, serializer);
     sse_encode_String(self.expiresAt, serializer);
   }
@@ -5992,6 +6286,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.fingerprint, serializer);
     sse_encode_bool(self.attested, serializer);
     sse_encode_bool(self.changed, serializer);
+    sse_encode_opt_String(self.signingKey, serializer);
+    sse_encode_bool(self.compared, serializer);
+    sse_encode_opt_String(self.previousFingerprint, serializer);
   }
 
   @protected
@@ -6092,6 +6389,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.reason, serializer);
     sse_encode_list_String(self.users, serializer);
     sse_encode_opt_String(self.signingKey, serializer);
+    sse_encode_opt_String(self.fingerprint, serializer);
     sse_encode_opt_box_autoadd_i_64(self.epoch, serializer);
     sse_encode_String(self.detail, serializer);
   }
@@ -6151,6 +6449,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.role, serializer);
     sse_encode_i_64(self.epoch, serializer);
     sse_encode_bool(self.migrated, serializer);
     sse_encode_bool(self.rotationNeeded, serializer);
@@ -6576,6 +6876,21 @@ class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
         RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamKeysPtr,
   );
 
+  /// Recovery epoch [epoch] of [team] taken: the person accepted the
+  /// owner's new start ([LkcTeamErrorKind::RecoveryEpoch]).
+  Future<void> acceptRecovery({
+    required String team,
+    required PlatformInt64 epoch,
+    required String userId,
+    required String signingKey,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysAcceptRecovery(
+    that: this,
+    team: team,
+    epoch: epoch,
+    userId: userId,
+    signingKey: signingKey,
+  );
+
   /// [signing_key] as [user_id]'s: the person compared it.
   Future<void> acceptSigningKey({
     required String userId,
@@ -6585,6 +6900,14 @@ class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
     userId: userId,
     signingKey: signingKey,
   );
+
+  /// Lets in [user_id], waiting since they joined.
+  Future<void> approve({required String team, required String userId}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamKeysApprove(
+        that: this,
+        team: team,
+        userId: userId,
+      );
 
   /// The team's first key; [confirmed]: the fingerprints the person
   /// compared. Answers the new epoch.
@@ -6634,6 +6957,21 @@ class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
       .api
       .crateApiTeamLkcTeamKeysJoin(that: this, token: token, secret: secret);
 
+  Future<void> leave({required String team}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamKeysLeave(that: this, team: team);
+
+  /// [fingerprint] compared with [user_id] by the person.
+  Future<void> markCompared({
+    required String team,
+    required String userId,
+    required String fingerprint,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysMarkCompared(
+    that: this,
+    team: team,
+    userId: userId,
+    fingerprint: fingerprint,
+  );
+
   Future<LkcReencryption> reencrypt({
     required String team,
     required List<String> apps,
@@ -6642,6 +6980,14 @@ class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
     team: team,
     apps: apps,
   );
+
+  /// Removes [user_id]: the team then needs a new key.
+  Future<void> removeMember({required String team, required String userId}) =>
+      RustLib.instance.api.crateApiTeamLkcTeamKeysRemoveMember(
+        that: this,
+        team: team,
+        userId: userId,
+      );
 
   /// Every team whose keys are wrapped to an older account key of this
   /// account's, asked for a new key and rewrapped. Answers those that
@@ -6841,6 +7187,10 @@ class LkcTeamsImpl extends RustOpaque implements LkcTeams {
         that: this,
         passphrase: passphrase,
       );
+
+  /// Whether a device of the account made its key: asked for, not set.
+  Future<bool> hasAccountKey() =>
+      RustLib.instance.api.crateApiTeamLkcTeamsHasAccountKey(that: this);
 
   Future<LkcInviteView> invite({required String token}) =>
       RustLib.instance.api.crateApiTeamLkcTeamsInvite(that: this, token: token);

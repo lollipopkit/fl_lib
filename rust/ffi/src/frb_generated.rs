@@ -27,8 +27,8 @@
 
 // Section: imports
 
-use crate::api::team::*;
-use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::lkc::*;
+use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 
@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
                     default_rust_auto_opaque = RustAutoOpaqueMoi,
                 );
                 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1701181741;
+                pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1604096408;
             
 
 // Section: executor
@@ -522,6 +522,28 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
  let output_ok = crate::api::lkc::LkcSync::versions(&*api_that_guard, api_name).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
+            }fn wire__crate__api__team__LkcTeamKeys_accept_recovery_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_accept_recovery", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
+let api_team = <String>::sse_decode(&mut deserializer);
+let api_epoch = <i64>::sse_decode(&mut deserializer);
+let api_user_id = <String>::sse_decode(&mut deserializer);
+let api_signing_key = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::team::LkcTeamKeys::accept_recovery(&*api_that_guard, api_team, api_epoch, api_user_id, api_signing_key).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
             }fn wire__crate__api__team__LkcTeamKeys_accept_signing_key_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_accept_signing_key", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -540,6 +562,26 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         }
         let api_that_guard = api_that_guard.unwrap();
  let output_ok = crate::api::team::LkcTeamKeys::accept_signing_key(&*api_that_guard, api_user_id, api_signing_key).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
+            }fn wire__crate__api__team__LkcTeamKeys_approve_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_approve", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
+let api_team = <String>::sse_decode(&mut deserializer);
+let api_user_id = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::team::LkcTeamKeys::approve(&*api_that_guard, api_team, api_user_id).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__team__LkcTeamKeys_commit_first_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -645,6 +687,46 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
  let output_ok = crate::api::team::LkcTeamKeys::join(&*api_that_guard, api_token, api_secret).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
+            }fn wire__crate__api__team__LkcTeamKeys_leave_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_leave", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
+let api_team = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::team::LkcTeamKeys::leave(&*api_that_guard, api_team).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
+            }fn wire__crate__api__team__LkcTeamKeys_mark_compared_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_mark_compared", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
+let api_team = <String>::sse_decode(&mut deserializer);
+let api_user_id = <String>::sse_decode(&mut deserializer);
+let api_fingerprint = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::team::LkcTeamKeys::mark_compared(&*api_that_guard, api_team, api_user_id, api_fingerprint).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
             }fn wire__crate__api__team__LkcTeamKeys_reencrypt_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
                 FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_reencrypt", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
@@ -663,6 +745,26 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         }
         let api_that_guard = api_that_guard.unwrap();
  let output_ok = crate::api::team::LkcTeamKeys::reencrypt(&*api_that_guard, api_team, api_apps).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
+            }fn wire__crate__api__team__LkcTeamKeys_remove_member_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeamKeys_remove_member", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
+let api_team = <String>::sse_decode(&mut deserializer);
+let api_user_id = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::team::LkcTeamKeys::remove_member(&*api_that_guard, api_team, api_user_id).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__team__LkcTeamKeys_rewrap_teams_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -1128,6 +1230,24 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         }
         let api_that_guard = api_that_guard.unwrap();
  let output_ok = crate::api::team::LkcTeams::fetch_account_key(&*api_that_guard, api_passphrase).await?;   std::result::Result::Ok(output_ok)
+                    })().await)
+                } })
+            }fn wire__crate__api__team__LkcTeams_has_account_key_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
+                FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec,_,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "LkcTeams_has_account_key", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeams>>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+                    transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_async_ref().await),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = crate::api::team::LkcTeams::has_account_key(&*api_that_guard).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__team__LkcTeams_invite_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -1742,9 +1862,10 @@ return crate::api::lkc::LkcFetched{missing: var_missing, saved: var_saved, etag:
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_id = <String>::sse_decode(deserializer);
 let mut var_token = <String>::sse_decode(deserializer);
+let mut var_url = <String>::sse_decode(deserializer);
 let mut var_secret = <Option<String>>::sse_decode(deserializer);
 let mut var_expiresAt = <String>::sse_decode(deserializer);
-return crate::api::team::LkcInviteLink{id: var_id, token: var_token, secret: var_secret, expires_at: var_expiresAt};}
+return crate::api::team::LkcInviteLink{id: var_id, token: var_token, url: var_url, secret: var_secret, expires_at: var_expiresAt};}
                 }
                 
                 impl SseDecode for crate::api::team::LkcInviteView {
@@ -1785,7 +1906,10 @@ let mut var_keyed = <bool>::sse_decode(deserializer);
 let mut var_fingerprint = <Option<String>>::sse_decode(deserializer);
 let mut var_attested = <bool>::sse_decode(deserializer);
 let mut var_changed = <bool>::sse_decode(deserializer);
-return crate::api::team::LkcMember{user_id: var_userId, name: var_name, role: var_role, approved: var_approved, keyed: var_keyed, fingerprint: var_fingerprint, attested: var_attested, changed: var_changed};}
+let mut var_signingKey = <Option<String>>::sse_decode(deserializer);
+let mut var_compared = <bool>::sse_decode(deserializer);
+let mut var_previousFingerprint = <Option<String>>::sse_decode(deserializer);
+return crate::api::team::LkcMember{user_id: var_userId, name: var_name, role: var_role, approved: var_approved, keyed: var_keyed, fingerprint: var_fingerprint, attested: var_attested, changed: var_changed, signing_key: var_signingKey, compared: var_compared, previous_fingerprint: var_previousFingerprint};}
                 }
                 
                 impl SseDecode for crate::api::team::LkcReencrypted {
@@ -1890,9 +2014,10 @@ return crate::api::team::LkcTeam{id: var_id, name: var_name, epoch: var_epoch, m
 let mut var_reason = <Option<String>>::sse_decode(deserializer);
 let mut var_users = <Vec<String>>::sse_decode(deserializer);
 let mut var_signingKey = <Option<String>>::sse_decode(deserializer);
+let mut var_fingerprint = <Option<String>>::sse_decode(deserializer);
 let mut var_epoch = <Option<i64>>::sse_decode(deserializer);
 let mut var_detail = <String>::sse_decode(deserializer);
-return crate::api::team::LkcTeamError{kind: var_kind, reason: var_reason, users: var_users, signing_key: var_signingKey, epoch: var_epoch, detail: var_detail};}
+return crate::api::team::LkcTeamError{kind: var_kind, reason: var_reason, users: var_users, signing_key: var_signingKey, fingerprint: var_fingerprint, epoch: var_epoch, detail: var_detail};}
                 }
                 
                 impl SseDecode for crate::api::team::LkcTeamErrorKind {
@@ -1915,7 +2040,8 @@ return crate::api::team::LkcTeamError{kind: var_kind, reason: var_reason, users:
 13 => crate::api::team::LkcTeamErrorKind::StaleEpoch,
 14 => crate::api::team::LkcTeamErrorKind::Unkeyed,
 15 => crate::api::team::LkcTeamErrorKind::PromotionNeeded,
-16 => crate::api::team::LkcTeamErrorKind::Sync,
+16 => crate::api::team::LkcTeamErrorKind::RecoveryEpoch,
+17 => crate::api::team::LkcTeamErrorKind::Sync,
             _ => unreachable!("Invalid variant for LkcTeamErrorKind: {}", inner),
         };}
                 }
@@ -1956,14 +2082,16 @@ return crate::api::team::LkcTeamSnapshot{log: var_log, seq: var_seq, plain: var_
                 
                 impl SseDecode for crate::api::team::LkcTeamStatus {
                     // Codec=Sse (Serialization based), see doc to use other codecs
-                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_epoch = <i64>::sse_decode(deserializer);
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_name = <String>::sse_decode(deserializer);
+let mut var_role = <String>::sse_decode(deserializer);
+let mut var_epoch = <i64>::sse_decode(deserializer);
 let mut var_migrated = <bool>::sse_decode(deserializer);
 let mut var_rotationNeeded = <bool>::sse_decode(deserializer);
 let mut var_staleOwn = <bool>::sse_decode(deserializer);
 let mut var_mayCommit = <bool>::sse_decode(deserializer);
 let mut var_members = <Vec<crate::api::team::LkcMember>>::sse_decode(deserializer);
 let mut var_skippedEpochs = <Vec<i64>>::sse_decode(deserializer);
-return crate::api::team::LkcTeamStatus{epoch: var_epoch, migrated: var_migrated, rotation_needed: var_rotationNeeded, stale_own: var_staleOwn, may_commit: var_mayCommit, members: var_members, skipped_epochs: var_skippedEpochs};}
+return crate::api::team::LkcTeamStatus{name: var_name, role: var_role, epoch: var_epoch, migrated: var_migrated, rotation_needed: var_rotationNeeded, stale_own: var_staleOwn, may_commit: var_mayCommit, members: var_members, skipped_epochs: var_skippedEpochs};}
                 }
                 
                 impl SseDecode for Option<String> {
@@ -2138,41 +2266,47 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
 23 => wire__crate__api__lkc__LkcSync_read_log_impl(port, ptr, rust_vec_len, data_len),
 25 => wire__crate__api__lkc__LkcSync_upload_impl(port, ptr, rust_vec_len, data_len),
 26 => wire__crate__api__lkc__LkcSync_versions_impl(port, ptr, rust_vec_len, data_len),
-27 => wire__crate__api__team__LkcTeamKeys_accept_signing_key_impl(port, ptr, rust_vec_len, data_len),
-28 => wire__crate__api__team__LkcTeamKeys_commit_first_impl(port, ptr, rust_vec_len, data_len),
-29 => wire__crate__api__team__LkcTeamKeys_create_invite_impl(port, ptr, rust_vec_len, data_len),
-30 => wire__crate__api__team__LkcTeamKeys_forget_team_impl(port, ptr, rust_vec_len, data_len),
-31 => wire__crate__api__team__LkcTeamKeys_grant_impl(port, ptr, rust_vec_len, data_len),
-32 => wire__crate__api__team__LkcTeamKeys_join_impl(port, ptr, rust_vec_len, data_len),
-33 => wire__crate__api__team__LkcTeamKeys_reencrypt_impl(port, ptr, rust_vec_len, data_len),
-34 => wire__crate__api__team__LkcTeamKeys_rewrap_teams_impl(port, ptr, rust_vec_len, data_len),
-35 => wire__crate__api__team__LkcTeamKeys_rotate_impl(port, ptr, rust_vec_len, data_len),
-36 => wire__crate__api__team__LkcTeamKeys_set_role_impl(port, ptr, rust_vec_len, data_len),
-37 => wire__crate__api__team__LkcTeamKeys_space_impl(port, ptr, rust_vec_len, data_len),
-38 => wire__crate__api__team__LkcTeamKeys_status_impl(port, ptr, rust_vec_len, data_len),
-39 => wire__crate__api__team__LkcTeamKeys_transfer_impl(port, ptr, rust_vec_len, data_len),
-41 => wire__crate__api__team__LkcTeamSpace_append_impl(port, ptr, rust_vec_len, data_len),
-42 => wire__crate__api__team__LkcTeamSpace_delete_impl(port, ptr, rust_vec_len, data_len),
-43 => wire__crate__api__team__LkcTeamSpace_epoch_impl(port, ptr, rust_vec_len, data_len),
-44 => wire__crate__api__team__LkcTeamSpace_list_impl(port, ptr, rust_vec_len, data_len),
-46 => wire__crate__api__team__LkcTeamSpace_put_snapshot_impl(port, ptr, rust_vec_len, data_len),
-47 => wire__crate__api__team__LkcTeamSpace_read_impl(port, ptr, rust_vec_len, data_len),
-48 => wire__crate__api__team__LkcTeamSpace_read_log_impl(port, ptr, rust_vec_len, data_len),
-49 => wire__crate__api__team__LkcTeamSpace_refresh_impl(port, ptr, rust_vec_len, data_len),
-50 => wire__crate__api__team__LkcTeamSpace_snapshot_impl(port, ptr, rust_vec_len, data_len),
-52 => wire__crate__api__team__LkcTeamSpace_write_impl(port, ptr, rust_vec_len, data_len),
-53 => wire__crate__api__team__LkcTeams_account_key_impl(port, ptr, rust_vec_len, data_len),
-54 => wire__crate__api__team__LkcTeams_change_key_passphrase_impl(port, ptr, rust_vec_len, data_len),
-55 => wire__crate__api__team__LkcTeams_create_impl(port, ptr, rust_vec_len, data_len),
-56 => wire__crate__api__team__LkcTeams_delete_impl(port, ptr, rust_vec_len, data_len),
-57 => wire__crate__api__team__LkcTeams_fetch_account_key_impl(port, ptr, rust_vec_len, data_len),
-58 => wire__crate__api__team__LkcTeams_invite_impl(port, ptr, rust_vec_len, data_len),
-59 => wire__crate__api__team__LkcTeams_list_impl(port, ptr, rust_vec_len, data_len),
-61 => wire__crate__api__team__LkcTeams_open_impl(port, ptr, rust_vec_len, data_len),
-62 => wire__crate__api__team__LkcTeams_rotate_account_key_impl(port, ptr, rust_vec_len, data_len),
-66 => wire__crate__api__lkc__lkc_sync_event_default_impl(port, ptr, rust_vec_len, data_len),
-69 => wire__crate__api__theme__prepare_theme_files_impl(port, ptr, rust_vec_len, data_len),
-70 => wire__crate__api__theme__prepare_theme_package_impl(port, ptr, rust_vec_len, data_len),
+27 => wire__crate__api__team__LkcTeamKeys_accept_recovery_impl(port, ptr, rust_vec_len, data_len),
+28 => wire__crate__api__team__LkcTeamKeys_accept_signing_key_impl(port, ptr, rust_vec_len, data_len),
+29 => wire__crate__api__team__LkcTeamKeys_approve_impl(port, ptr, rust_vec_len, data_len),
+30 => wire__crate__api__team__LkcTeamKeys_commit_first_impl(port, ptr, rust_vec_len, data_len),
+31 => wire__crate__api__team__LkcTeamKeys_create_invite_impl(port, ptr, rust_vec_len, data_len),
+32 => wire__crate__api__team__LkcTeamKeys_forget_team_impl(port, ptr, rust_vec_len, data_len),
+33 => wire__crate__api__team__LkcTeamKeys_grant_impl(port, ptr, rust_vec_len, data_len),
+34 => wire__crate__api__team__LkcTeamKeys_join_impl(port, ptr, rust_vec_len, data_len),
+35 => wire__crate__api__team__LkcTeamKeys_leave_impl(port, ptr, rust_vec_len, data_len),
+36 => wire__crate__api__team__LkcTeamKeys_mark_compared_impl(port, ptr, rust_vec_len, data_len),
+37 => wire__crate__api__team__LkcTeamKeys_reencrypt_impl(port, ptr, rust_vec_len, data_len),
+38 => wire__crate__api__team__LkcTeamKeys_remove_member_impl(port, ptr, rust_vec_len, data_len),
+39 => wire__crate__api__team__LkcTeamKeys_rewrap_teams_impl(port, ptr, rust_vec_len, data_len),
+40 => wire__crate__api__team__LkcTeamKeys_rotate_impl(port, ptr, rust_vec_len, data_len),
+41 => wire__crate__api__team__LkcTeamKeys_set_role_impl(port, ptr, rust_vec_len, data_len),
+42 => wire__crate__api__team__LkcTeamKeys_space_impl(port, ptr, rust_vec_len, data_len),
+43 => wire__crate__api__team__LkcTeamKeys_status_impl(port, ptr, rust_vec_len, data_len),
+44 => wire__crate__api__team__LkcTeamKeys_transfer_impl(port, ptr, rust_vec_len, data_len),
+46 => wire__crate__api__team__LkcTeamSpace_append_impl(port, ptr, rust_vec_len, data_len),
+47 => wire__crate__api__team__LkcTeamSpace_delete_impl(port, ptr, rust_vec_len, data_len),
+48 => wire__crate__api__team__LkcTeamSpace_epoch_impl(port, ptr, rust_vec_len, data_len),
+49 => wire__crate__api__team__LkcTeamSpace_list_impl(port, ptr, rust_vec_len, data_len),
+51 => wire__crate__api__team__LkcTeamSpace_put_snapshot_impl(port, ptr, rust_vec_len, data_len),
+52 => wire__crate__api__team__LkcTeamSpace_read_impl(port, ptr, rust_vec_len, data_len),
+53 => wire__crate__api__team__LkcTeamSpace_read_log_impl(port, ptr, rust_vec_len, data_len),
+54 => wire__crate__api__team__LkcTeamSpace_refresh_impl(port, ptr, rust_vec_len, data_len),
+55 => wire__crate__api__team__LkcTeamSpace_snapshot_impl(port, ptr, rust_vec_len, data_len),
+57 => wire__crate__api__team__LkcTeamSpace_write_impl(port, ptr, rust_vec_len, data_len),
+58 => wire__crate__api__team__LkcTeams_account_key_impl(port, ptr, rust_vec_len, data_len),
+59 => wire__crate__api__team__LkcTeams_change_key_passphrase_impl(port, ptr, rust_vec_len, data_len),
+60 => wire__crate__api__team__LkcTeams_create_impl(port, ptr, rust_vec_len, data_len),
+61 => wire__crate__api__team__LkcTeams_delete_impl(port, ptr, rust_vec_len, data_len),
+62 => wire__crate__api__team__LkcTeams_fetch_account_key_impl(port, ptr, rust_vec_len, data_len),
+63 => wire__crate__api__team__LkcTeams_has_account_key_impl(port, ptr, rust_vec_len, data_len),
+64 => wire__crate__api__team__LkcTeams_invite_impl(port, ptr, rust_vec_len, data_len),
+65 => wire__crate__api__team__LkcTeams_list_impl(port, ptr, rust_vec_len, data_len),
+67 => wire__crate__api__team__LkcTeams_open_impl(port, ptr, rust_vec_len, data_len),
+68 => wire__crate__api__team__LkcTeams_rotate_account_key_impl(port, ptr, rust_vec_len, data_len),
+72 => wire__crate__api__lkc__lkc_sync_event_default_impl(port, ptr, rust_vec_len, data_len),
+75 => wire__crate__api__theme__prepare_theme_files_impl(port, ptr, rust_vec_len, data_len),
+76 => wire__crate__api__theme__prepare_theme_package_impl(port, ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
                 }
@@ -2195,26 +2329,26 @@ return crate::api::theme::ThemeVariantInfo{key: var_key, name: var_name};}
 20 => wire__crate__api__lkc__LkcSync_new_impl(ptr, rust_vec_len, data_len),
 21 => wire__crate__api__lkc__LkcSync_offset_ms_impl(ptr, rust_vec_len, data_len),
 24 => wire__crate__api__lkc__LkcSync_stop_listening_impl(ptr, rust_vec_len, data_len),
-40 => wire__crate__api__team__LkcTeamKeys_with_key_impl(ptr, rust_vec_len, data_len),
-45 => wire__crate__api__team__LkcTeamSpace_listen_impl(ptr, rust_vec_len, data_len),
-51 => wire__crate__api__team__LkcTeamSpace_stop_listening_impl(ptr, rust_vec_len, data_len),
-60 => wire__crate__api__team__LkcTeams_new_impl(ptr, rust_vec_len, data_len),
-63 => wire__crate__api__theme__check_theme_components_impl(ptr, rust_vec_len, data_len),
-64 => wire__crate__api__theme__compare_theme_versions_impl(ptr, rust_vec_len, data_len),
-65 => wire__crate__api__theme__installed_theme_variants_impl(ptr, rust_vec_len, data_len),
-67 => wire__crate__api__theme__parse_theme_catalog_impl(ptr, rust_vec_len, data_len),
-68 => wire__crate__api__theme__parse_theme_listing_impl(ptr, rust_vec_len, data_len),
-71 => wire__crate__api__theme__read_installed_icon_pack_impl(ptr, rust_vec_len, data_len),
-72 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
-73 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
-74 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
-75 => wire__crate__api__sync__sync_blob_name_impl(ptr, rust_vec_len, data_len),
-76 => wire__crate__api__sync__sync_later_impl(ptr, rust_vec_len, data_len),
-77 => wire__crate__api__sync__sync_stamp_of_impl(ptr, rust_vec_len, data_len),
-78 => wire__crate__api__sync__sync_tick_impl(ptr, rust_vec_len, data_len),
-79 => wire__crate__api__sync__sync_winners_impl(ptr, rust_vec_len, data_len),
-80 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
-81 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
+45 => wire__crate__api__team__LkcTeamKeys_with_key_impl(ptr, rust_vec_len, data_len),
+50 => wire__crate__api__team__LkcTeamSpace_listen_impl(ptr, rust_vec_len, data_len),
+56 => wire__crate__api__team__LkcTeamSpace_stop_listening_impl(ptr, rust_vec_len, data_len),
+66 => wire__crate__api__team__LkcTeams_new_impl(ptr, rust_vec_len, data_len),
+69 => wire__crate__api__theme__check_theme_components_impl(ptr, rust_vec_len, data_len),
+70 => wire__crate__api__theme__compare_theme_versions_impl(ptr, rust_vec_len, data_len),
+71 => wire__crate__api__theme__installed_theme_variants_impl(ptr, rust_vec_len, data_len),
+73 => wire__crate__api__theme__parse_theme_catalog_impl(ptr, rust_vec_len, data_len),
+74 => wire__crate__api__theme__parse_theme_listing_impl(ptr, rust_vec_len, data_len),
+77 => wire__crate__api__theme__read_installed_icon_pack_impl(ptr, rust_vec_len, data_len),
+78 => wire__crate__api__theme__read_installed_theme_impl(ptr, rust_vec_len, data_len),
+79 => wire__crate__api__theme__read_theme_repo_impl(ptr, rust_vec_len, data_len),
+80 => wire__crate__api__theme__read_theme_repo_archive_impl(ptr, rust_vec_len, data_len),
+81 => wire__crate__api__sync__sync_blob_name_impl(ptr, rust_vec_len, data_len),
+82 => wire__crate__api__sync__sync_later_impl(ptr, rust_vec_len, data_len),
+83 => wire__crate__api__sync__sync_stamp_of_impl(ptr, rust_vec_len, data_len),
+84 => wire__crate__api__sync__sync_tick_impl(ptr, rust_vec_len, data_len),
+85 => wire__crate__api__sync__sync_winners_impl(ptr, rust_vec_len, data_len),
+86 => wire__crate__api__theme__theme_format_impl(ptr, rust_vec_len, data_len),
+87 => wire__crate__api__theme__theme_repo_archive_url_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
                 }
@@ -2405,6 +2539,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::lkc::LkcFetched> for crate::a
                     [
                     self.id.into_into_dart().into_dart(),
 self.token.into_into_dart().into_dart(),
+self.url.into_into_dart().into_dart(),
 self.secret.into_into_dart().into_dart(),
 self.expires_at.into_into_dart().into_dart()
                 ].into_dart()
@@ -2479,7 +2614,10 @@ self.approved.into_into_dart().into_dart(),
 self.keyed.into_into_dart().into_dart(),
 self.fingerprint.into_into_dart().into_dart(),
 self.attested.into_into_dart().into_dart(),
-self.changed.into_into_dart().into_dart()
+self.changed.into_into_dart().into_dart(),
+self.signing_key.into_into_dart().into_dart(),
+self.compared.into_into_dart().into_dart(),
+self.previous_fingerprint.into_into_dart().into_dart()
                 ].into_dart()
                 }
             }
@@ -2661,6 +2799,7 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::team::LkcTeam> for crate::api
 self.reason.into_into_dart().into_dart(),
 self.users.into_into_dart().into_dart(),
 self.signing_key.into_into_dart().into_dart(),
+self.fingerprint.into_into_dart().into_dart(),
 self.epoch.into_into_dart().into_dart(),
 self.detail.into_into_dart().into_dart()
                 ].into_dart()
@@ -2692,7 +2831,8 @@ Self::AccountKeyReplaced => 12.into_dart(),
 Self::StaleEpoch => 13.into_dart(),
 Self::Unkeyed => 14.into_dart(),
 Self::PromotionNeeded => 15.into_dart(),
-Self::Sync => 16.into_dart(),
+Self::RecoveryEpoch => 16.into_dart(),
+Self::Sync => 17.into_dart(),
                     _ => unreachable!(),
                 }
                 }
@@ -2773,7 +2913,9 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::team::LkcTeamSnapshot> for cr
             impl flutter_rust_bridge::IntoDart for crate::api::team::LkcTeamStatus {
                 fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
                     [
-                    self.epoch.into_into_dart().into_dart(),
+                    self.name.into_into_dart().into_dart(),
+self.role.into_into_dart().into_dart(),
+self.epoch.into_into_dart().into_dart(),
 self.migrated.into_into_dart().into_dart(),
 self.rotation_needed.into_into_dart().into_dart(),
 self.stale_own.into_into_dart().into_dart(),
@@ -3121,6 +3263,7 @@ crate::api::lkc::LkcFailure::Refused => { 7 }
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.id, serializer);
 <String>::sse_encode(self.token, serializer);
+<String>::sse_encode(self.url, serializer);
 <Option<String>>::sse_encode(self.secret, serializer);
 <String>::sse_encode(self.expires_at, serializer);}
                 }
@@ -3159,7 +3302,10 @@ crate::api::lkc::LkcFailure::Refused => { 7 }
 <bool>::sse_encode(self.keyed, serializer);
 <Option<String>>::sse_encode(self.fingerprint, serializer);
 <bool>::sse_encode(self.attested, serializer);
-<bool>::sse_encode(self.changed, serializer);}
+<bool>::sse_encode(self.changed, serializer);
+<Option<String>>::sse_encode(self.signing_key, serializer);
+<bool>::sse_encode(self.compared, serializer);
+<Option<String>>::sse_encode(self.previous_fingerprint, serializer);}
                 }
                 
                 impl SseEncode for crate::api::team::LkcReencrypted {
@@ -3251,6 +3397,7 @@ crate::api::lkc::LkcSyncErrorKind::Invalid => { 9 }
 <Option<String>>::sse_encode(self.reason, serializer);
 <Vec<String>>::sse_encode(self.users, serializer);
 <Option<String>>::sse_encode(self.signing_key, serializer);
+<Option<String>>::sse_encode(self.fingerprint, serializer);
 <Option<i64>>::sse_encode(self.epoch, serializer);
 <String>::sse_encode(self.detail, serializer);}
                 }
@@ -3273,7 +3420,8 @@ crate::api::team::LkcTeamErrorKind::AccountKeyReplaced => { 12 }
 crate::api::team::LkcTeamErrorKind::StaleEpoch => { 13 }
 crate::api::team::LkcTeamErrorKind::Unkeyed => { 14 }
 crate::api::team::LkcTeamErrorKind::PromotionNeeded => { 15 }
-crate::api::team::LkcTeamErrorKind::Sync => { 16 }
+crate::api::team::LkcTeamErrorKind::RecoveryEpoch => { 16 }
+crate::api::team::LkcTeamErrorKind::Sync => { 17 }
  _ => { unimplemented!(""); }}, serializer);}
                 }
                 
@@ -3309,7 +3457,9 @@ crate::api::team::LkcTeamErrorKind::Sync => { 16 }
                 
                 impl SseEncode for crate::api::team::LkcTeamStatus {
                     // Codec=Sse (Serialization based), see doc to use other codecs
-                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<i64>::sse_encode(self.epoch, serializer);
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.name, serializer);
+<String>::sse_encode(self.role, serializer);
+<i64>::sse_encode(self.epoch, serializer);
 <bool>::sse_encode(self.migrated, serializer);
 <bool>::sse_encode(self.rotation_needed, serializer);
 <bool>::sse_encode(self.stale_own, serializer);
@@ -3464,8 +3614,8 @@ crate::api::team::LkcTeamErrorKind::Sync => { 16 }
 
 // Section: imports
 
-use crate::api::team::*;
-use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::lkc::*;
+use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};use super::*;
 

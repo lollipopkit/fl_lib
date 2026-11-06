@@ -185,16 +185,15 @@ impl TeamKey {
         mac_eq(&self.attest(team, epoch, user_id, recipient, signing_key), mac, "an attestation")
     }
 
-    /// The commit MAC of [next] (epoch [epoch]), this the key before it.
-    pub fn commit_mac(&self, team: &[u8; 16], epoch: i64, next: &[u8; KEY_LEN]) -> [u8; KEY_LEN] {
+    /// The commit MAC of an epoch's [commit] message ([commit_message]),
+    /// this the key of the epoch before.
+    pub fn commit_mac(&self, commit: &[u8]) -> [u8; KEY_LEN] {
         let key = blake3::derive_key(CTX_COMMIT_MAC, self.0.as_ref());
-        let mut m = Message::new(team, epoch);
-        m.raw(next);
-        *blake3::keyed_hash(&key, &m.0).as_bytes()
+        *blake3::keyed_hash(&key, commit).as_bytes()
     }
 
-    pub fn verify_commit_mac(&self, team: &[u8; 16], epoch: i64, next: &[u8; KEY_LEN], mac: &[u8]) -> Result<(), CryptoError> {
-        mac_eq(&self.commit_mac(team, epoch, next), mac, "a commit MAC")
+    pub fn verify_commit_mac(&self, commit: &[u8], mac: &[u8]) -> Result<(), CryptoError> {
+        mac_eq(&self.commit_mac(commit), mac, "a commit MAC")
     }
 }
 
@@ -295,6 +294,44 @@ pub fn invite_message(team: &[u8; 16], epoch: i64, key_id: &[u8; KEY_LEN], signe
 pub fn role_message(team: &[u8; 16], epoch: i64, key_id: &[u8; KEY_LEN], signer: &str, user_id: &str, role: &str, signing_key: &[u8; KEY_LEN]) -> Vec<u8> {
     let mut m = Message::tagged(TAG_ROLE, team, epoch);
     m.raw(key_id).str(signer).str(user_id).str(role).raw(signing_key);
+    m.0
+}
+
+/// What a user's key record signs: their [seq]th keys, following
+/// [prev_signing_key] (the record before's, or [NO_KEY] for the first). The
+/// record's own key signs it, and the key before too, unless a reset.
+pub fn user_key_message(user_id: &str, seq: i64, recipient: &str, signing_key: &[u8; KEY_LEN], prev_signing_key: &[u8; KEY_LEN]) -> Vec<u8> {
+    let mut m = Message(b"lkc user v1 key\0".to_vec());
+    m.str(user_id).raw(&seq.to_be_bytes()).str(recipient).raw(signing_key).raw(prev_signing_key);
+    m.0
+}
+
+/// A synced write's owner: a user's id, or `team:{id}`.
+fn sync_head(tag: &[u8], owner: &str, app: &str) -> Message {
+    let mut m = Message(tag.to_vec());
+    m.str(owner).str(app);
+    m
+}
+
+/// What a file's version signs: its [name], [epoch] (0 for one's own),
+/// [version] (rising per name) and the body's blake3.
+pub fn sync_file_message(owner: &str, app: &str, name: &str, epoch: i64, version: i64, digest: &[u8; KEY_LEN]) -> Vec<u8> {
+    let mut m = sync_head(b"lkc sync v1 file\0", owner, app);
+    m.str(name).raw(&epoch.to_be_bytes()).raw(&version.to_be_bytes()).raw(digest);
+    m.0
+}
+
+/// What a log batch signs: [epoch], the body's blake3, its idempotency [key].
+pub fn sync_batch_message(owner: &str, app: &str, epoch: i64, digest: &[u8; KEY_LEN], key: &str) -> Vec<u8> {
+    let mut m = sync_head(b"lkc sync v1 batch\0", owner, app);
+    m.raw(&epoch.to_be_bytes()).raw(digest).str(key);
+    m.0
+}
+
+/// What a log snapshot signs: [epoch], the [seq] it covers, the body's blake3.
+pub fn sync_snapshot_message(owner: &str, app: &str, epoch: i64, seq: i64, digest: &[u8; KEY_LEN]) -> Vec<u8> {
+    let mut m = sync_head(b"lkc sync v1 snapshot\0", owner, app);
+    m.raw(&epoch.to_be_bytes()).raw(&seq.to_be_bytes()).raw(digest);
     m.0
 }
 
@@ -425,11 +462,10 @@ mod tests {
         assert_ne!(k.attest(&TEAM, 3, "u1a", "ge1x", &sk), mac);
         assert!(TeamKey::generate().verify_attestation(&TEAM, 3, "u1", "age1x", &sk, &mac).is_err());
 
-        let next = TeamKey::generate();
-        let cm = k.commit_mac(&TEAM, 4, &next.id());
-        k.verify_commit_mac(&TEAM, 4, &next.id(), &cm).unwrap();
-        assert!(k.verify_commit_mac(&TEAM, 5, &next.id(), &cm).is_err());
-        assert!(k.verify_commit_mac(&TEAM, 4, &next.id(), &cm[..31]).is_err());
+        let cm = k.commit_mac(b"commit 4");
+        k.verify_commit_mac(b"commit 4", &cm).unwrap();
+        assert!(k.verify_commit_mac(b"commit 5", &cm).is_err());
+        assert!(k.verify_commit_mac(b"commit 4", &cm[..31]).is_err());
     }
 
     #[test]
@@ -488,6 +524,34 @@ mod tests {
         want.extend_from_slice(b"\0\0\0\x01a\0\0\0\x01b\0\0\0\x05admin");
         want.extend_from_slice(&[5; 32]);
         assert_eq!(r, want);
+    }
+
+    /// Homebase's signatures of its fixed messages (`homebase-db`
+    /// `team::tests::vectors`), each by the key of seed `[1; 32]`.
+    #[test]
+    fn signatures_match_homebase() {
+        let key = |seed: u8| signing_key(&[seed; 32]);
+        let public = |seed: u8| key(seed).verifying_key().to_bytes();
+        let digest = *blake3::hash(b"hello").as_bytes();
+        let owner = "team:00000000-0000-0000-0000-000000000001";
+        let recipient = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p";
+        let messages = [
+            user_key_message("user-1", 1, recipient, &public(1), &NO_KEY),
+            user_key_message("user-1", 2, recipient, &public(1), &public(2)),
+            sync_file_message(owner, "serverbox", "backup.age", 3, 7, &digest),
+            sync_batch_message(owner, "serverbox", 3, &digest, "idem-key-0000001"),
+            sync_snapshot_message(owner, "serverbox", 3, 42, &digest),
+        ];
+        let want = [
+            "878033e33d6d720a76f005b948a9df27fc6293d80eeda8e2a0677b98a3d6a6e23db6b01bcce750ffd6492aedb78be184ba71c81c1a27640dd04f283832af7308",
+            "e6360160769490209350f800fae850fc3a73d545f4b3ccc2b2af6361987fe1ffb6891b0096aa5fd9867b3d9820a38bb503775ccc3b4e16f7a43ec5fa2243cf0e",
+            "a7e11feb9002130f43c207ab15e75c337766c270ce577169278d5d7c8984319b2003c4bbb22c2a456a222745adb2a86dc5732d941f8614456aac8bfdd4652a0e",
+            "1c2214faee58d0c43fb6ddc1acecd25f75f3a39a580ca48760fa1444809beeb22edd8afb0380208e2deb4c5449912bf3c8dc7ad5219bbf1707439dd81d0bd00f",
+            "35ec72198642ce7a01e389c07eb05cadd6bb93d253fcf9ff8f2a2e0c81bf954320998ca965cd6c00384d172e3612214c7404cf456df026087d987de4e3d53104",
+        ];
+        for (m, want) in messages.iter().zip(want) {
+            assert_eq!(hex(&sign(&key(1), m)), want);
+        }
     }
 
     #[test]

@@ -190,6 +190,7 @@ impl From<fl_lkc::sync::Error> for LkcSyncError {
             Kind::TooLarge => (LkcSyncErrorKind::TooLarge, None),
             Kind::NotAge => (LkcSyncErrorKind::NotAge, None),
             Kind::Refused(r) => (LkcSyncErrorKind::Refused, Some(r).filter(|r| !r.is_empty())),
+            Kind::Version(_) => (LkcSyncErrorKind::Refused, Some("sync_version".into())),
             Kind::Busy => (LkcSyncErrorKind::Busy, None),
             Kind::StaleEpoch(_) => (LkcSyncErrorKind::StaleEpoch, None),
             Kind::SignedOut => (LkcSyncErrorKind::SignedOut, None),

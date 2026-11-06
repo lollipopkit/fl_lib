@@ -1402,6 +1402,298 @@ class LibLocalizationsZh extends LibLocalizations {
   String themeStoreDeleteIconPack(String name) {
     return '删除“$name”？其文件将从本机移除。如果它正在使用中，应用将改用主题自带的图标。';
   }
+
+  @override
+  String get lkcTeams => '团队';
+
+  @override
+  String get lkcTeamNew => '新建团队';
+
+  @override
+  String get lkcTeamName => '团队名称';
+
+  @override
+  String get lkcTeamNone => '还没有团队';
+
+  @override
+  String lkcTeamEpoch(int epoch) {
+    return 'epoch $epoch';
+  }
+
+  @override
+  String lkcTeamMemberCount(int count) {
+    return '$count 位成员';
+  }
+
+  @override
+  String lkcTeamKeyedCount(int count) {
+    return '$count 位持有密钥';
+  }
+
+  @override
+  String get lkcTeamRotationNeeded => '需要轮换';
+
+  @override
+  String get lkcTeamAwaitingKey => '等待授钥';
+
+  @override
+  String get lkcTeamMembersAwaitingKey => '有成员待授钥';
+
+  @override
+  String get lkcTeamKeyChanged => '签名公钥变化';
+
+  @override
+  String get lkcTeamKeyChanges => '有密钥变化待确认';
+
+  @override
+  String get lkcTeamHoldsKey => '已持有密钥';
+
+  @override
+  String get lkcTeamMigrating => '迁移中';
+
+  @override
+  String get lkcTeamMigrated => '已全部迁移到当前 epoch';
+
+  @override
+  String get lkcTeamFirstKeyDue => '待首次提交';
+
+  @override
+  String get lkcTeamStopped => '已停止使用';
+
+  @override
+  String get lkcTeamWaitingApproval => '等待批准';
+
+  @override
+  String get lkcTeamKeyPassword => 'LK Cloud 密钥密码';
+
+  @override
+  String get lkcTeamSetKeyPassword => '设置 LK Cloud 密钥密码';
+
+  @override
+  String get lkcTeamSetKeyPasswordTip => '本账号的所有 app 都用它打开团队。密码丢失后无法找回。';
+
+  @override
+  String get lkcTeamUnlockTitle => '解锁账号密钥';
+
+  @override
+  String get lkcTeamUnlock => '解锁';
+
+  @override
+  String get lkcTeamRepeat => '再次输入';
+
+  @override
+  String get lkcTeamWrongPassword => '密码错误';
+
+  @override
+  String get lkcTeamPasswordMismatch => '两次输入不一致';
+
+  @override
+  String get lkcTeamPasswordShort => '至少 8 个字符';
+
+  @override
+  String get lkcTeamLock => '锁定';
+
+  @override
+  String get lkcTeamInvite => '邀请';
+
+  @override
+  String get lkcTeamRotate => '轮换密钥';
+
+  @override
+  String get lkcTeamGrant => '授钥';
+
+  @override
+  String get lkcTeamPromote => '设为 admin';
+
+  @override
+  String get lkcTeamDemote => '降为成员';
+
+  @override
+  String get lkcTeamTransfer => '转让 owner';
+
+  @override
+  String get lkcTeamRemove => '移出团队';
+
+  @override
+  String get lkcTeamLeave => '退出团队';
+
+  @override
+  String get lkcTeamApprove => '批准';
+
+  @override
+  String get lkcTeamCompare => '核对指纹';
+
+  @override
+  String get lkcTeamFingerprint => '指纹';
+
+  @override
+  String lkcTeamComparedCheck(String name) {
+    return '与 $name 当面或通过其他可信渠道核对，全部一致';
+  }
+
+  @override
+  String get lkcTeamCompared => '已核对';
+
+  @override
+  String get lkcTeamNotCompared => '未核对';
+
+  @override
+  String get lkcTeamMe => '我';
+
+  @override
+  String get lkcTeamRoleOwner => 'owner';
+
+  @override
+  String get lkcTeamRoleAdmin => 'admin';
+
+  @override
+  String get lkcTeamRoleMember => '成员';
+
+  @override
+  String lkcTeamKeyChangedTitle(String name) {
+    return '$name 的签名公钥已变化';
+  }
+
+  @override
+  String get lkcTeamKeyChangedTip => '对方可能更换了设备或密钥，也可能是服务器在冒充。';
+
+  @override
+  String get lkcTeamPrevious => '之前核对的';
+
+  @override
+  String get lkcTeamCurrent => '现在的';
+
+  @override
+  String get lkcTeamTrustNew => '确认是本人更换';
+
+  @override
+  String get lkcTeamDontTrust => '暂不信任';
+
+  @override
+  String get lkcTeamInviteDays => '有效期';
+
+  @override
+  String get lkcTeamInviteUses => '可用次数';
+
+  @override
+  String lkcTeamDays(int count) {
+    return '$count 天';
+  }
+
+  @override
+  String get lkcTeamInviteWithKey => '链接带密钥';
+
+  @override
+  String get lkcTeamInviteWithoutKey => '不带密钥';
+
+  @override
+  String get lkcTeamCreateLink => '生成链接';
+
+  @override
+  String get lkcTeamInviteLink => '邀请链接';
+
+  @override
+  String get lkcTeamInviteSecretTip => '# 后面的部分不会发给服务器，只能通过可信渠道发送。';
+
+  @override
+  String lkcTeamInviteTerms(String date, int uses) {
+    return '有效期至 $date · 可用 $uses 次';
+  }
+
+  @override
+  String get lkcTeamRotating => '生成并分发新密钥';
+
+  @override
+  String get lkcTeamReencrypting => '重新加密';
+
+  @override
+  String lkcTeamRotated(int epoch) {
+    return '已轮换到 epoch $epoch';
+  }
+
+  @override
+  String get lkcTeamSnapshotNeeded => '日志将在下次同步时重新加密';
+
+  @override
+  String lkcTeamUnreadable(int count) {
+    return '$count 个文件需要由其他管理员的设备重新加密';
+  }
+
+  @override
+  String get lkcTeamPromotionNeeded => '需要先由 owner 提升，才能轮换密钥';
+
+  @override
+  String get lkcTeamUntrusted => '服务器返回的数据校验失败（epoch 回退或签名无效），已停止使用该团队';
+
+  @override
+  String get lkcTeamRefetch => '重新获取';
+
+  @override
+  String lkcTeamUnconfirmed(String names) {
+    return '请先核对 $names 的指纹';
+  }
+
+  @override
+  String lkcTeamNoRecipient(String names) {
+    return '$names 还没有打开账号密钥';
+  }
+
+  @override
+  String get lkcTeamKeyReplaced => '其他设备更换了账号密钥，请重新解锁';
+
+  @override
+  String get lkcTeamFirstKey => '核对全部成员的指纹后首次提交';
+
+  @override
+  String get lkcTeamMakeFirstKey => '首次提交';
+
+  @override
+  String get lkcTeamAllMatch => '全部一致';
+
+  @override
+  String lkcTeamRemoveConfirm(String name) {
+    return '移出 $name？之后团队需要轮换密钥。';
+  }
+
+  @override
+  String lkcTeamLeaveConfirm(String name) {
+    return '退出 $name？';
+  }
+
+  @override
+  String lkcTeamTransferConfirm(String name) {
+    return '$name 将成为 owner，你将成为 admin。';
+  }
+
+  @override
+  String get lkcTeamRotateConfirm => '所有成员将获得新密钥，团队的文件会重新加密。';
+
+  @override
+  String get lkcTeamJoin => '加入团队';
+
+  @override
+  String get lkcTeamJoinLink => '邀请链接';
+
+  @override
+  String lkcTeamJoined(String name) {
+    return '已加入 $name';
+  }
+
+  @override
+  String lkcTeamSkippedEpochs(int count) {
+    return '$count 个早期 epoch 的数据在本设备无法读取';
+  }
+
+  @override
+  String lkcTeamRecoveryTitle(String name) {
+    return '$name 重置了团队密钥';
+  }
+
+  @override
+  String get lkcTeamRecoveryTip => '只有 owner 丢失了所有密钥时才会这样做。请先与对方确认，再接受。';
+
+  @override
+  String get lkcTeamAcceptRecovery => '接受';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -2801,4 +3093,296 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String themeStoreDeleteIconPack(String name) {
     return '刪除「$name」？其檔案將從本機移除。如果它正在使用中，應用程式將改用主題內建的圖示。';
   }
+
+  @override
+  String get lkcTeams => '團隊';
+
+  @override
+  String get lkcTeamNew => '新增團隊';
+
+  @override
+  String get lkcTeamName => '團隊名稱';
+
+  @override
+  String get lkcTeamNone => '還沒有團隊';
+
+  @override
+  String lkcTeamEpoch(int epoch) {
+    return 'epoch $epoch';
+  }
+
+  @override
+  String lkcTeamMemberCount(int count) {
+    return '$count 位成員';
+  }
+
+  @override
+  String lkcTeamKeyedCount(int count) {
+    return '$count 位持有金鑰';
+  }
+
+  @override
+  String get lkcTeamRotationNeeded => '需要輪換';
+
+  @override
+  String get lkcTeamAwaitingKey => '等待授予金鑰';
+
+  @override
+  String get lkcTeamMembersAwaitingKey => '有成員待授予金鑰';
+
+  @override
+  String get lkcTeamKeyChanged => '簽章公鑰已變更';
+
+  @override
+  String get lkcTeamKeyChanges => '有金鑰變更待確認';
+
+  @override
+  String get lkcTeamHoldsKey => '已持有金鑰';
+
+  @override
+  String get lkcTeamMigrating => '遷移中';
+
+  @override
+  String get lkcTeamMigrated => '已全部遷移到目前 epoch';
+
+  @override
+  String get lkcTeamFirstKeyDue => '待首次提交';
+
+  @override
+  String get lkcTeamStopped => '已停止使用';
+
+  @override
+  String get lkcTeamWaitingApproval => '等待核准';
+
+  @override
+  String get lkcTeamKeyPassword => 'LK Cloud 金鑰密碼';
+
+  @override
+  String get lkcTeamSetKeyPassword => '設定 LK Cloud 金鑰密碼';
+
+  @override
+  String get lkcTeamSetKeyPasswordTip => '本帳號的所有 app 都用它開啟團隊。密碼遺失後無法找回。';
+
+  @override
+  String get lkcTeamUnlockTitle => '解鎖帳號金鑰';
+
+  @override
+  String get lkcTeamUnlock => '解鎖';
+
+  @override
+  String get lkcTeamRepeat => '再次輸入';
+
+  @override
+  String get lkcTeamWrongPassword => '密碼錯誤';
+
+  @override
+  String get lkcTeamPasswordMismatch => '兩次輸入不一致';
+
+  @override
+  String get lkcTeamPasswordShort => '至少 8 個字元';
+
+  @override
+  String get lkcTeamLock => '鎖定';
+
+  @override
+  String get lkcTeamInvite => '邀請';
+
+  @override
+  String get lkcTeamRotate => '輪換金鑰';
+
+  @override
+  String get lkcTeamGrant => '授予金鑰';
+
+  @override
+  String get lkcTeamPromote => '設為 admin';
+
+  @override
+  String get lkcTeamDemote => '降為成員';
+
+  @override
+  String get lkcTeamTransfer => '轉讓 owner';
+
+  @override
+  String get lkcTeamRemove => '移出團隊';
+
+  @override
+  String get lkcTeamLeave => '退出團隊';
+
+  @override
+  String get lkcTeamApprove => '核准';
+
+  @override
+  String get lkcTeamCompare => '核對指紋';
+
+  @override
+  String get lkcTeamFingerprint => '指紋';
+
+  @override
+  String lkcTeamComparedCheck(String name) {
+    return '與 $name 當面或透過其他可信管道核對，全部一致';
+  }
+
+  @override
+  String get lkcTeamCompared => '已核對';
+
+  @override
+  String get lkcTeamNotCompared => '未核對';
+
+  @override
+  String get lkcTeamMe => '我';
+
+  @override
+  String get lkcTeamRoleOwner => 'owner';
+
+  @override
+  String get lkcTeamRoleAdmin => 'admin';
+
+  @override
+  String get lkcTeamRoleMember => '成員';
+
+  @override
+  String lkcTeamKeyChangedTitle(String name) {
+    return '$name 的簽章公鑰已變更';
+  }
+
+  @override
+  String get lkcTeamKeyChangedTip => '對方可能更換了裝置或金鑰，也可能是伺服器在冒充。';
+
+  @override
+  String get lkcTeamPrevious => '之前核對的';
+
+  @override
+  String get lkcTeamCurrent => '現在的';
+
+  @override
+  String get lkcTeamTrustNew => '確認是本人更換';
+
+  @override
+  String get lkcTeamDontTrust => '暫不信任';
+
+  @override
+  String get lkcTeamInviteDays => '有效期';
+
+  @override
+  String get lkcTeamInviteUses => '可用次數';
+
+  @override
+  String lkcTeamDays(int count) {
+    return '$count 天';
+  }
+
+  @override
+  String get lkcTeamInviteWithKey => '連結帶金鑰';
+
+  @override
+  String get lkcTeamInviteWithoutKey => '不帶金鑰';
+
+  @override
+  String get lkcTeamCreateLink => '產生連結';
+
+  @override
+  String get lkcTeamInviteLink => '邀請連結';
+
+  @override
+  String get lkcTeamInviteSecretTip => '# 後面的部分不會傳給伺服器，只能透過可信管道傳送。';
+
+  @override
+  String lkcTeamInviteTerms(String date, int uses) {
+    return '有效期至 $date · 可用 $uses 次';
+  }
+
+  @override
+  String get lkcTeamRotating => '產生並分發新金鑰';
+
+  @override
+  String get lkcTeamReencrypting => '重新加密';
+
+  @override
+  String lkcTeamRotated(int epoch) {
+    return '已輪換到 epoch $epoch';
+  }
+
+  @override
+  String get lkcTeamSnapshotNeeded => '日誌將在下次同步時重新加密';
+
+  @override
+  String lkcTeamUnreadable(int count) {
+    return '$count 個檔案需要由其他管理員的裝置重新加密';
+  }
+
+  @override
+  String get lkcTeamPromotionNeeded => '需要先由 owner 提升，才能輪換金鑰';
+
+  @override
+  String get lkcTeamUntrusted => '伺服器回傳的資料校驗失敗（epoch 回退或簽章無效），已停止使用該團隊';
+
+  @override
+  String get lkcTeamRefetch => '重新取得';
+
+  @override
+  String lkcTeamUnconfirmed(String names) {
+    return '請先核對 $names 的指紋';
+  }
+
+  @override
+  String lkcTeamNoRecipient(String names) {
+    return '$names 還沒有開啟帳號金鑰';
+  }
+
+  @override
+  String get lkcTeamKeyReplaced => '其他裝置更換了帳號金鑰，請重新解鎖';
+
+  @override
+  String get lkcTeamFirstKey => '核對全部成員的指紋後首次提交';
+
+  @override
+  String get lkcTeamMakeFirstKey => '首次提交';
+
+  @override
+  String get lkcTeamAllMatch => '全部一致';
+
+  @override
+  String lkcTeamRemoveConfirm(String name) {
+    return '移出 $name？之後團隊需要輪換金鑰。';
+  }
+
+  @override
+  String lkcTeamLeaveConfirm(String name) {
+    return '退出 $name？';
+  }
+
+  @override
+  String lkcTeamTransferConfirm(String name) {
+    return '$name 將成為 owner，你將成為 admin。';
+  }
+
+  @override
+  String get lkcTeamRotateConfirm => '所有成員將取得新金鑰，團隊的檔案會重新加密。';
+
+  @override
+  String get lkcTeamJoin => '加入團隊';
+
+  @override
+  String get lkcTeamJoinLink => '邀請連結';
+
+  @override
+  String lkcTeamJoined(String name) {
+    return '已加入 $name';
+  }
+
+  @override
+  String lkcTeamSkippedEpochs(int count) {
+    return '$count 個早期 epoch 的資料在本裝置無法讀取';
+  }
+
+  @override
+  String lkcTeamRecoveryTitle(String name) {
+    return '$name 重設了團隊金鑰';
+  }
+
+  @override
+  String get lkcTeamRecoveryTip => '只有 owner 遺失了所有金鑰時才會這樣做。請先與對方確認，再接受。';
+
+  @override
+  String get lkcTeamAcceptRecovery => '接受';
 }

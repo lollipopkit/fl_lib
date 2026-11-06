@@ -298,7 +298,7 @@ async fn a_page_is_read_from_the_cursor_with_its_digests_checked() {
     .await;
     let LogRead::Page { log, batches, head, more, .. } = sync.read_log(0, None, None).await.unwrap() else { panic!() };
     assert_eq!((log.as_deref(), head, more), (Some("6f1c"), 3, true));
-    assert_eq!(batches, vec![Batch { seq: 1, body: b"one".to_vec(), epoch: None }, Batch { seq: 2, body: b"two".to_vec(), epoch: None }]);
+    assert_eq!(batches, vec![Batch { seq: 1, body: b"one".to_vec(), epoch: None, idempotency_key: None, signed: None }, Batch { seq: 2, body: b"two".to_vec(), epoch: None, idempotency_key: None, signed: None }]);
     let LogRead::Page { batches, more, .. } = sync.read_log(2, Some("6f1c"), Some(1)).await.unwrap() else { panic!() };
     assert_eq!((batches.len(), more), (1, false));
 
@@ -331,7 +331,7 @@ async fn a_snapshot_is_written_at_its_seq_and_read_with_its_log() {
     assert_eq!(fake.requests("/v2/sync/serverbox/snapshot")[0].body, b"snap");
 
     let to = dir.path().join("got");
-    assert_eq!(sync.download_snapshot(&to).await.unwrap(), Some(Snapshot { log: "6f1c".into(), seq: 7 }));
+    assert_eq!(sync.download_snapshot(&to).await.unwrap(), Some(Snapshot { log: "6f1c".into(), seq: 7, signed: None }));
     assert_eq!(std::fs::read(&to).unwrap(), b"snap");
 
     let (_fake, sync) = homebase(|_| Response::status(404)).await;

@@ -11,6 +11,7 @@
 //! a key wrapped to a member no key holder attested, need the person to
 //! compare a [`crypto::fingerprint`].
 
+mod chain;
 pub mod crypto;
 pub mod identity;
 mod space;
@@ -33,6 +34,7 @@ use crate::{Failure, unreachable};
 use crypto::CryptoError;
 pub use space::{TeamLog, TeamSpace};
 pub use teams::{MemberView, Teams, TeamStatus};
+pub use chain::{Chain, Chains};
 pub use trust::{Keeper, Trust};
 pub use verify::Keyring;
 
@@ -58,8 +60,9 @@ pub enum TeamError {
     Untrusted(String),
     /// A signing key other than the newest [`Trust`] holds for this user:
     /// theirs changed (a rotation), or homebase is lying. The person compares
-    /// it ([`crypto::fingerprint`]) and accepts it, or not.
-    SigningKeyChanged { user_id: String, signing_key: String },
+    /// it ([`crypto::fingerprint`]: [fingerprint], when their key records
+    /// name the key's recipient) and accepts it, or not.
+    SigningKeyChanged { user_id: String, signing_key: String, fingerprint: Option<String> },
     /// Members whose keys no holder of the current key attested, nor the
     /// person confirmed by fingerprint: confirmed first, then asked again.
     Unconfirmed(Vec<String>),
@@ -72,6 +75,10 @@ pub enum TeamError {
     StaleEpoch(i64),
     /// Approved, holding no key yet: an admin's device grants one.
     Unkeyed,
+    /// An epoch the owner made when nobody with authority could, chained to
+    /// no key, under [signing_key] ([fingerprint] to compare): the person
+    /// accepts it ([Teams::accept_recovery]) or not.
+    RecoveryEpoch { epoch: i64, committed_by: String, signing_key: String, fingerprint: Option<String> },
     /// This account joined after the current epoch's commit: the next is
     /// made by one of its members, or after the owner's signed promotion
     /// ([Teams::set_role]).
@@ -142,6 +149,61 @@ pub(crate) fn unb64(s: &str, what: &str) -> Result<Vec<u8>, TeamError> {
 pub struct PublishedKey {
     pub recipient: Option<String>,
     pub signing_key: Option<String>,
+    /// What the next record names: its seq, and the key before it (the
+    /// chain's tail, base64).
+    #[serde(default)]
+    pub next_seq: i64,
+    #[serde(default)]
+    pub prev_signing_key: Option<String>,
+}
+
+/// One of a user's key records: their keys from [seq] on, signed by their
+/// own key and, unless a [reset], by the key before ([prev_signing_key]).
+/// [legacy]: seeded by homebase from before records were signed, unsigned.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct KeyRecord {
+    pub seq: i64,
+    pub recipient: String,
+    /// Base64.
+    pub signing_key: String,
+    pub prev_signing_key: Option<String>,
+    pub self_signature: Option<String>,
+    pub prev_signature: Option<String>,
+    pub reset: bool,
+    #[serde(default)]
+    pub legacy: bool,
+}
+
+#[derive(Deserialize)]
+struct RecordPage {
+    records: Vec<KeyRecord>,
+    #[serde(default)]
+    more: bool,
+}
+
+/// The keyed invite one joined by, signed by its maker.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct JoinInvite {
+    pub signed_by: String,
+    pub signer_key: String,
+    pub role: String,
+    pub recipient: String,
+    pub signature: String,
+}
+
+/// One who received an epoch's key after its commit: by an admin's grant
+/// ([via] `grant`), or by a keyed invite and their own grant (`invite`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Join {
+    pub user_id: String,
+    pub recipient: String,
+    pub signing_key: String,
+    pub via: String,
+    pub signed_by: String,
+    pub signer_key: String,
+    pub signature: String,
+    #[serde(default)]
+    pub invite: Option<JoinInvite>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -238,6 +300,13 @@ pub struct EpochRecord {
     /// Promotions signed during the epoch ([crypto::role_message]).
     #[serde(default)]
     pub roles: Vec<RoleGrant>,
+    /// Who received its key after the commit.
+    #[serde(default)]
+    pub joins: Vec<Join>,
+    /// Made by the owner when nobody with authority could commit, chained
+    /// to no key: taken only once the person accepts it.
+    #[serde(default)]
+    pub recovery: bool,
 }
 
 /// A promotion signed during an epoch: [signed_by] (under [signer_key])
@@ -338,7 +407,8 @@ pub enum Reencrypted {
     /// The space is of the current epoch, and homebase took it so.
     Migrated,
     /// These files are sealed under an epoch this device holds no key of
-    /// (left out as unchecked): another admin's device re-encrypts them.
+    /// (left out as unchecked), or not checked as written by one who could:
+    /// another admin's device re-encrypts them, or they are removed.
     Unreadable(Vec<String>),
     /// The files are; the log is not: the app writes a snapshot (sealed with
     /// the current key) up to the head, then asks again.
@@ -415,8 +485,25 @@ impl<S: Store> TeamClient<S> {
         self.call(Method::GET, "/v2/keys", None).await
     }
 
-    pub(crate) async fn set_user_key(&self, recipient: &str, signing_key: &str) -> Result<(), TeamError> {
-        self.call::<Value>(Method::PUT, "/v2/keys", Some(&serde_json::json!({ "recipient": recipient, "signing_key": signing_key }))).await.map(|_| ())
+    pub(crate) async fn put_user_key(&self, body: &Value) -> Result<(), TeamError> {
+        self.call::<Value>(Method::PUT, "/v2/keys", Some(body)).await.map(|_| ())
+    }
+
+    /// [user_id]'s key records after [since], every page.
+    pub async fn key_records(&self, user_id: &str, since: i64) -> Result<Vec<KeyRecord>, TeamError> {
+        let user = user_segment(user_id)?;
+        let mut records: Vec<KeyRecord> = Vec::new();
+        loop {
+            let after = records.last().map_or(since, |r| r.seq);
+            let page: RecordPage = self.call(Method::GET, &format!("/v2/keys/{user}/records?since={after}"), None).await?;
+            if page.records.first().is_some_and(|r| r.seq <= after) {
+                return Err(TeamError::Invalid("a page of key records not following the last".into()));
+            }
+            records.extend(page.records);
+            if !page.more {
+                return Ok(records);
+            }
+        }
     }
 
     // Teams.
@@ -483,6 +570,16 @@ impl<S: Store> TeamClient<S> {
             return Err(TeamError::NotFound);
         }
         self.call(Method::GET, &format!("/v2/teams/invites/{token}"), None).await
+    }
+
+    /// An invite's link, with its [secret] (the fragment) when it carries
+    /// the key: homebase's own page, which the apps open too.
+    pub fn invite_url(&self, token: &str, secret: Option<&str>) -> String {
+        let link = self.session.client().api_url(&format!("/teams/join/{token}"));
+        match secret {
+            Some(secret) => format!("{link}#{secret}"),
+            None => link,
+        }
     }
 
     pub(crate) async fn post(&self, path: &str, body: &Value) -> Result<Value, TeamError> {
