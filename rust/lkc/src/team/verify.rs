@@ -199,6 +199,9 @@ fn check_record(team: &[u8; 16], team_id: &str, record: &EpochRecord, prev: Opti
     }
     trust.check(&record.committed_by, chain_of(chains, &record.committed_by), &signing_key)?;
     crypto::verify(&signing_key, &commit_bytes(team, record)?, &unb64(&record.signature, "signature")?, "a commit signature")?;
+    for m in &record.members {
+        trust.note(&m.user_id, chain_of(chains, &m.user_id), &raw32(&m.signing_key, "signing_key")?);
+    }
     Ok(key_id)
 }
 

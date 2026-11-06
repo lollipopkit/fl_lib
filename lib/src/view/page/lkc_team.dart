@@ -38,6 +38,7 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
 
   /// Whether a device of the account made its key: asked for, else set.
   bool? _hasKey;
+  Object? _openFailed;
   List<_TeamEntry> _teams = const [];
   String? _selected;
   bool _loading = false;
@@ -49,6 +50,7 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
   }
 
   Future<void> _open() async {
+    if (_openFailed != null) setState(() => _openFailed = null);
     try {
       final keys = await _account.open();
       if (keys != null) {
@@ -59,7 +61,7 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
       final has = await (await _client.teams()).hasAccountKey();
       if (mounted) setState(() => _hasKey = has);
     } catch (e) {
-      if (mounted) context._showTeamErr(e);
+      if (mounted) setState(() => _openFailed = e);
     }
   }
 
@@ -115,7 +117,17 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
       body: Stack(
         children: [
           if (keys == null)
-            _hasKey == null ? const Center(child: SizedLoading(23)) : _Unlock(hasKey: _hasKey!, onUnlock: _unlock)
+            switch ((_hasKey, _openFailed)) {
+              (final bool has, _) => _Unlock(hasKey: has, onUnlock: _unlock),
+              (null, final Object e) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 13,
+                  children: [Text(_teamErrText(e), textAlign: TextAlign.center), Btn.text(text: l10n.retry, onTap: _open)],
+                ),
+              ),
+              _ => const Center(child: SizedLoading(23)),
+            }
           else
             _buildTeams(),
           Positioned(
@@ -625,6 +637,8 @@ final class _TeamDetailState extends State<_TeamDetail> {
           error: true,
           action: (l10n.lkcTeamRefetch, widget.onChanged),
         ),
+      if (error != null && !_bannered.contains(error.kind))
+        _Banner(icon: Icons.error_outline, title: _teamErrText(error), error: true, action: (l10n.retry, widget.onChanged)),
       if (error?.kind == LkcTeamErrorKind.unkeyed) _Banner(icon: Icons.hourglass_top, title: l10n.lkcTeamAwaitingKey),
       if (error?.kind == LkcTeamErrorKind.signingKeyChanged)
         _Banner(
@@ -703,11 +717,11 @@ final class _TeamDetailState extends State<_TeamDetail> {
                 ),
               if (!me && m.changed) _sheetTile(ctx, Icons.change_circle, l10n.lkcTeamKeyChangedTitle(m.name), 'change'),
               if (!me && !m.compared && !m.changed && fp != null) _sheetTile(ctx, Icons.fingerprint, l10n.lkcTeamCompare, 'compare'),
-              if (!me && m.approved && !m.keyed && _admin && (_status?.epoch ?? 0) > 0) _sheetTile(ctx, Icons.key, l10n.lkcTeamGrant, 'grant'),
+              if (!me && fp != null && m.approved && !m.keyed && _admin && (_status?.epoch ?? 0) > 0) _sheetTile(ctx, Icons.key, l10n.lkcTeamGrant, 'grant'),
               if (!me && !m.approved && _admin) _sheetTile(ctx, Icons.how_to_reg, l10n.lkcTeamApprove, 'approve'),
-              if (!me && _owner && m.approved && m.role == 'member') _sheetTile(ctx, Icons.arrow_upward, l10n.lkcTeamPromote, 'promote'),
+              if (!me && fp != null && _owner && m.approved && m.role == 'member') _sheetTile(ctx, Icons.arrow_upward, l10n.lkcTeamPromote, 'promote'),
               if (!me && _owner && m.role == 'admin') _sheetTile(ctx, Icons.arrow_downward, l10n.lkcTeamDemote, 'demote'),
-              if (!me && _owner && m.approved) _sheetTile(ctx, Icons.swap_horiz, l10n.lkcTeamTransfer, 'transfer'),
+              if (!me && fp != null && _owner && m.approved) _sheetTile(ctx, Icons.swap_horiz, l10n.lkcTeamTransfer, 'transfer'),
               if (!me && _admin && m.role != 'owner') _sheetTile(ctx, Icons.person_remove, l10n.lkcTeamRemove, 'remove', destructive: true),
             ],
           ),
@@ -810,7 +824,10 @@ final class _TeamDetailState extends State<_TeamDetail> {
     if (res != true || !mounted) return;
     await _after(() async {
       await _keys.acceptSigningKey(userId: userId, signingKey: signingKey);
-      if (now != null) await _keys.markCompared(team: _team.id, userId: userId, fingerprint: now);
+      // Their current keys only: a change met in an older record is of keys
+      // since replaced.
+      final current = _status?.members.where((m) => m.userId == userId).firstOrNull?.fingerprint;
+      if (now != null && now == current) await _keys.markCompared(team: _team.id, userId: userId, fingerprint: now);
     });
   }
 
@@ -1205,17 +1222,28 @@ extension on BuildContext {
 
   void _showTeamErr(Object? e) {
     if (e == null) return;
-    final text = switch (e) {
-      LkcTeamError(kind: LkcTeamErrorKind.wrongPassphrase) => l10n.lkcTeamWrongPassword,
-      LkcTeamError(kind: LkcTeamErrorKind.promotionNeeded) => l10n.lkcTeamPromotionNeeded,
-      LkcTeamError(kind: LkcTeamErrorKind.accountKeyReplaced) => l10n.lkcTeamKeyReplaced,
-      LkcTeamError(kind: LkcTeamErrorKind.untrusted || LkcTeamErrorKind.crypto) => l10n.lkcTeamUntrusted,
-      LkcTeamError(kind: LkcTeamErrorKind.unconfirmed, :final users) => l10n.lkcTeamUnconfirmed(users.join(', ')),
-      LkcTeamError(kind: LkcTeamErrorKind.noRecipient, :final users) => l10n.lkcTeamNoRecipient(users.join(', ')),
-      LkcTeamError(:final detail) => detail,
-      final LkcException e => e.text(l10n),
-      _ => '$e',
-    };
-    showRoundDialog(title: l10n.fail, child: Text(text), actions: Btnx.oks);
+    showRoundDialog(title: l10n.fail, child: Text(_teamErrText(e)), actions: Btnx.oks);
   }
 }
+
+String _teamErrText(Object e) => switch (e) {
+  LkcTeamError(kind: LkcTeamErrorKind.wrongPassphrase) => l10n.lkcTeamWrongPassword,
+  LkcTeamError(kind: LkcTeamErrorKind.promotionNeeded) => l10n.lkcTeamPromotionNeeded,
+  LkcTeamError(kind: LkcTeamErrorKind.accountKeyReplaced) => l10n.lkcTeamKeyReplaced,
+  LkcTeamError(kind: LkcTeamErrorKind.untrusted || LkcTeamErrorKind.crypto) => l10n.lkcTeamUntrusted,
+  LkcTeamError(kind: LkcTeamErrorKind.unconfirmed, :final users) => l10n.lkcTeamUnconfirmed(users.join(', ')),
+  LkcTeamError(kind: LkcTeamErrorKind.noRecipient, :final users) => l10n.lkcTeamNoRecipient(users.join(', ')),
+  LkcTeamError(:final detail) => detail,
+  final LkcException e => e.text(l10n),
+  _ => '$e',
+};
+
+/// What a team's own banner shows ([_TeamDetailState._banners]); any other
+/// error gets the general one.
+const _bannered = {
+  LkcTeamErrorKind.untrusted,
+  LkcTeamErrorKind.crypto,
+  LkcTeamErrorKind.unkeyed,
+  LkcTeamErrorKind.signingKeyChanged,
+  LkcTeamErrorKind.recoveryEpoch,
+};

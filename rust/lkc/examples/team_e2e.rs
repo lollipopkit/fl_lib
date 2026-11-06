@@ -115,15 +115,7 @@ async fn run(session: Arc<Session<Memory>>, me: String, passphrase: String, seco
 
     let started = std::time::Instant::now();
     let etag = loop {
-        let current = match space.read("f").await {
-            Ok(f) => f.map(|(_, e)| e),
-            // Written by a run from before writes were signed.
-            Err(TeamError::Untrusted(e)) if e.contains("not signed") => {
-                space.delete("f", None).await.expect("remove an unsigned file");
-                None
-            }
-            Err(e) => panic!("a read: {e}"),
-        };
+        let current = space.read("f").await.expect("a read").map(|(_, e)| e);
         let condition = current.map_or(Condition::Absent, Condition::Match);
         match space.write("f", b"team e2e", condition).await {
             Ok(etag) => break etag,

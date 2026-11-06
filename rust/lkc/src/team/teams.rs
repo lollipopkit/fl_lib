@@ -163,7 +163,12 @@ impl<S: Store, K: Keeper> Teams<S, K> {
             let mut chain = held.get(user).cloned().unwrap_or_default();
             async move {
                 let since = chain.head().map_or(0, |l| l.seq);
-                chain.extend(user, &self.client.key_records(user, since).await?)?;
+                match self.client.key_records(user, since).await {
+                    Ok(records) => chain.extend(user, &records)?,
+                    // An account gone: what was read of it holds.
+                    Err(TeamError::NotFound) => {}
+                    Err(e) => return Err(e),
+                }
                 Ok::<_, TeamError>((user.clone(), chain))
             }
         });

@@ -1170,3 +1170,27 @@ async fn a_recovery_epoch_waits_for_the_person() {
     bob.teams.accept_recovery(TEAM, 2, &committed_by, &signing_key).await.unwrap();
     assert_eq!(bob.teams.keyring(TEAM).await.unwrap().epoch(), 2);
 }
+
+/// Carol's device meets bob first in epoch 1's signed record: a key
+/// homebase puts in his place after (with a reset record of its own) is
+/// shown changed, not taken on first sight.
+#[tokio::test]
+async fn a_member_is_first_met_in_a_signed_record() {
+    let (state, fake, alice, bob) = setup().await;
+    let carol = carol_joined(&state, &fake, &alice, &bob).await;
+    let mallory = AccountKey::generate("bob");
+    {
+        let mut s = state.lock().unwrap();
+        let seq = s.records["bob"].len() as i64 + 1;
+        let tail = raw(&s.keys["bob"].1);
+        let message = crypto::user_key_message("bob", seq, &mallory.recipient(), &mallory.signing_raw(), &tail);
+        let record = json!({
+            "seq": seq, "recipient": mallory.recipient(), "signing_key": mallory.signing_public(), "prev_signing_key": b64(&tail),
+            "self_signature": b64(&crypto::sign(mallory.signing(), &message)), "prev_signature": null, "reset": true, "legacy": false,
+        });
+        s.records.get_mut("bob").unwrap().push(record);
+        s.keys.insert("bob".into(), (mallory.recipient(), mallory.signing_public()));
+    }
+    let status = carol.teams.status(TEAM).await.unwrap();
+    assert!(status.members.iter().find(|m| m.user_id == "bob").unwrap().changed);
+}

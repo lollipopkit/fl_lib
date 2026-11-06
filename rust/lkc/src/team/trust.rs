@@ -133,6 +133,15 @@ impl Trust {
         Err(TeamError::SigningKeyChanged { user_id: user_id.to_string(), signing_key: encoded, fingerprint })
     }
 
+    /// [key] as [user_id]'s by a record a trusted committer signed: pinned
+    /// when nothing is yet, so homebase's word later cannot be the first.
+    pub(crate) fn note(&mut self, user_id: &str, chain: &Chain, key: &[u8; KEY_LEN]) {
+        if !self.users.contains_key(user_id) {
+            let seq = chain.link_of(key).map_or(0, |l| l.seq);
+            self.users.insert(user_id.to_string(), Pinned { seq, signing_key: b64(key), earlier: vec![] });
+        }
+    }
+
     /// [fingerprint] compared with [user_id] by the person.
     pub fn compare(&mut self, user_id: &str, fingerprint: &str) {
         self.compared.insert(user_id.to_string(), fingerprint.to_string());

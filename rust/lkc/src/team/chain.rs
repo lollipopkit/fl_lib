@@ -44,6 +44,9 @@ impl Chain {
                 return Err(TeamError::Untrusted(format!("{user_id}: key records out of order")));
             }
             let mut rotates = false;
+            // TODO(migration): legacy records go once homebase seeds none
+            // (each user republished a signed one): unsigned, they follow
+            // nothing and are only ever trusted on first sight.
             if !r.legacy {
                 let message = crypto::user_key_message(user_id, r.seq, &r.recipient, &signing_key, &prev_key);
                 let own = r.self_signature.as_deref().ok_or_else(|| TeamError::Untrusted(format!("{user_id}: a key record unsigned")))?;
