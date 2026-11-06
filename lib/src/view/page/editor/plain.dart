@@ -26,8 +26,15 @@ class PlainEditPage extends StatefulWidget {
 }
 
 class _FullscreenEditWidgetState extends State<PlainEditPage> {
-  late final _controller =
-      TextEditingController(text: widget.args?.initialText ?? '');
+  late final _initial = widget.args?.initialText ?? '';
+  late final _controller = TextEditingController(text: _initial);
+  var _dirty = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onChanged);
+  }
 
   @override
   void dispose() {
@@ -35,19 +42,25 @@ class _FullscreenEditWidgetState extends State<PlainEditPage> {
     super.dispose();
   }
 
+  void _onChanged() {
+    final dirty = _controller.text != _initial;
+    if (dirty != _dirty) setState(() => _dirty = dirty);
+  }
+
+  Future<bool> _confirm() async {
+    final sure = await context.showRoundDialog<bool>(
+      title: libL10n.attention,
+      child: Text(libL10n.askContinue(libL10n.exit)),
+      actions: Btnx.cancelOk,
+    );
+    return sure == true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        final sure = await context.showRoundDialog(
-          title: libL10n.attention,
-          actions: Btnx.oks,
-        );
-        if (sure != true) return;
-        contextSafe?.pop();
-      },
+    return PopGuard(
+      enabled: _dirty,
+      confirm: _confirm,
       child: Scaffold(
         appBar: CustomAppBar(
           title: Text(widget.args?.title ?? libL10n.edit),

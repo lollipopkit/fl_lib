@@ -105,7 +105,13 @@ class _EditorPageState extends State<EditorPage> {
   late final _modesMap = _lang?.editorLangs ?? ProgLang.defaultLangModeMap;
   late final _isMarkdown = _lang == ProgLang.markdown;
 
-  var _saved = false;
+  /// What was last read or written: unsaved edits are a difference from it.
+  var _savedText = '';
+  var _dirty = false;
+
+  /// The lines last compared: the controller also notifies for the caret and
+  /// the selection, which leave the lines as they were.
+  Object? _comparedLines;
 
   /// False while the file is read: saving then would write an empty file,
   /// and typing would be replaced by what was read.
@@ -128,6 +134,7 @@ class _EditorPageState extends State<EditorPage> {
     // Not lazy: in preview nothing reads it before `dispose`, which would then
     // create it on the already disposed [_controller].
     _findController = CodeFindController(_controller);
+    _controller.addListener(_onChanged);
     _setupCtrl();
   }
 
@@ -143,12 +150,24 @@ class _EditorPageState extends State<EditorPage> {
     if (!_previewing) _focusNode.requestFocus();
   }
 
+  void _onChanged() {
+    final lines = _controller.codeLines;
+    if (identical(lines, _comparedLines)) return;
+    _comparedLines = lines;
+    final dirty = _loaded && _controller.text != _savedText;
+    if (dirty != _dirty) setState(() => _dirty = dirty);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _previewing ? null : _codeTheme['root']?.backgroundColor,
-      appBar: _buildAppBar(),
-      body: _buildBody(),
+    return PopGuard(
+      enabled: _dirty,
+      confirm: _confirmLeave,
+      child: Scaffold(
+        backgroundColor: _previewing ? null : _codeTheme['root']?.backgroundColor,
+        appBar: _buildAppBar(),
+        body: _buildBody(),
+      ),
     );
   }
 
@@ -157,11 +176,6 @@ class _EditorPageState extends State<EditorPage> {
       title: TwoLineText(
         up: widget.args?.title ?? widget.args?.path?.getFileName() ?? libL10n.unknown,
         down: _previewing ? libL10n.preview : libL10n.editor,
-      ),
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        tooltip: libL10n.exit,
-        onPressed: _onPop,
       ),
       actions: [
         if (_isMarkdown)
@@ -286,11 +300,16 @@ extension on _EditorPageState {
       }
       if (!mounted) return;
       _controller.text = code;
+      // Read back: the editor keeps its own line breaks.
+      _savedText = _controller.text;
       _markLoaded();
       return;
     }
     // Synchronous, from `initState`: no rebuild needed yet.
-    if (text != null) _controller.text = text;
+    if (text != null) {
+      _controller.text = text;
+      _savedText = _controller.text;
+    }
     _loaded = true;
   }
 
@@ -300,62 +319,40 @@ extension on _EditorPageState {
     context.pop();
   }
 
-  void _onSave() async {
-    // If path is not null, then it's a file editor
+  /// Writes the text where it came from; false when that failed.
+  Future<bool> _save() async {
+    final text = _controller.text;
     final path = widget.args?.path;
     if (path != null) {
       final (res, _) = await context.showLoadingDialog(
-        fn: () => File(path).writeAsString(_controller.text),
+        fn: () => File(path).writeAsString(text),
       );
       if (res == null) {
         Toast.error(libL10n.fail);
-        return;
+        return false;
       }
-      final ret = EditorPageRet(EditorPageRetType.path, path);
-      widget.args?.onSave(ret);
-      _saved = true;
-
-      final pop_ = widget.args?.closeAfterSave ?? _kCloseAfterSave;
-      if (pop_) Future.microtask(_pop);
-      return;
+      if (!mounted) return true;
+      widget.args?.onSave(EditorPageRet(EditorPageRetType.path, path));
+    } else {
+      widget.args?.onSave(EditorPageRet(EditorPageRetType.text, text));
     }
-
-    // it's a text editor
-    final ret = EditorPageRet(EditorPageRetType.text, _controller.text);
-    widget.args?.onSave(ret);
-    _saved = true;
-
-    final pop_ = widget.args?.closeAfterSave ?? _kCloseAfterSave;
-    if (pop_) Future.microtask(_pop);
+    _savedText = text;
+    _comparedLines = null;
+    _onChanged();
+    return true;
   }
 
-  void _pop() async {
-    if (!_saved) {
-      final ret = await contextSafe?.showRoundDialog(
-        title: libL10n.attention,
-        child: Text(libL10n.askContinue(libL10n.exit)),
-        actions: Btnx.cancelOk,
-      );
-      if (ret != true) return;
-    }
-    contextSafe?.pop();
+  void _onSave() async {
+    if (!await _save() || !mounted) return;
+    if (widget.args?.closeAfterSave ?? _kCloseAfterSave) context.pop();
   }
 
-  void _onPop() async {
-    if (_saved || !_loaded) {
-      contextSafe?.pop();
-      return;
-    }
-
+  /// Save and leave, leave without saving, or stay.
+  Future<bool> _confirmLeave() async {
     // `popDialog`, not `pop`. `showRoundDialog` puts the dialog on the root
     // navigator, while this context's nearest navigator is the one holding
     // the *page* — a different one wherever the editor was pushed inside a
-    // pane or a tab. Popping that closed the editor and left the dialog on
-    // screen over whatever was behind it, with `shouldSave` never completing
-    // because the dialog route was still there.
-    //
-    // `Btn.ok` and friends get this right without being told: they resolve
-    // the navigator from the button's own context, which is inside the dialog.
+    // pane or a tab.
     final shouldSave = await contextSafe?.showRoundDialog<bool>(
       title: libL10n.attention,
       child: Text(libL10n.actionAndAction(libL10n.save, libL10n.exit)),
@@ -370,10 +367,9 @@ extension on _EditorPageState {
         ),
       ],
     );
-    if (shouldSave == true) {
-      _onSave();
-    }
-    if (shouldSave != null) contextSafe?.pop();
+    if (shouldSave == null) return false;
+    if (shouldSave) return _save();
+    return true;
   }
 }
 
