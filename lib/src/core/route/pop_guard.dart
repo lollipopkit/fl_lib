@@ -39,11 +39,32 @@ class PopGuard extends StatefulWidget {
   static Future<bool> confirmLeave(
     NavigatorState within, {
     RoutePredicate? stays,
-  }) async {
-    final asking = [
-      for (final guard in _guards)
-        if (guard._leaves(within, stays)) guard,
-    ]..sort((a, b) => b._order.compareTo(a._order));
+  }) => _ask(_leaving(within, stays));
+
+  /// [confirmLeave], then removes the guarded pages that agreed, for a region
+  /// that is put away rather than popped — a pane kept alive while hidden.
+  /// The pages with nothing to lose keep their place.
+  static Future<bool> leave(NavigatorState within, {RoutePredicate? stays}) async {
+    final leaving = _leaving(within, stays);
+    if (!await _ask(leaving)) return false;
+    for (final guard in leaving) {
+      final route = guard._route;
+      if (guard.mounted && route != null && route.isActive) {
+        route.navigator?.removeRoute(route);
+      }
+    }
+    return true;
+  }
+
+  static List<_PopGuardState> _leaving(
+    NavigatorState within,
+    RoutePredicate? stays,
+  ) => [
+    for (final guard in _guards)
+      if (guard._leaves(within, stays)) guard,
+  ]..sort((a, b) => b._order.compareTo(a._order));
+
+  static Future<bool> _ask(List<_PopGuardState> asking) async {
     for (final guard in asking) {
       if (!guard.mounted || !guard.widget.enabled) continue;
       if (!await guard.widget.confirm()) return false;
