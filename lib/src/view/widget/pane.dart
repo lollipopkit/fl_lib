@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../../core/route/pop_guard.dart';
+
 /// Marks a subtree as living inside one pane of a multi-pane layout.
 ///
 /// A pane owns a [Navigator] of its own, so that pages hosted in it keep
@@ -114,7 +116,11 @@ class PaneScope extends InheritedWidget {
     if (navigator == null || Navigator.maybeOf(context) != navigator) {
       return null;
     }
-    return navigator.canPop() ? null : close;
+    if (navigator.canPop()) return null;
+    // Closing the pane removes what is in it, so it asks as back would.
+    return () async {
+      if (await PopGuard.confirmLeave(navigator)) close();
+    };
   }
 
   @override

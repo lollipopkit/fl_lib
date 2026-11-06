@@ -20,6 +20,7 @@ export 'src/res/ui.dart';
 export 'src/core/build.dart';
 export 'src/core/init.dart';
 export 'src/core/route/page_route.dart';
+export 'src/core/route/pop_guard.dart';
 export 'src/core/route/route.dart';
 export 'src/core/route/swipe_back.dart';
 export 'src/core/update.dart';
