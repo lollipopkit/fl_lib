@@ -163,10 +163,13 @@ class LkcBatch {
   final PlatformInt64 seq;
   final Uint8List body;
 
-  const LkcBatch({required this.seq, required this.body});
+  /// A team's: the key epoch it was sealed under.
+  final PlatformInt64? epoch;
+
+  const LkcBatch({required this.seq, required this.body, this.epoch});
 
   @override
-  int get hashCode => seq.hashCode ^ body.hashCode;
+  int get hashCode => seq.hashCode ^ body.hashCode ^ epoch.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -174,7 +177,8 @@ class LkcBatch {
       other is LkcBatch &&
           runtimeType == other.runtimeType &&
           seq == other.seq &&
-          body == other.body;
+          body == other.body &&
+          epoch == other.epoch;
 }
 
 class LkcError implements FrbException {
@@ -303,12 +307,21 @@ class LkcSyncError implements FrbException {
   /// `sync_snapshot_stale` or `sync_key_reused` when [kind] is
   /// [LkcSyncErrorKind::Refused].
   final String? reason;
+
+  /// The team's current epoch, when [kind] is [LkcSyncErrorKind::StaleEpoch].
+  final PlatformInt64? epoch;
   final String detail;
 
-  const LkcSyncError({required this.kind, this.reason, required this.detail});
+  const LkcSyncError({
+    required this.kind,
+    this.reason,
+    this.epoch,
+    required this.detail,
+  });
 
   @override
-  int get hashCode => kind.hashCode ^ reason.hashCode ^ detail.hashCode;
+  int get hashCode =>
+      kind.hashCode ^ reason.hashCode ^ epoch.hashCode ^ detail.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -317,6 +330,7 @@ class LkcSyncError implements FrbException {
           runtimeType == other.runtimeType &&
           kind == other.kind &&
           reason == other.reason &&
+          epoch == other.epoch &&
           detail == other.detail;
 }
 
@@ -330,6 +344,9 @@ enum LkcSyncErrorKind {
   /// Homebase's `reason` in [LkcSyncError::reason].
   refused,
   busy,
+
+  /// A team's write under a replaced key: the current in [LkcSyncError::epoch].
+  staleEpoch,
   signedOut,
   unreachable,
   invalid,
@@ -348,12 +365,17 @@ class LkcSyncEvent {
   /// Not listening, why: tried again after a wait.
   final String? lost;
 
+  /// A team's members or key changed (`key`, `members`, `rotation_needed`,
+  /// …): its keys are read again.
+  final String? teamChange;
+
   const LkcSyncEvent({
     required this.connected,
     this.name,
     this.etag,
     this.logSeq,
     this.lost,
+    this.teamChange,
   });
 
   static Future<LkcSyncEvent> default_() =>
@@ -365,7 +387,8 @@ class LkcSyncEvent {
       name.hashCode ^
       etag.hashCode ^
       logSeq.hashCode ^
-      lost.hashCode;
+      lost.hashCode ^
+      teamChange.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -376,7 +399,8 @@ class LkcSyncEvent {
           name == other.name &&
           etag == other.etag &&
           logSeq == other.logSeq &&
-          lost == other.lost;
+          lost == other.lost &&
+          teamChange == other.teamChange;
 }
 
 class LkcSyncFile {
@@ -385,16 +409,24 @@ class LkcSyncFile {
   final BigInt size;
   final String updatedAt;
 
+  /// A team's: the key epoch it was written under.
+  final PlatformInt64? epoch;
+
   const LkcSyncFile({
     required this.name,
     required this.etag,
     required this.size,
     required this.updatedAt,
+    this.epoch,
   });
 
   @override
   int get hashCode =>
-      name.hashCode ^ etag.hashCode ^ size.hashCode ^ updatedAt.hashCode;
+      name.hashCode ^
+      etag.hashCode ^
+      size.hashCode ^
+      updatedAt.hashCode ^
+      epoch.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -404,7 +436,8 @@ class LkcSyncFile {
           name == other.name &&
           etag == other.etag &&
           size == other.size &&
-          updatedAt == other.updatedAt;
+          updatedAt == other.updatedAt &&
+          epoch == other.epoch;
 }
 
 class LkcSyncVersion {

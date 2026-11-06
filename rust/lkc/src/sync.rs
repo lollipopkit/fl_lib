@@ -18,6 +18,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -31,6 +32,7 @@ use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 
 use crate::session::{Session, Store};
+use crate::team::{canonical, team_bytes};
 use crate::{Failure, now_ms, unreachable};
 
 /// Up to this a file is sent in one request; above it, straight to the store.
@@ -71,6 +73,8 @@ pub enum Kind {
     Refused(String),
     /// Too many writes this minute, or uploads under way (`429`).
     Busy,
+    /// A team's write under a replaced key (`409`): the current epoch.
+    StaleEpoch(i64),
     /// Not signed in, or homebase no longer takes the session.
     SignedOut,
     /// Nothing reached homebase, or no answer: worth trying later.
@@ -116,6 +120,9 @@ pub struct File {
     pub size: u64,
     /// RFC 3339.
     pub updated_at: String,
+    /// A team's: the key epoch it was written under.
+    #[serde(default)]
+    pub epoch: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -161,6 +168,8 @@ pub struct Batch {
     pub seq: i64,
     /// The age file, its digest checked.
     pub body: Vec<u8>,
+    /// A team's: the key epoch it was sealed under.
+    pub epoch: Option<i64>,
 }
 
 /// Where the log is after a read.
@@ -193,6 +202,8 @@ struct WireBatch {
     seq: i64,
     digest: String,
     body: String,
+    #[serde(default)]
+    epoch: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -214,6 +225,9 @@ pub enum Event {
     /// The log reached [seq] (this device's own appends too): read on from
     /// the cursor.
     Log { seq: i64 },
+    /// A team's members or key changed (`key`, `members`, `rotation_needed`,
+    /// …): its keys are read again ([`SyncClient::team_events`]).
+    Team { change: String },
     /// Not listening: a connection failed or ended, and is tried again after
     /// a wait. For logs; never a token.
     Lost(String),
@@ -253,10 +267,19 @@ impl Clock {
     }
 }
 
-/// One app's sync, on a signed-in [`Session`].
+/// A team's space (`/v2/teams/{team}/sync`): every request names the key
+/// epoch its writes are sealed under (`X-Team-Epoch`).
+struct TeamSpace {
+    id: String,
+    epoch: AtomicI64,
+}
+
+/// One app's sync, on a signed-in [`Session`]: the person's own files, or a
+/// team's ([`SyncClient::for_team`]).
 pub struct SyncClient<S: Store> {
     session: Arc<Session<S>>,
     app: String,
+    team: Option<TeamSpace>,
     clock: Clock,
     /// The version each name was last written at by this device, so its own
     /// writes heard back on [`SyncClient::events`] are not taken for another's.
@@ -269,7 +292,27 @@ type Body = Pin<Box<dyn Stream<Item = reqwest::Result<bytes::Bytes>> + Send>>;
 impl<S: Store> SyncClient<S> {
     /// [app]: `serverbox`, `gptbox`, … (`[a-z0-9._-]`, not starting with `.`).
     pub fn new(session: Arc<Session<S>>, app: &str) -> Self {
-        Self { session, app: app.to_string(), clock: Clock::default(), written: Mutex::new(HashMap::new()) }
+        Self { session, app: app.to_string(), team: None, clock: Clock::default(), written: Mutex::new(HashMap::new()) }
+    }
+
+    /// [app]'s files of team [team] (its id), written under key [epoch].
+    pub(crate) fn for_team(session: Arc<Session<S>>, team: &str, app: &str, epoch: i64) -> Self {
+        // Canonical, so homebase's events name it alike however it was given.
+        let team = Some(TeamSpace { id: canonical(team).unwrap_or_else(|_| team.to_string()), epoch: AtomicI64::new(epoch) });
+        Self { session, app: app.to_string(), team, clock: Clock::default(), written: Mutex::new(HashMap::new()) }
+    }
+
+    /// The key epoch a team's writes now name; after a rotation, or a
+    /// [`Kind::StaleEpoch`].
+    pub(crate) fn set_epoch(&self, epoch: i64) {
+        if let Some(t) = &self.team {
+            t.epoch.store(epoch, Ordering::Release);
+        }
+    }
+
+    /// The epoch writes name; `None` for the person's own files.
+    pub(crate) fn epoch(&self) -> Option<i64> {
+        self.team.as_ref().map(|t| t.epoch.load(Ordering::Acquire))
     }
 
     pub fn session(&self) -> &Arc<Session<S>> {
@@ -299,6 +342,16 @@ impl<S: Store> SyncClient<S> {
         self.fetch(&self.file_path(name)?, to, known).await
     }
 
+    /// [name]'s bytes and version; `None` when there is no such file.
+    pub async fn download_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String)>, Error> {
+        let mut body = Vec::new();
+        match self.fetch_with(&self.file_path(name)?, Target::Memory(&mut body), None, |_| {}).await? {
+            Fetched::Saved(etag) => Ok(Some((body, etag))),
+            Fetched::Missing => Ok(None),
+            Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a file answered 304")),
+        }
+    }
+
     /// A kept version of [name] ([`SyncClient::versions`]) written to [to].
     pub async fn download_version(&self, name: &str, etag: &str, to: &Path) -> Result<Fetched, Error> {
         if !etag.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -310,8 +363,13 @@ impl<S: Store> SyncClient<S> {
     /// [from] as [name]'s new version, if [condition] still holds. Answers the
     /// new version.
     pub async fn upload(&self, name: &str, from: &Path, condition: Condition) -> Result<String, Error> {
+        self.upload_bytes(name, read_file(from).await?, condition).await
+    }
+
+    /// [body] as [name]'s new version, if [condition] still holds.
+    pub async fn upload_bytes(&self, name: &str, body: Vec<u8>, condition: Condition) -> Result<String, Error> {
         let path = self.file_path(name)?;
-        let bytes = bytes::Bytes::from(tokio::fs::read(from).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", from.display())))?);
+        let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
         if size > MAX_BYTES {
             return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
@@ -367,6 +425,9 @@ impl<S: Store> SyncClient<S> {
             // A bare `409` is the store not showing the upload yet; one with a
             // reason (a snapshot gone stale) is a refusal.
             if response.status() == StatusCode::CONFLICT {
+                if let Some(current) = stale_epoch(&response, self.epoch()) {
+                    return Err(Error::new(Kind::StaleEpoch(current), "HTTP 409 team_epoch_stale"));
+                }
                 let body = read_limited(response, MAX_JSON).await?;
                 if let Some(reason) = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["reason"].as_str().map(str::to_string)) {
                     return Err(Error::new(Kind::Refused(reason.clone()), format!("HTTP 409 {reason}")));
@@ -401,7 +462,7 @@ impl<S: Store> SyncClient<S> {
     }
 
     pub async fn list(&self) -> Result<Vec<File>, Error> {
-        let response = self.send(Method::GET, &format!("/v2/sync/{}", self.app_segment()?), |r| r).await?;
+        let response = self.send(Method::GET, &self.app_path()?, |r| r).await?;
         self.json(response).await
     }
 
@@ -459,7 +520,7 @@ impl<S: Store> SyncClient<S> {
             if blake3::hash(&body).to_hex().as_str() != b.digest {
                 return Err(Error::new(Kind::Invalid, format!("batch {}: digest mismatch", b.seq)));
             }
-            batches.push(Batch { seq: b.seq, body });
+            batches.push(Batch { seq: b.seq, body, epoch: b.epoch });
         }
         Ok(LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more })
     }
@@ -467,8 +528,13 @@ impl<S: Store> SyncClient<S> {
     /// [from] as the log's snapshot up to [seq]: further than the last, up to
     /// the head. Answers its version.
     pub async fn put_snapshot(&self, seq: i64, from: &Path) -> Result<String, Error> {
+        self.put_snapshot_bytes(seq, read_file(from).await?).await
+    }
+
+    /// [body] as the log's snapshot up to [seq].
+    pub async fn put_snapshot_bytes(&self, seq: i64, body: Vec<u8>) -> Result<String, Error> {
         let path = format!("{}/snapshot", self.app_path()?);
-        let bytes = bytes::Bytes::from(tokio::fs::read(from).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", from.display())))?);
+        let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
         if size > MAX_BYTES {
             return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
@@ -489,9 +555,19 @@ impl<S: Store> SyncClient<S> {
 
     /// The log's snapshot written to [to]; `None` before there is one.
     pub async fn download_snapshot(&self, to: &Path) -> Result<Option<Snapshot>, Error> {
+        self.snapshot_into(Target::File(to)).await
+    }
+
+    /// The log's snapshot and its bytes; `None` before there is one.
+    pub async fn download_snapshot_bytes(&self) -> Result<Option<(Snapshot, Vec<u8>)>, Error> {
+        let mut body = Vec::new();
+        Ok(self.snapshot_into(Target::Memory(&mut body)).await?.map(|s| (s, body)))
+    }
+
+    async fn snapshot_into(&self, into: Target<'_>) -> Result<Option<Snapshot>, Error> {
         let mut found = None;
         let fetched = self
-            .fetch_with(&format!("{}/snapshot", self.app_path()?), to, None, |response| {
+            .fetch_with(&format!("{}/snapshot", self.app_path()?), into, None, |response| {
                 let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
                 found = header("sync-log").zip(header("sync-seq").and_then(|v| v.parse().ok())).map(|(log, seq)| Snapshot { log, seq });
             })
@@ -506,7 +582,17 @@ impl<S: Store> SyncClient<S> {
     /// What other devices write, as long as it is read: connected again after
     /// a drop, waiting longer each time up to a minute. Ends when signed out.
     pub fn events(self: Arc<Self>) -> impl Stream<Item = Event> + Send + 'static {
+        self.events_on("sync")
+    }
+
+    /// A team's changes of members and key ([Event::Team]), as [events].
+    pub fn team_events(self: Arc<Self>) -> impl Stream<Item = Event> + Send + 'static {
+        self.events_on("team")
+    }
+
+    fn events_on(self: Arc<Self>, chan: &'static str) -> impl Stream<Item = Event> + Send + 'static {
         struct Listen<S: Store> {
+            chan: &'static str,
             sync: Arc<SyncClient<S>>,
             body: Option<Body>,
             buffer: Vec<u8>,
@@ -514,7 +600,7 @@ impl<S: Store> SyncClient<S> {
             /// Waited before the next connection, once [Event::Lost] is out.
             retry: Option<Duration>,
         }
-        let start = Listen { sync: self, body: None, buffer: Vec::new(), wait: Duration::from_secs(1), retry: None };
+        let start = Listen { chan, sync: self, body: None, buffer: Vec::new(), wait: Duration::from_secs(1), retry: None };
         futures_util::stream::unfold(start, |mut st| async move {
             if let Some(wait) = st.retry.take() {
                 tokio::time::sleep(wait).await;
@@ -527,7 +613,7 @@ impl<S: Store> SyncClient<S> {
                     continue;
                 }
                 let Some(body) = st.body.as_mut() else {
-                    match st.sync.listen().await {
+                    match st.sync.listen(st.chan).await {
                         Ok(body) => {
                             st.body = Some(body);
                             st.buffer.clear();
@@ -560,8 +646,8 @@ impl<S: Store> SyncClient<S> {
         })
     }
 
-    async fn listen(&self) -> Result<Body, Error> {
-        let response = self.send(Method::GET, "/sse/listen?chan=sync", |r| r.header(header::ACCEPT, "text/event-stream")).await?;
+    async fn listen(&self, chan: &str) -> Result<Body, Error> {
+        let response = self.send(Method::GET, &format!("/sse/listen?chan={chan}"), |r| r.header(header::ACCEPT, "text/event-stream")).await?;
         let stream = response.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|v| v.starts_with("text/event-stream"));
         if response.status() != StatusCode::OK {
             return Err(refusal(response).await);
@@ -573,8 +659,16 @@ impl<S: Store> SyncClient<S> {
         Ok(Box::pin(response.bytes_stream()))
     }
 
-    /// An event of this app written by another device.
+    /// An event of this app (of this team, or of none) written by another
+    /// device.
     fn heard(&self, value: &Value) -> Option<Event> {
+        let team = value["team"].as_str().map(|t| canonical(t).unwrap_or_default());
+        if team.as_deref() != self.team.as_ref().map(|t| t.id.as_str()) {
+            return None;
+        }
+        if value["event"] == "team" {
+            return value["change"].as_str().map(|c| Event::Team { change: c.to_string() });
+        }
         if value["app"] != self.app.as_str() {
             return None;
         }
@@ -591,11 +685,11 @@ impl<S: Store> SyncClient<S> {
     }
 
     async fn fetch(&self, path: &str, to: &Path, known: Option<&str>) -> Result<Fetched, Error> {
-        self.fetch_with(path, to, known, |_| {}).await
+        self.fetch_with(path, Target::File(to), known, |_| {}).await
     }
 
     /// [fetch], [answered] shown homebase's answer before its body is read.
-    async fn fetch_with(&self, path: &str, to: &Path, known: Option<&str>, answered: impl FnOnce(&reqwest::Response)) -> Result<Fetched, Error> {
+    async fn fetch_with(&self, path: &str, into: Target<'_>, known: Option<&str>, answered: impl FnOnce(&reqwest::Response)) -> Result<Fetched, Error> {
         let response = self
             .send(Method::GET, path, |r| match known {
                 Some(etag) => r.header(header::IF_NONE_MATCH, quote(etag)),
@@ -639,7 +733,10 @@ impl<S: Store> SyncClient<S> {
         } else {
             response
         };
-        save(body, to).await?;
+        match into {
+            Target::File(to) => save(body, to).await?,
+            Target::Memory(buffer) => *buffer = read_limited(body, MAX_BYTES as usize).await?,
+        }
         Ok(Fetched::Saved(etag))
     }
 
@@ -691,7 +788,10 @@ impl<S: Store> SyncClient<S> {
                 Failure::Rejected => Error::new(Kind::SignedOut, e.detail),
                 _ => Error::new(Kind::Unreachable, e.detail),
             })?;
-            let request = build(client.transfer().request(method.clone(), &url).bearer_auth(token));
+            let mut request = build(client.transfer().request(method.clone(), &url).bearer_auth(token));
+            if let Some(epoch) = self.epoch() {
+                request = request.header("x-team-epoch", epoch);
+            }
             let retryable = method != Method::POST || request.try_clone().and_then(|r| r.build().ok()).is_some_and(|r| r.headers().contains_key("idempotency-key"));
             let sent = now_ms();
             let response = request.send().await.map_err(|e| Error::new(Kind::Unreachable, unreachable(&url, e).detail))?;
@@ -731,14 +831,19 @@ impl<S: Store> SyncClient<S> {
     }
 
     fn app_path(&self) -> Result<String, Error> {
-        Ok(format!("/v2/sync/{}", self.app_segment()?))
+        let app = self.app_segment()?;
+        match &self.team {
+            None => Ok(format!("/v2/sync/{app}")),
+            Some(t) if team_bytes(&t.id).is_ok() => Ok(format!("/v2/teams/{}/sync/{app}", t.id)),
+            Some(_) => Err(Error::new(Kind::Invalid, "not a team id")),
+        }
     }
 
     fn file_path(&self, name: &str) -> Result<String, Error> {
         if !valid(name, 128, true) {
             return Err(Error::new(Kind::Invalid, "not a file name"));
         }
-        Ok(format!("/v2/sync/{}/{name}", self.app_segment()?))
+        Ok(format!("{}/{name}", self.app_path()?))
     }
 }
 
@@ -773,14 +878,38 @@ async fn refusal(response: reqwest::Response) -> Error {
         StatusCode::TOO_MANY_REQUESTS => Kind::Busy,
         StatusCode::UNAUTHORIZED => Kind::SignedOut,
         StatusCode::FORBIDDEN | StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY => {
+            let current = response.headers().get("x-team-epoch").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
             let body = read_limited(response, MAX_JSON).await.unwrap_or_default();
             let reason = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["reason"].as_str().map(str::to_string)).unwrap_or_default();
+            if let (STALE_EPOCH, Some(current)) = (reason.as_str(), current) {
+                return Error::new(Kind::StaleEpoch(current), format!("HTTP {status} {STALE_EPOCH}"));
+            }
             return Error::new(Kind::Refused(reason.clone()), format!("HTTP {status} {reason}"));
         }
         s if s.is_server_error() => Kind::Unreachable,
         _ => Kind::Invalid,
     };
     Error::new(kind, format!("HTTP {status}"))
+}
+
+/// Homebase's reason for a team's write under a replaced key.
+const STALE_EPOCH: &str = "team_epoch_stale";
+
+/// The current epoch a team's `409` names (`X-Team-Epoch`), when it names
+/// one other than the request's: a write under a replaced key.
+fn stale_epoch(response: &reqwest::Response, sent: Option<i64>) -> Option<i64> {
+    let current = response.headers().get("x-team-epoch")?.to_str().ok()?.parse().ok()?;
+    (Some(current) != sent).then_some(current)
+}
+
+/// Where a download goes.
+enum Target<'a> {
+    File(&'a Path),
+    Memory(&'a mut Vec<u8>),
+}
+
+async fn read_file(from: &Path) -> Result<Vec<u8>, Error> {
+    tokio::fs::read(from).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", from.display())))
 }
 
 async fn read_limited(mut response: reqwest::Response, max: usize) -> Result<Vec<u8>, Error> {

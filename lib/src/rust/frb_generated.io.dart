@@ -5,6 +5,7 @@
 
 import 'api/lkc.dart';
 import 'api/sync.dart';
+import 'api/team.dart';
 import 'api/theme.dart';
 
 import 'dart:async';
@@ -24,6 +25,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcAccountKeyPtr => wire
+      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKeyPtr;
+
+  CrossPlatformFinalizerArg
   get rust_arc_decrement_strong_count_LkcSessionPtr => wire
       ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSessionPtr;
 
@@ -31,8 +36,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   get rust_arc_decrement_strong_count_LkcSyncPtr => wire
       ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSyncPtr;
 
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcTeamKeysPtr => wire
+      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeysPtr;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcTeamSpacePtr => wire
+      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpacePtr;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcTeamsPtr => wire
+      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamsPtr;
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  LkcAccountKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  );
 
   @protected
   LkcSession
@@ -43,6 +66,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   LkcSync
   dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeamKeys
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeamSpace
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeams
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    dynamic raw,
+  );
+
+  @protected
+  LkcAccountKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
     dynamic raw,
   );
 
@@ -59,6 +106,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  LkcTeamKeys
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeamSpace
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeams
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<bool> Function(String)
+  dco_decode_DartFn_Inputs_String_Output_bool_AnyhowException(dynamic raw);
+
+  @protected
   FutureOr<void> Function(String)
   dco_decode_DartFn_Inputs_String_Output_unit_AnyhowException(dynamic raw);
 
@@ -70,6 +139,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Object dco_decode_DartOpaque(dynamic raw);
 
   @protected
+  LkcAccountKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  );
+
+  @protected
   LkcSession
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     dynamic raw,
@@ -78,6 +153,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   LkcSync
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeamKeys
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeamSpace
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    dynamic raw,
+  );
+
+  @protected
+  LkcTeams
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
     dynamic raw,
   );
 
@@ -93,10 +186,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  LkcAccountKey
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  );
+
+  @protected
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
   LkcSnapshot dco_decode_box_autoadd_lkc_snapshot(dynamic raw);
+
+  @protected
+  LkcTeamFile dco_decode_box_autoadd_lkc_team_file(dynamic raw);
+
+  @protected
+  LkcTeamSnapshot dco_decode_box_autoadd_lkc_team_snapshot(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
@@ -117,10 +222,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LkcBatch> dco_decode_list_lkc_batch(dynamic raw);
 
   @protected
+  List<LkcMember> dco_decode_list_lkc_member(dynamic raw);
+
+  @protected
   List<LkcSyncFile> dco_decode_list_lkc_sync_file(dynamic raw);
 
   @protected
   List<LkcSyncVersion> dco_decode_list_lkc_sync_version(dynamic raw);
+
+  @protected
+  List<LkcTeam> dco_decode_list_lkc_team(dynamic raw);
+
+  @protected
+  List<LkcTeamFailure> dco_decode_list_lkc_team_failure(dynamic raw);
+
+  @protected
+  Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
 
   @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
@@ -150,7 +267,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LkcFetched dco_decode_lkc_fetched(dynamic raw);
 
   @protected
+  LkcInviteLink dco_decode_lkc_invite_link(dynamic raw);
+
+  @protected
+  LkcInviteView dco_decode_lkc_invite_view(dynamic raw);
+
+  @protected
+  LkcJoined dco_decode_lkc_joined(dynamic raw);
+
+  @protected
   LkcLogRead dco_decode_lkc_log_read(dynamic raw);
+
+  @protected
+  LkcMember dco_decode_lkc_member(dynamic raw);
+
+  @protected
+  LkcReencrypted dco_decode_lkc_reencrypted(dynamic raw);
+
+  @protected
+  LkcReencryption dco_decode_lkc_reencryption(dynamic raw);
 
   @protected
   LkcSnapshot dco_decode_lkc_snapshot(dynamic raw);
@@ -171,13 +306,49 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LkcSyncVersion dco_decode_lkc_sync_version(dynamic raw);
 
   @protected
+  LkcTeam dco_decode_lkc_team(dynamic raw);
+
+  @protected
+  LkcTeamError dco_decode_lkc_team_error(dynamic raw);
+
+  @protected
+  LkcTeamErrorKind dco_decode_lkc_team_error_kind(dynamic raw);
+
+  @protected
+  LkcTeamFailure dco_decode_lkc_team_failure(dynamic raw);
+
+  @protected
+  LkcTeamFile dco_decode_lkc_team_file(dynamic raw);
+
+  @protected
+  LkcTeamLog dco_decode_lkc_team_log(dynamic raw);
+
+  @protected
+  LkcTeamSnapshot dco_decode_lkc_team_snapshot(dynamic raw);
+
+  @protected
+  LkcTeamStatus dco_decode_lkc_team_status(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  LkcAccountKey?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    dynamic raw,
+  );
 
   @protected
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   LkcSnapshot? dco_decode_opt_box_autoadd_lkc_snapshot(dynamic raw);
+
+  @protected
+  LkcTeamFile? dco_decode_opt_box_autoadd_lkc_team_file(dynamic raw);
+
+  @protected
+  LkcTeamSnapshot? dco_decode_opt_box_autoadd_lkc_team_snapshot(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
@@ -225,6 +396,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  LkcAccountKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   LkcSession
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     SseDeserializer deserializer,
@@ -233,6 +410,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   LkcSync
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamKeys
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamSpace
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeams
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcAccountKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
     SseDeserializer deserializer,
   );
 
@@ -249,7 +450,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  LkcTeamKeys
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamSpace
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeams
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Object sse_decode_DartOpaque(SseDeserializer deserializer);
+
+  @protected
+  LkcAccountKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  );
 
   @protected
   LkcSession
@@ -260,6 +485,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   LkcSync
   sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamKeys
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamSpace
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeams
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
     SseDeserializer deserializer,
   );
 
@@ -275,10 +518,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  LkcAccountKey
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   LkcSnapshot sse_decode_box_autoadd_lkc_snapshot(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamFile sse_decode_box_autoadd_lkc_team_file(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamSnapshot sse_decode_box_autoadd_lkc_team_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -299,12 +558,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LkcBatch> sse_decode_list_lkc_batch(SseDeserializer deserializer);
 
   @protected
+  List<LkcMember> sse_decode_list_lkc_member(SseDeserializer deserializer);
+
+  @protected
   List<LkcSyncFile> sse_decode_list_lkc_sync_file(SseDeserializer deserializer);
 
   @protected
   List<LkcSyncVersion> sse_decode_list_lkc_sync_version(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<LkcTeam> sse_decode_list_lkc_team(SseDeserializer deserializer);
+
+  @protected
+  List<LkcTeamFailure> sse_decode_list_lkc_team_failure(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
 
   @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
@@ -336,7 +609,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LkcFetched sse_decode_lkc_fetched(SseDeserializer deserializer);
 
   @protected
+  LkcInviteLink sse_decode_lkc_invite_link(SseDeserializer deserializer);
+
+  @protected
+  LkcInviteView sse_decode_lkc_invite_view(SseDeserializer deserializer);
+
+  @protected
+  LkcJoined sse_decode_lkc_joined(SseDeserializer deserializer);
+
+  @protected
   LkcLogRead sse_decode_lkc_log_read(SseDeserializer deserializer);
+
+  @protected
+  LkcMember sse_decode_lkc_member(SseDeserializer deserializer);
+
+  @protected
+  LkcReencrypted sse_decode_lkc_reencrypted(SseDeserializer deserializer);
+
+  @protected
+  LkcReencryption sse_decode_lkc_reencryption(SseDeserializer deserializer);
 
   @protected
   LkcSnapshot sse_decode_lkc_snapshot(SseDeserializer deserializer);
@@ -357,13 +648,53 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LkcSyncVersion sse_decode_lkc_sync_version(SseDeserializer deserializer);
 
   @protected
+  LkcTeam sse_decode_lkc_team(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamError sse_decode_lkc_team_error(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamErrorKind sse_decode_lkc_team_error_kind(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamFailure sse_decode_lkc_team_failure(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamFile sse_decode_lkc_team_file(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamLog sse_decode_lkc_team_log(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamSnapshot sse_decode_lkc_team_snapshot(SseDeserializer deserializer);
+
+  @protected
+  LkcTeamStatus sse_decode_lkc_team_status(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  LkcAccountKey?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   LkcSnapshot? sse_decode_opt_box_autoadd_lkc_snapshot(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamFile? sse_decode_opt_box_autoadd_lkc_team_file(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LkcTeamSnapshot? sse_decode_opt_box_autoadd_lkc_team_snapshot(
     SseDeserializer deserializer,
   );
 
@@ -419,6 +750,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -433,6 +771,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    LkcTeamKeys self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    LkcTeamSpace self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    LkcTeams self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -442,6 +808,33 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
     LkcSync self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    LkcTeamKeys self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    LkcTeamSpace self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    LkcTeams self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_DartFn_Inputs_String_Output_bool_AnyhowException(
+    FutureOr<bool> Function(String) self,
     SseSerializer serializer,
   );
 
@@ -462,6 +855,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -471,6 +871,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
     LkcSync self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    LkcTeamKeys self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    LkcTeamSpace self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    LkcTeams self,
     SseSerializer serializer,
   );
 
@@ -487,6 +908,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_i_64(
     PlatformInt64 self,
     SseSerializer serializer,
@@ -495,6 +923,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_lkc_snapshot(
     LkcSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_lkc_team_file(
+    LkcTeamFile self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_lkc_team_snapshot(
+    LkcTeamSnapshot self,
     SseSerializer serializer,
   );
 
@@ -517,6 +957,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_lkc_batch(List<LkcBatch> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_lkc_member(
+    List<LkcMember> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_lkc_sync_file(
     List<LkcSyncFile> self,
     SseSerializer serializer,
@@ -525,6 +971,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_lkc_sync_version(
     List<LkcSyncVersion> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_lkc_team(List<LkcTeam> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_lkc_team_failure(
+    List<LkcTeamFailure> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_i_64_strict(
+    Int64List self,
     SseSerializer serializer,
   );
 
@@ -565,7 +1026,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_lkc_fetched(LkcFetched self, SseSerializer serializer);
 
   @protected
+  void sse_encode_lkc_invite_link(LkcInviteLink self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_invite_view(LkcInviteView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_joined(LkcJoined self, SseSerializer serializer);
+
+  @protected
   void sse_encode_lkc_log_read(LkcLogRead self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_member(LkcMember self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_reencrypted(
+    LkcReencrypted self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lkc_reencryption(
+    LkcReencryption self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_lkc_snapshot(LkcSnapshot self, SseSerializer serializer);
@@ -592,7 +1077,47 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_lkc_team(LkcTeam self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_team_error(LkcTeamError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_team_error_kind(
+    LkcTeamErrorKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lkc_team_failure(
+    LkcTeamFailure self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lkc_team_file(LkcTeamFile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_team_log(LkcTeamLog self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lkc_team_snapshot(
+    LkcTeamSnapshot self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_lkc_team_status(LkcTeamStatus self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    LkcAccountKey? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_i_64(
@@ -603,6 +1128,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_lkc_snapshot(
     LkcSnapshot? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_lkc_team_file(
+    LkcTeamFile? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_lkc_team_snapshot(
+    LkcTeamSnapshot? self,
     SseSerializer serializer,
   );
 
@@ -673,6 +1210,40 @@ class RustLibWire implements BaseWire {
     : _lookup = dynamicLibrary.lookup;
 
   void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKeyPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey',
+      );
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey =
+      _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKeyPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKeyPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey',
+      );
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey =
+      _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKeyPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
   rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     ffi.Pointer<ffi.Void> ptr,
   ) {
@@ -738,5 +1309,107 @@ class RustLibWire implements BaseWire {
       );
   late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync =
       _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSyncPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeysPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys',
+      );
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys =
+      _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeysPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeysPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys',
+      );
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeys =
+      _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamKeysPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpacePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace',
+      );
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace =
+      _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpacePtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpacePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace',
+      );
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpace =
+      _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamSpacePtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamsPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams',
+      );
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams =
+      _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamsPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamsPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_fl_lib_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams',
+      );
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeams =
+      _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcTeamsPtr
           .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 }
