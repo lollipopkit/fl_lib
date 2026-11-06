@@ -181,6 +181,22 @@ struct RecordPage {
     more: bool,
 }
 
+/// An app with anything in a team's sync space.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SpaceApp {
+    pub app: String,
+    /// Its files, the snapshot not counted.
+    pub files: i64,
+    /// Of its files and snapshot.
+    pub bytes: i64,
+    pub snapshot: bool,
+    /// Its log holds batches past the snapshot.
+    pub log: bool,
+    /// The oldest key epoch of its files, snapshot and those batches.
+    #[serde(default)]
+    pub oldest_epoch: Option<i64>,
+}
+
 /// The keyed invite one joined by, signed by its maker.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct JoinInvite {
@@ -538,6 +554,12 @@ impl<S: Store> TeamClient<S> {
     pub async fn detail(&self, id: &str) -> Result<TeamDetail, TeamError> {
         team_bytes(id)?;
         self.call(Method::GET, &format!("/v2/teams/{id}"), None).await
+    }
+
+    /// The apps with anything in the team's sync space.
+    pub async fn space_apps(&self, id: &str) -> Result<Vec<SpaceApp>, TeamError> {
+        team_bytes(id)?;
+        self.call(Method::GET, &format!("/v2/teams/{id}/sync"), None).await
     }
 
     /// The team's key state, with every epoch's record (read page by page).

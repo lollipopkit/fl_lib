@@ -374,6 +374,15 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
             s.members.insert(user, m);
             ok(json!({ "team_id": TEAM, "approved": true }))
         }
+        ("GET", p) if p == format!("{base}/sync") => {
+            let epochs = s.files.values().map(|f| f.2).chain(s.log.iter().map(|b| b.2));
+            let apps: Vec<Value> = epochs.clone().min().map(|oldest| json!({
+                "app": "serverbox", "files": s.files.keys().filter(|n| *n != ".snapshot").count(),
+                "bytes": s.files.values().map(|f| f.1.len()).sum::<usize>(), "snapshot": s.files.contains_key(".snapshot"),
+                "log": !s.log.is_empty(), "oldest_epoch": oldest,
+            })).into_iter().collect();
+            ok(json!(apps))
+        }
         ("GET", p) if p == format!("{base}/sync/serverbox") => ok(Value::Array(
             s.files
                 .iter()
@@ -660,7 +669,7 @@ async fn rotation_reencrypts_the_space_and_writes_follow_it() {
     for _ in 0..2 {
         alice.teams.rotate(TEAM, &[]).await.unwrap();
     }
-    assert_eq!(alice.teams.reencrypt(TEAM, &["serverbox"]).await.unwrap(), Reencrypted::Migrated);
+    assert_eq!(alice.teams.reencrypt(TEAM).await.unwrap(), Reencrypted::Migrated);
     let (plain, etag) = space.read("servers").await.unwrap().unwrap();
     assert_eq!(plain, b"hosts");
     // Bob's space still names epoch 1: refused, sealed again, sent again.
@@ -866,7 +875,7 @@ async fn a_file_of_an_epoch_not_held_is_reported() {
         s.wraps.get_mut(&(1, "alice".to_string())).unwrap().wrap = b64(&forged.wrap(&alice.key().recipient()).unwrap());
         s.files.insert("old".into(), ("e".into(), forged.seal(b"x").unwrap(), 1, Value::Null));
     }
-    assert_eq!(alice.teams.reencrypt(TEAM, &["serverbox"]).await.unwrap(), Reencrypted::Unreadable(vec!["serverbox/old".into()]));
+    assert_eq!(alice.teams.reencrypt(TEAM).await.unwrap(), Reencrypted::Unreadable(vec!["serverbox/old".into()]));
 }
 
 /// Alice signs epoch 2 with her first key, rotates, signs 3 with the next:
@@ -1193,4 +1202,18 @@ async fn a_member_is_first_met_in_a_signed_record() {
     }
     let status = carol.teams.status(TEAM).await.unwrap();
     assert!(status.members.iter().find(|m| m.user_id == "bob").unwrap().changed);
+}
+
+/// Only apps holding something under an older key are read again.
+#[tokio::test]
+async fn reencrypt_reads_only_apps_under_an_older_key() {
+    let (state, fake, alice, bob) = setup().await;
+    keyed(&state, &alice, &bob).await;
+    let space = bob.teams.space(TEAM, "serverbox").await.unwrap();
+    space.write("servers", b"hosts", Condition::Absent).await.unwrap();
+    assert_eq!(alice.teams.reencrypt(TEAM).await.unwrap(), Reencrypted::Migrated);
+    assert!(fake.requests(&format!("/v2/teams/{TEAM}/sync/serverbox")).is_empty());
+    alice.teams.rotate(TEAM, &[]).await.unwrap();
+    assert_eq!(alice.teams.reencrypt(TEAM).await.unwrap(), Reencrypted::Migrated);
+    assert_eq!(fake.requests(&format!("/v2/teams/{TEAM}/sync/serverbox")).len(), 1);
 }

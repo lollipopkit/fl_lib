@@ -264,7 +264,6 @@ abstract class RustLibApi extends BaseApi {
   Future<LkcReencryption> crateApiTeamLkcTeamKeysReencrypt({
     required LkcTeamKeys that,
     required String team,
-    required List<String> apps,
   });
 
   Future<void> crateApiTeamLkcTeamKeysRemoveMember({
@@ -1883,7 +1882,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<LkcReencryption> crateApiTeamLkcTeamKeysReencrypt({
     required LkcTeamKeys that,
     required String team,
-    required List<String> apps,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -1894,7 +1892,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(team, serializer);
-          sse_encode_list_String(apps, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1907,7 +1904,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_lkc_team_error,
         ),
         constMeta: kCrateApiTeamLkcTeamKeysReencryptConstMeta,
-        argValues: [that, team, apps],
+        argValues: [that, team],
         apiImpl: this,
       ),
     );
@@ -1916,7 +1913,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTeamLkcTeamKeysReencryptConstMeta =>
       const TaskConstMeta(
         debugName: "LkcTeamKeys_reencrypt",
-        argNames: ["that", "team", "apps"],
+        argNames: ["that", "team"],
       );
 
   @override
@@ -6972,14 +6969,10 @@ class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
     fingerprint: fingerprint,
   );
 
-  Future<LkcReencryption> reencrypt({
-    required String team,
-    required List<String> apps,
-  }) => RustLib.instance.api.crateApiTeamLkcTeamKeysReencrypt(
-    that: this,
-    team: team,
-    apps: apps,
-  );
+  Future<LkcReencryption> reencrypt({required String team}) => RustLib
+      .instance
+      .api
+      .crateApiTeamLkcTeamKeysReencrypt(that: this, team: team);
 
   /// Removes [user_id]: the team then needs a new key.
   Future<void> removeMember({required String team, required String userId}) =>

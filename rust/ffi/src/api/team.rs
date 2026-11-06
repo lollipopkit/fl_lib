@@ -455,9 +455,8 @@ impl LkcTeamKeys {
         Ok(LkcJoined { team_id: j.team_id, approved: j.approved })
     }
 
-    pub async fn reencrypt(&self, team: String, apps: Vec<String>) -> Result<LkcReencryption, LkcTeamError> {
-        let apps: Vec<&str> = apps.iter().map(String::as_str).collect();
-        let (outcome, unreadable) = match self.0.reencrypt(&team, &apps).await? {
+    pub async fn reencrypt(&self, team: String) -> Result<LkcReencryption, LkcTeamError> {
+        let (outcome, unreadable) = match self.0.reencrypt(&team).await? {
             Reencrypted::Migrated => (LkcReencrypted::Migrated, vec![]),
             Reencrypted::Unreadable(files) => (LkcReencrypted::Unreadable, files),
             Reencrypted::SnapshotNeeded => (LkcReencrypted::SnapshotNeeded, vec![]),

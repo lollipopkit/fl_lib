@@ -132,7 +132,7 @@ async fn run(session: Arc<Session<Memory>>, me: String, passphrase: String, seco
     println!("written under epoch {before}");
 
     assert_eq!(teams.rotate(&team, &[]).await.expect("rotate"), before + 1);
-    assert_eq!(teams.reencrypt(&team, &[APP]).await.expect("re-encrypt"), Reencrypted::Migrated);
+    assert_eq!(teams.reencrypt(&team).await.expect("re-encrypt"), Reencrypted::Migrated);
     // The space still names the epoch before: refused, sealed again, sent again.
     let (plain, etag2) = space.read("f").await.unwrap().expect("the file");
     assert_eq!(plain, b"team e2e");
@@ -193,7 +193,7 @@ async fn roles(teams: &Arc<Teams<Memory, Forget>>, team: &str, passphrase: Strin
         teams.set_role(team, &other, "member", "").await.expect("demote");
         teams.client().remove_member(team, &other).await.expect("remove");
         let epoch = teams.rotate(team, &[]).await.expect("rotate after removing");
-        assert_eq!(teams.reencrypt(team, &[APP]).await.expect("re-encrypt"), Reencrypted::Migrated);
+        assert_eq!(teams.reencrypt(team).await.expect("re-encrypt"), Reencrypted::Migrated);
         println!("demoted, removed, rotated to epoch {epoch}");
     };
     let result = tokio::spawn(result).await;

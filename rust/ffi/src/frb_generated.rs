@@ -732,8 +732,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
-let api_team = <String>::sse_decode(&mut deserializer);
-let api_apps = <Vec<String>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+let api_team = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, crate::api::team::LkcTeamError>((move || async move {
                         let mut api_that_guard = None;
 let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
@@ -744,7 +743,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             }
         }
         let api_that_guard = api_that_guard.unwrap();
- let output_ok = crate::api::team::LkcTeamKeys::reencrypt(&*api_that_guard, api_team, api_apps).await?;   std::result::Result::Ok(output_ok)
+ let output_ok = crate::api::team::LkcTeamKeys::reencrypt(&*api_that_guard, api_team).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__team__LkcTeamKeys_remove_member_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {

@@ -17,11 +17,7 @@ final class LkcPageArgs {
   /// Shown inside a page that has a title bar of its own: no second one.
   final bool embedded;
 
-  /// The apps whose files a team's space holds, re-encrypted after a
-  /// rotation (`serverbox`, …).
-  final List<String> teamApps;
-
-  const LkcPageArgs(this.client, {this.embedded = false, this.teamApps = const []});
+  const LkcPageArgs(this.client, {this.embedded = false});
 }
 
 /// The LK Cloud account: sign-in, the plans held and on sale, and the account itself.
@@ -409,7 +405,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   void _openTeams() {
     LkcTeamsPage.route.go(
       context,
-      LkcPageArgs(_client, teamApps: widget.args.teamApps),
+      LkcPageArgs(_client),
       target: widget.args.embedded ? NavTarget.root : NavTarget.nearest,
     );
   }

@@ -160,7 +160,6 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
             },
             child: _TeamDetail(
               client: _client,
-              apps: widget.args.teamApps,
               entry: entry,
               keys: _keys!,
               onBack: () => setState(() => _selected = null),
@@ -177,7 +176,7 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
             Expanded(
               child: entry == null
                   ? Center(child: Icon(Icons.group, size: 56, color: Theme.of(context).colorScheme.outlineVariant))
-                  : _TeamDetail(key: ValueKey(entry.team.id), client: _client, apps: widget.args.teamApps, entry: entry, keys: _keys!, onChanged: _load),
+                  : _TeamDetail(key: ValueKey(entry.team.id), client: _client, entry: entry, keys: _keys!, onChanged: _load),
             ),
           ],
         );
@@ -548,13 +547,12 @@ final class _FingerprintCard extends StatelessWidget {
 /// One team: its state, its members, and what this account may do in it.
 final class _TeamDetail extends StatefulWidget {
   final LkcClient client;
-  final List<String> apps;
   final _TeamEntry entry;
   final LkcTeamKeys keys;
   final VoidCallback? onBack;
   final Future<void> Function() onChanged;
 
-  const _TeamDetail({super.key, required this.client, required this.apps, required this.entry, required this.keys, this.onBack, required this.onChanged});
+  const _TeamDetail({super.key, required this.client, required this.entry, required this.keys, this.onBack, required this.onChanged});
 
   @override
   State<_TeamDetail> createState() => _TeamDetailState();
@@ -933,7 +931,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
     try {
       final epoch = await _keys.rotate(team: team, confirmed: confirmed);
       progress.value = l10n.lkcTeamReencrypting;
-      final r = await _keys.reencrypt(team: team, apps: widget.apps);
+      final r = await _keys.reencrypt(team: team);
       done = switch (r.outcome) {
         LkcReencrypted.migrated => l10n.lkcTeamRotated(epoch),
         LkcReencrypted.snapshotNeeded => l10n.lkcTeamSnapshotNeeded,
