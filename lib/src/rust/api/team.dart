@@ -81,10 +81,7 @@ abstract class LkcTeamKeys implements RustOpaqueInterface {
     required String fingerprint,
   });
 
-  Future<LkcReencryption> reencrypt({
-    required String team,
-    required List<String> apps,
-  });
+  Future<LkcReencryption> reencrypt({required String team});
 
   /// Removes [user_id]: the team then needs a new key.
   Future<void> removeMember({required String team, required String userId});

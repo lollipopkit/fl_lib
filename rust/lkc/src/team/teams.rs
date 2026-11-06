@@ -644,28 +644,29 @@ impl<S: Store, K: Keeper> Teams<S, K> {
         serde_json::from_value(joined).map_err(|e| TeamError::Invalid(format!("a join: {e}")))
     }
 
-    /// After a rotation: every file of [apps] in the team's space, and its
-    /// log's snapshot, read, checked and written again under the current key,
-    /// then the epoch marked migrated.
-    pub async fn reencrypt(self: &Arc<Self>, team: &str, apps: &[&str]) -> Result<Reencrypted, TeamError> {
+    /// After a rotation: every file of each app in the team's space under
+    /// an older key, and its log's snapshot, read, checked and written again
+    /// under the current key, then the epoch marked migrated.
+    pub async fn reencrypt(self: &Arc<Self>, team: &str) -> Result<Reencrypted, TeamError> {
         let ring = self.keyring(team).await?;
         let held: Vec<i64> = ring.keys().map(|(e, _)| e).collect();
         let mut unreadable = Vec::new();
-        for app in apps {
-            let space = TeamSpace::new(self.clone(), team, app, ring.clone())?;
+        let apps = self.client.space_apps(team).await?;
+        for app in apps.iter().filter(|a| a.oldest_epoch.is_some_and(|e| e < ring.epoch())) {
+            let space = TeamSpace::new(self.clone(), team, &app.app, ring.clone())?;
             for file in space.list().await? {
                 if file.epoch == Some(ring.epoch()) {
                     continue;
                 }
                 if file.epoch.is_some_and(|e| !held.contains(&e)) {
-                    unreadable.push(format!("{app}/{}", file.name));
+                    unreadable.push(format!("{}/{}", app.app, file.name));
                     continue;
                 }
                 let resealed = if file.name == SNAPSHOT { space.reseal_snapshot().await } else { space.reseal(&file.name).await };
                 match resealed {
                     Ok(()) => {}
                     // Not checked as written by one who could: left as it is.
-                    Err(TeamError::Untrusted(_) | TeamError::Crypto(_) | TeamError::SigningKeyChanged { .. }) => unreadable.push(format!("{app}/{}", file.name)),
+                    Err(TeamError::Untrusted(_) | TeamError::Crypto(_) | TeamError::SigningKeyChanged { .. }) => unreadable.push(format!("{}/{}", app.app, file.name)),
                     Err(e) => return Err(e),
                 }
             }
