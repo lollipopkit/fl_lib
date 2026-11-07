@@ -53,7 +53,6 @@ abstract class LkcTeamKeys implements RustOpaqueInterface {
 
   Future<LkcInviteLink> createInvite({
     required String team,
-    required String role,
     required int uses,
     required PlatformInt64 days,
     required bool keyed,
@@ -252,14 +251,12 @@ class LkcInviteLink {
 class LkcInviteView {
   final String teamId;
   final String teamName;
-  final String role;
   final bool approvalRequired;
   final bool keyed;
 
   const LkcInviteView({
     required this.teamId,
     required this.teamName,
-    required this.role,
     required this.approvalRequired,
     required this.keyed,
   });
@@ -268,7 +265,6 @@ class LkcInviteView {
   int get hashCode =>
       teamId.hashCode ^
       teamName.hashCode ^
-      role.hashCode ^
       approvalRequired.hashCode ^
       keyed.hashCode;
 
@@ -279,7 +275,6 @@ class LkcInviteView {
           runtimeType == other.runtimeType &&
           teamId == other.teamId &&
           teamName == other.teamName &&
-          role == other.role &&
           approvalRequired == other.approvalRequired &&
           keyed == other.keyed;
 }

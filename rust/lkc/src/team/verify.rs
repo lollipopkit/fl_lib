@@ -116,7 +116,7 @@ pub(crate) fn writers(team: &[u8; 16], record: &EpochRecord, chains: &Chains) ->
                     ("grant", _) => j.signed_by != j.user_id && vouched(&writers, &j.signed_by, &signer_key),
                     ("invite", Some(inv)) => {
                         let inviter = raw32(&inv.signer_key, "signer_key")?;
-                        let message = crypto::invite_message(team, record.epoch, &key_id, &inv.signed_by, &inv.role, &inv.recipient);
+                        let message = crypto::invite_message(team, record.epoch, &key_id, &inv.signed_by, &inv.recipient);
                         crypto::verify(&inviter, &message, &unb64(&inv.signature, "signature")?, "an invite signature")?;
                         j.signed_by == j.user_id && signer_key == signing_key && vouched(&writers, &inv.signed_by, &inviter)
                     }
@@ -500,7 +500,7 @@ pub(super) fn invite_key(view: &InviteView, secret: &InviteSecret) -> Result<(i6
     if view.recipient.as_deref() != Some(&recipient) {
         return Err(bad("not wrapped to this link"));
     }
-    let message = crypto::invite_message(&team, view.epoch, &key_id, by, &view.role, &recipient);
+    let message = crypto::invite_message(&team, view.epoch, &key_id, by, &recipient);
     crypto::verify(&secret.signer, &message, &unb64(signature, "signature")?, "an invite signature")?;
     let k = TeamKey::unwrap(&unb64(wrap, "wrap")?, &[&secret.identity()])?;
     if k.id() != key_id {

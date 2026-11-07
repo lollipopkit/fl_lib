@@ -142,7 +142,7 @@ async fn run(session: Arc<Session<Memory>>, me: String, passphrase: String, seco
     assert!(space.list().await.unwrap().iter().all(|f| f.epoch == Some(before + 1)));
     println!("rotated, re-encrypted, migrated, written under epoch {}", before + 1);
 
-    let terms = InviteTerms { role: "member".into(), uses: 1, days: 1 };
+    let terms = InviteTerms { uses: 1, days: 1 };
     let link = teams.create_invite(&team, &terms, true).await.expect("a keyed invite");
     let view = teams.client().invite(&link.made.token).await.expect("the invite");
     assert!(view.wrap.is_some() && view.signature.is_some());
@@ -169,7 +169,7 @@ async fn roles(teams: &Arc<Teams<Memory, Forget>>, team: &str, passphrase: Strin
         let fingerprint = fl_lkc::team::crypto::fingerprint(&other, &key.recipient(), &key.signing_raw());
         let them = Arc::new(Teams::new(api, key, Trust::default(), Forget));
 
-        let terms = InviteTerms { role: "member".into(), uses: 1, days: 1 };
+        let terms = InviteTerms { uses: 1, days: 1 };
         let link = teams.create_invite(team, &terms, true).await.expect("a keyed invite");
         them.join(&link.made.token, link.secret.as_deref()).await.expect("join");
         let seen = teams.status(team).await.expect("status");

@@ -1012,7 +1012,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
     );
     if (go != true || !mounted) return;
     final link = await context._runTeam(
-      () => _keys.createInvite(team: _team.id, role: 'member', uses: uses.round(), days: days.round(), keyed: keyed),
+      () => _keys.createInvite(team: _team.id, uses: uses.round(), days: days.round(), keyed: keyed),
     );
     if (link == null || !mounted) return;
     final scheme = Theme.of(context).colorScheme;

@@ -62,8 +62,8 @@ struct State {
     members: BTreeMap<String, M>,
     wraps: BTreeMap<(i64, String), W>,
     epochs: BTreeMap<i64, Value>,
-    /// token → (role, epoch, keyed).
-    invites: BTreeMap<String, (String, i64, Option<Value>)>,
+    /// token → (epoch, keyed).
+    invites: BTreeMap<String, (i64, Option<Value>)>,
     /// name → (etag, body, epoch, signature as listed).
     files: BTreeMap<String, (String, Vec<u8>, i64, Value)>,
     /// Each name's highest version.
@@ -329,26 +329,27 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
                 k
             });
             let epoch = s.epoch;
-            s.invites.insert(token.clone(), (body["role"].as_str().unwrap().into(), epoch, keyed.clone()));
+            assert!(body.get("role").is_none());
+            s.invites.insert(token.clone(), (epoch, keyed.clone()));
             ok(json!({
-                "id": "i", "role": body["role"], "created_by": user, "epoch": epoch, "keyed": keyed.is_some(),
+                "id": "i", "created_by": user, "epoch": epoch, "keyed": keyed.is_some(),
                 "uses_left": 1, "expires_at": "2026-01-08T00:00:00Z", "created_at": "2026-01-01T00:00:00Z", "token": token,
             }))
         }
         ("GET", p) if p.starts_with("/v2/teams/invites/") => {
             let token = p.trim_start_matches("/v2/teams/invites/");
-            let Some((role, epoch, key)) = s.invites.get(token).cloned() else { return Response::json(200, json!({ "code": 3, "msg": "Not found" })) };
+            let Some((epoch, key)) = s.invites.get(token).cloned() else { return Response::json(200, json!({ "code": 3, "msg": "Not found" })) };
             let k = key.unwrap_or(Value::Null);
             ok(json!({
-                "team_id": TEAM, "team_name": "t", "role": role, "epoch": epoch, "approval_required": false,
+                "team_id": TEAM, "team_name": "t", "epoch": epoch, "approval_required": false,
                 "recipient": k["recipient"], "wrap": k["wrap"], "key_id": k["key_id"], "signed_by": k["signed_by"],
                 "signing_key": k["signing_key"], "signature": k["signature"],
             }))
         }
         ("POST", p) if p.starts_with("/v2/teams/invites/") && p.ends_with("/join") => {
             let token = p.trim_start_matches("/v2/teams/invites/").trim_end_matches("/join");
-            let (role, invite_epoch, keyed) = s.invites.get(token).cloned().unwrap();
-            let mut m = M { role, approved: true, attestation: None };
+            let (invite_epoch, keyed) = s.invites.get(token).cloned().unwrap();
+            let mut m = M { role: "member".into(), approved: true, attestation: None };
             if let Some(k) = body.get("key") {
                 let epoch = k["epoch"].as_i64().unwrap();
                 let recipient = k["recipient"].as_str().unwrap().to_string();
@@ -365,7 +366,7 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
                 let join = json!({
                     "user_id": user, "recipient": recipient, "signing_key": s.keys[&user].1, "via": "invite", "signed_by": user,
                     "signer_key": s.keys[&user].1, "signature": k["signature"],
-                    "invite": { "signed_by": inv["signed_by"], "signer_key": inv["signing_key"], "role": "member", "recipient": inv["recipient"], "signature": inv["signature"] },
+                    "invite": { "signed_by": inv["signed_by"], "signer_key": inv["signing_key"], "recipient": inv["recipient"], "signature": inv["signature"] },
                 });
                 s.joins.entry(epoch).or_default().push(join);
                 let signed = Some((user.clone(), s.keys[&user].1.clone(), k["signature"].as_str().unwrap().to_string()));
@@ -580,7 +581,7 @@ impl Person {
 }
 
 fn terms() -> InviteTerms {
-    InviteTerms { role: "member".into(), uses: 1, days: 7 }
+    InviteTerms { uses: 1, days: 7 }
 }
 
 fn add(state: &Mutex<State>, user: &str, role: &str) {
@@ -915,8 +916,6 @@ async fn a_member_promoted_mid_epoch_rotates() {
     let carol = person(&fake, "carol").await;
     carol.teams.join(&link.made.token, link.secret.as_deref()).await.unwrap();
     // Not an admin yet: an invite never makes one.
-    let admin = InviteTerms { role: "admin".into(), ..terms() };
-    assert!(matches!(alice.teams.create_invite(TEAM, &admin, true).await, Err(TeamError::Invalid(_))));
     assert!(matches!(alice.teams.set_role(TEAM, "carol", "admin", &bob.fingerprint()).await, Err(TeamError::Untrusted(_))));
     alice.teams.set_role(TEAM, "carol", "admin", &carol.fingerprint()).await.unwrap();
     assert_eq!(carol.teams.rotate(TEAM, &[]).await.unwrap(), 2);

@@ -27,8 +27,8 @@
 
 // Section: imports
 
-use crate::api::lkc::*;
-use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::team::*;
+use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 
@@ -610,7 +610,6 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>>::sse_decode(&mut deserializer);
 let api_team = <String>::sse_decode(&mut deserializer);
-let api_role = <String>::sse_decode(&mut deserializer);
 let api_uses = <i32>::sse_decode(&mut deserializer);
 let api_days = <i64>::sse_decode(&mut deserializer);
 let api_keyed = <bool>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
@@ -624,7 +623,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             }
         }
         let api_that_guard = api_that_guard.unwrap();
- let output_ok = crate::api::team::LkcTeamKeys::create_invite(&*api_that_guard, api_team, api_role, api_uses, api_days, api_keyed).await?;   std::result::Result::Ok(output_ok)
+ let output_ok = crate::api::team::LkcTeamKeys::create_invite(&*api_that_guard, api_team, api_uses, api_days, api_keyed).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__team__LkcTeamKeys_forget_team_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -1871,10 +1870,9 @@ return crate::api::team::LkcInviteLink{id: var_id, token: var_token, url: var_ur
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_teamId = <String>::sse_decode(deserializer);
 let mut var_teamName = <String>::sse_decode(deserializer);
-let mut var_role = <String>::sse_decode(deserializer);
 let mut var_approvalRequired = <bool>::sse_decode(deserializer);
 let mut var_keyed = <bool>::sse_decode(deserializer);
-return crate::api::team::LkcInviteView{team_id: var_teamId, team_name: var_teamName, role: var_role, approval_required: var_approvalRequired, keyed: var_keyed};}
+return crate::api::team::LkcInviteView{team_id: var_teamId, team_name: var_teamName, approval_required: var_approvalRequired, keyed: var_keyed};}
                 }
                 
                 impl SseDecode for crate::api::team::LkcJoined {
@@ -2556,7 +2554,6 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::team::LkcInviteLink> for crat
                     [
                     self.team_id.into_into_dart().into_dart(),
 self.team_name.into_into_dart().into_dart(),
-self.role.into_into_dart().into_dart(),
 self.approval_required.into_into_dart().into_dart(),
 self.keyed.into_into_dart().into_dart()
                 ].into_dart()
@@ -3271,7 +3268,6 @@ crate::api::lkc::LkcFailure::Refused => { 7 }
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<String>::sse_encode(self.team_id, serializer);
 <String>::sse_encode(self.team_name, serializer);
-<String>::sse_encode(self.role, serializer);
 <bool>::sse_encode(self.approval_required, serializer);
 <bool>::sse_encode(self.keyed, serializer);}
                 }
@@ -3613,8 +3609,8 @@ crate::api::team::LkcTeamErrorKind::Sync => { 17 }
 
 // Section: imports
 
-use crate::api::lkc::*;
-use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::team::*;
+use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};use super::*;
 

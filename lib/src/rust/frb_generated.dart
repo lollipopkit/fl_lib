@@ -225,7 +225,6 @@ abstract class RustLibApi extends BaseApi {
   Future<LkcInviteLink> crateApiTeamLkcTeamKeysCreateInvite({
     required LkcTeamKeys that,
     required String team,
-    required String role,
     required int uses,
     required PlatformInt64 days,
     required bool keyed,
@@ -1636,7 +1635,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<LkcInviteLink> crateApiTeamLkcTeamKeysCreateInvite({
     required LkcTeamKeys that,
     required String team,
-    required String role,
     required int uses,
     required PlatformInt64 days,
     required bool keyed,
@@ -1650,7 +1648,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(team, serializer);
-          sse_encode_String(role, serializer);
           sse_encode_i_32(uses, serializer);
           sse_encode_i_64(days, serializer);
           sse_encode_bool(keyed, serializer);
@@ -1666,7 +1663,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_lkc_team_error,
         ),
         constMeta: kCrateApiTeamLkcTeamKeysCreateInviteConstMeta,
-        argValues: [that, team, role, uses, days, keyed],
+        argValues: [that, team, uses, days, keyed],
         apiImpl: this,
       ),
     );
@@ -1675,7 +1672,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTeamLkcTeamKeysCreateInviteConstMeta =>
       const TaskConstMeta(
         debugName: "LkcTeamKeys_create_invite",
-        argNames: ["that", "team", "role", "uses", "days", "keyed"],
+        argNames: ["that", "team", "uses", "days", "keyed"],
       );
 
   @override
@@ -4207,14 +4204,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   LkcInviteView dco_decode_lkc_invite_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return LkcInviteView(
       teamId: dco_decode_String(arr[0]),
       teamName: dco_decode_String(arr[1]),
-      role: dco_decode_String(arr[2]),
-      approvalRequired: dco_decode_bool(arr[3]),
-      keyed: dco_decode_bool(arr[4]),
+      approvalRequired: dco_decode_bool(arr[2]),
+      keyed: dco_decode_bool(arr[3]),
     );
   }
 
@@ -5169,13 +5165,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     final var_teamId = sse_decode_String(deserializer);
     final var_teamName = sse_decode_String(deserializer);
-    final var_role = sse_decode_String(deserializer);
     final var_approvalRequired = sse_decode_bool(deserializer);
     final var_keyed = sse_decode_bool(deserializer);
     return LkcInviteView(
       teamId: var_teamId,
       teamName: var_teamName,
-      role: var_role,
       approvalRequired: var_approvalRequired,
       keyed: var_keyed,
     );
@@ -6249,7 +6243,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.teamId, serializer);
     sse_encode_String(self.teamName, serializer);
-    sse_encode_String(self.role, serializer);
     sse_encode_bool(self.approvalRequired, serializer);
     sse_encode_bool(self.keyed, serializer);
   }
@@ -6919,14 +6912,12 @@ class LkcTeamKeysImpl extends RustOpaque implements LkcTeamKeys {
 
   Future<LkcInviteLink> createInvite({
     required String team,
-    required String role,
     required int uses,
     required PlatformInt64 days,
     required bool keyed,
   }) => RustLib.instance.api.crateApiTeamLkcTeamKeysCreateInvite(
     that: this,
     team: team,
-    role: role,
     uses: uses,
     days: days,
     keyed: keyed,
