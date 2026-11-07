@@ -259,7 +259,6 @@ pub struct LkcInviteLink {
 pub struct LkcInviteView {
     pub team_id: String,
     pub team_name: String,
-    pub role: String,
     pub approval_required: bool,
     pub keyed: bool,
 }
@@ -348,7 +347,7 @@ impl LkcTeams {
 
     pub async fn invite(&self, token: String) -> Result<LkcInviteView, LkcTeamError> {
         let v = self.api().invite(&token).await?;
-        Ok(LkcInviteView { team_id: v.team_id, team_name: v.team_name, role: v.role, approval_required: v.approval_required, keyed: v.wrap.is_some() })
+        Ok(LkcInviteView { team_id: v.team_id, team_name: v.team_name, approval_required: v.approval_required, keyed: v.wrap.is_some() })
     }
 
     /// [key] open for every team: [trust] as last kept (empty the first
@@ -443,8 +442,8 @@ impl LkcTeamKeys {
         Ok(LkcTeamKeys(Arc::new(self.0.with_key(key)?)))
     }
 
-    pub async fn create_invite(&self, team: String, role: String, uses: i32, days: i64, keyed: bool) -> Result<LkcInviteLink, LkcTeamError> {
-        let link = self.0.create_invite(&team, &InviteTerms { role, uses, days }, keyed).await?;
+    pub async fn create_invite(&self, team: String, uses: i32, days: i64, keyed: bool) -> Result<LkcInviteLink, LkcTeamError> {
+        let link = self.0.create_invite(&team, &InviteTerms { uses, days }, keyed).await?;
         let url = self.0.client().invite_url(&link.made.token, link.secret.as_deref());
         Ok(LkcInviteLink { id: link.made.invite.id, token: link.made.token, url, secret: link.secret, expires_at: link.made.invite.expires_at })
     }

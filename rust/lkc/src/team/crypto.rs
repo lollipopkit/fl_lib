@@ -280,11 +280,16 @@ pub fn grant_message(team: &[u8; 16], epoch: i64, key_id: &[u8; KEY_LEN], signer
     m.0
 }
 
+/// Part of every keyed invite's signed bytes: never change it.
+const INVITE_ROLE: &str = "member";
+
 /// What a keyed invite signs: epoch [epoch]'s key [key_id] wrapped by
-/// [signer] to the link's [recipient], for joining as [role].
-pub fn invite_message(team: &[u8; 16], epoch: i64, key_id: &[u8; KEY_LEN], signer: &str, role: &str, recipient: &str) -> Vec<u8> {
+/// [signer] to the link's [recipient], for joining as a member (an admin is
+/// made by a signed promotion, never by a link).
+/// [INVITE_ROLE] keeps the bytes invites were signed with when they named one.
+pub fn invite_message(team: &[u8; 16], epoch: i64, key_id: &[u8; KEY_LEN], signer: &str, recipient: &str) -> Vec<u8> {
     let mut m = Message::tagged(TAG_INVITE, team, epoch);
-    m.raw(key_id).str(signer).str(role).str(recipient);
+    m.raw(key_id).str(signer).str(INVITE_ROLE).str(recipient);
     m.0
 }
 
@@ -571,7 +576,7 @@ mod tests {
         verify(&pk, &m, &sig, "a grant").unwrap();
         let other = grant_message(&TEAM, 2, &[3; 32], "admin", "u", "age1v");
         assert!(verify(&pk, &other, &sig, "a grant").is_err());
-        assert_ne!(m, invite_message(&TEAM, 2, &[3; 32], "admin", "u", "age1u"));
+        assert_ne!(m, invite_message(&TEAM, 2, &[3; 32], "admin", "age1u"));
     }
 
     #[test]

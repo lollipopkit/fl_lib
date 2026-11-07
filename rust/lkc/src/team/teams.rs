@@ -590,19 +590,14 @@ impl<S: Store, K: Keeper> Teams<S, K> {
     /// secret and this account's signing key in the link's fragment.
     pub async fn create_invite(&self, team: &str, terms: &InviteTerms, keyed: bool) -> Result<InviteLink, TeamError> {
         let id = team_bytes(team)?;
-        let role = terms.role.as_str();
-        // An admin is made by a signed promotion, never by a link.
-        if role != "member" {
-            return Err(TeamError::Invalid("an invite lets in members only".into()));
-        }
-        let mut body = json!({ "role": role, "uses": terms.uses, "days": terms.days });
+        let mut body = json!({ "uses": terms.uses, "days": terms.days });
         let secret = if keyed {
             let ring = self.keyring(team).await?;
             let secret = InviteSecret::generate(self.key.signing_raw());
             let recipient = secret.recipient();
             let k = ring.current();
             let key_id = k.id();
-            let message = crypto::invite_message(&id, ring.epoch(), &key_id, self.me(), role, &recipient);
+            let message = crypto::invite_message(&id, ring.epoch(), &key_id, self.me(), &recipient);
             body["key"] = json!({
                 "epoch": ring.epoch(),
                 "recipient": recipient,

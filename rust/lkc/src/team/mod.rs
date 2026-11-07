@@ -202,7 +202,6 @@ pub struct SpaceApp {
 pub struct JoinInvite {
     pub signed_by: String,
     pub signer_key: String,
-    pub role: String,
     pub recipient: String,
     pub signature: String,
 }
@@ -272,7 +271,6 @@ pub(crate) fn manages(role: &str) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Invite {
     pub id: String,
-    pub role: String,
     pub created_by: String,
     pub epoch: i64,
     pub keyed: bool,
@@ -376,7 +374,6 @@ pub struct InviteMade {
 pub struct InviteView {
     pub team_id: String,
     pub team_name: String,
-    pub role: String,
     pub epoch: i64,
     pub approval_required: bool,
     pub recipient: Option<String>,
@@ -397,12 +394,10 @@ pub struct Joined {
     pub approved: bool,
 }
 
-/// Who an invite lets in, how often and for how long.
+/// How often an invite lets a member in, and for how long (an admin is made
+/// by a signed promotion, [Teams::set_role], never by a link).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InviteTerms {
-    /// `member`: an admin is made by a signed promotion
-    /// ([Teams::set_role]), never by a link.
-    pub role: String,
     /// 1 to 100.
     pub uses: i32,
     /// 1 to 7.
