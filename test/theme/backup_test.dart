@@ -296,8 +296,11 @@ void main() {
     // A version the store no longer offers: its version of the same theme.
     final older = await ThemeBackup.restore({
       'c' * 64: {'id': 'example.piggy', 'name': 'Piggy'},
+      // An icon pack of the same id is not that theme.
+      'd' * 64: {'id': 'example.piggy', 'name': 'Piggy icons', 'kind': 'icons'},
     }, rootDirectory: other.path);
     expect(older.installedAs, {'c' * 64: digest});
+    expect(older.failed, ['Piggy icons']);
     await ThemePackages.remove(digest, rootDirectory: other.path);
   });
 
