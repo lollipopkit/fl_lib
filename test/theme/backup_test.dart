@@ -257,8 +257,8 @@ void main() {
     expect(ThemePackages.listInstalled(rootDirectory: other.path), isEmpty);
   });
 
-  test('a theme the app no longer ships comes back from the store', () async {
-    // The release the app shipped, now only in the store: found by its digest.
+  /// A store with one release of Piggy in it; its digest.
+  String storeWithPiggy() {
     final bytes = Uint8List.fromList(_fsbt(id: 'example.piggy', name: 'Piggy'));
     final digest = sha256.convert(bytes).toString();
     final listing = 'id = "example.piggy"\nname = "Piggy"\n[[version]]\nversion = "1.0.0"\n'
@@ -278,6 +278,49 @@ void main() {
       ThemePackages.debugFetch = null;
       initTestThemeHost();
     });
+    return digest;
+  }
+
+  test('a theme named only comes back from the store', () async {
+    final digest = storeWithPiggy();
+
+    final report = await ThemeBackup.restore({
+      digest: {'id': 'example.piggy', 'name': 'Piggy'},
+      // A theme the store does not offer stays missing.
+      'b' * 64: {'id': 'example.pride', 'name': 'Pride'},
+    }, rootDirectory: other.path);
+    expect(report.installedAs, {digest: digest});
+    expect(report.failed, ['Pride']);
+    await ThemePackages.remove(digest, rootDirectory: other.path);
+
+    // A version the store no longer offers: its version of the same theme.
+    final older = await ThemeBackup.restore({
+      'c' * 64: {'id': 'example.piggy', 'name': 'Piggy'},
+    }, rootDirectory: other.path);
+    expect(older.installedAs, {'c' * 64: digest});
+    await ThemePackages.remove(digest, rootDirectory: other.path);
+  });
+
+  test('a store theme the cached listing does not know is named from the store', () async {
+    final digest = storeWithPiggy();
+    final theme = await ThemePackages.install(
+      _fsbt(id: 'example.piggy', name: 'Piggy'),
+      rootDirectory: device.path,
+    );
+    expect(theme.installationId, digest);
+    // As one installed from the store, which keeps no package.
+    await File('${device.path}/.sources/$digest.fsbt').delete();
+
+    final export = await ThemeBackup.export(rootDirectory: device.path);
+    expect(export.skipped, isEmpty);
+    expect((export.entries[digest]! as Map)['store'], isNotNull);
+    // Kept as this device's listing for the next one.
+    expect(ThemeStore.fromJson(ThemeHost.settings.themeStoreCache.fetch()), isNotNull);
+  });
+
+  test('a theme the app no longer ships comes back from the store', () async {
+    // The release the app shipped, now only in the store: found by its digest.
+    final digest = storeWithPiggy();
 
     final report = await ThemeBackup.restore({
       digest: {'id': 'example.piggy', 'name': 'Piggy', 'bundled': 'example.piggy'},

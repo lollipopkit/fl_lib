@@ -33,9 +33,8 @@ class PopGuard extends StatefulWidget {
   ///
   /// A route of [within] goes unless [stays] holds for it, so [stays] has to
   /// hold for every route that remains — as `settings is Page` or `isFirst`
-  /// do. A page in a navigator nested under [within] is always asked: whether
-  /// the route holding that navigator stays is not known here, and asking too
-  /// often loses nothing.
+  /// do. A page in a navigator nested under [within] goes with the route of
+  /// [within] that navigator is on.
   static Future<bool> confirmLeave(
     NavigatorState within, {
     RoutePredicate? stays,
@@ -103,12 +102,16 @@ class _PopGuardState extends State<PopGuard> {
     final route = _route;
     if (!mounted || !widget.enabled) return false;
     if (route == null || !route.isActive) return false;
-    final own = route.navigator;
-    if (own == within) return !(stays?.call(route) ?? false);
-    var nav = own?.context.findAncestorStateOfType<NavigatorState>();
+    // The route of [within] this page is on, or is inside: a page in a
+    // navigator nested in a route that stays, stays with it.
+    var holder = route;
+    var nav = route.navigator;
     while (nav != null) {
-      if (nav == within) return true;
-      nav = nav.context.findAncestorStateOfType<NavigatorState>();
+      if (nav == within) return !(stays?.call(holder) ?? false);
+      final next = ModalRoute.of(nav.context);
+      if (next == null) return false;
+      holder = next;
+      nav = next.navigator;
     }
     return false;
   }

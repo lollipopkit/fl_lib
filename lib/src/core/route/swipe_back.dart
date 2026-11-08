@@ -45,38 +45,25 @@ class SwipeBackPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // As the route's own detector decides: a back that would not go through
-    // (a pop scope, an animation still running) is no gesture at all.
-    return EdgeSwipeBack(
-      enabled: () => route.isCurrent && route.popGestureEnabled,
+    return _EdgeSwipe(
+      route: route,
       child: _inner.buildTransitions(route, context, animation, secondaryAnimation, child),
     );
   }
 }
 
-/// The left edge of [child], where a horizontal drag is a back gesture: sent
-/// as Android's, which a route's transition follows, or, with [onEnd], told
-/// to the caller to follow — for a page no route below it pops, such as the
-/// root of a pane that closes on back.
-class EdgeSwipeBack extends StatefulWidget {
-  const EdgeSwipeBack({super.key, required this.enabled, this.onProgress, this.onEnd, required this.child});
+/// The left edge of a page, where a horizontal drag is a back gesture.
+class _EdgeSwipe extends StatefulWidget {
+  const _EdgeSwipe({required this.route, required this.child});
 
-  /// Whether a swipe starting now is a back.
-  final bool Function() enabled;
-
-  /// How far the swipe has gone, 0 to 1, with [onEnd].
-  final ValueChanged<double>? onProgress;
-
-  /// The swipe let go: [commit] when it goes back. Set, it is told here in
-  /// place of Android's events.
-  final void Function({required bool commit})? onEnd;
+  final PageRoute<dynamic> route;
   final Widget child;
 
   @override
-  State<EdgeSwipeBack> createState() => _EdgeSwipeState();
+  State<_EdgeSwipe> createState() => _EdgeSwipeState();
 }
 
-class _EdgeSwipeState extends State<EdgeSwipeBack> {
+class _EdgeSwipeState extends State<_EdgeSwipe> {
   late final _drag = HorizontalDragGestureRecognizer(debugOwner: this)
     ..onStart = _onStart
     ..onUpdate = _onUpdate
@@ -88,13 +75,7 @@ class _EdgeSwipeState extends State<EdgeSwipeBack> {
 
   @override
   void dispose() {
-    if (_active) {
-      if (widget.onEnd case final onEnd?) {
-        onEnd(commit: false);
-      } else {
-        _send('cancelBackGesture');
-      }
-    }
+    if (_active) _send('cancelBackGesture');
     _drag.dispose();
     super.dispose();
   }
@@ -116,22 +97,16 @@ class _EdgeSwipeState extends State<EdgeSwipeBack> {
   double _progress(double x) => (x / context.size!.width).clamp(0.0, 1.0);
 
   void _onStart(DragStartDetails d) {
-    if (!widget.enabled()) return;
+    final route = widget.route;
+    // As the route's own detector decides: a back that would not go through
+    // (a pop scope, an animation still running) is no gesture at all.
+    if (!route.isCurrent || !route.popGestureEnabled) return;
     _active = true;
-    if (widget.onEnd == null) {
-      _send('startBackGesture', _event(d.globalPosition, d.localPosition.dx));
-    } else {
-      widget.onProgress?.call(_progress(d.localPosition.dx));
-    }
+    _send('startBackGesture', _event(d.globalPosition, d.localPosition.dx));
   }
 
   void _onUpdate(DragUpdateDetails d) {
-    if (!_active) return;
-    if (widget.onEnd == null) {
-      _send('updateBackGestureProgress', _event(d.globalPosition, d.localPosition.dx));
-    } else {
-      widget.onProgress?.call(_progress(d.localPosition.dx));
-    }
+    if (_active) _send('updateBackGestureProgress', _event(d.globalPosition, d.localPosition.dx));
   }
 
   void _onEnd(DragEndDetails d) {
@@ -142,14 +117,12 @@ class _EdgeSwipeState extends State<EdgeSwipeBack> {
     final commit = v.abs() >= SwipeBackPageTransitionsBuilder.flingVelocity
         ? v > 0
         : progress >= SwipeBackPageTransitionsBuilder.commitFraction;
-    if (widget.onEnd case final onEnd?) return onEnd(commit: commit);
     _send(commit ? 'commitBackGesture' : 'cancelBackGesture');
   }
 
   void _onCancel() {
     if (!_active) return;
     _active = false;
-    if (widget.onEnd case final onEnd?) return onEnd(commit: false);
     _send('cancelBackGesture');
   }
 
@@ -167,7 +140,7 @@ class _EdgeSwipeState extends State<EdgeSwipeBack> {
           bottom: 0,
           child: Listener(
             onPointerDown: (e) {
-              if (widget.enabled()) _drag.addPointer(e);
+              if (widget.route.isCurrent && widget.route.popGestureEnabled) _drag.addPointer(e);
             },
             behavior: HitTestBehavior.translucent,
           ),

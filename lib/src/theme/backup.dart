@@ -51,6 +51,7 @@ abstract final class ThemeBackup {
 
     final bundled = await _bundledDigests(bundle ?? rootBundle);
     final store = ThemeStore.fromJson(ThemeHost.settings.themeStoreCache.fetch());
+    final live = _LiveStore(bundle);
     final entries = <String, Object?>{};
     final skipped = <String>[];
     for (final theme in installed) {
@@ -93,6 +94,12 @@ abstract final class ThemeBackup {
         entries[id] = {...base, 'fsbt': base64Encode(source)};
         continue;
       }
+      // A store release this device's cached listing does not know (never
+      // opened, or since cleared): the store itself is asked, once.
+      if (_storeItemFor(await live.get(remember: true), id) case final item?) {
+        entries[id] = {...base, 'store': item.toJson()};
+        continue;
+      }
       entries[id] = base;
       skipped.add(theme.name);
     }
@@ -113,6 +120,7 @@ abstract final class ThemeBackup {
   }) async {
     final installedAs = <String, String>{};
     final failed = <String>[];
+    final live = _LiveStore(bundle ?? rootBundle);
     for (final MapEntry(key: id, value: raw) in entries.entries) {
       if (raw is! Map) {
         // Not something this or any build wrote: said, as one that failed.
@@ -144,6 +152,7 @@ abstract final class ThemeBackup {
           rootDirectory,
           bundle ?? rootBundle,
           blobs,
+          live,
         );
         installedAs[id] = theme.installationId;
       } catch (error, stack) {
@@ -160,6 +169,7 @@ abstract final class ThemeBackup {
     String? rootDirectory,
     AssetBundle bundle,
     ThemeBlobStore? blobs,
+    _LiveStore live,
   ) async {
     if (raw['store'] case final store?) {
       final item = ThemeStoreItem.fromJson(store);
@@ -185,9 +195,7 @@ abstract final class ThemeBackup {
         // An app that stopped shipping it: the same bytes are a store
         // release, found by their digest (the installation id).
         // TODO: remove once no backup names a bundled theme.
-        final catalog = ThemeHost.current.catalogUrl;
-        if (catalog == null) throw const FormatException('No bundled themes');
-        final item = _storeItemFor(await ThemeRepos.store(catalog, bundle: bundle), id);
+        final item = _storeItemFor(await live.get(), id);
         if (item == null) throw const FormatException('No longer bundled, and not in the store');
         return ThemeRepos.install(item, rootDirectory: rootDirectory);
       }
@@ -208,8 +216,20 @@ abstract final class ThemeBackup {
         throw const FormatException('The kept package is another theme');
       }
     } else {
-      // Listed so the restore can say it is missing; see the class doc.
-      throw const FormatException('The backup does not carry this theme');
+      // Named only: a sender that could not tell where it came from. The
+      // same bytes may be a store release, found by their digest (the
+      // installation id); else the store's own version of the theme it
+      // names, as a theme already here at another version is kept.
+      final store = await live.get();
+      final item = switch (_storeItemFor(store, id)) {
+        final same? when same.listing.id == raw['id'] => same,
+        _ => store?.items.where((i) => i.listing.id == raw['id'] && i.installable).firstOrNull,
+      };
+      if (item == null) {
+        // Listed so the restore can say it is missing; see the class doc.
+        throw const FormatException('The backup does not carry this theme');
+      }
+      return ThemeRepos.install(item, rootDirectory: rootDirectory);
     }
     final installed = await ThemePackages.installAny(
       bytes,
@@ -351,4 +371,27 @@ final class ThemeRestoreReport {
 
   final Map<String, String> installedAs;
   final List<String> failed;
+}
+
+/// The theme store as it is now, read at most once per export or restore;
+/// null when this app has no store or it cannot be read.
+final class _LiveStore {
+  _LiveStore(this._bundle);
+
+  final AssetBundle? _bundle;
+  Future<ThemeStore?>? _store;
+
+  /// [remember] keeps what was read as this device's cached listing.
+  Future<ThemeStore?> get({bool remember = false}) => _store ??= () async {
+    final catalog = ThemeHost.current.catalogUrl;
+    if (catalog == null) return null;
+    try {
+      final store = await ThemeRepos.store(catalog, bundle: _bundle);
+      if (remember) await ThemeHost.settings.themeStoreCache.set(store.toJson());
+      return store;
+    } catch (e, s) {
+      Loggers.app.warning('Reading the theme store', e, s);
+      return null;
+    }
+  }();
 }
