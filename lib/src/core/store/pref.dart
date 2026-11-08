@@ -60,8 +60,15 @@ final class PrefStore extends KvStore {
   /// Defaults to `''`.
   final String? prefix;
 
-  /// Value changes listeners.
+  /// Told the key of each value set or removed through this store.
   final Set<PrefStoreKeyListener> listeners;
+
+  /// A copy: a listener may add or remove one.
+  void _notify(String key) {
+    for (final listener in listeners.toList()) {
+      listener(key);
+    }
+  }
 
   /// Due to the limit of the SharedPreferences singleton, only [shared] is recommended.
   ///
@@ -185,6 +192,7 @@ final class PrefStore extends KvStore {
       return instance.remove(key);
     });
     if (!res) return false;
+    _notify(key);
     if (updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) {
       if (!await updateLastUpdateTs(key: key)) return false;
     }
@@ -226,6 +234,7 @@ final class PrefStore extends KvStore {
     final existed = instance.containsKey(key);
     final ret = await instance.remove(key);
     if (!ret) return false;
+    if (existed) _notify(key);
     updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
     if (updateLastUpdateTsOnRemove &&
         existed &&
@@ -246,8 +255,12 @@ final class PrefStore extends KvStore {
     }
 
     final lastUpTsMap = lastUpdateTs;
+    final cleared = instance.getKeys();
     final ret = await instance.clear();
     if (!ret) return false;
+    for (final key in cleared) {
+      _notify(key);
+    }
     if (lastUpTsMap != null) {
       final restored = await set(
         lastUpdateTsKey,
@@ -350,13 +363,15 @@ abstract class _BasePrefPropListenable {
   final PrefStore store;
   final String key;
 
-  /// The internal map of prop key listeners.
-  static final _map = <int, PrefStoreKeyListener>{};
+  /// The store listener added for each listener of each key. Keyed by both:
+  /// one listener added to several keys (`Listenable.merge`) is one store
+  /// listener per key, each saying only of its own.
+  static final _map = <(String, VoidCallback), PrefStoreKeyListener>{};
 
   const _BasePrefPropListenable(this.store, this.key);
 
   void addListener(VoidCallback listener) {
-    final lis = _map.putIfAbsent(listener.hashCode, () {
+    final lis = _map.putIfAbsent((key, listener), () {
       // The actual listener
       void lis(String k) {
         if (k == key) listener();
@@ -368,7 +383,7 @@ abstract class _BasePrefPropListenable {
   }
 
   void removeListener(VoidCallback listener) {
-    final actualListener = _map.remove(listener.hashCode);
+    final actualListener = _map.remove((key, listener));
     if (actualListener != null) {
       store.listeners.remove(actualListener);
     }
