@@ -67,11 +67,15 @@ abstract final class AgeCryptor {
 
   /// [data] opened with [identity]. Throws a [FormatException] when it is not
   /// an age file [identity] opens.
-  static Future<Uint8List> decryptWith(List<int> data, String identity) async {
+  static Future<Uint8List> decryptWith(List<int> data, String identity) => decryptWithAny(data, [identity]);
+
+  /// [data] opened with whichever of [identities] it is sealed to, in one
+  /// pass. Throws a [FormatException] when none opens it.
+  static Future<Uint8List> decryptWithAny(List<int> data, List<String> identities) async {
     try {
-      return await Rage.decryptWithIdentities(data, [identity]);
+      return await Rage.decryptWithIdentities(data, identities);
     } on RageError catch (e) {
-      throw FormatException('Not an age file this key opens: ${e.message}');
+      throw FormatException('Not an age file these keys open: ${e.message}');
     }
   }
 
