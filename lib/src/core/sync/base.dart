@@ -26,6 +26,10 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// words; the log has it either way.
   final lastFailure = ValueNotifier<Object?>(null);
 
+  /// Whether a sync is running: [lastFailure] is cleared as one starts, and
+  /// says nothing until it ends.
+  final running = ValueNotifier(false);
+
   Timer? _syncTimer;
   Completer<void>? _scheduledSync;
   RemoteStorage<I>? _scheduledStorage;
@@ -217,6 +221,7 @@ abstract class SyncIface<T extends Mergeable, I> {
     final running = _syncInFlight;
     if (running != null) return running;
 
+    this.running.value = true;
     final future = _drainSyncQueue();
     _syncInFlight = future;
     return future;
@@ -242,6 +247,7 @@ abstract class SyncIface<T extends Mergeable, I> {
       }
     } finally {
       _syncInFlight = null;
+      running.value = false;
     }
   }
 

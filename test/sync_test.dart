@@ -42,6 +42,22 @@ void main() {
     expect(sync.saveCount, 2);
   });
 
+  test('running says so from start to end, queued syncs included', () async {
+    final uploadGate = Completer<void>();
+    final firstUploadStarted = Completer<void>();
+    final remote = _TestRemoteStorage(uploadGate: uploadGate, firstUploadStarted: firstUploadStarted);
+    final sync = _TestSync(remote);
+    expect(sync.running.value, isFalse);
+
+    final first = sync.sync(throttleMilli: 0);
+    await firstUploadStarted.future;
+    expect(sync.running.value, isTrue);
+    final second = sync.sync(throttleMilli: 0);
+    uploadGate.complete();
+    await Future.wait([first, second]);
+    expect(sync.running.value, isFalse);
+  });
+
   test('sync drains a dirty change after an in-flight upload fails', () async {
     final error = StateError('first upload failed');
     final uploadGate = Completer<void>();
