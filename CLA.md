@@ -13,7 +13,7 @@ asks of you.
 ## Why this agreement exists
 
 fl_lib is released under the **GNU General Public License v3**. It is the
-common library of ServerBox and GPT Box, which are also distributed through the
+common library of ServerBox and LLMBox, which are also distributed through the
 Apple App Store and other channels whose terms cannot all be satisfied at the
 same time as every GPLv3 condition. Shipping in both places is only possible
 for a party who holds rights beyond those the GPLv3 itself conveys.
