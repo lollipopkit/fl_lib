@@ -105,7 +105,7 @@ void main() {
     expect(find.text('top'), findsOneWidget);
   });
 
-  testWidgets('a page in a nested navigator is always asked', (
+  testWidgets('a page in a nested navigator goes with the route holding it', (
     tester,
   ) async {
     await pumpApp(tester);
@@ -128,16 +128,17 @@ void main() {
     expect(await PopGuard.confirmLeave(navKey.currentState!), isFalse);
     expect(asked, ['inner']);
 
-    // Whether its holder stays is not known; asking costs nothing.
+    // Its holder stays, and so does it: what is put away over the holder
+    // does not ask a page it is not taking.
     asked.clear();
     expect(
       await PopGuard.confirmLeave(
         navKey.currentState!,
         stays: ModalRoute.withName('holder'),
       ),
-      isFalse,
+      isTrue,
     );
-    expect(asked, ['inner']);
+    expect(asked, isEmpty);
   });
 
   Future<GlobalKey<NavigatorState>> pumpPane(
