@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_lib/fl_lib.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
@@ -19,6 +19,12 @@ part 'lkc.dart';
 /// Impl this interface to provide a backup service.
 abstract class SyncIface<T extends Mergeable, I> {
   SyncIface();
+
+  /// Why the last sync stopped without an upload: a download that failed, or
+  /// a remote backup this device could not read (another password, a newer
+  /// build's). Null once a sync gets past them. For the app to say so in
+  /// words; the log has it either way.
+  final lastFailure = ValueNotifier<Object?>(null);
 
   Timer? _syncTimer;
   Completer<void>? _scheduledSync;
@@ -245,6 +251,7 @@ abstract class SyncIface<T extends Mergeable, I> {
       Loggers.app.warning('No remote storage available');
       return;
     }
+    lastFailure.value = null;
 
     // The common case, and the reason this check comes first: a sync runs on
     // every launch, and most launches changed nothing on either side. What
@@ -286,6 +293,7 @@ abstract class SyncIface<T extends Mergeable, I> {
         await rs.download(relativePath: Paths.bakName);
       } catch (e, s) {
         Loggers.app.warning('Download backup', e, s);
+        lastFailure.value = e;
         return;
       }
 
@@ -295,6 +303,7 @@ abstract class SyncIface<T extends Mergeable, I> {
         await dlBak.merge();
       } catch (e, s) {
         Loggers.app.warning('Merge backup', e, s);
+        lastFailure.value = e;
         return;
       }
 

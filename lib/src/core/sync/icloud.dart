@@ -36,10 +36,14 @@ final class ICloud implements RemoteStorage<ICloudFile> {
     );
   }
 
+  /// [idle]: fails with a [TimeoutException] once iCloud has said nothing
+  /// of the download for this long, rather than waiting on one it never
+  /// ends; a slow one that keeps going is waited for.
   @override
   Future<void> download({
     required String relativePath,
     String? localPath,
+    Duration? idle,
   }) async {
     final completer = Completer<void>();
     await ICloudStorage.downloadFile(
@@ -47,7 +51,7 @@ final class ICloud implements RemoteStorage<ICloudFile> {
       relativePath: relativePath,
       localPath: localPath ?? Paths.doc.joinPath(relativePath),
       onProgress: (stream) {
-        settleOnProgress(stream, completer);
+        settleOnProgress(stream, completer, idle: idle);
       },
     );
     return completer.future;
@@ -117,8 +121,15 @@ final class ICloud implements RemoteStorage<ICloudFile> {
   @visibleForTesting
   static void settleOnProgress(
     Stream<Object?> stream,
-    Completer<void> completer,
-  ) {
+    Completer<void> completer, {
+    Duration? idle,
+  }) {
+    if (idle != null) {
+      stream = stream.timeout(idle, onTimeout: (sink) {
+        sink.addError(TimeoutException('iCloud said nothing of the transfer', idle));
+        sink.close();
+      });
+    }
     stream.listen(
       null,
       onDone: completer.complete,
