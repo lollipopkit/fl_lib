@@ -14,8 +14,13 @@ final class GistRs implements RemoteStorage<String> {
   /// GitHub token used for auth. The shared client loads it from secure storage.
   String? token;
 
-  GistRs({String? gistId, this.token, Dio? client})
-      : gistId = gistId ?? PrefProps.gistId.get(),
+  /// Keeps the id of the gist the first upload made. When not given, the id
+  /// is kept in [PrefProps.gistId] and read from there when [gistId] is
+  /// null; when given, [gistId] is the only one.
+  final Future<void> Function(String id)? onCreated;
+
+  GistRs({String? gistId, this.token, this.onCreated, Dio? client})
+      : gistId = gistId ?? (onCreated == null ? PrefProps.gistId.get() : null),
         _client = client ??
             Dio(
               BaseOptions(
@@ -25,6 +30,8 @@ final class GistRs implements RemoteStorage<String> {
                 },
               ),
             );
+
+  String? get _gist => gistId ?? (onCreated == null ? PrefProps.gistId.get() : null);
 
   /// Shared instance reading config from preferences.
   static final shared = GistRs();
@@ -128,7 +135,7 @@ final class GistRs implements RemoteStorage<String> {
 
   Future<String> _ensureGistForUpload({required String fileName, required String content}) async {
     final headers = _authHeaders();
-    final existingId = gistId ?? PrefProps.gistId.get();
+    final existingId = _gist;
     if (existingId != null && existingId.isNotEmpty) return existingId;
 
     // Create a new secret gist with the file
@@ -145,10 +152,11 @@ final class GistRs implements RemoteStorage<String> {
     );
     final id = (res.data as Map)['id'] as String;
     gistId = id;
-    // Persist id for later use
     try {
-      await PrefProps.gistId.set(id);
-    } catch (_) {}
+      await (onCreated ?? PrefProps.gistId.set)(id);
+    } catch (e) {
+      dprint('Failed to keep the new gist id: $e');
+    }
     return id;
   }
 
@@ -175,7 +183,7 @@ final class GistRs implements RemoteStorage<String> {
   @override
   Future<void> delete(String relativePath) async {
     final headers = _authHeaders();
-    final id = gistId ?? PrefProps.gistId.get();
+    final id = _gist;
     if (id == null || id.isEmpty) return;
 
     await _client.patch(
@@ -192,7 +200,7 @@ final class GistRs implements RemoteStorage<String> {
   @override
   Future<void> download({required String relativePath, String? localPath}) async {
     final headers = _authHeaders();
-    final id = gistId ?? PrefProps.gistId.get();
+    final id = _gist;
     if (id == null || id.isEmpty) {
       throw StateError('Gist id is missing. Set PrefProps.gistId or upload once to create.');
     }
@@ -230,7 +238,7 @@ final class GistRs implements RemoteStorage<String> {
   Future<bool> exists(String relativePath) async {
     try {
       final headers = _authHeaders();
-      final id = gistId ?? PrefProps.gistId.get();
+      final id = _gist;
       if (id == null || id.isEmpty) return false;
 
       final res = await _client.get('/gists/$id', options: Options(headers: headers));
@@ -244,7 +252,7 @@ final class GistRs implements RemoteStorage<String> {
   }
 
   @override
-  String get identity => gistId ?? PrefProps.gistId.get() ?? '';
+  String get identity => _gist ?? '';
 
   /// The gist's current revision SHA.
   ///
@@ -260,7 +268,7 @@ final class GistRs implements RemoteStorage<String> {
   @override
   Future<String?> versionTag(String relativePath) async {
     try {
-      final id = gistId ?? PrefProps.gistId.get();
+      final id = _gist;
       if (id == null || id.isEmpty) return null;
 
       final res = await _client.get('/gists/$id', options: Options(headers: _authHeaders()));
@@ -283,7 +291,7 @@ final class GistRs implements RemoteStorage<String> {
   Future<List<String>> list() async {
     try {
       final headers = _authHeaders();
-      final id = gistId ?? PrefProps.gistId.get();
+      final id = _gist;
       if (id == null || id.isEmpty) return [];
 
       final res = await _client.get('/gists/$id', options: Options(headers: headers));

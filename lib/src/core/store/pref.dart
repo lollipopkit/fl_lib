@@ -39,8 +39,9 @@ abstract final class PrefProps {
   /// Enable GitHub Gist sync
   static const gistSync = PrefPropDefault('gist_sync', false, updateLastUpdateTsOnSetProp: false);
 
-  /// Whether automatic backup sync should include app settings.
-  static const syncAppSettings = PrefPropDefault('sync_app_settings', false, updateLastUpdateTsOnSetProp: false);
+  /// Whether automatic backup sync should include app settings. On unless
+  /// turned off: settings are the person's, like the rest of what syncs.
+  static const syncAppSettings = PrefPropDefault('sync_app_settings', true, updateLastUpdateTsOnSetProp: false);
 }
 
 /// The listener of the SharedPreferences.
