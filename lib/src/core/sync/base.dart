@@ -26,8 +26,9 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// words; the log has it either way.
   final lastFailure = ValueNotifier<Object?>(null);
 
-  /// Whether a sync is running: [lastFailure] is cleared as one starts, and
-  /// says nothing until it ends.
+  /// Whether a sync is running: [lastFailure] is of the one before until it
+  /// reaches the remote, and cleared then; what it says is the last one's
+  /// once this is false.
   final running = ValueNotifier(false);
 
   Timer? _syncTimer;
@@ -221,9 +222,10 @@ abstract class SyncIface<T extends Mergeable, I> {
     final running = _syncInFlight;
     if (running != null) return running;
 
-    this.running.value = true;
     final future = _drainSyncQueue();
     _syncInFlight = future;
+    // After: a listener that syncs on it joins this one.
+    this.running.value = true;
     return future;
   }
 

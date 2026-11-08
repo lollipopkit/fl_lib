@@ -44,11 +44,6 @@ abstract final class PrefProps {
   static const syncAppSettings = PrefPropDefault('sync_app_settings', true, updateLastUpdateTsOnSetProp: false);
 }
 
-/// The listener of the SharedPreferences.
-///
-/// - [key] is the changed key.
-typedef PrefStoreKeyListener = void Function(String key);
-
 /// SharedPreferences store.
 ///
 /// {@template PrefStore.init}
@@ -60,15 +55,9 @@ final class PrefStore extends KvStore {
   /// Defaults to `''`.
   final String? prefix;
 
-  /// Told the key of each value set or removed through this store.
-  final Set<PrefStoreKeyListener> listeners;
-
-  /// A copy: a listener may add or remove one.
-  void _notify(String key) {
-    for (final listener in listeners.toList()) {
-      listener(key);
-    }
-  }
+  /// Who watches which key: told of each value set or removed through this
+  /// store, after it is stamped.
+  final _listeners = _StoreListenerManager();
 
   /// Due to the limit of the SharedPreferences singleton, only [shared] is recommended.
   ///
@@ -76,12 +65,11 @@ final class PrefStore extends KvStore {
   PrefStore({
     this.prefix,
     super.name = 'Pref',
-    Set<PrefStoreKeyListener>? listeners,
     super.lastUpdateTsKey,
     super.updateLastUpdateTsOnSet,
     super.updateLastUpdateTsOnClear,
     super.updateLastUpdateTsOnRemove,
-  }) : listeners = listeners ?? {};
+  });
 
   /// Single instance for the whole app.
   ///
@@ -192,11 +180,11 @@ final class PrefStore extends KvStore {
       return instance.remove(key);
     });
     if (!res) return false;
-    _notify(key);
-    if (updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) {
-      if (!await updateLastUpdateTs(key: key)) return false;
-    }
-    return res;
+    // Stamped first: a listener reading the stamps, or syncing on the change,
+    // sees this one. Told either way, as the value changed.
+    final stamped = !(updateLastUpdateTsOnSet ?? this.updateLastUpdateTsOnSet) || await updateLastUpdateTs(key: key);
+    _listeners.notify(key);
+    return stamped;
   }
 
   /// Get all keys.
@@ -234,14 +222,11 @@ final class PrefStore extends KvStore {
     final existed = instance.containsKey(key);
     final ret = await instance.remove(key);
     if (!ret) return false;
-    if (existed) _notify(key);
-    updateLastUpdateTsOnRemove ??= this.updateLastUpdateTsOnRemove;
-    if (updateLastUpdateTsOnRemove &&
-        existed &&
-        !await updateLastUpdateTs(key: key)) {
-      return false;
-    }
-    return ret;
+    if (!existed) return ret;
+    // As [set]: stamped, then told.
+    final stamped = !(updateLastUpdateTsOnRemove ?? this.updateLastUpdateTsOnRemove) || await updateLastUpdateTs(key: key);
+    _listeners.notify(key);
+    return stamped;
   }
 
   /// Clear the store.
@@ -258,8 +243,9 @@ final class PrefStore extends KvStore {
     final cleared = instance.getKeys();
     final ret = await instance.clear();
     if (!ret) return false;
+    // Not the internal ones: the stamps are put back below.
     for (final key in cleared) {
-      _notify(key);
+      if (!isInternalKey(key)) _listeners.notify(key);
     }
     if (lastUpTsMap != null) {
       final restored = await set(
@@ -363,31 +349,11 @@ abstract class _BasePrefPropListenable {
   final PrefStore store;
   final String key;
 
-  /// The store listener added for each listener of each key. Keyed by both:
-  /// one listener added to several keys (`Listenable.merge`) is one store
-  /// listener per key, each saying only of its own.
-  static final _map = <(String, VoidCallback), PrefStoreKeyListener>{};
-
   const _BasePrefPropListenable(this.store, this.key);
 
-  void addListener(VoidCallback listener) {
-    final lis = _map.putIfAbsent((key, listener), () {
-      // The actual listener
-      void lis(String k) {
-        if (k == key) listener();
-      }
+  void addListener(VoidCallback listener) => store._listeners.addListener(key, listener);
 
-      return lis;
-    });
-    store.listeners.add(lis);
-  }
-
-  void removeListener(VoidCallback listener) {
-    final actualListener = _map.remove((key, listener));
-    if (actualListener != null) {
-      store.listeners.remove(actualListener);
-    }
-  }
+  void removeListener(VoidCallback listener) => store._listeners.removeListener(key, listener);
 }
 
 /// The [ValueListenable] of the key.
