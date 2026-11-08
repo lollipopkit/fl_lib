@@ -29,4 +29,26 @@ void main() {
     await b.set(false);
     expect(heard, 2);
   });
+
+  test('a listener that throws stops neither the write nor the others', () async {
+    const a = PrefPropDefault('listenable_throw', false, updateLastUpdateTsOnSetProp: false);
+    final heard = <String>[];
+    void throwing() {
+      throw StateError('listener');
+    }
+    void other() => heard.add('other');
+    final errors = <FlutterErrorDetails>[];
+    final before = FlutterError.onError;
+    FlutterError.onError = errors.add;
+    addTearDown(() => FlutterError.onError = before);
+
+    a.listenable().addListener(throwing);
+    a.listenable().addListener(other);
+    await a.set(true);
+    expect(a.listenable().value, isTrue);
+    expect(heard, ['other']);
+    expect(errors, hasLength(1));
+    a.listenable().removeListener(throwing);
+    a.listenable().removeListener(other);
+  });
 }

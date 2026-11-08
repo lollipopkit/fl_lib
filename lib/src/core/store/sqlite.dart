@@ -902,8 +902,14 @@ class _StoreListenerManager {
     final callbacks = _keyListeners[key];
     if (callbacks == null) return;
     // Over a copy: a callback is allowed to remove itself, and several do.
+    // One that throws is reported, as a ChangeNotifier's is: the write is
+    // done, and the others are still told of it.
     for (final callback in List<VoidCallback>.of(callbacks)) {
-      callback();
+      try {
+        callback();
+      } catch (e, s) {
+        FlutterError.reportError(FlutterErrorDetails(exception: e, stack: s, library: 'fl_lib store', context: ErrorDescription('telling a listener of "$key"')));
+      }
     }
   }
 
