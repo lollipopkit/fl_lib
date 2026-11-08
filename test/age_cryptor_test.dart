@@ -107,4 +107,14 @@ void main() {
     final other = await AgeCryptor.generateKey();
     await expectLater(AgeCryptor.decryptWith(sealed, other.identity), throwsA(isA<FormatException>()));
   });
+
+  test('one pass over several keys opens what any of them was sealed to', () async {
+    final keys = [for (var i = 0; i < 3; i++) await AgeCryptor.generateKey()];
+    final sealed = await AgeCryptor.encryptTo(plain, keys.last.recipient);
+    expect(await AgeCryptor.decryptWithAny(sealed, [for (final k in keys) k.identity]), plain);
+    await expectLater(
+      AgeCryptor.decryptWithAny(sealed, [keys.first.identity, keys[1].identity]),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }
