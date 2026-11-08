@@ -46,7 +46,9 @@ final class ICloud implements RemoteStorage<ICloudFile> {
     Duration? idle,
   }) async {
     final completer = Completer<void>();
-    await ICloudStorage.downloadFile(
+    // Not awaited first: a download that stalls never returns, and [idle]
+    // is what gives up on it then.
+    final native = ICloudStorage.downloadFile(
       containerId: containerId,
       relativePath: relativePath,
       localPath: localPath ?? Paths.doc.joinPath(relativePath),
@@ -54,7 +56,13 @@ final class ICloud implements RemoteStorage<ICloudFile> {
         settleOnProgress(stream, completer, idle: idle);
       },
     );
-    return completer.future;
+    unawaited(native.then<void>((_) {}, onError: (Object e, StackTrace s) {
+      if (!completer.isCompleted) completer.completeError(e, s);
+    }));
+    await completer.future;
+    // Settled: the copy to [localPath] is the native call's to finish. One
+    // given up on may still finish later, into the path it was given.
+    await native;
   }
 
   @override

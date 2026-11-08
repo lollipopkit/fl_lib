@@ -221,9 +221,11 @@ abstract final class ThemeBackup {
       // installation id); else the store's own version of the theme it
       // names, as a theme already here at another version is kept.
       final store = await live.get();
+      final kind = raw['kind'] == _iconsKind ? ThemeListingKind.icons : ThemeListingKind.theme;
+      bool named(ThemeStoreItem i) => i.listing.id == raw['id'] && i.listing.kind == kind;
       final item = switch (_storeItemFor(store, id)) {
-        final same? when same.listing.id == raw['id'] => same,
-        _ => store?.items.where((i) => i.listing.id == raw['id'] && i.installable).firstOrNull,
+        final same? when named(same) => same,
+        _ => store?.items.where((i) => named(i) && i.installable).firstOrNull,
       };
       if (item == null) {
         // Listed so the restore can say it is missing; see the class doc.
