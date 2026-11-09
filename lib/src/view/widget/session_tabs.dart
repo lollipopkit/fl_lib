@@ -268,6 +268,9 @@ class _SessionTabsViewState<T> extends State<SessionTabsView<T>> {
     super.dispose();
   }
 
+  /// Counts moves to a page; one that a later move took over stops there.
+  int _move = 0;
+
   void _onControllerChanged() {
     if (!mounted) return;
     setState(() {});
@@ -275,17 +278,28 @@ class _SessionTabsViewState<T> extends State<SessionTabsView<T>> {
     // does not exist until this build has been laid out.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || !_pageCtrl.hasClients) return;
+      final move = ++_move;
       final target = widget.controller.index;
-      if (_pageCtrl.page?.round() == target) {
+      final position = _pageCtrl.position;
+      // Not while an earlier move is still on its way somewhere else.
+      if (_pageCtrl.page == target && !position.isScrollingNotifier.value) {
         widget.controller.syncVisibility();
         return;
       }
-      await _pageCtrl.animateToPage(
-        target,
-        duration: widget.duration,
-        curve: widget.curve,
-      );
-      if (!mounted) return;
+      if (!position.hasContentDimensions ||
+          target * position.viewportDimension > position.maxScrollExtent) {
+        // A page added past the ones laid out is not in the scroll extent
+        // until it is laid out, and an animation stops at the old end.
+        _pageCtrl.jumpToPage(target);
+      } else {
+        await _pageCtrl.animateToPage(
+          target,
+          duration: widget.duration,
+          curve: widget.curve,
+        );
+      }
+      // Interrupted by a later move, which shows and focuses its own tab.
+      if (!mounted || move != _move) return;
       widget.controller.syncVisibility();
       final focus = widget.controller.current?.focus;
       if (focus == null || !(widget.mayFocus?.call() ?? true)) return;
@@ -300,10 +314,8 @@ class _SessionTabsViewState<T> extends State<SessionTabsView<T>> {
       controller: _pageCtrl,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: controller.length,
-      onPageChanged: (index) {
-        controller.select(index);
-        controller.syncVisibility();
-      },
+      // No onPageChanged: only the controller moves the page, and an animation
+      // past a tab reported it as selected, which sent the view back there.
       itemBuilder: (context, index) {
         final leading = widget.leading;
         if (leading != null && index == 0) return leading;

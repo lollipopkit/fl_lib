@@ -149,6 +149,90 @@ void main() {
     );
   });
 
+  // Opened from the leading page with another tab between: the animation
+  // passed that tab, which was then selected instead.
+  testWidgets('a tab opened past another is the one shown', (tester) async {
+    final c = SessionTabsController<String>(leadingName: '+');
+    addTearDown(c.dispose);
+    c.add(preferred: 'a', build: (_, _, _) => 'a');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionTabsView<String>(
+          controller: c,
+          leading: const Text('add'),
+          builder: (_, tab) => Focus(focusNode: tab.focus, child: Text('page ${tab.name}')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final b = c.add(preferred: 'b', build: (_, _, _) => 'b');
+    c.select(c.names.indexOf(b.name));
+    await tester.pumpAndSettle();
+
+    expect(c.index, 2);
+    expect(find.text('page b'), findsOneWidget);
+    expect(b.visible.value, isTrue);
+    expect(b.focus.hasPrimaryFocus, isTrue);
+    expect(c.tabs[0].visible.value, isFalse);
+  });
+
+  Future<SessionTabsController<String>> pumpTwo(WidgetTester tester) async {
+    final c = SessionTabsController<String>(leadingName: '+');
+    addTearDown(c.dispose);
+    c.add(preferred: 'a', build: (_, _, _) => 'a');
+    c.add(preferred: 'b', build: (_, _, _) => 'b');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionTabsView<String>(
+          controller: c,
+          leading: const Text('add'),
+          // Steady, so a test can stop it over the tab in between.
+          curve: Curves.linear,
+          builder: (_, tab) => Focus(focusNode: tab.focus, child: Text('page ${tab.name}')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return c;
+  }
+
+  testWidgets('a tab chosen while passing it is where the view stops', (tester) async {
+    final c = await pumpTwo(tester);
+    c.select(2);
+    await tester.pump();
+    final page = tester.widget<PageView>(find.byType(PageView)).controller!;
+    while (page.page! < 0.6) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(page.page!.round(), 1, reason: 'passing tab a');
+    c.select(1);
+    // Its move starts here, over tab a.
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('page a'), findsOneWidget);
+    expect(find.text('page b'), findsNothing);
+    expect(c.tabs[0].visible.value, isTrue);
+    expect(c.tabs[1].visible.value, isFalse);
+    expect(c.tabs[0].focus.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('two selections in one frame focus once the page is there', (tester) async {
+    final c = await pumpTwo(tester);
+    c.select(1);
+    c.select(2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(c.tabs[1].focus.hasFocus, isFalse, reason: 'on a phone, a keyboard over the page still sliding in');
+    expect(c.tabs[1].visible.value, isFalse);
+
+    await tester.pumpAndSettle();
+    expect(c.tabs[1].focus.hasPrimaryFocus, isTrue);
+    expect(c.tabs[1].visible.value, isTrue);
+  });
+
   // A view on a page that is not on screen switched sessions as they were
   // restored, and took the focus — on a phone, a terminal's keyboard — from
   // the page the user was on.
