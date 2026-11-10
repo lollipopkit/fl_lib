@@ -17,6 +17,9 @@ fn remote(e: LkcError) -> Error {
     match e.kind {
         Kind::Refused(reason) if reason == "sync_log_full" => Error::LogFull,
         Kind::Refused(reason) => Error::Refused(reason),
+        // Over what any plan keeps: the plan's own refusal, as far as anyone
+        // can do anything about it.
+        Kind::TooLarge => Error::Refused("sync_file_too_large".into()),
         Kind::SignedOut => Error::SignedOut,
         _ => Error::Remote(e.to_string()),
     }
@@ -146,4 +149,23 @@ pub fn rfc3339_ms(s: &str) -> Option<i64> {
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146097 + doe - 719468;
     Some(((days * 24 + h) * 60 + mi - offset_min) * 60_000 + sec * 1000 + ms)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lkc(kind: Kind) -> LkcError {
+        LkcError { kind, detail: String::new() }
+    }
+
+    #[test]
+    fn homebase_refusals_say_what_they_are() {
+        assert_eq!(remote(lkc(Kind::Refused("sync_log_full".into()))), Error::LogFull);
+        assert_eq!(remote(lkc(Kind::Refused("sync_quota".into()))), Error::Refused("sync_quota".into()));
+        assert_eq!(remote(lkc(Kind::Refused("sync_file_too_large".into()))), Error::Refused("sync_file_too_large".into()));
+        assert_eq!(remote(lkc(Kind::TooLarge)), Error::Refused("sync_file_too_large".into()));
+        assert_eq!(remote(lkc(Kind::SignedOut)), Error::SignedOut);
+        assert!(matches!(remote(lkc(Kind::Unreachable)), Error::Remote(_)));
+    }
 }
