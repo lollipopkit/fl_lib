@@ -119,14 +119,15 @@ final class LkcLogSync {
   Future<void> _run(Future<void> Function(SyncLogEngine) run) async {
     if (!_wanted) return;
     final SyncLogEngine engine;
+    final opening = _opening ??= _open();
     try {
-      engine = await (_opening ??= _open());
+      engine = await opening;
       // The password still opens the key: nothing syncs while it does not.
       await key();
     } catch (e, s) {
       // Opened again next time: the key, the password or the network may be
-      // there by then.
-      _opening = null;
+      // there by then. Only this one: another may have taken its place meanwhile.
+      if (identical(_opening, opening)) _opening = null;
       lastFailure.value = e;
       if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing) {
         Loggers.app.warning('LK Cloud log sync: opening', e, s);

@@ -724,6 +724,27 @@ async fn a_gap_is_read_from_a_snapshot_and_covered_segments_go() {
     assert_eq!(a.host.values(), b.host.values());
 }
 
+#[tokio::test]
+async fn a_blob_that_has_not_arrived_is_waited_for() {
+    let (files, file) = (Arc::new(MemFiles::default()), Arc::new(MemKeyFile::default()));
+    let (a, b) = (Device::new("pw"), Device::new("pw"));
+    for d in [&a, &b] {
+        SegmentSync::<MemHost, MemFiles, SyncKey>::bind(&*d.host, "dav").await.unwrap();
+    }
+    let big = "y".repeat(200 << 10);
+    a.host.edit("font", "f1", Some(json!(big)));
+    a.segments(&files, &file).await.sync().await.unwrap();
+    // The folder has the segment, not yet the blob it names.
+    let blob = files.names().into_iter().find(|n| n.starts_with("op-")).unwrap();
+    let held = files.files.lock().unwrap().remove(&blob).unwrap();
+    let sb = b.segments(&files, &file).await;
+    sb.sync().await.unwrap();
+    assert_eq!(b.host.value("font", "f1"), None);
+    files.files.lock().unwrap().insert(blob, held);
+    sb.sync().await.unwrap();
+    assert_eq!(b.host.value("font", "f1"), Some(json!(big)));
+}
+
 // The key.
 
 #[tokio::test]

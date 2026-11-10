@@ -67,6 +67,7 @@ impl From<Error> for SyncEngineError {
             Error::KeyNotHere(id) => (K::KeyNotHere, id),
             Error::PasswordMissing => (K::PasswordMissing, String::new()),
             Error::SignedOut => (K::SignedOut, String::new()),
+            Error::Pending(what) => (K::Remote, format!("{what} is not here yet")),
         };
         Self { kind, detail }
     }
