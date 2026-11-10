@@ -37,8 +37,12 @@ use crate::{Failure, now_ms, unreachable};
 
 /// Up to this a file is sent in one request; above it, straight to the store.
 pub const DIRECT_MAX: u64 = 1 << 20;
-/// The largest file homebase keeps.
-pub const MAX_BYTES: u64 = 32 << 20;
+/// The largest file any plan keeps (Cloud Basic's): each plan's own limit is
+/// homebase's to say (`413 sync_file_too_large`).
+pub const MAX_BYTES: u64 = 256 << 20;
+/// What a download is read up to, held in memory: a snapshot is held to no
+/// file's limit, but a phone holds no more than this of it.
+const MAX_READ: u64 = MAX_BYTES;
 /// What a JSON answer may be.
 const MAX_JSON: usize = 1 << 20;
 /// What a page of the log may be: homebase fills one while the batches
@@ -63,12 +67,15 @@ pub enum Kind {
     Changed,
     /// No such file, version or upload (`404`).
     Missing,
-    /// Larger than homebase keeps (`413`).
+    /// Larger than one request carries, or than any plan keeps (`413`
+    /// without a reason). Over the plan's own limit is
+    /// `Refused("sync_file_too_large")`.
     TooLarge,
     /// Not an age file (`415`).
     NotAge,
     /// Homebase's `reason`: `sync_unavailable` (the plan has no sync),
-    /// `sync_quota` or `sync_daily_limit` (`403`); `sync_log_full` (a snapshot
+    /// `sync_quota` or `sync_daily_limit` (`403`); `sync_file_too_large` (`413`,
+    /// over the plan's per-file limit); `sync_log_full` (a snapshot
     /// is due) or `sync_snapshot_stale` (`409`); `sync_key_reused` (`422`).
     Refused(String),
     /// Too many writes this minute, or uploads under way (`429`).
@@ -614,9 +621,6 @@ impl<S: Store> SyncClient<S> {
         let path = format!("{}/snapshot", self.app_path()?);
         let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
-        if size > MAX_BYTES {
-            return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
-        }
         if size <= DIRECT_MAX {
             let response = self
                 .send(Method::PUT, &format!("{path}?seq={seq}"), |r| {
@@ -813,7 +817,7 @@ impl<S: Store> SyncClient<S> {
         };
         match into {
             Target::File(to) => save(body, to).await?,
-            Target::Memory(buffer) => *buffer = read_limited(body, MAX_BYTES as usize).await?,
+            Target::Memory(buffer) => *buffer = read_limited(body, MAX_READ as usize).await?,
         }
         Ok(Fetched::Saved(etag))
     }
@@ -951,11 +955,10 @@ async fn refusal(response: reqwest::Response) -> Error {
     let kind = match status {
         StatusCode::PRECONDITION_FAILED => Kind::Changed,
         StatusCode::NOT_FOUND => Kind::Missing,
-        StatusCode::PAYLOAD_TOO_LARGE => Kind::TooLarge,
         StatusCode::UNSUPPORTED_MEDIA_TYPE => Kind::NotAge,
         StatusCode::TOO_MANY_REQUESTS => Kind::Busy,
         StatusCode::UNAUTHORIZED => Kind::SignedOut,
-        StatusCode::FORBIDDEN | StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY => {
+        StatusCode::FORBIDDEN | StatusCode::CONFLICT | StatusCode::UNPROCESSABLE_ENTITY | StatusCode::PAYLOAD_TOO_LARGE => {
             let current = response.headers().get("x-team-epoch").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
             let highest = response.headers().get("x-sync-version").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok());
             let body = read_limited(response, MAX_JSON).await.unwrap_or_default();
@@ -965,6 +968,10 @@ async fn refusal(response: reqwest::Response) -> Error {
             }
             if let ("sync_version", Some(highest)) = (reason.as_str(), highest) {
                 return Error::new(Kind::Version(highest), format!("HTTP {status} sync_version"));
+            }
+            // A bare 413: over what one request carries, not the plan's.
+            if status == StatusCode::PAYLOAD_TOO_LARGE && reason.is_empty() {
+                return Error::new(Kind::TooLarge, format!("HTTP {status}"));
             }
             return Error::new(Kind::Refused(reason.clone()), format!("HTTP {status} {reason}"));
         }
@@ -1016,7 +1023,7 @@ async fn save(response: reqwest::Response, to: &Path) -> Result<(), Error> {
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| Error::new(Kind::Unreachable, e.to_string()))?;
         written += chunk.len() as u64;
-        if written > MAX_BYTES {
+        if written > MAX_READ {
             let _ = tokio::fs::remove_file(&part).await;
             return Err(Error::new(Kind::TooLarge, "the file outgrew homebase's limit"));
         }

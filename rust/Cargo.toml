@@ -1,14 +1,24 @@
 # fl_lib's Rust: `theme` (what a theme package is and how the theme store is
-# read, pure), `lkc` (LK Cloud: the IdP, a session's tokens, homebase's sync)
-# and `ffi` (their bridge to Dart, built by `hook/build.dart`).
+# read, pure), `lkc` (LK Cloud: the IdP, a session's tokens, homebase's sync),
+# `sync` (the operation log's clock and merge, pure), `sync_engine` (the sync
+# every app runs on it: LK Cloud's log or a folder, the sync key) and `ffi`
+# (their bridge to Dart, built by `hook/build.dart`).
 #
 # Its own workspace root: an app that carries fl_lib inside a Cargo workspace
 # of its own (Server Box does) would otherwise have cargo take these crates for
 # unlisted members of that one and refuse to build them.
 [workspace]
-members = ["theme", "lkc", "sync", "ffi"]
+members = ["theme", "lkc", "sync", "sync_engine", "ffi"]
 resolver = "3"
 
 [profile.release]
 lto = true
 codegen-units = 1
+
+# scrypt opens and seals the sync key file: unoptimized it takes seconds a
+# call, which the tests make many of.
+[profile.dev.package.scrypt]
+opt-level = 3
+
+[profile.dev.package.salsa20]
+opt-level = 3

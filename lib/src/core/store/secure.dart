@@ -303,8 +303,11 @@ final class SecureProp {
 
   /// Reads the value of the property.
   /// Throws [RateLimitExceededException] if rate limit is exceeded.
-  Future<String?> read() async {
-    if (!_RateLimiter.canRead()) {
+  ///
+  /// [limited] false for what no person asks for (a sync's own reads): held
+  /// to no rate limit, which is there against a page asking in a loop.
+  Future<String?> read({bool limited = true}) async {
+    if (limited && !_RateLimiter.canRead()) {
       dprint('SecureProp read rate limit exceeded');
       throw RateLimitExceededException(
         'Read rate limit exceeded. Try again later.',
@@ -350,8 +353,10 @@ final class SecureProp {
 
   /// Writes the value of the property.
   /// Throws [RateLimitExceededException] if rate limit is exceeded.
-  Future<void> write(String? value) async {
-    if (!_RateLimiter.canWrite()) {
+  ///
+  /// [limited] as [read]'s.
+  Future<void> write(String? value, {bool limited = true}) async {
+    if (limited && !_RateLimiter.canWrite()) {
       dprint('SecureProp write rate limit exceeded');
       throw RateLimitExceededException(
         'Write rate limit exceeded. Try again later.',

@@ -83,6 +83,9 @@ export 'src/core/store/secure.dart';
 // --- Synchronization ---
 // Cloud sync base classes and implementations (iCloud, WebDAV)
 export 'src/core/sync/base.dart';
+// The operation-log sync on LK Cloud or a folder, sealed to a sync key
+export 'src/core/sync/log.dart';
+export 'src/rust/api/sync_engine.dart' show SyncKeyHandle, SyncEngineError, SyncEngineErrorKind, SyncReply, SyncLogEngine, SyncSegmentEngine;
 
 // --- LK Cloud ---
 // Client of LK Cloud: sign-in, account, subscriptions, files

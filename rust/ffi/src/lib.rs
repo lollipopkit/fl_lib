@@ -7,3 +7,4 @@
 pub mod api;
 mod frb_generated;
 mod lkc_bridge;
+mod sync_engine_bridge;

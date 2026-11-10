@@ -1,0 +1,20 @@
+[package]
+name = "fl_sync_engine"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "The operation-log sync every app on fl_lib runs: LK Cloud's log, or segment files on WebDAV and iCloud, sealed to the account's sync key"
+
+[dependencies]
+fl_sync = { path = "../sync" }
+fl_lkc = { path = "../lkc" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+flate2 = "1"
+age = { version = "0.11", default-features = false, features = ["armor"] }
+getrandom = "0.3"
+tokio = { version = "1.53", default-features = false, features = ["sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1.53", features = ["full"] }
+proptest = "1"
