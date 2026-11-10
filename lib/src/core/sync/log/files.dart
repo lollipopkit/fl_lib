@@ -222,16 +222,25 @@ final class FileLogSync {
 
   ({String id, SyncFiles files})? _storeOf(RemoteStorage<Object?>? rs) => switch (rs) {
     final ICloud icloud => (id: 'icloud:${icloud.containerId}', files: ICloudSyncFiles(icloud, folder)),
-    // Named by a keyed hash: no endpoint written to device-local state.
-    final Webdav webdav when webdav.client != null => (
-      id: 'webdav:${syncBlobName(secret: folder, data: utf8.encode('${webdav.identity}|${webdavAccount?.call() ?? ''}'))}',
-      files: WebdavSyncFiles(() => switch (remote()) {
-        final Webdav now => now,
-        _ => webdav,
-      }, folder),
-    ),
+    final Webdav webdav when webdav.client != null => (id: _webdavId(webdav), files: _boundTo(_webdavId(webdav), webdav)),
     _ => null,
   };
+
+  /// Named by a keyed hash: no endpoint written to device-local state.
+  String _webdavId(Webdav webdav) =>
+      'webdav:${syncBlobName(secret: folder, data: utf8.encode('${webdav.identity}|${webdavAccount?.call() ?? ''}'))}';
+
+  /// The folder on [id]'s server for good: the WebDAV now while it is that
+  /// one (new credentials taken), and a run stopped once it is another, so
+  /// nothing sealed for one server is written to the next.
+  SyncFiles _boundTo(String id, Webdav webdav) => WebdavSyncFiles(() {
+    final now = switch (remote()) {
+      final Webdav now when now.client != null => now,
+      _ => webdav,
+    };
+    if (_webdavId(now) != id) throw StateError('The WebDAV this sync ran on changed');
+    return now;
+  }, folder);
 
   /// [rs]'s sync key, opened with the password here: what its segments and
   /// the backup are sealed with.
