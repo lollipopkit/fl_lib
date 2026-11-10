@@ -151,7 +151,7 @@ final class LkcLogSync {
 
   Future<SyncLogEngine> _open() async {
     final user = client.user.value;
-    if (user == null) throw StateError('Signed out');
+    if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
     final sync = await client.sync(app);
     final k = await key();
     await syncCall(() => SyncLogEngine.bind(account: user.id, host: _host.call));
@@ -163,7 +163,7 @@ final class LkcLogSync {
   /// where there is none.
   Future<SyncKeyHandle> key({bool create = true}) async {
     final user = client.user.value;
-    if (user == null) throw StateError('Signed out');
+    if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
     _account = user.id;
     return SyncKeyring.ofLkc(await client.sync(app), user.id, create: create);
   }

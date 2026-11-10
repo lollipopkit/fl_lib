@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:icloud_storage_plus/icloud_storage.dart' show ICloudContainerAccessException, ICloudCoordinationException;
 import 'package:webdav_client_plus/webdav_client_plus.dart' show WebdavException;
 
 import 'package:fl_lib/src/core/logger.dart';
@@ -34,6 +35,8 @@ bool isRemoteFailure(Object e) => switch (e) {
   SocketException() || TimeoutException() || HttpException() || TlsException() => true,
   DioException(:final response) => (response?.statusCode ?? 500) >= 500,
   WebdavException(:final statusCode) => statusCode == null || statusCode >= 500,
+  // Signed out of iCloud, or its container not reachable now.
+  ICloudContainerAccessException() || ICloudCoordinationException() => true,
   _ => false,
 };
 

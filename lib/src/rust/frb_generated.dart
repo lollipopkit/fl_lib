@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -2015691678;
+  int get rustContentHash => 1820685642;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -441,7 +441,7 @@ abstract class RustLibApi extends BaseApi {
     required List<int> sealed,
   });
 
-  Uint8List crateApiSyncEngineSyncKeyHandleSeal({
+  Future<Uint8List> crateApiSyncEngineSyncKeyHandleSeal({
     required SyncKeyHandle that,
     required List<int> plain,
   });
@@ -615,8 +615,6 @@ abstract class RustLibApi extends BaseApi {
   });
 
   String crateApiSyncSyncLater({required String last, required String seen});
-
-  bool crateApiSyncEngineSyncSealedToKey({required List<int> data});
 
   String crateApiSyncSyncStampOf({required BigInt ms, required BigInt device});
 
@@ -3402,20 +3400,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Uint8List crateApiSyncEngineSyncKeyHandleSeal({
+  Future<Uint8List> crateApiSyncEngineSyncKeyHandleSeal({
     required SyncKeyHandle that,
     required List<int> plain,
   }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeyHandle(
             that,
             serializer,
           );
           sse_encode_list_prim_u_8_loose(plain, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 73,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_prim_u_8_strict,
@@ -4826,33 +4829,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "sync_later", argNames: ["last", "seen"]);
 
   @override
-  bool crateApiSyncEngineSyncSealedToKey({required List<int> data}) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_list_prim_u_8_loose(data, serializer);
-          return pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 114,
-          )!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiSyncEngineSyncSealedToKeyConstMeta,
-        argValues: [data],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSyncEngineSyncSealedToKeyConstMeta =>
-      const TaskConstMeta(debugName: "sync_sealed_to_key", argNames: ["data"]);
-
-  @override
   String crateApiSyncSyncStampOf({required BigInt ms, required BigInt device}) {
     return handler.executeSync(
       SyncTask(
@@ -4863,7 +4839,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 115,
+            funcId: 114,
           )!;
         },
         codec: SseCodec(
@@ -4898,7 +4874,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 116,
+            funcId: 115,
           )!;
         },
         codec: SseCodec(
@@ -4931,7 +4907,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 117,
+            funcId: 116,
           )!;
         },
         codec: SseCodec(
@@ -4959,7 +4935,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 118,
+            funcId: 117,
           )!;
         },
         codec: SseCodec(
@@ -4986,7 +4962,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 119,
+            funcId: 118,
           )!;
         },
         codec: SseCodec(
@@ -9240,7 +9216,9 @@ class SyncKeyHandleImpl extends RustOpaque implements SyncKeyHandle {
   Future<Uint8List> open({required List<int> sealed}) => RustLib.instance.api
       .crateApiSyncEngineSyncKeyHandleOpen(that: this, sealed: sealed);
 
-  Uint8List seal({required List<int> plain}) => RustLib.instance.api
+  /// [plain] sealed to the key: off Dart's isolate, as a whole backup is
+  /// large.
+  Future<Uint8List> seal({required List<int> plain}) => RustLib.instance.api
       .crateApiSyncEngineSyncKeyHandleSeal(that: this, plain: plain);
 }
 

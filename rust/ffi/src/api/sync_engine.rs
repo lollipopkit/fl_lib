@@ -79,13 +79,6 @@ fn bridge(call: impl Fn(String, String, Option<Vec<u8>>) -> DartFnFuture<SyncRep
     Bridge(call)
 }
 
-/// Whether [data] is sealed to a sync key: one sealed with a password
-/// otherwise, or not at all.
-#[frb(sync)]
-pub fn sync_sealed_to_key(data: Vec<u8>) -> bool {
-    fl_sync_engine::key::sealed_to_key(&data)
-}
-
 /// Every sync key of the app, one per remote, and what the backup password
 /// here does not open. One per process.
 #[frb(opaque)]
@@ -164,8 +157,9 @@ impl SyncKeyHandle {
         self.0.id()
     }
 
-    #[frb(sync)]
-    pub fn seal(&self, plain: Vec<u8>) -> R<Vec<u8>> {
+    /// [plain] sealed to the key: off Dart's isolate, as a whole backup is
+    /// large.
+    pub async fn seal(&self, plain: Vec<u8>) -> R<Vec<u8>> {
         Ok(self.0.seal(&plain)?)
     }
 

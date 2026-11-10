@@ -12,11 +12,6 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Log`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`, `from`
 
-/// Whether [data] is sealed to a sync key: one sealed with a password
-/// otherwise, or not at all.
-bool syncSealedToKey({required List<int> data}) =>
-    RustLib.instance.api.crateApiSyncEngineSyncSealedToKey(data: data);
-
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeyHandle>>
 abstract class SyncKeyHandle implements RustOpaqueInterface {
   /// Opened with the password here again, now with [force].
@@ -30,7 +25,9 @@ abstract class SyncKeyHandle implements RustOpaqueInterface {
   /// [sealed] opened, once more after looking for a newer key.
   Future<Uint8List> open({required List<int> sealed});
 
-  Uint8List seal({required List<int> plain});
+  /// [plain] sealed to the key: off Dart's isolate, as a whole backup is
+  /// large.
+  Future<Uint8List> seal({required List<int> plain});
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>

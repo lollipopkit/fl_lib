@@ -36,13 +36,15 @@ abstract final class SyncKeyring {
   /// their remotes meanwhile.
   static final passwordMismatch = ValueNotifier<Set<String>>(const {});
 
-  /// [label] begins the key file's comment line (`ServerBox sync key`). Once,
-  /// at launch.
-  static void init({required String label}) {
-    _keys ??= SyncKeys(label: label, secrets: _secrets);
-  }
+  static String? _label;
 
-  static SyncKeys get _ring => _keys ?? (throw StateError('SyncKeyring.init was not called'));
+  /// [label] begins the key file's comment line (`ServerBox sync key`). Once,
+  /// at launch. The keys are made when first asked for: without fl_lib's
+  /// Rust, asking fails and the app runs on.
+  static void init({required String label}) => _label ??= label;
+
+  static SyncKeys get _ring =>
+      _keys ??= SyncKeys(label: _label ?? (throw StateError('SyncKeyring.init was not called')), secrets: _secrets);
 
   static Future<T> _said<T>(Future<T> Function() run) async {
     try {
@@ -85,8 +87,17 @@ abstract final class SyncKeyring {
   /// to restore.
   static Future<Uint8List> openKept(Uint8List sealed) => _said(() => _ring.openKept(sealed: sealed));
 
-  /// Whether [data] is sealed to a key; one sealed with a password otherwise.
-  static bool sealedToKey(Uint8List data) => syncSealedToKey(data: data);
+  /// Whether [data] is sealed to a key; one sealed with a password otherwise,
+  /// or not at all.
+  static bool sealedToKey(List<int> data) {
+    if (data.length < _keySealed.length) return false;
+    for (var i = 0; i < _keySealed.length; i++) {
+      if (data[i] != _keySealed[i]) return false;
+    }
+    return true;
+  }
+
+  static final _keySealed = utf8.encode('age-encryption.org/v1\n-> X25519 ');
 
   static Future<SyncReply> _file(SyncKeyFile file, String method, String args, Uint8List? bytes) => switch (method) {
     'keyFile.read' => syncReply(file.read, bytes: (r) => r?.body, json: (r) => r?.version),
@@ -147,6 +158,7 @@ abstract final class SyncKeyring {
   @visibleForTesting
   static void resetForTest() {
     _keys = null;
+    _label = null;
     passwordMismatch.value = const {};
   }
 }

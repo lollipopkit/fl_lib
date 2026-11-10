@@ -196,7 +196,7 @@ void main() {
     final folder = _Folder();
     await _freshDevice();
     final key = await SyncKeyring.ofFiles(FilesKeyFile(folder, 'folder'));
-    final sealed = key.seal(plain: Uint8List.fromList([1, 2, 3]));
+    final sealed = await key.seal(plain: Uint8List.fromList([1, 2, 3]));
     expect(SyncKeyring.sealedToKey(sealed), isTrue);
     expect(await SyncKeyring.openAny(sealed), [1, 2, 3]);
   });
