@@ -296,12 +296,14 @@ final class FileLogSync {
     }
     if (rs == null || store == null) return;
     final SyncSegmentEngine engine;
+    final opening = _opening ??= _open(rs, store);
     try {
-      engine = await (_opening ??= _open(rs, store));
+      engine = await opening;
       // The password still opens the key: nothing syncs while it does not.
       await keyOf(rs);
     } catch (e, s) {
-      _opening = null;
+      // Only this one: another may have taken its place meanwhile.
+      if (identical(_opening, opening)) _opening = null;
       lastFailure.value = e;
       if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing) {
         Loggers.app.warning('File log sync: opening', e, s);

@@ -168,12 +168,12 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                         continue;
                     };
                     let ops = self.core.decode(&snapshot.body, &format!("snapshot {}", snapshot.seq)).await?;
-                    self.core.apply(run, ops, self.state(vec![(LOG, Some(snapshot.log)), (CURSOR, Some(snapshot.seq.to_string()))])).await?;
+                    self.core.apply(run, ops, self.state(vec![(LOG, Some(snapshot.log)), (CURSOR, Some(snapshot.seq.to_string()))]), false).await?;
                 }
                 Page::Batches { log, batches, more } => {
                     for (seq, body) in batches {
                         let ops = self.core.decode(&body, &format!("batch {seq}")).await?;
-                        self.core.apply(run, ops, self.state(vec![(LOG, log.clone()), (CURSOR, Some(seq.to_string()))])).await?;
+                        self.core.apply(run, ops, self.state(vec![(LOG, log.clone()), (CURSOR, Some(seq.to_string()))]), false).await?;
                     }
                     if !more {
                         return Ok(());

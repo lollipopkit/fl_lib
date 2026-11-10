@@ -202,15 +202,19 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
 
     /// [ops] with each blob an op names read in; an op whose blob is gone or
     /// unreadable is left out (a later op of its record has replaced it, or
-    /// nothing here reads it).
-    pub async fn resolve(&self, ops: Vec<Op>) -> Result<Vec<Op>> {
+    /// nothing here reads it). With [wait], a blob not there is
+    /// [Error::Pending]: it may only not have arrived.
+    pub async fn resolve(&self, ops: Vec<Op>, wait: bool) -> Result<Vec<Op>> {
         let mut out = Vec::with_capacity(ops.len());
         for op in ops {
             let Some(name) = Self::blob_of(&op.d).map(str::to_string) else {
                 out.push(op);
                 continue;
             };
-            let Some(sealed) = self.blobs.get_blob(name).await? else {
+            let Some(sealed) = self.blobs.get_blob(name.clone()).await? else {
+                if wait {
+                    return Err(Error::Pending(name));
+                }
                 self.host.warn(format!("Sync passed over {}/{}: its blob is gone", op.c, op.id));
                 continue;
             };
@@ -268,18 +272,20 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     }
 
     /// The ops that win over what is here written, then [state] set. Without
-    /// [received] (nothing here reads the batch), only the state.
-    pub async fn apply(&self, run: &Run<'_>, received: Option<Vec<Op>>, state: Vec<(String, Option<String>)>) -> Result<()> {
+    /// [received] (nothing here reads the batch), only the state. With
+    /// [wait_for_blobs], nothing is written while a blob is not there yet
+    /// ([Error::Pending]).
+    pub async fn apply(&self, run: &Run<'_>, received: Option<Vec<Op>>, state: Vec<(String, Option<String>)>, wait_for_blobs: bool) -> Result<()> {
         if let Some(received) = received {
             let (carried, passed): (Vec<Op>, Vec<Op>) = received.into_iter().partition(|op| run.carries(&op.c));
             // Kept for the others: a snapshot written here carries them on,
             // as content, not a blob's name, so a key rotated here seals them
             // again.
-            let passed = self.resolve(Self::newest(passed)).await?;
+            let passed = self.resolve(Self::newest(passed), wait_for_blobs).await?;
             if !passed.is_empty() {
                 self.host.pass(self.prefix.to_string(), passed).await?;
             }
-            let ops = self.resolve(carried).await?;
+            let ops = self.resolve(carried, wait_for_blobs).await?;
             if !ops.is_empty() {
                 let unkept = self.host.apply(ops).await?;
                 if !unkept.is_empty() {

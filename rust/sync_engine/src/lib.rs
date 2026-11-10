@@ -58,6 +58,9 @@ pub enum Error {
     PasswordMissing,
     /// Signed out, or in as someone the run was not for.
     SignedOut,
+    /// What an op names is not there yet (a blob a folder has not brought):
+    /// the read stops before it, to be tried again.
+    Pending(String),
 }
 
 impl std::fmt::Display for Error {
@@ -73,6 +76,7 @@ impl std::fmt::Display for Error {
             Error::KeyNotHere(id) => write!(f, "the sync key of {id} is not here yet"),
             Error::PasswordMissing => f.write_str("no backup password"),
             Error::SignedOut => f.write_str("signed out"),
+            Error::Pending(what) => write!(f, "{what} is not here yet"),
         }
     }
 }

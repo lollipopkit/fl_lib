@@ -219,7 +219,7 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
                 state.push((format!("{PREFIX}{CURSOR}{d}"), Some(n.to_string())));
             }
         }
-        self.core.apply(run, Some(ops), state).await?;
+        self.core.apply(run, Some(ops), state, false).await?;
         Ok(true)
     }
 
@@ -244,8 +244,16 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
         };
         let since = self.core.get_int(SINCE).await? + 1;
         let state = vec![(format!("{PREFIX}{CURSOR}{device}"), Some(n.to_string())), (format!("{PREFIX}{SINCE}"), Some(since.to_string()))];
-        self.core.apply(run, ops, state).await?;
-        Ok(true)
+        // A recent segment's blob may only not have arrived (iCloud brings
+        // files apart): read again next time, as one no key opens yet is.
+        let recent = at.is_none_or(|at| now_ms() - at < UNREADABLE_MAX_MS);
+        match self.core.apply(run, ops, state, recent).await {
+            Err(Error::Pending(what)) => {
+                self.core.host.warn(format!("Sync waits for {what} of {name}"));
+                Ok(false)
+            }
+            other => other.map(|_| true),
+        }
     }
 
     async fn push(&self, run: &Run<'_>, listed: &Listing) -> Result<()> {
