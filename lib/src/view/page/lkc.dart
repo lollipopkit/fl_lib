@@ -135,10 +135,13 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
                 top: 0,
                 left: 0,
                 right: 0,
-                child: AnimatedOpacity(
-                  opacity: _loading ? 1 : 0,
+                // Only while loading: hidden, an indeterminate bar still
+                // animates and redraws every frame.
+                child: AnimatedSwitcher(
                   duration: _kFade,
-                  child: const LinearProgressIndicator(minHeight: 2),
+                  child: _loading
+                      ? const LinearProgressIndicator(minHeight: 2)
+                      : const SizedBox(height: 2, width: double.infinity),
                 ),
               ),
             ],
