@@ -10,11 +10,26 @@ typedef SyncOp = ({String c, String id, String h, Object? d});
 /// A record kind kept outside the kv stores: read to send, stamped where it
 /// changed ([SyncRecorder.stampChanged]), and installed by its owner after the
 /// stores are written.
-typedef SyncKind = ({
-  FutureOr<Object?> Function(String id) read,
-  void Function()? stamp,
-  FutureOr<void> Function(List<SyncOp> ops) install,
-});
+final class SyncKind {
+  const SyncKind({required this._read, this.stamp, required this.install}) : _reader = null;
+
+  /// `reader` makes a `read` for many records, which reads what they share
+  /// once (every theme's files).
+  const SyncKind.batched({required this._reader, this.stamp, required this.install}) : _read = null;
+
+  final FutureOr<Object?> Function(String id)? _read;
+  final FutureOr<Object?> Function(String id) Function()? _reader;
+
+  /// Stamps what changed since it last looked, before the pending records
+  /// are read.
+  final void Function()? stamp;
+
+  /// Writes the ops that won, each stamped with its op's stamp.
+  final FutureOr<void> Function(List<SyncOp> ops) install;
+
+  /// [read] for many records.
+  FutureOr<Object?> Function(String id) reader() => _reader?.call() ?? _read!;
+}
 
 /// Records an app keeps in tables of its own (ServerBox's servers, keys,
 /// snippets), written in the stores' transaction.
@@ -61,8 +76,9 @@ abstract final class SyncRecords {
   /// [read] for many records.
   static FutureOr<Object?> Function(String c, String id) reader() {
     final table = tables?.reader();
+    final ofKind = <String, FutureOr<Object?> Function(String id)>{};
     return (c, id) {
-      if (kinds[c] case final kind?) return kind.read(id);
+      if (kinds[c] case final kind?) return (ofKind[c] ??= kind.reader())(id);
       if (c.startsWith(_kvPrefix)) {
         final store = _kvStore(c);
         if (store == null || !_syncedKey(store, id)) return null;
