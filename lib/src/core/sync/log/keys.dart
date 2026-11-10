@@ -64,7 +64,8 @@ abstract final class SyncKeyring {
 
   /// [id]'s remote is not synced here any more: read again next time.
   static void release(String id) {
-    _ring.release(id: id);
+    // None opened yet: nothing to release.
+    _keys?.release(id: id);
     passwordMismatch.value = {...passwordMismatch.value}..remove(id);
   }
 
