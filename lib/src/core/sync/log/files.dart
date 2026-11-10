@@ -219,7 +219,10 @@ final class FileLogSync {
     // Named by a keyed hash: no endpoint written to device-local state.
     final Webdav webdav when webdav.client != null => (
       id: 'webdav:${syncBlobName(secret: folder, data: utf8.encode('${webdav.identity}|${webdavAccount?.call() ?? ''}'))}',
-      files: WebdavSyncFiles(() => remote() as Webdav? ?? webdav, folder),
+      files: WebdavSyncFiles(() => switch (remote()) {
+        final Webdav now => now,
+        _ => webdav,
+      }, folder),
     ),
     _ => null,
   };
