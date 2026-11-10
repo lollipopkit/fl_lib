@@ -696,6 +696,7 @@ version = "0.1.0"
 dependencies = [
  "fl_lkc",
  "fl_sync",
+ "fl_sync_engine",
  "fl_theme",
  "flutter_rust_bridge",
  "futures-util",
@@ -736,6 +737,21 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fl_sync_engine"
+version = "0.1.0"
+dependencies = [
+ "age",
+ "fl_lkc",
+ "fl_sync",
+ "flate2",
+ "getrandom 0.3.4",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

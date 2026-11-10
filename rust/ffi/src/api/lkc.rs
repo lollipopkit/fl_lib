@@ -292,6 +292,12 @@ impl LkcSync {
         Self { client: Arc::new(SyncClient::new(session.0.clone(), &app)), listening: std::sync::Mutex::new(None) }
     }
 
+    /// The client, for the sync engine on it.
+    #[frb(ignore)]
+    pub(crate) fn client(&self) -> Arc<SyncClient<DartStore>> {
+        self.client.clone()
+    }
+
     /// Homebase's clock minus this one's, in milliseconds; 0 before an answer.
     #[frb(sync)]
     pub fn offset_ms(&self) -> i64 {
