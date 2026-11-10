@@ -52,12 +52,18 @@ final class LkcException implements Exception {
 final class LkcClient {
   static const defaultBaseUrl = 'https://api.lolli.tech';
 
+  /// Conduit, LK Cloud's model gateway.
+  static const defaultConduitUrl = 'https://cpa.lolli.tech';
+
   // Not on the object store: an upload of 5 GB takes as long as it takes.
   static const _connectTimeout = Duration(seconds: 15);
   static const _receiveTimeout = Duration(seconds: 30);
 
   final LkcOidc oidc;
   final Uri baseUrl;
+
+  /// Where Conduit serves: [conduitKey] and the OpenAI API (`/v1`).
+  final Uri conduitUrl;
 
   /// Whether this app may sell plans by the web checkout.
   ///
@@ -72,6 +78,7 @@ final class LkcClient {
 
   /// Talks to the object store: never sends the token.
   final Dio _store;
+  final Dio _conduit;
   final LkcIdp _idp;
 
   /// The session, restored from [tokenProp] the first time it is asked for.
@@ -100,19 +107,23 @@ final class LkcClient {
   LkcClient({
     required this.oidc,
     Uri? baseUrl,
+    Uri? conduitUrl,
     bool? webCheckout,
     this.tokenProp = SecureStoreProps.lkcToken,
     Dio? api,
     Dio? store,
+    Dio? conduit,
     Dio? idp,
     @visibleForTesting Future<bool> Function(Uri url)? openBrowser,
     @visibleForTesting bool? loopback,
     LkcCache? cache,
   }) : cache = cache ?? LkcCache(),
        baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
+       conduitUrl = conduitUrl ?? Uri.parse(defaultConduitUrl),
        webCheckout = webCheckout ?? (!isIOS && !isMacOS),
        _api = api ?? Dio(),
        _store = store ?? Dio(),
+       _conduit = conduit ?? Dio(),
        _idp = LkcIdp(
          oidc,
          _timed(idp ?? Dio()),
@@ -123,6 +134,9 @@ final class LkcClient {
        ) {
     _timed(_api).options.baseUrl = this.baseUrl.toString();
     _store.options.validateStatus = (_) => true;
+    _timed(_conduit).options
+      ..baseUrl = this.conduitUrl.toString()
+      ..validateStatus = (_) => true;
     // The amounts the paywall was worded from here before homebase worded it.
     // TODO: rm once no install keeps them.
     this.cache.remove('benefits');
@@ -243,7 +257,7 @@ final class LkcClient {
       unawaited(refreshCatalog().then((_) {}, onError: (_) {}));
     }
     final session = await _ensureSession();
-    if (!session.signedIn()) return;
+    if (!session.signedIn()) return _signedOut();
     // The account as last read, until homebase says it again.
     user.value ??= _cached(
       _kUser,
@@ -312,9 +326,35 @@ final class LkcClient {
     }
   }
 
+  /// Run by [signOut] while the session still holds, to end what the app
+  /// made with it (a [conduitKey], say). One that fails is logged and passed.
+  final beforeSignOut = <Future<void> Function()>[];
+
+  /// Told whenever the user is known to be signed out: by [signOut], by a
+  /// session that ended (the IdP, homebase, a refresh lost), and by [init]
+  /// finding none. Maybe more than once for one sign-out.
+  final onSignedOut = <void Function()>[];
+
+  void _signedOut() {
+    for (final f in [...onSignedOut]) {
+      try {
+        f();
+      } catch (e, s) {
+        Loggers.app.warning('LK Cloud signed out', e, s);
+      }
+    }
+  }
+
   /// Sign out here and end the session at the IdP; [why] is logged.
   Future<void> signOut([String why = 'signed out by the user']) async {
     await _unregisterDevice();
+    for (final f in [...beforeSignOut]) {
+      try {
+        await f();
+      } catch (e, s) {
+        Loggers.app.warning('LK Cloud before sign-out', e, s);
+      }
+    }
     _clear();
     await (await _ensureSession()).signOut(why: why);
   }
@@ -335,6 +375,7 @@ final class LkcClient {
     cache
       ..remove(_kUser)
       ..remove(_kEntitlements);
+    _signedOut();
   }
 
   /// The access token to send, refreshed by the session once due. A session
@@ -375,6 +416,72 @@ final class LkcClient {
     await _unregisterDevice();
     await _call('DELETE', '/auth/user');
     await signOut('the account was deleted');
+  }
+
+  // Conduit
+
+  /// This device's Conduit API key for this app ([LkcOidc.clientId]). Conduit
+  /// knows the user by the sign-in: nothing to register there. Asked again
+  /// for the same [device], it answers a new key and the old one stops
+  /// working. [deviceName] is what the user sees in Conduit's portal.
+  Future<String> conduitKey({
+    required String device,
+    String? deviceName,
+  }) async {
+    final data = await _conduitCall(
+      'POST',
+      '/v0/user/app-keys',
+      body: {
+        'app': oidc.clientId,
+        'device_id': device,
+        'device_name': ?deviceName,
+      },
+    );
+    final item = data is Map ? data['item'] : null;
+    final key = item is Map ? item['key'] : null;
+    if (key is! String || key.isEmpty) {
+      throw const LkcException(message: 'Conduit sent no key');
+    }
+    return key;
+  }
+
+  /// Ends the key [conduitKey] made for [device]; one already gone is done.
+  Future<void> dropConduitKey(String device) async {
+    try {
+      await _conduitCall(
+        'DELETE',
+        '/v0/user/app-keys/${Uri.encodeComponent(oidc.clientId)}/${Uri.encodeComponent(device)}',
+      );
+    } on LkcException catch (e) {
+      if (e.status != HttpStatus.notFound) rethrow;
+    }
+  }
+
+  /// Conduit's reply, or its `error` as an [LkcException]. Its refusal says
+  /// nothing of the LK Cloud session, which stays.
+  Future<Object?> _conduitCall(String method, String path, {Object? body}) async {
+    final token = await _accessToken();
+    final Response<Object?> res;
+    try {
+      res = await _conduit.request<Object?>(
+        path,
+        data: body,
+        options: Options(
+          method: method,
+          headers: {HttpHeaders.authorizationHeader: 'Bearer $token'},
+        ),
+      );
+    } on DioException catch (e) {
+      throw LkcException(message: e.message ?? e.type.name);
+    }
+    final status = res.statusCode ?? 0;
+    final data = res.data;
+    if (status >= 200 && status < 300) return data;
+    final error = data is Map ? data['error'] : null;
+    throw LkcException(
+      status: status,
+      message: error is String ? error : null,
+    );
   }
 
   // Push devices
