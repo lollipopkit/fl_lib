@@ -44,6 +44,7 @@ void main() {
   late _Adapter api;
   late _Adapter store;
   late _Adapter idp;
+  late _Adapter conduit;
   late LkcClient client;
   late LkcMemoryCache cache;
   Future<bool> Function(Uri url) browser = (_) async => false;
@@ -55,6 +56,7 @@ void main() {
       ..on('GET /auth/user', {'data': _user})
       ..on('GET /v2/entitlements', {'data': []});
     store = _Adapter();
+    conduit = _Adapter();
     idp = _Adapter()
       ..on('GET /auth/v1/.well-known/openid-configuration', _discovery);
     cache = LkcMemoryCache();
@@ -67,6 +69,7 @@ void main() {
       ),
       api: Dio()..httpClientAdapter = api,
       store: Dio()..httpClientAdapter = store,
+      conduit: Dio()..httpClientAdapter = conduit,
       idp: Dio()..httpClientAdapter = idp,
       openBrowser: (url) => browser(url),
       loopback: true,
@@ -543,6 +546,73 @@ void main() {
       isTrue,
     );
     expect(cache.read('device'), isNull);
+  });
+
+  group('Conduit key', () {
+    test('asked with the access token, for this app and device', () async {
+      conduit.onFn('POST /v0/user/app-keys', (_) => (201, {'item': {'id': 'ak1', 'key': 'sk-1'}}));
+      await signedIn();
+      expect(await client.conduitKey(device: 'dev1', deviceName: 'Mac'), 'sk-1');
+      final sent = conduit.requests.single;
+      expect(sent.headers[HttpHeaders.authorizationHeader], 'Bearer a1');
+      expect(sent.data, {'app': 'test', 'device_id': 'dev1', 'device_name': 'Mac'});
+    });
+
+    test('a refusal carries Conduit\'s words', () async {
+      conduit.onFn('POST /v0/user/app-keys', (_) => (404, {'error': 'app keys are not available'}));
+      await signedIn();
+      final e = await client.conduitKey(device: 'dev1').then<LkcException?>((_) => null, onError: (Object e) => e as LkcException);
+      expect(e?.status, 404);
+      expect(e?.message, 'app keys are not available');
+    });
+
+    test('one already gone is dropped', () async {
+      conduit.onFn('DELETE /v0/user/app-keys/test/dev1', (_) => (404, {'error': 'api key not found'}));
+      await signedIn();
+      await client.dropConduitKey('dev1');
+      expect(conduit.requests.single.method, 'DELETE');
+    });
+
+    test('told when known signed out: no session at launch', () async {
+      var told = 0;
+      client.onSignedOut.add(() => told++);
+      await client.init();
+      expect(told, 1);
+    });
+
+    test('told when known signed out: signing out', () async {
+      var told = 0;
+      client.onSignedOut.add(() => told++);
+      await signedIn();
+      expect(told, 0);
+      await client.signOut();
+      // Once for this side, again as the session ends: it may come twice.
+      expect(told, isPositive);
+    });
+
+    test('a request Conduit never answers is an LkcException', () async {
+      conduit.gate = (_) async => throw DioException.connectionError(
+        requestOptions: RequestOptions(),
+        reason: 'offline',
+      );
+      await signedIn();
+      await expectLater(client.conduitKey(device: 'dev1'), throwsA(isA<LkcException>()));
+    });
+
+    test('what runs before signing out has the session still', () async {
+      conduit.onFn('DELETE /v0/user/app-keys/test/dev1', (_) => (200, {'status': 'ok'}));
+      await signedIn();
+      var signedInThen = false;
+      client.beforeSignOut.add(() async {
+        signedInThen = client.signedIn;
+        await client.dropConduitKey('dev1');
+      });
+      client.beforeSignOut.add(() async => throw StateError('passed'));
+      await client.signOut();
+      expect(signedInThen, isTrue);
+      expect(conduit.requests.single.headers[HttpHeaders.authorizationHeader], 'Bearer a1');
+      expect(client.signedIn, isFalse);
+    });
   });
 
   test('the catalog is asked for by its ETag, and kept on a 304', () async {
