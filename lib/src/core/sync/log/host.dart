@@ -24,6 +24,41 @@ abstract interface class SyncFiles {
   Future<void> delete(String name);
 }
 
+/// A log the server orders, kept by Dart (LK Cloud's is reached in Rust):
+/// a test's, or a store an app reaches itself. Its blobs are [SyncFiles].
+abstract interface class SyncLogStore implements SyncFiles {
+  /// Appends [body] once per [key]: the seq given, of which log, and whether
+  /// a snapshot is due. [SyncLogFull] while a snapshot is due first.
+  Future<({String log, int seq, bool compact})> append(String key, Uint8List body);
+
+  /// The batches after [after] of [log], or [SyncLogPage.compacted].
+  Future<SyncLogPage> readLog(int after, String? log);
+
+  /// [body] as the snapshot up to [seq]; false when one at or past it is
+  /// there already.
+  Future<bool> putSnapshot(int seq, Uint8List body);
+
+  /// The snapshot, null before there is one.
+  Future<({String log, int seq, Uint8List body})?> snapshot();
+}
+
+final class SyncLogPage {
+  const SyncLogPage({required this.log, required this.batches, required this.more}) : compacted = false;
+
+  /// The batches after the cursor are gone, or it was of another log.
+  const SyncLogPage.compacted({this.log}) : batches = const [], more = false, compacted = true;
+
+  final String? log;
+  final List<(int, Uint8List)> batches;
+  final bool more;
+  final bool compacted;
+}
+
+/// The log takes no more batches until a snapshot covers them.
+final class SyncLogFull implements Exception {
+  const SyncLogFull();
+}
+
 /// The calls the Rust engine makes of Dart, answered.
 typedef SyncCall = Future<SyncReply> Function(String method, String json, Uint8List? bytes);
 
@@ -41,11 +76,11 @@ Future<SyncReply> syncReply<T>(
   } catch (e, s) {
     final kind = switch (e) {
       SyncPasswordMissing() => 'passwordMissing',
-      SyncRefused() => 'refused',
+      SyncRefused() || SyncLogFull() => 'refused',
       _ => 'host',
     };
     if (kind == 'host') Loggers.app.warning('Sync host call', e, s);
-    return SyncReply(json: '', error: '$e', errorKind: kind);
+    return SyncReply(json: '', error: e is SyncLogFull ? 'sync_log_full' : '$e', errorKind: kind);
   }
 }
 
@@ -53,9 +88,15 @@ Future<SyncReply> syncReply<T>(
 /// [SyncRecords]' values, the `sync_state` and `sync_passed` tables, and
 /// [files] for a segment engine.
 final class SyncHost {
-  SyncHost({this.files, this.stamp});
+  SyncHost({SyncFiles? files, this.log, this.stamp}) : files = files ?? log;
 
   final SyncFiles? files;
+
+  /// The log, when Dart keeps it ([SyncLogEngine.onDart]).
+  final SyncLogStore? log;
+
+  /// The bodies of the page [log] read last, by seq: fetched one by one.
+  final _page = <int, Uint8List>{};
 
   /// Stamps what changed without a write that stamps it (files), before what
   /// is pending is read.
@@ -110,11 +151,33 @@ final class SyncHost {
         for (final f in await _files.list(a as String)) [f.name, f.at?.millisecondsSinceEpoch],
       ]),
       'files.delete' => syncReply(() => _files.delete(a as String)),
+      'log.append' => syncReply(() async {
+        final r = await _log.append(a as String, bytes ?? Uint8List(0));
+        return {'log': r.log, 'seq': r.seq, 'compact': r.compact};
+      }),
+      'log.read' => syncReply(() async {
+        final m = a as Map;
+        final page = await _log.readLog(m['after'] as int, m['log'] as String?);
+        _page
+          ..clear()
+          ..addEntries(page.batches.map((b) => MapEntry(b.$1, b.$2)));
+        return {
+          'log': page.log,
+          'compacted': page.compacted,
+          'more': page.more,
+          'batches': [for (final (seq, _) in page.batches) {'seq': seq}],
+        };
+      }),
+      'log.batch' => syncReply(() => _page[a as int], bytes: (r) => r),
+      'log.putSnapshot' => syncReply(() => _log.putSnapshot(a as int, bytes ?? Uint8List(0))),
+      'log.snapshot' => syncReply(_log.snapshot, bytes: (r) => r?.body, json: (r) => r == null ? null : {'log': r.log, 'seq': r.seq}),
       _ => Future.value(SyncReply(json: '', error: 'no such call: $method', errorKind: 'host')),
     };
   }
 
   SyncFiles get _files => files ?? (throw StateError('Not a segment sync'));
+
+  SyncLogStore get _log => log ?? (throw StateError('No log kept in Dart'));
 
   static List<List<String>> _rows(List<({String c, String id, String hlc})> rows) => [
     for (final r in rows) [r.c, r.id, r.hlc],

@@ -31,6 +31,62 @@ final class _Folder implements SyncFiles {
   }
 }
 
+/// A server-ordered log in memory, as LK Cloud keeps one.
+final class _Log extends _Folder implements SyncLogStore {
+  final batches = <(int, String, Uint8List)>[];
+  (int, Uint8List)? snap;
+
+  @override
+  Future<({String log, int seq, bool compact})> append(String key, Uint8List body) async {
+    for (final (seq, k, _) in batches) {
+      if (k == key) return (log: 'l', seq: seq, compact: false);
+    }
+    final seq = (batches.lastOrNull?.$1 ?? 0) + 1;
+    batches.add((seq, key, body));
+    return (log: 'l', seq: seq, compact: batches.length % 3 == 0);
+  }
+
+  @override
+  Future<SyncLogPage> readLog(int after, String? log) async => SyncLogPage(
+    log: 'l',
+    batches: [for (final (seq, _, body) in batches) if (seq > after) (seq, body)],
+    more: false,
+  );
+
+  @override
+  Future<bool> putSnapshot(int seq, Uint8List body) async {
+    if ((snap?.$1 ?? 0) >= seq) return false;
+    snap = (seq, body);
+    return true;
+  }
+
+  @override
+  Future<({String log, int seq, Uint8List body})?> snapshot() async =>
+      snap == null ? null : (log: 'l', seq: snap!.$1, body: snap!.$2);
+}
+
+/// The key file on a log: writes ordered.
+final class _LogKeyFile implements SyncKeyFile {
+  ({Uint8List body, String version})? file;
+  var _v = 0;
+
+  @override
+  String get id => 'account';
+
+  @override
+  Future<({Uint8List body, String version})?> read() async => file;
+
+  @override
+  Future<String?> write(Uint8List body, {required String? ifVersion}) async {
+    if (file?.version != ifVersion) return null;
+    file = (body: body, version: 'v${++_v}');
+    return file!.version;
+  }
+
+  @override
+  Future<bool> canCreate() async => true;
+}
+
 /// This install as another device: a fresh database, another device id.
 Future<SqliteStore> _freshDevice() async {
   await SqliteDb.close();
@@ -111,6 +167,29 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({'bakPwd': 'other'});
     await expectLater(_engine(folder), throwsA(isA<SyncPasswordMismatch>()));
     expect(SyncKeyring.passwordMismatch.value, {'folder'});
+  });
+
+  test('a log Dart keeps carries the edits, and its snapshot covers them', () async {
+    final log = _Log();
+    final file = _LogKeyFile();
+    Future<SyncLogEngine> engine() async {
+      final key = await SyncKeyring.ofFiles(file);
+      final host = SyncHost(log: log);
+      await syncCall(() => SyncLogEngine.bind(account: 'account', host: host.call));
+      return SyncLogEngine.onDart(key: key, host: host.call);
+    }
+
+    var store = await _freshDevice();
+    final a = await engine();
+    for (var i = 0; i < 4; i++) {
+      store.set('k$i', i);
+      await syncCall(a.run);
+    }
+    expect(log.batches, hasLength(4));
+    expect(log.snap, isNotNull);
+    store = await _freshDevice();
+    await syncCall((await engine()).run);
+    expect([for (var i = 0; i < 4; i++) store.get<int>('k$i')], [0, 1, 2, 3]);
   });
 
   test('a key seals and opens what the whole backup is', () async {

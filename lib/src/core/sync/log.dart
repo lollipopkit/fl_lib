@@ -5,7 +5,7 @@ library;
 export 'log/categories.dart';
 export 'log/errors.dart';
 export 'log/files.dart';
-export 'log/host.dart' show SyncFiles, SyncHost;
+export 'log/host.dart' show SyncFiles, SyncHost, SyncLogStore, SyncLogPage, SyncLogFull;
 export 'log/keys.dart';
 export 'log/lkc.dart';
 export 'log/recorder.dart';

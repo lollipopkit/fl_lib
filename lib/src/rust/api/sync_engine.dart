@@ -9,6 +9,7 @@ import 'lkc.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bridge`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Log`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`, `from`
 
 /// Whether [data] is sealed to a sync key: one sealed with a password
@@ -107,6 +108,15 @@ abstract class SyncLogEngine implements RustOpaqueInterface {
     required FutureOr<SyncReply> Function(String, String, Uint8List?) host,
   }) => RustLib.instance.api.crateApiSyncEngineSyncLogEngineNew(
     lkc: lkc,
+    key: key,
+    host: host,
+  );
+
+  /// On a log [host] keeps too (`log.*`, its blobs `files.*`).
+  static SyncLogEngine onDart({
+    required SyncKeyHandle key,
+    required FutureOr<SyncReply> Function(String, String, Uint8List?) host,
+  }) => RustLib.instance.api.crateApiSyncEngineSyncLogEngineOnDart(
     key: key,
     host: host,
   );

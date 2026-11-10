@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fl_sync_engine::key::{BoxFuture, KeyFile, Secrets, Versioned};
+use fl_sync_engine::log::{Appended, LogTransport, Page, SnapshotBody};
 use fl_sync_engine::segment::Files;
 use fl_sync_engine::{BlobStore, Error, Hlc, Host, Listed, Op, Read, Result, Stamped};
 use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture};
@@ -40,6 +41,12 @@ impl Bridge {
     async fn call<T: DeserializeOwned>(&self, method: &str, args: impl Serialize) -> Result<T> {
         let args = serde_json::to_value(args).map_err(|e| Error::Host(e.to_string()))?;
         let reply = self.raw(method, args, None).await?;
+        let json = if reply.json.is_empty() { "null" } else { &reply.json };
+        serde_json::from_str(json).map_err(|e| Error::Host(format!("{method} answered: {e}")))
+    }
+
+    async fn call_with<T: DeserializeOwned>(&self, method: &str, args: Value, bytes: Vec<u8>) -> Result<T> {
+        let reply = self.raw(method, args, Some(bytes)).await?;
         let json = if reply.json.is_empty() { "null" } else { &reply.json };
         serde_json::from_str(json).map_err(|e| Error::Host(format!("{method} answered: {e}")))
     }
@@ -226,5 +233,75 @@ impl Secrets for DartSecrets {
 
     fn set_pending(&self, pending: HashMap<String, String>) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move { self.0.call::<Value>("secrets.setPending", pending).await.map(|_| ()) })
+    }
+}
+
+/// A log in Dart (`log.*`, its blobs `files.*`): a test's, or a store the
+/// app reaches itself.
+pub struct DartLog(pub Bridge);
+
+impl BlobStore for DartLog {
+    async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
+        DartFiles(self.0.clone()).put_blob(name, body).await
+    }
+
+    async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
+        DartFiles(self.0.clone()).get_blob(name).await
+    }
+
+    async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
+        DartFiles(self.0.clone()).blobs(prefix).await
+    }
+
+    async fn delete_blob(&self, name: String) -> Result<()> {
+        DartFiles(self.0.clone()).delete_blob(name).await
+    }
+}
+
+impl LogTransport for DartLog {
+    async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
+        let reply = self.0.raw("log.append", json!(key), Some(body)).await;
+        let reply = match reply {
+            Err(Error::Refused(r)) if r == "sync_log_full" => return Err(Error::LogFull),
+            other => other?,
+        };
+        let a: Value = serde_json::from_str(&reply.json).map_err(|e| Error::Host(e.to_string()))?;
+        let field = |k: &str| a.get(k).cloned().unwrap_or(Value::Null);
+        Ok(Appended {
+            log: field("log").as_str().ok_or_else(|| Error::Host("log.append: no log".into()))?.to_string(),
+            seq: field("seq").as_i64().ok_or_else(|| Error::Host("log.append: no seq".into()))?,
+            compact: field("compact").as_bool().unwrap_or(false),
+        })
+    }
+
+    async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
+        let page: Value = self.0.call("log.read", json!({ "after": after, "log": log })).await?;
+        let log = page.get("log").and_then(Value::as_str).map(str::to_string);
+        if page.get("compacted").and_then(Value::as_bool).unwrap_or(false) {
+            return Ok(Page::Compacted { log });
+        }
+        let mut batches = Vec::new();
+        for b in page.get("batches").and_then(Value::as_array).cloned().unwrap_or_default() {
+            let seq = b.get("seq").and_then(Value::as_i64).ok_or_else(|| Error::Host("log.read: a batch without seq".into()))?;
+            // Fetched apart: bytes do not travel in JSON.
+            let body = self.0.raw("log.batch", json!(seq), None).await?.bytes.ok_or_else(|| Error::Host(format!("log.batch {seq}: gone")))?;
+            batches.push((seq, body));
+        }
+        Ok(Page::Batches { log, batches, more: page.get("more").and_then(Value::as_bool).unwrap_or(false) })
+    }
+
+    async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
+        self.0.call_with("log.putSnapshot", json!(seq), body).await
+    }
+
+    async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
+        let reply = self.0.raw("log.snapshot", Value::Null, None).await?;
+        let Some(body) = reply.bytes else { return Ok(None) };
+        let s: Value = serde_json::from_str(&reply.json).map_err(|e| Error::Host(e.to_string()))?;
+        Ok(Some(SnapshotBody {
+            log: s.get("log").and_then(Value::as_str).ok_or_else(|| Error::Host("log.snapshot: no log".into()))?.to_string(),
+            seq: s.get("seq").and_then(Value::as_i64).ok_or_else(|| Error::Host("log.snapshot: no seq".into()))?,
+            body,
+        }))
     }
 }
