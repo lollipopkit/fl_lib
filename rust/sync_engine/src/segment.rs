@@ -147,6 +147,8 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
     pub async fn reset(&self) -> Result<()> {
         let _run = self.core.run().await?;
         Self::forget(&*self.core.host).await?;
+        // Every device is read anew: its snapshots too.
+        self.snapshots_read.lock().unwrap_or_else(|e| e.into_inner()).clear();
         self.core.too_new.send_replace(false);
         Ok(())
     }
@@ -176,8 +178,10 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
                 .or_else(|| listed.snapshots.keys().find(|d| **d != mine && !read.contains(*d)).cloned());
             let Some(next) = next else { break };
             read.insert(next.clone());
-            self.read_snapshot(run, &next, &mine).await?;
-            self.snapshots_read.lock().unwrap_or_else(|e| e.into_inner()).insert(next.clone(), listed.snapshots[&next]);
+            // One no key here opens is read again next time.
+            if self.read_snapshot(run, &next, &mine).await? {
+                self.snapshots_read.lock().unwrap_or_else(|e| e.into_inner()).insert(next.clone(), listed.snapshots[&next]);
+            }
         }
         for (device, ns) in &listed.segments {
             if *device == mine {
@@ -194,26 +198,28 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
         Ok(())
     }
 
-    async fn read_snapshot(&self, run: &Run<'_>, device: &str, mine: &str) -> Result<()> {
+    /// Whether [device]'s snapshot was read (or is gone).
+    async fn read_snapshot(&self, run: &Run<'_>, device: &str, mine: &str) -> Result<bool> {
         let name = snapshot_name(device);
-        let Some(sealed) = self.files.get_blob(name.clone()).await? else { return Ok(()) };
+        let Some(sealed) = self.files.get_blob(name.clone()).await? else { return Ok(true) };
         let plain = match self.core.open(&sealed).await {
             Ok(plain) => plain,
             Err(Error::Unreadable(e)) => {
                 // Read again next time, while the gap it would close is there.
                 self.core.host.warn(format!("Sync could not open {name}: {e}"));
-                return Ok(());
+                return Ok(false);
             }
             Err(e) => return Err(e),
         };
-        let Some((ops, doc)) = self.core.parse(&plain, &name)? else { return Ok(()) };
+        let Some((ops, doc)) = self.core.parse(&plain, &name)? else { return Ok(true) };
         let mut state = Vec::new();
         for (d, n) in covers_of(&doc) {
             if d != mine && n > self.cursor(&d).await? {
                 state.push((format!("{PREFIX}{CURSOR}{d}"), Some(n.to_string())));
             }
         }
-        self.core.apply(run, Some(ops), state).await
+        self.core.apply(run, Some(ops), state).await?;
+        Ok(true)
     }
 
     /// Whether the read goes on past segment [n] of [device], written [at].
@@ -373,7 +379,9 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
     /// Forgets what was read and sent: the next sync reads every device anew
     /// and joins again. For another store, or what is carried changing.
     pub async fn forget(host: &H) -> Result<()> {
-        host.clear_state(PREFIX.to_string(), vec![format!("{PREFIX}{STORE}")]).await?;
+        // This device's own numbering stays: a segment written again under a
+        // number the others read past would never be read.
+        host.clear_state(PREFIX.to_string(), vec![format!("{PREFIX}{STORE}"), format!("{PREFIX}{N}")]).await?;
         host.forget_passed(PREFIX.to_string()).await
     }
 

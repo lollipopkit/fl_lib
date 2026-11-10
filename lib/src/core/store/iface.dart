@@ -207,6 +207,21 @@ sealed class KvStore {
         () => _updateLastUpdateTs(ts: ts, key: key),
       );
 
+  /// [updateLastUpdateTs] for many keys at once, each to its own [stamps]
+  /// time: the map read and written once.
+  Future<bool> updateLastUpdateTsOf(Map<String, int> stamps) =>
+      _serializeLastUpdateTsMutation(() async {
+        var map = <String, int>{};
+        try {
+          map = lastUpdateTs ?? map;
+        } catch (_) {}
+        for (final MapEntry(:key, :value) in stamps.entries) {
+          if (isDeviceLocalKey(key) || isInternalKey(key)) continue;
+          map[key] = value;
+        }
+        return await set(lastUpdateTsKey, map, updateLastUpdateTsOnSet: false);
+      });
+
   /// Get the last update timestamp.
   ///
   /// {@macro store_last_update_ts}

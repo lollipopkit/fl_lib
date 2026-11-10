@@ -214,6 +214,12 @@ final class FileLogSync {
   final tooNew = ValueNotifier(false);
   final lastFailure = ValueNotifier<Object?>(null);
 
+  /// A run is going on.
+  final running = ValueNotifier(false);
+
+  /// When a run last went through.
+  final lastSyncAt = ValueNotifier<DateTime?>(null);
+
   ({String id, SyncFiles files})? _storeOf(RemoteStorage<Object?>? rs) => switch (rs) {
     final ICloud icloud => (id: 'icloud:${icloud.containerId}', files: ICloudSyncFiles(icloud, folder)),
     // Named by a keyed hash: no endpoint written to device-local state.
@@ -293,14 +299,17 @@ final class FileLogSync {
       }
       return;
     }
+    running.value = true;
     try {
       await syncCall(engine.run);
       lastFailure.value = null;
+      lastSyncAt.value = DateTime.now();
     } catch (e, s) {
       lastFailure.value = e;
-      Loggers.app.warning('File log sync', e, s);
+      if (!(e is SyncError && e.kind == SyncEngineErrorKind.remote)) Loggers.app.warning('File log sync', e, s);
     } finally {
       tooNew.value = engine.tooNew();
+      running.value = false;
     }
   }
 

@@ -23,6 +23,8 @@ struct HostState {
     passed: BTreeMap<(String, String, String), Op>,
     not_carried: HashSet<String>,
     unread: HashSet<(String, String)>,
+    /// Collections this build does not keep (a newer one's).
+    unkept: HashSet<String>,
     warnings: Vec<String>,
     applied: usize,
 }
@@ -92,15 +94,16 @@ impl Host for MemHost {
             .collect())
     }
 
-    async fn apply(&self, ops: Vec<Op>) -> Result<()> {
+    async fn apply(&self, ops: Vec<Op>) -> Result<Vec<Op>> {
         let mut s = self.lock();
+        let (ops, unkept): (Vec<Op>, Vec<Op>) = ops.into_iter().partition(|op| !s.unkept.contains(&op.c));
         let won: Vec<Op> = fl_sync::winners(|c, id| s.records.get(&(c.to_string(), id.to_string())).map(|(h, _)| *h), &ops).into_iter().cloned().collect();
         for op in won {
             self.clock.lock().unwrap().observe(op.h);
             s.records.insert((op.c, op.id), (op.h, op.d));
             s.applied += 1;
         }
-        Ok(())
+        Ok(unkept)
     }
 
     async fn not_carried(&self) -> Result<HashSet<String>> {
@@ -613,6 +616,26 @@ async fn what_is_not_carried_here_is_kept_for_the_others() {
     log.drop_covered();
     c.log(&log, &file).await.sync().await.unwrap();
     assert_eq!(c.host.value("kv:setting", "theme"), Some(json!("dark")));
+}
+
+#[tokio::test]
+async fn what_this_build_does_not_keep_stays_in_the_log() {
+    let (log, file) = (MemLog::new(), Arc::new(MemKeyFile::default()));
+    log.lock().compact_after = 2;
+    let (a, b, c) = (Device::new("pw"), Device::new("pw"), Device::new("pw"));
+    a.host.edit("new:kind", "x", Some(json!(1)));
+    a.log(&log, &file).await.sync().await.unwrap();
+    // b is an older build: it writes the snapshot, and keeps a's record in it.
+    b.host.lock().unkept.insert("new:kind".into());
+    let lb = b.log(&log, &file).await;
+    for i in 0..3 {
+        b.host.edit("k", &format!("r{i}"), Some(json!(i)));
+        lb.sync().await.unwrap();
+    }
+    assert_eq!(b.host.value("new:kind", "x"), None);
+    log.drop_covered();
+    c.log(&log, &file).await.sync().await.unwrap();
+    assert_eq!(c.host.value("new:kind", "x"), Some(json!(1)));
 }
 
 #[tokio::test]

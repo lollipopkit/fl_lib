@@ -127,8 +127,10 @@ pub trait Host: Send + Sync + 'static {
     /// Writes, in one transaction, those of [ops] whose stamp is greater than
     /// the record's here (`fl_sync::winners`), each stamped with its op's,
     /// and tells the app what changed. Deciding and writing are one step, so
-    /// an edit made meanwhile is not overwritten by an older op.
-    fn apply(&self, ops: Vec<Op>) -> impl Future<Output = Result<()>> + Send;
+    /// an edit made meanwhile is not overwritten by an older op. Answers the
+    /// ops of collections this build does not keep (a newer one's), which the
+    /// engine keeps for its snapshots, so the log loses none of them.
+    fn apply(&self, ops: Vec<Op>) -> impl Future<Output = Result<Vec<Op>>> + Send;
 
     /// The collections not sent or taken now (a category switched off here).
     /// Asked once per run: one switched during a run is taken by the next.

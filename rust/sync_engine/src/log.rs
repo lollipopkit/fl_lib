@@ -121,6 +121,8 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     pub async fn reset(&self) -> Result<()> {
         let _run = self.core.run().await?;
         Self::forget(&*self.core.host).await?;
+        // Sealed under what was carried before: its records are read again.
+        *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = None;
         self.core.too_new.send_replace(false);
         Ok(())
     }

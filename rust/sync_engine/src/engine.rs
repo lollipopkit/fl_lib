@@ -255,9 +255,12 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
         if !complete {
             return Ok(None);
         }
+        // Kept for the others: what this device does not sync, and what it
+        // does not keep (a newer build's collections).
+        let held: HashSet<(&str, &str)> = all.iter().map(|r| (r.c.as_str(), r.id.as_str())).collect();
         let mut sender = Sender::default();
         for op in self.host.passed(self.prefix.to_string()).await? {
-            if !run.carries(&op.c) {
+            if !run.carries(&op.c) || !held.contains(&(op.c.as_str(), op.id.as_str())) {
                 ops.push(sender.send(self, op).await?);
             }
         }
@@ -278,7 +281,10 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
             }
             let ops = self.resolve(carried).await?;
             if !ops.is_empty() {
-                self.host.apply(ops).await?;
+                let unkept = self.host.apply(ops).await?;
+                if !unkept.is_empty() {
+                    self.host.pass(self.prefix.to_string(), Self::newest(unkept)).await?;
+                }
             }
         }
         self.host.set_state(state).await

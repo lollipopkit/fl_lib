@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:webdav_client_plus/webdav_client_plus.dart' show WebdavException;
 
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
@@ -23,6 +27,15 @@ abstract interface class SyncFiles {
 
   Future<void> delete(String name);
 }
+
+/// Whether [e] is the store's or the network's, worth trying later: no
+/// answer, a timeout, a server's error.
+bool isRemoteFailure(Object e) => switch (e) {
+  SocketException() || TimeoutException() || HttpException() || TlsException() => true,
+  DioException(:final response) => (response?.statusCode ?? 500) >= 500,
+  WebdavException(:final statusCode) => statusCode == null || statusCode >= 500,
+  _ => false,
+};
 
 /// A log the server orders, kept by Dart (LK Cloud's is reached in Rust):
 /// a test's, or a store an app reaches itself. Its blobs are [SyncFiles].
@@ -77,6 +90,7 @@ Future<SyncReply> syncReply<T>(
     final kind = switch (e) {
       SyncPasswordMissing() => 'passwordMissing',
       SyncRefused() || SyncLogFull() => 'refused',
+      _ when isRemoteFailure(e) => 'remote',
       _ => 'host',
     };
     if (kind == 'host') Loggers.app.warning('Sync host call', e, s);
@@ -116,7 +130,9 @@ final class SyncHost {
       'all' => syncReply(() => _rows(SyncRecorder.all())),
       'pending' => syncReply(() => _rows(SyncRecorder.pending(a as String? ?? ''))),
       'read' => syncReply(() => _read(a as List)),
-      'apply' => syncReply(() => SyncRecords.apply(_ops(a as List))),
+      'apply' => syncReply(() async => [
+        for (final op in await SyncRecords.apply(_ops(a as List))) {'c': op.c, 'id': op.id, 'h': op.h, 'd': op.d},
+      ]),
       'notCarried' => syncReply(() => SyncGroups.notCarried().toList()),
       'afterRead' => syncReply(() {
         final not = {for (final c in a as List) c as String};
@@ -184,10 +200,23 @@ final class SyncHost {
   ];
 
   static Future<List<Map<String, Object?>>> _read(List<Object?> ids) async {
+    final pairs = [for (final p in ids.cast<List<Object?>>()) (p[0] as String, p[1] as String)];
+    // A kind that reads many at once, once per kind.
+    final many = <(String, String), Object?>{};
+    for (final MapEntry(key: c, value: kind) in SyncRecords.kinds.entries) {
+      final readMany = kind.readMany;
+      if (readMany == null) continue;
+      final of = [for (final (pc, id) in pairs) if (pc == c) id];
+      if (of.isEmpty) continue;
+      final read = await readMany(of);
+      for (var i = 0; i < of.length; i++) {
+        many[(c, of[i])] = read[i];
+      }
+    }
     final read = SyncRecords.reader();
     final out = <Map<String, Object?>>[];
-    for (final pair in ids.cast<List<Object?>>()) {
-      final d = await read(pair[0] as String, pair[1] as String);
+    for (final pair in pairs) {
+      final d = many.containsKey(pair) ? many[pair] : await read(pair.$1, pair.$2);
       out.add(switch (d) {
         _ when identical(d, SyncRecords.unread) => const {'unread': true},
         _ when identical(d, SyncRecords.silent) => const {'silent': true},

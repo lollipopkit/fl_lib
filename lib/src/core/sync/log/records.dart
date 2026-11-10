@@ -11,11 +11,11 @@ typedef SyncOp = ({String c, String id, String h, Object? d});
 /// changed ([SyncRecorder.stampChanged]), and installed by its owner after the
 /// stores are written.
 final class SyncKind {
-  const SyncKind({required this._read, this.stamp, required this.install}) : _reader = null;
+  const SyncKind({required this._read, this.stamp, required this.install}) : _reader = null, readMany = null;
 
   /// `reader` makes a `read` for many records, which reads what they share
   /// once (every theme's files).
-  const SyncKind.batched({required this._reader, this.stamp, required this.install}) : _read = null;
+  const SyncKind.batched({required this._reader, this.stamp, required this.install}) : _read = null, readMany = null;
 
   final FutureOr<Object?> Function(String id)? _read;
   final FutureOr<Object?> Function(String id) Function()? _reader;
@@ -27,8 +27,15 @@ final class SyncKind {
   /// Writes the ops that won, each stamped with its op's stamp.
   final FutureOr<void> Function(List<SyncOp> ops) install;
 
+  /// Many records read at once (each chat's entries in one call), in order;
+  /// [read] one by one otherwise.
+  const SyncKind.many({required this.readMany, this.stamp, required this.install}) : _read = null, _reader = null;
+
   /// [read] for many records.
-  FutureOr<Object?> Function(String id) reader() => _reader?.call() ?? _read!;
+  FutureOr<Object?> Function(String id) reader() => _reader?.call() ?? _read ?? (id) async => (await readMany!([id])).single;
+
+  /// See [SyncKind.many].
+  final Future<List<Object?>> Function(List<String> ids)? readMany;
 }
 
 /// Records an app keeps in tables of its own (ServerBox's servers, keys,
@@ -92,17 +99,28 @@ abstract final class SyncRecords {
   /// The winners of [ops] against the stamps here, written: the stores and
   /// [tables] in one transaction, decided in it, so an edit made meanwhile is
   /// not overwritten; then [kinds]; then [announce].
-  static Future<void> apply(List<SyncOp> ops) async {
-    final current = SyncRecorder.stampsOf({for (final op in ops) (op.c, op.id)});
-    final won = winners(ops, current);
-    if (won.isEmpty) return;
+  /// Answers the ops of collections this build does not keep (a newer
+  /// one's): the engine keeps them for its snapshots.
+  static Future<List<SyncOp>> apply(List<SyncOp> ops) async {
+    final unkept = [for (final op in ops) if (!keeps(op.c)) op];
+    final current = SyncRecorder.stampsOf({for (final op in ops) if (keeps(op.c)) (op.c, op.id)});
+    final won = winners([for (final op in ops) if (keeps(op.c)) op], current);
+    if (won.isEmpty) return unkept;
     final written = write([for (final op in won) if (!kinds.containsKey(op.c)) op]);
     for (final MapEntry(key: c, value: kind) in kinds.entries) {
       final of = [for (final op in won) if (op.c == c) op];
       if (of.isNotEmpty) await kind.install(of);
     }
     await announce?.call(won, written);
+    return unkept;
   }
+
+  /// Whether records of [c] are kept by this build: a synced store's, a
+  /// kind's or [tables]'.
+  static bool keeps(String c) =>
+      kinds.containsKey(c) ||
+      (c.startsWith(_kvPrefix) && _kvStore(c) != null) ||
+      (tables?.claims(c) ?? false);
 
   /// Of [ops], per record the one with the greatest stamp, when greater than
   /// [current]'s (`fl_sync::winners`), in the order each record first came.
@@ -148,8 +166,12 @@ abstract final class SyncRecords {
     });
     // The whole backup's stamps, at each op's time, so it agrees with what
     // was written.
+    final stamps = <SqliteStore, Map<String, int>>{};
     for (final op in kv) {
-      unawaited(op.store.updateLastUpdateTs(ts: SyncRecorder.msOf(op.h), key: op.key));
+      (stamps[op.store] ??= {})[op.key] = SyncRecorder.msOf(op.h);
+    }
+    for (final MapEntry(key: store, value: of) in stamps.entries) {
+      unawaited(store.updateLastUpdateTsOf(of));
     }
     return written;
   }

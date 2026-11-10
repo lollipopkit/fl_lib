@@ -111,18 +111,18 @@ abstract final class SyncKeyring {
   static Future<SyncReply> _secrets(String method, String args, Uint8List? _) {
     final a = args.isEmpty ? null : jsonDecode(args);
     return switch (method) {
+      // Unlimited: a sync is not a user asking.
       'secrets.password' => syncReply(() async {
-        final pwd = await SecureStoreProps.bakPwd.read();
+        final pwd = await SecureStoreProps.bakPwd.read(limited: false);
         return pwd == null || pwd.isEmpty ? null : pwd;
       }),
-      'secrets.kept' => syncReply(() => _kept(a as String).read()),
-      'secrets.setKept' => syncReply(() => _kept((a as Map)['id'] as String).write(a['identities'] as String)),
+      'secrets.kept' => syncReply(() => _kept(a as String).read(limited: false)),
+      'secrets.setKept' => syncReply(() => _kept((a as Map)['id'] as String).write(a['identities'] as String, limited: false)),
       'secrets.epochs' => syncReply(() => _decoded(_epochsProp.get())),
       'secrets.setEpochs' => syncReply(() async {
         final all = a as Map;
         all.isEmpty ? await _epochsProp.remove() : await _epochsProp.set(jsonEncode(all));
       }),
-      // Past the rate limit: a sync is not a user asking.
       'secrets.pending' => syncReply(() async => _decoded(await _pendingProp.storage.read(key: _pendingProp.key))),
       'secrets.setPending' => syncReply(() {
         final all = a as Map;

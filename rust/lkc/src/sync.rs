@@ -40,9 +40,9 @@ pub const DIRECT_MAX: u64 = 1 << 20;
 /// The largest file any plan keeps (Cloud Basic's): each plan's own limit is
 /// homebase's to say (`413 sync_file_too_large`).
 pub const MAX_BYTES: u64 = 256 << 20;
-/// What a download is read up to: a snapshot is held to no file's limit,
-/// only to the space's.
-const MAX_READ: u64 = 1 << 30;
+/// What a download is read up to, held in memory: a snapshot is held to no
+/// file's limit, but a phone holds no more than this of it.
+const MAX_READ: u64 = MAX_BYTES;
 /// What a JSON answer may be.
 const MAX_JSON: usize = 1 << 20;
 /// What a page of the log may be: homebase fills one while the batches

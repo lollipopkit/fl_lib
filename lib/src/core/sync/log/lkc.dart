@@ -46,6 +46,12 @@ final class LkcLogSync {
   /// sync's failure.
   final lastFailure = ValueNotifier<Object?>(null);
 
+  /// A run is going on.
+  final running = ValueNotifier(false);
+
+  /// When a run last went through.
+  final lastSyncAt = ValueNotifier<DateTime?>(null);
+
   bool get _wanted => client.signedIn && client.user.value != null && enabled.value;
 
   final _host = SyncHost();
@@ -69,9 +75,14 @@ final class LkcLogSync {
     });
     // Signed out, or in as someone else: the next run opens anew, and what
     // this device knew of the account before goes.
+    // Read again (a refresh) as the same account: nothing changed.
+    var user = client.user.value?.id;
     client.user.addListener(() {
+      final now = client.user.value?.id;
+      if (now == user) return;
+      user = now;
       final was = _account;
-      if (was != null && was != client.user.value?.id) unawaited(SyncKeyring.forget(was));
+      if (was != null && was != now) unawaited(SyncKeyring.forget(was));
       reset();
       unawaited(sync());
     });
@@ -122,14 +133,19 @@ final class LkcLogSync {
       }
       return;
     }
+    running.value = true;
     try {
       await syncCall(() => run(engine));
       lastFailure.value = null;
+      lastSyncAt.value = DateTime.now();
     } catch (e, s) {
       lastFailure.value = e;
-      if (e is! SyncRefused) Loggers.app.warning('LK Cloud log sync', e, s);
+      if (e is! SyncRefused && !(e is SyncError && e.kind == SyncEngineErrorKind.remote)) {
+        Loggers.app.warning('LK Cloud log sync', e, s);
+      }
     } finally {
       tooNew.value = engine.tooNew();
+      running.value = false;
     }
   }
 

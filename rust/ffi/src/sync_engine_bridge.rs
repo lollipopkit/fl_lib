@@ -99,8 +99,8 @@ impl Host for DartHost {
             .collect()
     }
 
-    async fn apply(&self, ops: Vec<Op>) -> Result<()> {
-        self.0.call::<Value>("apply", ops).await.map(|_| ())
+    async fn apply(&self, ops: Vec<Op>) -> Result<Vec<Op>> {
+        Ok(self.0.call::<Option<Vec<Op>>>("apply", ops).await?.unwrap_or_default())
     }
 
     async fn not_carried(&self) -> Result<HashSet<String>> {
