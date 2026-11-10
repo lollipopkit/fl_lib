@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -149,82 +150,29 @@ void main() {
     });
   });
 
-  group('benefits', () {
-    final l10n = LibLocalizationsEn();
-    final benefits = LkcBenefits.fromJson([
-      {'tier': 'free', 'benefit': 'backup.count', 'value': 1},
-      {'tier': 'free', 'benefit': 'backup.app_bytes', 'value': 10000000},
-      {'tier': 'free', 'benefit': 'file.bytes', 'value': 0},
-      {'tier': 'basic', 'benefit': 'backup.count', 'value': null},
-      {'tier': 'basic', 'benefit': 'backup.total_bytes', 'value': 1000000000},
-      {'tier': 'basic', 'benefit': 'relay.bytes_per_sec', 'value': 2500000},
-      {'tier': 'basic', 'benefit': 'uptime.targets', 'value': 10},
-      {'tier': 'basic', 'benefit': 'uptime.interval_secs', 'value': 60},
-      {'tier': 'basic', 'benefit': 'sync', 'value': 1},
-      {'tier': 'basic', 'benefit': 'future.thing', 'value': 3},
-      {'tier': 'storage.plus', 'benefit': 'file.bytes', 'value': 50000000000},
-      {
-        'tier': 'storage.plus',
-        'benefit': 'file.max_bytes',
-        'value': 2000000000,
-      },
-      {'tier': 'storage.pro', 'benefit': 'file.bytes', 'value': null},
-      {'tier': 'storage.pro', 'benefit': 'file.max_bytes', 'value': null},
-    ]);
+  group('paywall', () {
+    final paywall = LkcPaywall.fromJson(_paywall);
 
-    test('a missing row grants nothing, null is unlimited', () {
-      expect(benefits.amount('free', LkcBenefit.backupCount), 1);
-      expect(benefits.amount('free', LkcBenefit.sync), 0);
-      expect(benefits.amount('basic', LkcBenefit.backupCount), isNull);
-      expect(benefits.amount('conduit.pro', LkcBenefit.sync), 0);
-    });
-
-    test('items from the amounts', () {
-      List<String> items(String tier, LkcLine line) => [
-        for (final i in benefits.items(l10n, tier, line)) '$i',
-      ];
-      expect(items(LkcBenefits.free, LkcLine.basic), [
-        'Backups: Latest one per app, up to 10 MB per app',
-      ]);
-      expect(items(LkcBenefits.free, LkcLine.storage), isEmpty);
-      expect(items('basic', LkcLine.basic), [
-        'Backups: Unlimited rolling per app, 1 GB shared by all apps',
-        'Relay, tailnet and push: Unlimited traffic, 2.5 MB/s, no availability guarantee',
-        'Downtime checks: Every minute, up to 10 targets',
-        'Sync: Real-time, end-to-end encrypted',
-      ]);
-      expect(items('storage.plus', LkcLine.storage), [
-        'WebDAV: Files up to 2 GB each',
-        'Share links: With expiry',
-      ]);
+    test('rows as homebase words them, in its order', () {
+      expect(paywall.locale, 'en');
+      expect(paywall.lines, ['basic', 'conduit', 'storage']);
       expect(
-        items('storage.pro', LkcLine.storage).first,
-        'WebDAV: Files up to 5 GB each',
+        [for (final i in paywall.items('basic', LkcPaywall.free)) '$i'],
+        ['Sync: Real-time, end-to-end encrypted', 'Push notifications'],
       );
+      expect(paywall.items('basic', 'basic').single.icon, 'monitor_heart');
     });
 
-    test('a Conduit plan by its limits', () {
-      expect(
-        [
-          for (final i in lkcConduitItems(
-            l10n,
-            const LkcConduitLimits(
-              period: 'monthly',
-              creditNanoUsd: 5000000000,
-              concurrency: 4,
-            ),
-          ))
-            '$i',
-        ],
-        ['Credit: \$5.00 per month', 'Concurrency: 4 requests in flight'],
-      );
+    test('a line or tier it does not list grants nothing shown', () {
+      expect(paywall.items('conduit', LkcPaywall.free), isEmpty);
+      expect(paywall.items('team', 'team.plus'), isEmpty);
     });
 
-    test('sizes in powers of 1000', () {
-      expect(lkcBytes(999), '999 B');
-      expect(lkcBytes(9500000), '9.5 MB');
-      expect(lkcBytes(12300000), '12 MB');
-      expect(lkcBytes(5000000000), '5 GB');
+    test('sizes in powers of 1024, as homebase words the plans', () {
+      expect(lkcBytes(1023), '1023 B');
+      expect(lkcBytes(9961472), '9.5 MiB');
+      expect(lkcBytes(12 << 20), '12 MiB');
+      expect(lkcBytes(5 << 30), '5 GiB');
     });
   });
 
@@ -477,24 +425,87 @@ void main() {
   });
 
   test('what was read shows before the network answers', () async {
-    api.on('GET /v2/billing/benefits', {
-      'data': [
-        {'tier': 'free', 'benefit': 'sync', 'value': 1},
-      ],
-    });
-    await client.refreshBenefits();
+    api.on('GET /v2/billing/paywall', {'data': _paywall});
+    await client.refreshPaywall('zh_TW');
+    expect(api.requests.last.uri.queryParameters, {'locale': 'zh-TW'});
     await signedIn();
+    // Homebase not answering, a node mid-deploy's 404 included: the copy kept
+    // stays.
+    api.onFn('GET /v2/billing/paywall', (_) => (404, ''));
     final next = LkcClient(
       cache: cache,
       oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://cb'),
+      api: Dio()..httpClientAdapter = api,
     );
-    expect(next.benefits.value?.amount('free', LkcBenefit.sync), 1);
+    await expectLater(next.refreshPaywall('zh_TW'), throwsA(anything));
+    expect(next.paywall.value?.items('basic', 'basic').single.title, 'Uptime');
+    // Another locale with nothing kept: these rows rather than none.
+    await expectLater(next.refreshPaywall('de'), throwsA(anything));
+    expect(next.paywall.value?.locale, 'en');
 
     // The account's own replies go with it.
     await client.signOut();
     expect(cache.read('user'), isNull);
     expect(cache.read('entitlements'), isNull);
-    expect(cache.read('benefits'), isNotNull);
+    expect(cache.read('paywall.zh-TW'), isNotNull);
+  });
+
+  test('a reply that does not parse is not kept', () async {
+    api
+      ..etag = '"bad"'
+      ..on('GET /v2/billing/paywall', {
+        'data': {
+          'lines': [
+            {
+              'line': 'basic',
+              'tiers': [
+                {
+                  'tier': 'free',
+                  'items': [
+                    {'icon': 'sync'},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+    await expectLater(client.refreshPaywall('en'), throwsA(anything));
+    expect(cache.read('paywall.en'), isNull);
+  });
+
+  test('a locale asked for later is not overwritten by an earlier', () async {
+    final slow = Completer<void>();
+    late RequestOptions served;
+    api.gate = (o) async {
+      if (o.uri.queryParameters['locale'] == 'de') await slow.future;
+      served = o;
+    };
+    api.onFn(
+      'GET /v2/billing/paywall',
+      (_) => (
+        200,
+        {
+          'data': {..._paywall, 'locale': served.uri.queryParameters['locale']},
+        },
+      ),
+    );
+    final de = client.refreshPaywall('de');
+    await client.refreshPaywall('fr');
+    slow.complete();
+    await de;
+    expect(client.paywall.value?.locale, 'fr');
+    // Still kept for when German is asked for.
+    expect(cache.read('paywall.de'), isNotNull);
+  });
+
+  test('amounts kept by an older build are dropped', () {
+    final old = LkcMemoryCache()..write('benefits', const []);
+    LkcClient(
+      cache: old,
+      oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://cb'),
+    );
+    expect(old.read('benefits'), isNull);
   });
 
   test('a device registered for push is dropped on signing out', () async {
@@ -554,13 +565,13 @@ void main() {
     api.onFn('GET /v2/billing/plans', (_) => (304, ''));
     final catalog = await client.refreshCatalog();
     expect(api.requests.last.headers[HttpHeaders.ifNoneMatchHeader], '"v1"');
-    expect(catalog.lineName(LkcLine.basic), 'Cloud Basic');
+    expect(catalog.lineName('basic'), 'Cloud Basic');
     expect(catalog.freeName, 'Cloud Free');
   });
 
   test('names are the ids until the catalog is read', () {
     const LkcCatalog? none = null;
-    expect(none.lineName(LkcLine.basic), 'basic');
+    expect(none.lineName('basic'), 'basic');
     expect(none.planName('storage.plus'), 'storage.plus');
   });
 
@@ -577,18 +588,12 @@ void main() {
           ],
           'apple': [],
           'google': [],
-          'limits': {
-            'period': 'monthly',
-            'credit_nano_usd': 5000000000,
-            'concurrency': null,
-          },
         },
       ],
     });
     final plan = (await client.refreshCatalog()).plans.single;
     expect(plan.line, LkcLine.conduit);
     expect(plan.stripe?.amount, 500);
-    expect(plan.limits?.concurrency, isNull);
     expect(api.requests.single.headers.keys, isNot(contains('Authorization')));
   });
 }
@@ -612,6 +617,9 @@ final class _Adapter implements HttpClientAdapter {
   /// Sent with every reply.
   String? etag;
 
+  /// Holds a reply back until it completes.
+  Future<void> Function(RequestOptions options)? gate;
+
   final _handlers = <String, (int, Object) Function(String body)>{};
   final _sent = <String, String>{};
 
@@ -630,6 +638,7 @@ final class _Adapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
+    await gate?.call(options);
     if (requestStream != null) {
       bodies.add([for (final chunk in await requestStream.toList()) ...chunk]);
     }
@@ -669,3 +678,47 @@ final class _Adapter implements HttpClientAdapter {
 }
 
 final class _RealHttp extends HttpOverrides {}
+
+const _paywall = {
+  'locale': 'en',
+  'lines': [
+    {
+      'line': 'basic',
+      'tiers': [
+        {
+          'tier': 'free',
+          'items': [
+            {
+              'icon': 'sync',
+              'title': 'Sync',
+              'detail': 'Real-time, end-to-end encrypted',
+            },
+            {'icon': 'notifications', 'title': 'Push notifications'},
+          ],
+        },
+        {
+          'tier': 'basic',
+          'items': [
+            {
+              'icon': 'monitor_heart',
+              'title': 'Uptime',
+              'detail': 'Every 5 minutes, up to 20 targets',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      'line': 'conduit',
+      'tiers': [
+        {
+          'tier': 'conduit.plus',
+          'items': [
+            {'icon': 'toll', 'title': 'Credit', 'detail': r'$20 a month'},
+          ],
+        },
+      ],
+    },
+    {'line': 'storage', 'tiers': []},
+  ],
+};

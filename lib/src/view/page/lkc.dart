@@ -60,6 +60,21 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     super.dispose();
   }
 
+  /// The locale the paywall was last asked in.
+  String? _paywallLocale;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The app's language changed while the page is open: homebase words the
+    // rows, so they are asked for again.
+    final locale = l10n.localeName;
+    if (_paywallLocale != null && _paywallLocale != locale) {
+      _paywallLocale = locale;
+      unawaited(_client.refreshPaywall(locale).then((_) {}, onError: (_) {}));
+    }
+  }
+
   /// Signed in by [LkcClient.init] while the page is open.
   void _onUser() {
     if (_client.user.value != null && !_loading) unawaited(_load());
@@ -70,9 +85,12 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     setState(() => _loading = true);
     try {
       // One after another: a future failing while another is awaited is an
-      // unhandled error. The benefits and the catalog only word the page:
+      // unhandled error. The paywall and the catalog only word the page:
       // without them it shows what it read last.
-      await _client.refreshBenefits().then((_) {}, onError: (_) {});
+      _paywallLocale = l10n.localeName;
+      await _client
+          .refreshPaywall(_paywallLocale!)
+          .then((_) {}, onError: (_) {});
       await _client.refreshCatalog().then((_) {}, onError: (_) {});
       if (_client.signedIn) {
         // The account and plans as read within a minute (a launch's own
@@ -107,7 +125,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
         listenable: Listenable.merge([
           _client.user,
           _client.entitlements,
-          _client.benefits,
+          _client.paywall,
           _client.catalog,
           _client.usage,
         ]),
@@ -198,14 +216,29 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     }
   }
 
+  /// The lines in homebase's order, then any held that it doesn't list.
+  List<String> get _lines {
+    final lines = [..._client.paywall.value?.lines ?? _kLines];
+    for (final e in _client.entitlements.value ?? const <LkcEntitlement>[]) {
+      if (e.line != LkcLine.unknown && !lines.contains(e.line.name)) {
+        lines.add(e.line.name);
+      }
+    }
+    return lines;
+  }
+
+  /// Until the paywall has been read once: the lines free of charge, which
+  /// every account has rows in. Held ones join them in [_lines].
+  static const _kLines = ['basic', 'storage'];
+
   Widget _buildSignedIn(LkcUser user) {
+    final lines = _lines;
     final first = [
       _LkcProfileCard(user: user, client: _client),
-      _buildLine(LkcLine.basic),
+      if (lines.isNotEmpty) _buildLine(lines.first),
     ];
     final second = [
-      _buildLine(LkcLine.storage),
-      _buildLine(LkcLine.conduit),
+      for (final line in lines.skip(1)) _buildLine(line),
       _buildActions(),
     ];
     return LayoutBuilder(
@@ -241,34 +274,24 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
 
   /// A line's section: what its plan grants, or nothing for a line neither
   /// held nor granting anything for free.
-  Widget _buildLine(LkcLine line) => _Section(child: _lineContent(line));
+  Widget _buildLine(String line) => _Section(child: _lineContent(line));
 
-  Widget? _lineContent(LkcLine line) {
+  Widget? _lineContent(String line) {
     final held = _client.entitlementOf(line);
-    final tier = held?.plan ?? LkcBenefits.free;
-    final items = line == LkcLine.conduit
-        ? switch (_planOf(held?.plan)?.limits) {
-            final LkcConduitLimits limits => lkcConduitItems(l10n, limits),
-            null => const <LkcBenefitItem>[],
-          }
-        : _client.benefits.value?.items(l10n, tier, line) ??
-              const <LkcBenefitItem>[];
+    final paywall = _client.paywall.value;
+    final items =
+        paywall?.items(line, held?.plan ?? LkcPaywall.free) ??
+        const <LkcPaywallItem>[];
     final onSale = [
       if (_client.webCheckout)
         for (final plan in _client.catalog.value?.plans ?? const <LkcPlan>[])
-          if (plan.line == line && plan.stripe != null && plan.id != held?.plan)
+          if (plan.line.name == line &&
+              plan.stripe != null &&
+              plan.id != held?.plan)
             plan,
     ];
     // Not read yet, neither now nor before: rows to come rather than none.
-    final unknown = line == LkcLine.conduit
-        ? held != null && _client.catalog.value == null
-        : _client.benefits.value == null;
-    if (unknown) {
-      if (!_loading || (line == LkcLine.conduit && held == null)) {
-        return held == null
-            ? null
-            : _GroupTitle(_lineName(line), _summaryOf(held));
-      }
+    if (paywall == null && _loading) {
       return Column(
         key: const ValueKey('skeleton'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -278,24 +301,17 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
         ],
       );
     }
-    if (held == null && items.isEmpty && onSale.isEmpty) return null;
+    final files = line == LkcLine.storage.name;
+    if (held == null && items.isEmpty && onSale.isEmpty && !files) return null;
 
     final rows = <Widget>[
       for (final item in items)
-        item.kind == LkcBenefitKind.storage
-            ? _buildStorage(item, tier)
-            : _LkcTile(
-                icon: _benefitIcon(item.kind),
-                title: item.title,
-                detail: item.detail,
-              ),
-      if (line == LkcLine.storage)
         _LkcTile(
-          icon: Icons.folder_open,
-          title: l10n.lkcFiles,
-          trailing: const _Chevron(),
-          onTap: _openFiles,
+          icon: _paywallIcon(item.icon),
+          title: item.title,
+          detail: item.detail,
         ),
+      if (files) _buildFiles(),
       for (final plan in onSale) _buildPlan(plan),
     ];
     return Column(
@@ -308,10 +324,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     );
   }
 
-  LkcPlan? _planOf(String? id) =>
-      id == null ? null : _client.catalog.value?.plan(id);
-
-  String _lineName(LkcLine line) => _client.catalog.value.lineName(line);
+  String _lineName(String line) => _client.catalog.value.lineName(line);
 
   /// What the group title says of the plan held: its name where the line's
   /// isn't it, and when it renews or ends.
@@ -324,26 +337,23 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
       _ => _dateOf(e),
     };
     final plan = catalog.planName(e.plan);
-    return [if (plan != catalog.lineName(e.line)) plan, ?status].join(' · ');
+    return [
+      if (plan != catalog.lineName(e.line.name)) plan,
+      ?status,
+    ].join(' · ');
   }
 
-  Widget _buildStorage(LkcBenefitItem item, String tier) {
+  /// The files row: what they take of what the directory may hold, as
+  /// homebase counts it (`/file/usage`).
+  Widget _buildFiles() {
     final theme = Theme.of(context);
-    final muted = TextStyle(fontSize: 13, color: theme.colorScheme.outline);
     final usage = _usage;
-    final quota = usage == null
-        ? _client.benefits.value?.amount(tier, LkcBenefit.fileBytes)
-        : usage.quotaBytes;
-    final total = quota == null ? l10n.lkcUnlimited : lkcBytes(quota);
-    return Padding(
+    final quota = usage?.quotaBytes;
+    final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: _LeadIcon(_benefitIcon(item.kind)),
-          ),
+          const _LeadIcon(Icons.folder_open),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
@@ -353,18 +363,24 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        item.title,
+                        l10n.lkcFiles,
                         style: const TextStyle(fontSize: 15),
                       ),
                     ),
-                    Text(
-                      usage == null
-                          ? total
-                          : '${lkcBytes(usage.bytes)} / $total',
-                      style: muted.copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    if (usage != null)
+                      Text(
+                        quota == null
+                            ? lkcBytes(usage.bytes)
+                            : l10n.lkcUsageOf(
+                                lkcBytes(usage.bytes),
+                                lkcBytes(quota),
+                              ),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.outline,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 if (usage != null && quota != null && quota > 0) ...[
@@ -379,14 +395,14 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 5),
-                Text(item.detail, style: muted),
               ],
             ),
           ),
+          const _Chevron(),
         ],
       ),
     );
+    return InkWell(onTap: _openFiles, child: row);
   }
 
   Widget _buildPlan(LkcPlan plan) {
@@ -796,7 +812,7 @@ String lkcAccountSummary(LkcClient client) {
   if (user == null) return l10n.lkcNotSignedIn;
   final lines = [
     for (final e in client.entitlements.value ?? const <LkcEntitlement>[])
-      client.catalog.value.lineName(e.line),
+      client.catalog.value.lineName(e.line.name),
   ];
   return [user.name, if (lines.isNotEmpty) lines.join(', ')].join(' · ');
 }
@@ -1266,13 +1282,17 @@ final class _Chevron extends StatelessWidget {
   );
 }
 
-IconData _benefitIcon(LkcBenefitKind kind) => switch (kind) {
-  LkcBenefitKind.backups => Icons.backup,
-  LkcBenefitKind.relay => Icons.swap_calls,
-  LkcBenefitKind.uptime => Icons.monitor_heart,
-  LkcBenefitKind.sync => Icons.sync,
-  LkcBenefitKind.storage => Icons.cloud,
-  LkcBenefitKind.shareLinks => Icons.link,
-  LkcBenefitKind.credit => Icons.toll,
-  LkcBenefitKind.concurrency => Icons.layers,
+/// The icon homebase names for a paywall row; a generic one for a name this
+/// build doesn't know.
+IconData _paywallIcon(String name) => switch (name) {
+  'backup' => Icons.backup,
+  'sync' => Icons.sync,
+  'monitor_heart' => Icons.monitor_heart,
+  'cloud' => Icons.cloud,
+  'link' => Icons.link,
+  'notifications' => Icons.notifications,
+  'toll' => Icons.toll,
+  'speed' => Icons.speed,
+  'group' => Icons.group,
+  _ => Icons.check_circle_outline,
 };

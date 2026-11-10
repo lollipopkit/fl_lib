@@ -8,6 +8,7 @@ enum LkcLine {
   basic,
   storage,
   conduit,
+  team,
 
   /// A line this build doesn't know.
   unknown;
@@ -136,31 +137,6 @@ final class LkcPrice {
   );
 }
 
-/// What a Conduit plan grants.
-final class LkcConduitLimits {
-  /// How often the credit is granted: `monthly`, `weekly`, or one this build doesn't know.
-  final String period;
-
-  /// Credit per [period], in billionths of a US dollar.
-  final int creditNanoUsd;
-
-  /// Requests in flight across all of a subscriber's keys, null when uncapped.
-  final int? concurrency;
-
-  const LkcConduitLimits({
-    required this.period,
-    required this.creditNanoUsd,
-    this.concurrency,
-  });
-
-  factory LkcConduitLimits.fromJson(Map<String, dynamic> json) =>
-      LkcConduitLimits(
-        period: json['period'] as String,
-        creditNanoUsd: (json['credit_nano_usd'] as num).toInt(),
-        concurrency: (json['concurrency'] as num?)?.toInt(),
-      );
-}
-
 /// A plan of the catalog.
 final class LkcPlan {
   final String id;
@@ -176,9 +152,6 @@ final class LkcPlan {
   /// Web checkouts available for the plan, in order of preference.
   final List<LkcPrice> web;
 
-  /// Absent for plans of other lines, or while Conduit hasn't told.
-  final LkcConduitLimits? limits;
-
   const LkcPlan({
     required this.id,
     required this.line,
@@ -186,7 +159,6 @@ final class LkcPlan {
     required this.period,
     this.name,
     required this.web,
-    this.limits,
   });
 
   /// The Stripe price, the one [LkcClient.openCheckout] sells.
@@ -203,10 +175,6 @@ final class LkcPlan {
       for (final p in json['web'] as List? ?? const [])
         LkcPrice.fromJson(p as Map<String, dynamic>),
     ],
-    limits: switch (json['limits']) {
-      final Map<String, dynamic> l => LkcConduitLimits.fromJson(l),
-      _ => null,
-    },
   );
 }
 
@@ -246,7 +214,7 @@ final class LkcCatalog {
 
 /// Names from the catalog; the ids while it hasn't been read.
 extension LkcCatalogNames on LkcCatalog? {
-  String lineName(LkcLine line) => this?.lines[line.name] ?? line.name;
+  String lineName(String line) => this?.lines[line] ?? line;
 
   String planName(String plan) => this?.plan(plan)?.name ?? plan;
 }
@@ -254,84 +222,7 @@ extension LkcCatalogNames on LkcCatalog? {
 /// The largest file one upload sends: the object store's limit, no plan's.
 const lkcStoreMaxFileBytes = 5000000000;
 
-/// Something a plan grants an amount of.
-enum LkcBenefit {
-  /// Bytes of files a directory holds.
-  fileBytes('file.bytes'),
-
-  /// Files a directory holds.
-  fileCount('file.count'),
-
-  /// Bytes of one file, at most [lkcStoreMaxFileBytes].
-  fileMaxBytes('file.max_bytes'),
-
-  /// Backups kept per app.
-  backupCount('backup.count'),
-
-  /// Bytes of one app's backups.
-  backupAppBytes('backup.app_bytes'),
-
-  /// Bytes of all apps' backups.
-  backupTotalBytes('backup.total_bytes'),
-
-  /// Targets checked from outside.
-  uptimeTargets('uptime.targets'),
-
-  /// Seconds between two checks of a target.
-  uptimeIntervalSecs('uptime.interval_secs'),
-
-  /// Relay bandwidth, bytes per second.
-  relayBytesPerSec('relay.bytes_per_sec'),
-
-  /// Real-time sync across devices: 1 on, 0 off.
-  sync('sync');
-
-  /// How homebase names it.
-  final String key;
-
-  const LkcBenefit(this.key);
-
-  /// The line whose plan grants it.
-  LkcLine get line => switch (this) {
-    fileBytes || fileCount || fileMaxBytes => LkcLine.storage,
-    _ => LkcLine.basic,
-  };
-
-  static LkcBenefit? of(String key) =>
-      values.where((b) => b.key == key).firstOrNull;
-}
-
-/// What every plan grants, and having none: GET /v2/billing/benefits.
-final class LkcBenefits {
-  /// The tier of a line without a plan.
-  static const free = 'free';
-
-  /// Amounts by tier (`free` or a plan id), null being unlimited.
-  final Map<String, Map<LkcBenefit, int?>> _tiers;
-
-  const LkcBenefits(this._tiers);
-
-  factory LkcBenefits.fromJson(List<dynamic> json) {
-    final tiers = <String, Map<LkcBenefit, int?>>{};
-    for (final row in json.cast<Map<String, dynamic>>()) {
-      // One this build doesn't know grants nothing it can tell of.
-      final benefit = LkcBenefit.of(row['benefit'] as String);
-      if (benefit == null) continue;
-      tiers.putIfAbsent(row['tier'] as String, () => {})[benefit] =
-          (row['value'] as num?)?.toInt();
-    }
-    return LkcBenefits(tiers);
-  }
-
-  /// What [tier] grants of [benefit]: null is unlimited, 0 is not granted.
-  int? amount(String tier, LkcBenefit benefit) {
-    final amounts = _tiers[tier];
-    if (amounts == null || !amounts.containsKey(benefit)) return 0;
-    return amounts[benefit];
-  }
-}
-
-/// The largest file of a `file.max_bytes` amount: the store caps it.
+/// The largest file of a directory's `max_file_bytes`: the store caps it.
 int lkcMaxFileBytes(int? amount) => amount == null
     ? lkcStoreMaxFileBytes
     : math.min(amount, lkcStoreMaxFileBytes);
@@ -488,4 +379,87 @@ final class LkcDevice {
     createdAt: DateTime.parse(json['created_at'] as String),
     lastSeenAt: DateTime.parse(json['last_seen_at'] as String),
   );
+}
+
+const _units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+
+/// [bytes] in powers of 1024, as homebase words the plans: `5 GiB`, `9.5 MiB`.
+String lkcBytes(int bytes) {
+  var v = bytes.toDouble();
+  var i = 0;
+  while (v >= 1024 && i < _units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  if (i == 0) return '$bytes ${_units[i]}';
+  var text = v.toStringAsFixed(v < 10 ? 1 : 0);
+  if (text.endsWith('.0')) text = text.substring(0, text.length - 2);
+  return '$text ${_units[i]}';
+}
+
+/// One row of the paywall, worded and formatted by homebase.
+final class LkcPaywallItem {
+  /// A Material icon's name (`sync`, `backup`, …); one this build doesn't
+  /// know shows a generic icon.
+  final String icon;
+  final String title;
+  final String? detail;
+
+  const LkcPaywallItem({required this.icon, required this.title, this.detail});
+
+  factory LkcPaywallItem.fromJson(Map<String, dynamic> json) => LkcPaywallItem(
+    icon: json['icon'] as String? ?? '',
+    title: json['title'] as String,
+    detail: json['detail'] as String?,
+  );
+
+  @override
+  String toString() => detail == null ? title : '$title: $detail';
+}
+
+/// What each line's plans grant, as homebase words it in [locale]:
+/// GET /v2/billing/paywall. Shown as it is: the limits are homebase's.
+final class LkcPaywall {
+  /// The tier of a line without a plan.
+  static const free = 'free';
+
+  /// The locale homebase answered in, which may be a fallback of the one asked.
+  final String locale;
+
+  /// Line ids in homebase's order.
+  final List<String> lines;
+
+  /// Rows by line, then by tier (`free` or a plan id).
+  final Map<String, Map<String, List<LkcPaywallItem>>> rows;
+
+  const LkcPaywall({
+    required this.locale,
+    required this.lines,
+    required this.rows,
+  });
+
+  factory LkcPaywall.fromJson(Map<String, dynamic> json) {
+    final lines = <String>[];
+    final items = <String, Map<String, List<LkcPaywallItem>>>{};
+    for (final l in (json['lines'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+      final line = l['line'] as String;
+      lines.add(line);
+      items[line] = {
+        for (final t in (l['tiers'] as List? ?? const []).cast<Map<String, dynamic>>())
+          t['tier'] as String: [
+            for (final i in t['items'] as List? ?? const [])
+              LkcPaywallItem.fromJson(i as Map<String, dynamic>),
+          ],
+      };
+    }
+    return LkcPaywall(
+      locale: json['locale'] as String? ?? '',
+      lines: lines,
+      rows: items,
+    );
+  }
+
+  /// What [tier] of [line] grants; none for a tier homebase doesn't list.
+  List<LkcPaywallItem> items(String line, String tier) =>
+      rows[line]?[tier] ?? const [];
 }

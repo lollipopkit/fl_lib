@@ -367,142 +367,8 @@ class LibLocalizationsZh extends LibLocalizations {
   String get lkcAccount => '账号';
 
   @override
-  String get lkcBenefitBackups => '备份';
-
-  @override
-  String lkcBenefitBackupsAppBytes(String size) {
-    return '每个 app 最大 $size';
-  }
-
-  @override
-  String lkcBenefitBackupsDetail(String kept, String limit) {
-    return '$kept，$limit';
-  }
-
-  @override
-  String get lkcBenefitBackupsLatest => '每个 app 只保留最新一次';
-
-  @override
-  String get lkcBenefitBackupsNoLimit => '不限容量';
-
-  @override
-  String lkcBenefitBackupsRolling(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 份',
-    );
-    return '每个 app 滚动保留 $_temp0';
-  }
-
-  @override
-  String get lkcBenefitBackupsRollingUnlimited => '每个 app 不限滚动备份份数';
-
-  @override
-  String lkcBenefitBackupsTotalBytes(String size) {
-    return '所有 app 共享 $size';
-  }
-
-  @override
-  String get lkcBenefitRelay => 'Relay、tailnet 和推送';
-
-  @override
-  String lkcBenefitRelayDetail(String rate) {
-    return '不限流量，中转速率 $rate，不保证可用';
-  }
-
-  @override
-  String get lkcBenefitRelayUnlimited => '不限流量和速率，不保证可用';
-
-  @override
-  String get lkcBenefitShareLinks => '文件分享链接';
-
-  @override
-  String get lkcBenefitShareLinksDetail => '带有效期';
-
-  @override
-  String lkcBenefitStorageDetail(String file) {
-    return '单个文件最大 $file';
-  }
-
-  @override
-  String get lkcBenefitSync => '多设备同步';
-
-  @override
-  String get lkcBenefitSyncDetail => '实时，端到端加密';
-
-  @override
-  String get lkcBenefitUptime => '外部宕机检测';
-
-  @override
-  String lkcBenefitUptimeDetail(int minutes, int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '每 $minutes 分钟',
-      one: '每分钟',
-    );
-    String _temp1 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 个目标',
-    );
-    return '$_temp0检测一次，最多 $_temp1';
-  }
-
-  @override
-  String lkcBenefitUptimeTargets(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 个目标',
-    );
-    return '最多 $_temp0';
-  }
-
-  @override
-  String get lkcBenefitUptimeTargetsUnlimited => '不限目标数';
-
-  @override
-  String lkcBenefitUptimeUnlimited(int minutes) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '每 $minutes 分钟',
-      one: '每分钟',
-    );
-    return '$_temp0检测一次，不限目标数';
-  }
-
-  @override
   String lkcCancelsOn(String date) {
     return '将于 $date 取消';
-  }
-
-  @override
-  String get lkcConduitConcurrency => '并发';
-
-  @override
-  String lkcConduitConcurrencyDetail(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 个请求',
-    );
-    return '同时处理 $_temp0';
-  }
-
-  @override
-  String get lkcConduitCredit => '额度';
-
-  @override
-  String lkcConduitCreditMonthly(String credit) {
-    return '每月 $credit';
-  }
-
-  @override
-  String lkcConduitCreditWeekly(String credit) {
-    return '每周 $credit';
   }
 
   @override
@@ -786,9 +652,6 @@ class LibLocalizationsZh extends LibLocalizations {
 
   @override
   String get lkcSubscribe => '订阅';
-
-  @override
-  String get lkcUnlimited => '不限';
 
   @override
   String lkcUsageOf(String used, String quota) {
@@ -2058,142 +1921,8 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
   String get lkcAccount => '帳號';
 
   @override
-  String get lkcBenefitBackups => '備份';
-
-  @override
-  String lkcBenefitBackupsAppBytes(String size) {
-    return '每個 app 最大 $size';
-  }
-
-  @override
-  String lkcBenefitBackupsDetail(String kept, String limit) {
-    return '$kept，$limit';
-  }
-
-  @override
-  String get lkcBenefitBackupsLatest => '每個 app 只保留最新一次';
-
-  @override
-  String get lkcBenefitBackupsNoLimit => '不限容量';
-
-  @override
-  String lkcBenefitBackupsRolling(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 份',
-    );
-    return '每個 app 滾動保留 $_temp0';
-  }
-
-  @override
-  String get lkcBenefitBackupsRollingUnlimited => '每個 app 不限滾動備份份數';
-
-  @override
-  String lkcBenefitBackupsTotalBytes(String size) {
-    return '所有 app 共用 $size';
-  }
-
-  @override
-  String get lkcBenefitRelay => 'Relay、tailnet 和推播';
-
-  @override
-  String lkcBenefitRelayDetail(String rate) {
-    return '不限流量，中繼速率 $rate，不保證可用';
-  }
-
-  @override
-  String get lkcBenefitRelayUnlimited => '不限流量與速率，不保證可用';
-
-  @override
-  String get lkcBenefitShareLinks => '檔案分享連結';
-
-  @override
-  String get lkcBenefitShareLinksDetail => '附有效期限';
-
-  @override
-  String lkcBenefitStorageDetail(String file) {
-    return '單一檔案最大 $file';
-  }
-
-  @override
-  String get lkcBenefitSync => '多裝置同步';
-
-  @override
-  String get lkcBenefitSyncDetail => '即時，端對端加密';
-
-  @override
-  String get lkcBenefitUptime => '外部停機偵測';
-
-  @override
-  String lkcBenefitUptimeDetail(int minutes, int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '每 $minutes 分鐘',
-      one: '每分鐘',
-    );
-    String _temp1 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 個目標',
-    );
-    return '$_temp0偵測一次，最多 $_temp1';
-  }
-
-  @override
-  String lkcBenefitUptimeTargets(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 個目標',
-    );
-    return '最多 $_temp0';
-  }
-
-  @override
-  String get lkcBenefitUptimeTargetsUnlimited => '不限目標數';
-
-  @override
-  String lkcBenefitUptimeUnlimited(int minutes) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '每 $minutes 分鐘',
-      one: '每分鐘',
-    );
-    return '$_temp0偵測一次，不限目標數';
-  }
-
-  @override
   String lkcCancelsOn(String date) {
     return '將於 $date 取消';
-  }
-
-  @override
-  String get lkcConduitConcurrency => '並行數';
-
-  @override
-  String lkcConduitConcurrencyDetail(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 個請求',
-    );
-    return '同時處理 $_temp0';
-  }
-
-  @override
-  String get lkcConduitCredit => '額度';
-
-  @override
-  String lkcConduitCreditMonthly(String credit) {
-    return '每月 $credit';
-  }
-
-  @override
-  String lkcConduitCreditWeekly(String credit) {
-    return '每週 $credit';
   }
 
   @override
@@ -2477,9 +2206,6 @@ class LibLocalizationsZhTw extends LibLocalizationsZh {
 
   @override
   String get lkcSubscribe => '訂閱';
-
-  @override
-  String get lkcUnlimited => '不限';
 
   @override
   String lkcUsageOf(String used, String quota) {

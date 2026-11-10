@@ -823,167 +823,11 @@ abstract class LibLocalizations {
   /// **'Account'**
   String get lkcAccount;
 
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Backups'**
-  String get lkcBenefitBackups;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'up to {size} per app'**
-  String lkcBenefitBackupsAppBytes(String size);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'{kept}, {limit}'**
-  String lkcBenefitBackupsDetail(String kept, String limit);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Latest one per app'**
-  String get lkcBenefitBackupsLatest;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'no size limit'**
-  String get lkcBenefitBackupsNoLimit;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 rolling} other{{count} rolling}} per app'**
-  String lkcBenefitBackupsRolling(int count);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Unlimited rolling per app'**
-  String get lkcBenefitBackupsRollingUnlimited;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'{size} shared by all apps'**
-  String lkcBenefitBackupsTotalBytes(String size);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Relay, tailnet and push'**
-  String get lkcBenefitRelay;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Unlimited traffic, {rate}, no availability guarantee'**
-  String lkcBenefitRelayDetail(String rate);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Unlimited traffic and speed, no availability guarantee'**
-  String get lkcBenefitRelayUnlimited;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Share links'**
-  String get lkcBenefitShareLinks;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'With expiry'**
-  String get lkcBenefitShareLinksDetail;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Files up to {file} each'**
-  String lkcBenefitStorageDetail(String file);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Sync'**
-  String get lkcBenefitSync;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Real-time, end-to-end encrypted'**
-  String get lkcBenefitSyncDetail;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Downtime checks'**
-  String get lkcBenefitUptime;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Every {minutes, plural, =1{minute} other{{minutes} minutes}}, up to {count, plural, =1{1 target} other{{count} targets}}'**
-  String lkcBenefitUptimeDetail(int minutes, int count);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Up to {count, plural, =1{1 target} other{{count} targets}}'**
-  String lkcBenefitUptimeTargets(int count);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Unlimited targets'**
-  String get lkcBenefitUptimeTargetsUnlimited;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Every {minutes, plural, =1{minute} other{{minutes} minutes}}, unlimited targets'**
-  String lkcBenefitUptimeUnlimited(int minutes);
-
   /// LK Cloud account page: a paid plan the user canceled.
   ///
   /// In en, this message translates to:
   /// **'Cancels on {date}'**
   String lkcCancelsOn(String date);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Concurrency'**
-  String get lkcConduitConcurrency;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 request} other{{count} requests}} in flight'**
-  String lkcConduitConcurrencyDetail(int count);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Credit'**
-  String get lkcConduitCredit;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'{credit} per month'**
-  String lkcConduitCreditMonthly(String credit);
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'{credit} per week'**
-  String lkcConduitCreditWeekly(String credit);
 
   /// LK Cloud account page.
   ///
@@ -1512,12 +1356,6 @@ abstract class LibLocalizations {
   /// In en, this message translates to:
   /// **'Subscribe'**
   String get lkcSubscribe;
-
-  /// LK Cloud account page.
-  ///
-  /// In en, this message translates to:
-  /// **'Unlimited'**
-  String get lkcUnlimited;
 
   /// LK Cloud account page.
   ///

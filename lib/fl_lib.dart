@@ -90,7 +90,6 @@ export 'src/rust/api/sync_engine.dart' show SyncKeyHandle, SyncEngineError, Sync
 // --- LK Cloud ---
 // Client of LK Cloud: sign-in, account, subscriptions, files
 export 'src/core/lkc/auth.dart' hide LkcIdp;
-export 'src/core/lkc/benefit.dart';
 export 'src/core/lkc/client.dart';
 export 'src/core/lkc/model.dart';
 export 'src/core/lkc/reason.dart';
