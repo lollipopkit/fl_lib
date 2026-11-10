@@ -2,7 +2,7 @@
 /// is sent, on LK Cloud's log or a WebDAV/iCloud folder.
 library;
 
-export 'log/categories.dart';
+export 'log/groups.dart';
 export 'log/errors.dart';
 export 'log/files.dart';
 export 'log/host.dart' show SyncFiles, SyncHost, SyncLogStore, SyncLogPage, SyncLogFull;

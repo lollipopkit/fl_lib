@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:fl_lib/src/core/lkc/client.dart';
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
-import 'package:fl_lib/src/core/sync/log/categories.dart';
+import 'package:fl_lib/src/core/sync/log/groups.dart';
 import 'package:fl_lib/src/core/sync/log/errors.dart';
 import 'package:fl_lib/src/core/sync/log/host.dart';
 import 'package:fl_lib/src/core/sync/log/keys.dart';
@@ -58,7 +58,7 @@ final class LkcLogSync {
     });
     // A category carried or not: the log is read again from its start, and
     // everything here sent, so neither side misses what was left out.
-    SyncCategories.changes.addListener(() {
+    SyncGroups.changes.addListener(() {
       if (!SqliteDb.isOpen) return;
       final opening = _opening;
       if (opening == null) {

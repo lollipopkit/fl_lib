@@ -1,10 +1,10 @@
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:flutter/foundation.dart';
 
-/// What a person chose to sync beside the records every sync carries, each
-/// its own switch on this device.
-final class SyncCategory {
-  const SyncCategory({required this.name, required this.pref, required this.collections, this.also = const [], this.extra});
+/// A group of collections a person chose to sync or not, one switch on this
+/// device: an app's category.
+final class SyncGroup {
+  const SyncGroup({required this.name, required this.pref, required this.collections, this.also = const [], this.extra});
 
   /// For logs and the app's labels.
   final String name;
@@ -27,16 +27,15 @@ final class SyncCategory {
   Listenable get changes => Listenable.merge([pref.listenable(), ...also]);
 }
 
-/// The app's categories ([define]); a collection none covers is always
-/// carried.
-abstract final class SyncCategories {
-  static List<SyncCategory> values = const [];
+/// The app's groups ([define]); a collection none covers is always carried.
+abstract final class SyncGroups {
+  static List<SyncGroup> values = const [];
 
-  static void define(List<SyncCategory> categories) => values = categories;
+  static void define(List<SyncGroup> categories) => values = categories;
 
   /// The category of a record of collection [c]; null for one every sync
   /// carries.
-  static SyncCategory? of(String c) {
+  static SyncGroup? of(String c) {
     for (final cat in values) {
       if (cat.collections.contains(c)) return cat;
     }
@@ -52,7 +51,7 @@ abstract final class SyncCategories {
       if (!cat.on) ...cat.collections,
   };
 
-  static Set<SyncCategory> get onNow => {
+  static Set<SyncGroup> get onNow => {
     for (final c in values)
       if (c.on) c,
   };

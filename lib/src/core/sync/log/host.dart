@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
-import 'package:fl_lib/src/core/sync/log/categories.dart';
+import 'package:fl_lib/src/core/sync/log/groups.dart';
 import 'package:fl_lib/src/core/sync/log/errors.dart';
 import 'package:fl_lib/src/core/sync/log/recorder.dart';
 import 'package:fl_lib/src/core/sync/log/records.dart';
@@ -117,7 +117,7 @@ final class SyncHost {
       'pending' => syncReply(() => _rows(SyncRecorder.pending(a as String? ?? ''))),
       'read' => syncReply(() => _read(a as List)),
       'apply' => syncReply(() => SyncRecords.apply(_ops(a as List))),
-      'notCarried' => syncReply(() => SyncCategories.notCarried().toList()),
+      'notCarried' => syncReply(() => SyncGroups.notCarried().toList()),
       'afterRead' => syncReply(() {
         final not = {for (final c in a as List) c as String};
         return SyncRecords.afterRead?.call((c) => !not.contains(c));
