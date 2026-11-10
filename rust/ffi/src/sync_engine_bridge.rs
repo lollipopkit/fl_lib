@@ -54,6 +54,7 @@ impl Bridge {
     fn tell(&self, method: &str, args: Value) {
         let call = self.0.clone();
         let method = method.to_string();
+        // Fire and forget: what Dart does with it answers nothing here.
         FLUTTER_RUST_BRIDGE_HANDLER.async_runtime().spawn(async move {
             let _ = call(method, args.to_string(), None).await;
         });

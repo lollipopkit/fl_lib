@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/sync/log/recorder.dart';
 
@@ -171,7 +172,12 @@ abstract final class SyncRecords {
       (stamps[op.store] ??= {})[op.key] = SyncRecorder.msOf(op.h);
     }
     for (final MapEntry(key: store, value: of) in stamps.entries) {
-      unawaited(store.updateLastUpdateTsOf(of));
+      // Best effort: the records are written, and the whole backup's stamps
+      // catch up at the next write.
+      unawaited(store.updateLastUpdateTsOf(of).catchError((Object e, StackTrace s) {
+        Loggers.app.warning('Sync stamps of ${store.name}', e, s);
+        return false;
+      }));
     }
     return written;
   }

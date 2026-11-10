@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fl_lib/fl_lib.dart';
@@ -29,6 +30,23 @@ final class _Folder implements SyncFiles {
   Future<void> delete(String name) async {
     files.remove(name);
   }
+}
+
+/// A folder out of reach.
+final class _Unreachable extends _Folder {
+  var reachable = true;
+
+  @override
+  Future<List<({String name, DateTime? at})>> list(String prefix) {
+    if (!reachable) throw const SocketException('no route');
+    return super.list(prefix);
+  }
+}
+
+/// A log that takes no batch: always full.
+final class _FullLog extends _Log {
+  @override
+  Future<({String log, int seq, bool compact})> append(String key, Uint8List body) => throw const SyncLogFull();
 }
 
 /// A server-ordered log in memory, as LK Cloud keeps one.
@@ -190,6 +208,27 @@ void main() {
     store = await _freshDevice();
     await syncCall((await engine()).run);
     expect([for (var i = 0; i < 4; i++) store.get<int>('k$i')], [0, 1, 2, 3]);
+  });
+
+  test('a folder out of reach is the remote\'s failure', () async {
+    final folder = _Unreachable();
+    await _freshDevice();
+    final engine = await _engine(folder);
+    folder.reachable = false;
+    await expectLater(syncCall(engine.run), throwsA(isA<SyncError>().having((e) => e.kind, 'kind', SyncEngineErrorKind.remote)));
+  });
+
+  test('a full log with no snapshot to make reaches the caller as such', () async {
+    final log = _FullLog();
+    final store = await _freshDevice();
+    final key = await SyncKeyring.ofFiles(_LogKeyFile());
+    final host = SyncHost(log: log);
+    store.set('k', 1);
+    // Nothing read yet: no snapshot can cover the log.
+    await expectLater(
+      syncCall(SyncLogEngine.onDart(key: key, host: host.call).run),
+      throwsA(isA<SyncError>().having((e) => e.kind, 'kind', SyncEngineErrorKind.logFull)),
+    );
   });
 
   test('a key seals and opens what the whole backup is', () async {

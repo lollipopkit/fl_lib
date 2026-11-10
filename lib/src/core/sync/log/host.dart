@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:icloud_storage_plus/icloud_storage.dart' show ICloudContainerAccessException, ICloudCoordinationException;
 import 'package:webdav_client_plus/webdav_client_plus.dart' show WebdavException;
 
+import 'package:fl_lib/src/core/lkc/client.dart';
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/sync/log/groups.dart';
@@ -93,6 +94,7 @@ Future<SyncReply> syncReply<T>(
     final kind = switch (e) {
       SyncPasswordMissing() => 'passwordMissing',
       SyncRefused() || SyncLogFull() => 'refused',
+      LkcException(reason: 'signed_out') => 'signedOut',
       _ when isRemoteFailure(e) => 'remote',
       _ => 'host',
     };
@@ -120,7 +122,12 @@ final class SyncHost {
   final void Function()? stamp;
 
   Future<SyncReply> call(String method, String args, Uint8List? bytes) {
-    final a = args.isEmpty ? null : jsonDecode(args);
+    final Object? a;
+    try {
+      a = args.isEmpty ? null : jsonDecode(args);
+    } on FormatException catch (e) {
+      return Future.value(SyncReply(json: '', error: '$method: $e', errorKind: 'host'));
+    }
     return switch (method) {
       'device' => syncReply(() => SyncRecorder.device.toInt()),
       'stamp' => syncReply(() {
@@ -189,7 +196,7 @@ final class SyncHost {
       }),
       'log.batch' => syncReply(() => _page[a as int], bytes: (r) => r),
       'log.putSnapshot' => syncReply(() => _log.putSnapshot(a as int, bytes ?? Uint8List(0))),
-      'log.snapshot' => syncReply(_log.snapshot, bytes: (r) => r?.body, json: (r) => r == null ? null : {'log': r.log, 'seq': r.seq}),
+      'log.snapshot' => syncReply(() => _log.snapshot(), bytes: (r) => r?.body, json: (r) => r == null ? null : {'log': r.log, 'seq': r.seq}),
       _ => Future.value(SyncReply(json: '', error: 'no such call: $method', errorKind: 'host')),
     };
   }

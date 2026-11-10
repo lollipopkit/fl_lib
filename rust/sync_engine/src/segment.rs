@@ -157,7 +157,8 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
         let mine = self.mine().await?;
         let mut read: HashSet<String> = {
             let done = self.snapshots_read.lock().unwrap_or_else(|e| e.into_inner());
-            listed.snapshots.iter().filter(|(d, at)| done.get(*d) == Some(at)).map(|(d, _)| d.clone()).collect()
+            // Unchanged only by a time the store says: without one, read again.
+            listed.snapshots.iter().filter(|(d, at)| at.is_some() && done.get(*d) == Some(at)).map(|(d, _)| d.clone()).collect()
         };
         loop {
             let mut gaps = Vec::new();
