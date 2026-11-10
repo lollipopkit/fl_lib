@@ -246,8 +246,14 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
         let state = vec![(format!("{PREFIX}{CURSOR}{device}"), Some(n.to_string())), (format!("{PREFIX}{SINCE}"), Some(since.to_string()))];
         // A recent segment's blob may only not have arrived (iCloud brings
         // files apart): read again next time, as one no key opens yet is.
+        // Unless its device's snapshot covers the segment: a blob is removed
+        // only once one does, its op replaced by a later one there.
         let recent = at.is_none_or(|at| now_ms() - at < UNREADABLE_MAX_MS);
-        match self.core.apply(run, ops, state, recent).await {
+        match self.core.apply(run, ops.clone(), state.clone(), recent).await {
+            Err(Error::Pending(what)) if self.cover_of(device, device).await >= n => {
+                self.core.host.warn(format!("Sync passed over {what} of {name}: covered, removed"));
+                self.core.apply(run, ops, state, false).await.map(|_| true)
+            }
             Err(Error::Pending(what)) => {
                 self.core.host.warn(format!("Sync waits for {what} of {name}"));
                 Ok(false)

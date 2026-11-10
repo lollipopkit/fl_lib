@@ -745,6 +745,29 @@ async fn a_blob_that_has_not_arrived_is_waited_for() {
     assert_eq!(b.host.value("font", "f1"), Some(json!(big)));
 }
 
+#[tokio::test]
+async fn a_blob_its_device_removed_is_not_waited_for() {
+    let (files, file) = (Arc::new(MemFiles::default()), Arc::new(MemKeyFile::default()));
+    let (a, b) = (Device::new("pw"), Device::new("pw"));
+    for d in [&a, &b] {
+        SegmentSync::<MemHost, MemFiles, SyncKey>::bind(&*d.host, "dav").await.unwrap();
+    }
+    let sa = a.segments(&files, &file).await;
+    a.host.edit("font", "f1", Some(json!("x".repeat(200 << 10))));
+    sa.sync().await.unwrap();
+    // Replaced, and a's snapshot written past it: the old blob goes.
+    a.host.edit("font", "f1", Some(json!("new")));
+    for i in 0..crate::segment::COMPACT_EVERY {
+        a.host.edit("k", &format!("r{i}"), Some(json!(i)));
+        sa.sync().await.unwrap();
+    }
+    let blob = files.names().into_iter().find(|n| n.starts_with("op-")).unwrap();
+    files.delete_blob(blob).await.unwrap();
+    b.segments(&files, &file).await.sync().await.unwrap();
+    assert_eq!(b.host.value("font", "f1"), Some(json!("new")));
+    assert_eq!(a.host.values(), b.host.values());
+}
+
 // The key.
 
 #[tokio::test]
