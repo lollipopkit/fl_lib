@@ -84,8 +84,9 @@ final class LkcClient {
   /// The effective plan of each line the user holds one in, null until read.
   final entitlements = ValueNotifier<List<LkcEntitlement>?>(null);
 
-  /// What every plan grants, null until read. Public, as is [catalog].
-  final benefits = ValueNotifier<LkcBenefits?>(null);
+  /// What every plan grants, worded for the locale last read, null until
+  /// read. Public, as is [catalog].
+  final paywall = ValueNotifier<LkcPaywall?>(null);
 
   /// The plan catalog, null until read.
   final catalog = ValueNotifier<LkcCatalog?>(null);
@@ -122,17 +123,17 @@ final class LkcClient {
        ) {
     _timed(_api).options.baseUrl = this.baseUrl.toString();
     _store.options.validateStatus = (_) => true;
-    benefits.value = _cached(
-      _kBenefits,
-      (d) => LkcBenefits.fromJson(_Tagged.of(d)!.data as List),
-    );
+    // The amounts the paywall was worded from here before homebase worded it.
+    // TODO: rm once no install keeps them.
+    this.cache.remove('benefits');
     catalog.value = _cached(
       _kCatalog,
       (d) => LkcCatalog.fromJson(_Tagged.of(d)!.data),
     );
   }
 
-  static const _kBenefits = 'benefits';
+  /// Per locale: the rows are worded in it.
+  static String _kPaywall(String locale) => 'paywall.$locale';
   static const _kCatalog = 'plans';
   static const _kUser = 'user';
   static const _kEntitlements = 'entitlements';
@@ -452,8 +453,8 @@ final class LkcClient {
   }
 
   /// The effective plan of [line], if any.
-  LkcEntitlement? entitlementOf(LkcLine line) =>
-      entitlements.value?.where((e) => e.line == line).firstOrNull;
+  LkcEntitlement? entitlementOf(String line) =>
+      entitlements.value?.where((e) => e.line.name == line).firstOrNull;
 
   /// Every subscription, ended ones included, newest change first.
   Future<List<LkcEntitlement>> subscriptions() async => _list(
@@ -461,11 +462,42 @@ final class LkcClient {
     LkcEntitlement.fromJson,
   );
 
-  /// Read [benefits] again. Public: no sign-in needed.
-  Future<LkcBenefits> refreshBenefits() async {
-    final data = await _public('/v2/billing/benefits', _kBenefits);
-    return benefits.value = LkcBenefits.fromJson(data as List? ?? const []);
+  /// Read [paywall] again in [localeName] (`l10n.localeName`). Public: no
+  /// sign-in needed. What was read before in that locale shows meanwhile, and
+  /// stays when homebase does not answer.
+  Future<LkcPaywall> refreshPaywall(String localeName) async {
+    // Homebase resolves the tag: `zh` and `zh-TW` to its Chinese scripts.
+    final locale = localeName.replaceAll('_', '-');
+    final key = _kPaywall(locale);
+    if (_paywallKey != key) {
+      _paywallKey = key;
+      // Another locale's rows until this one's arrive, rather than none.
+      final kept = _cached(
+        key,
+        (d) => LkcPaywall.fromJson(_Tagged.of(d)!.data as Map<String, dynamic>),
+      );
+      if (kept != null) paywall.value = kept;
+    }
+    final data = await _public(
+      '/v2/billing/paywall',
+      key,
+      query: {'locale': locale},
+    );
+    final LkcPaywall read;
+    try {
+      read = LkcPaywall.fromJson(data as Map<String, dynamic>);
+    } catch (_) {
+      // Not kept: its ETag would bring the same body back as a 304.
+      cache.remove(key);
+      rethrow;
+    }
+    // A read for a locale asked for since answers late.
+    if (_paywallKey == key) paywall.value = read;
+    return read;
   }
+
+  /// The cache key [paywall] was last read under.
+  String? _paywallKey;
 
   /// Read [catalog] again. Public: no sign-in needed.
   Future<LkcCatalog> refreshCatalog() async {
@@ -475,10 +507,15 @@ final class LkcClient {
 
   /// The `data` of a public reply, kept under [key] with its ETag: the copy
   /// kept is sent for again, and a 304 confirms it.
-  Future<Object?> _public(String path, String key) async {
+  Future<Object?> _public(
+    String path,
+    String key, {
+    Map<String, String>? query,
+  }) async {
     final kept = _Tagged.of(cache.read(key));
     final res = await _api.get<Object?>(
       path,
+      queryParameters: query,
       options: Options(headers: {HttpHeaders.ifNoneMatchHeader: ?kept?.etag}),
     );
     if (res.statusCode == HttpStatus.notModified && kept != null) {
@@ -704,7 +741,7 @@ final class LkcClient {
   ];
 
   void dispose() {
-    benefits.dispose();
+    paywall.dispose();
     catalog.dispose();
     usage.dispose();
     _returnListener?.dispose();

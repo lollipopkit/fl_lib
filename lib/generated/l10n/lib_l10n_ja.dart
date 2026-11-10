@@ -367,140 +367,8 @@ class LibLocalizationsJa extends LibLocalizations {
   String get lkcAccount => 'アカウント';
 
   @override
-  String get lkcBenefitBackups => 'バックアップ';
-
-  @override
-  String lkcBenefitBackupsAppBytes(String size) {
-    return 'アプリごとに最大 $size';
-  }
-
-  @override
-  String lkcBenefitBackupsDetail(String kept, String limit) {
-    return '$kept、$limit';
-  }
-
-  @override
-  String get lkcBenefitBackupsLatest => 'アプリごとに最新の 1 件のみ';
-
-  @override
-  String get lkcBenefitBackupsNoLimit => '容量無制限';
-
-  @override
-  String lkcBenefitBackupsRolling(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 世代',
-    );
-    return 'アプリごとに $_temp0をローリング保存';
-  }
-
-  @override
-  String get lkcBenefitBackupsRollingUnlimited => 'アプリごとにローリング保存無制限';
-
-  @override
-  String lkcBenefitBackupsTotalBytes(String size) {
-    return '全アプリ共有で $size';
-  }
-
-  @override
-  String get lkcBenefitRelay => 'Relay、tailnet、プッシュ';
-
-  @override
-  String lkcBenefitRelayDetail(String rate) {
-    return 'トラフィック無制限、中継速度 $rate、可用性の保証なし';
-  }
-
-  @override
-  String get lkcBenefitRelayUnlimited => 'トラフィック・速度無制限、可用性の保証なし';
-
-  @override
-  String get lkcBenefitShareLinks => '共有リンク';
-
-  @override
-  String get lkcBenefitShareLinksDetail => '有効期限付き';
-
-  @override
-  String lkcBenefitStorageDetail(String file) {
-    return '1 ファイルあたり最大 $file';
-  }
-
-  @override
-  String get lkcBenefitSync => '同期';
-
-  @override
-  String get lkcBenefitSyncDetail => 'リアルタイム、エンドツーエンド暗号化';
-
-  @override
-  String get lkcBenefitUptime => '外部ダウンタイム監視';
-
-  @override
-  String lkcBenefitUptimeDetail(int minutes, int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '$minutes 分',
-    );
-    String _temp1 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 件',
-    );
-    return '$_temp0ごとにチェック、最大 $_temp1の対象';
-  }
-
-  @override
-  String lkcBenefitUptimeTargets(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 件',
-    );
-    return '最大 $_temp0の対象';
-  }
-
-  @override
-  String get lkcBenefitUptimeTargetsUnlimited => '対象数無制限';
-
-  @override
-  String lkcBenefitUptimeUnlimited(int minutes) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '$minutes 分',
-    );
-    return '$_temp0ごとにチェック、対象数無制限';
-  }
-
-  @override
   String lkcCancelsOn(String date) {
     return '$date にキャンセル';
-  }
-
-  @override
-  String get lkcConduitConcurrency => '同時実行数';
-
-  @override
-  String lkcConduitConcurrencyDetail(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 件',
-    );
-    return '同時に $_temp0のリクエスト';
-  }
-
-  @override
-  String get lkcConduitCredit => 'クレジット';
-
-  @override
-  String lkcConduitCreditMonthly(String credit) {
-    return '月 $credit';
-  }
-
-  @override
-  String lkcConduitCreditWeekly(String credit) {
-    return '週 $credit';
   }
 
   @override
@@ -787,9 +655,6 @@ class LibLocalizationsJa extends LibLocalizations {
 
   @override
   String get lkcSubscribe => '購読する';
-
-  @override
-  String get lkcUnlimited => '無制限';
 
   @override
   String lkcUsageOf(String used, String quota) {

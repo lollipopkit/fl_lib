@@ -368,149 +368,8 @@ class LibLocalizationsPt extends LibLocalizations {
   String get lkcAccount => 'Conta';
 
   @override
-  String get lkcBenefitBackups => 'Backups';
-
-  @override
-  String lkcBenefitBackupsAppBytes(String size) {
-    return 'até $size por app';
-  }
-
-  @override
-  String lkcBenefitBackupsDetail(String kept, String limit) {
-    return '$kept, $limit';
-  }
-
-  @override
-  String get lkcBenefitBackupsLatest => 'O mais recente de cada app';
-
-  @override
-  String get lkcBenefitBackupsNoLimit => 'sem limite de tamanho';
-
-  @override
-  String lkcBenefitBackupsRolling(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count backups rotativos',
-      one: '1 backup rotativo',
-    );
-    return '$_temp0 por app';
-  }
-
-  @override
-  String get lkcBenefitBackupsRollingUnlimited =>
-      'Backups rotativos ilimitados por app';
-
-  @override
-  String lkcBenefitBackupsTotalBytes(String size) {
-    return '$size compartilhados entre todos os apps';
-  }
-
-  @override
-  String get lkcBenefitRelay => 'Relay, tailnet e push';
-
-  @override
-  String lkcBenefitRelayDetail(String rate) {
-    return 'Tráfego ilimitado, $rate, sem garantia de disponibilidade';
-  }
-
-  @override
-  String get lkcBenefitRelayUnlimited =>
-      'Tráfego e velocidade ilimitados, sem garantia de disponibilidade';
-
-  @override
-  String get lkcBenefitShareLinks => 'Links de compartilhamento';
-
-  @override
-  String get lkcBenefitShareLinksDetail => 'Com validade';
-
-  @override
-  String lkcBenefitStorageDetail(String file) {
-    return 'Arquivos de até $file cada';
-  }
-
-  @override
-  String get lkcBenefitSync => 'Sincronização';
-
-  @override
-  String get lkcBenefitSyncDetail =>
-      'Em tempo real, com criptografia de ponta a ponta';
-
-  @override
-  String get lkcBenefitUptime => 'Verificações de indisponibilidade';
-
-  @override
-  String lkcBenefitUptimeDetail(int minutes, int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '$minutes minutos',
-      one: 'minuto',
-    );
-    String _temp1 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count alvos',
-      one: '1 alvo',
-    );
-    return 'A cada $_temp0, até $_temp1';
-  }
-
-  @override
-  String lkcBenefitUptimeTargets(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count alvos',
-      one: '1 alvo',
-    );
-    return 'Até $_temp0';
-  }
-
-  @override
-  String get lkcBenefitUptimeTargetsUnlimited => 'Alvos ilimitados';
-
-  @override
-  String lkcBenefitUptimeUnlimited(int minutes) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '$minutes minutos',
-      one: 'minuto',
-    );
-    return 'A cada $_temp0, alvos ilimitados';
-  }
-
-  @override
   String lkcCancelsOn(String date) {
     return 'Cancela em $date';
-  }
-
-  @override
-  String get lkcConduitConcurrency => 'Concorrência';
-
-  @override
-  String lkcConduitConcurrencyDetail(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count solicitações simultâneas',
-      one: '1 solicitação simultânea',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get lkcConduitCredit => 'Crédito';
-
-  @override
-  String lkcConduitCreditMonthly(String credit) {
-    return '$credit por mês';
-  }
-
-  @override
-  String lkcConduitCreditWeekly(String credit) {
-    return '$credit por semana';
   }
 
   @override
@@ -821,9 +680,6 @@ class LibLocalizationsPt extends LibLocalizations {
 
   @override
   String get lkcSubscribe => 'Assinar';
-
-  @override
-  String get lkcUnlimited => 'Ilimitado';
 
   @override
   String lkcUsageOf(String used, String quota) {

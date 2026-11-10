@@ -46,14 +46,34 @@ const _catalog = {
   'free': {'name': 'Cloud Free'},
 };
 
-const _benefits = [
-  {'tier': 'basic', 'benefit': 'backup.count', 'value': 10},
-  {'tier': 'basic', 'benefit': 'backup.app_bytes', 'value': 100000000},
-  {'tier': 'free', 'benefit': 'file.bytes', 'value': 100000000},
-  {'tier': 'free', 'benefit': 'file.max_bytes', 'value': 5000000000},
-  {'tier': 'storage.plus', 'benefit': 'file.bytes', 'value': 50000000000},
-  {'tier': 'storage.plus', 'benefit': 'file.max_bytes', 'value': 5000000000},
-];
+const _paywall = {
+  'locale': 'en',
+  'lines': [
+    {
+      'line': 'basic',
+      'tiers': [
+        {
+          'tier': 'basic',
+          'items': [
+            {'icon': 'backup', 'title': 'Backups', 'detail': '5 versions'},
+            {'icon': 'something-new', 'title': 'Something new'},
+          ],
+        },
+      ],
+    },
+    {
+      'line': 'storage',
+      'tiers': [
+        {
+          'tier': 'free',
+          'items': [
+            {'icon': 'cloud', 'title': 'WebDAV', 'detail': 'Files up to 5 GB'},
+          ],
+        },
+      ],
+    },
+  ],
+};
 
 const _user = {
   'id': 'u1',
@@ -74,20 +94,21 @@ const _entitlements = [
   },
 ];
 
-LkcClient _client({required bool webCheckout}) => LkcClient(
+LkcClient _client({required bool webCheckout, bool paywall = true}) =>
+    LkcClient(
   oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://cb'),
   cache: LkcMemoryCache(),
   webCheckout: webCheckout,
   api: Dio()
     ..httpClientAdapter = _Adapter({
       '/v2/billing/plans': _catalog,
-      '/v2/billing/benefits': _benefits,
+      if (paywall) '/v2/billing/paywall': _paywall,
       '/auth/user': _user,
       '/v2/entitlements': _entitlements,
       '/file/usage': {
         'files': 3,
-        'bytes': 12000000,
-        'quota': {'bytes': 100000000, 'files': null, 'max_file_bytes': null},
+        'bytes': 12 << 20,
+        'quota': {'bytes': 100 << 20, 'files': null, 'max_file_bytes': null},
       },
     }),
 );
@@ -134,13 +155,24 @@ void main() {
     expect(find.text(_l10n.lkcEndsOn('Oct 28, 2027')), findsOneWidget);
     // No plan held in Storage.
     expect(find.text('Cloud Free'), findsOneWidget);
-    expect(find.text(_l10n.lkcBenefitBackups), findsOneWidget);
-    expect(find.text('12 MB / 100 MB'), findsOneWidget);
-    expect(find.text(_l10n.lkcBenefitStorageDetail('5 GB')), findsOneWidget);
+    // As homebase words them, an icon this build doesn't know included.
+    expect(find.text('Backups'), findsOneWidget);
+    expect(find.text('5 versions'), findsOneWidget);
+    expect(find.text('Something new'), findsOneWidget);
+    expect(find.text('Files up to 5 GB'), findsOneWidget);
+    expect(find.text(_l10n.lkcUsageOf('12 MiB', '100 MiB')), findsOneWidget);
     // On sale where web checkout is on.
     expect(find.text('Storage Plus'), findsOneWidget);
     expect(find.text(_l10n.lkcPerYear(r'$12.00')), findsOneWidget);
     expect(find.text(_l10n.lkcDeleteAccount), findsOneWidget);
+  });
+
+  testWidgets('no paywall read yet: the files are still reached', (
+    tester,
+  ) async {
+    await _pump(tester, _client(webCheckout: false, paywall: false), signedIn: true);
+    expect(find.text(_l10n.lkcFiles), findsOneWidget);
+    expect(find.text(_l10n.lkcUsageOf('12 MiB', '100 MiB')), findsOneWidget);
   });
 
   testWidgets('no plans or prices where web checkout is off', (tester) async {

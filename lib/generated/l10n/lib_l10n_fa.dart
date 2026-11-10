@@ -368,148 +368,8 @@ class LibLocalizationsFa extends LibLocalizations {
   String get lkcAccount => 'حساب کاربری';
 
   @override
-  String get lkcBenefitBackups => 'نسخه‌های پشتیبان';
-
-  @override
-  String lkcBenefitBackupsAppBytes(String size) {
-    return 'تا $size برای هر برنامه';
-  }
-
-  @override
-  String lkcBenefitBackupsDetail(String kept, String limit) {
-    return '$kept، $limit';
-  }
-
-  @override
-  String get lkcBenefitBackupsLatest => 'آخرین نسخه برای هر برنامه';
-
-  @override
-  String get lkcBenefitBackupsNoLimit => 'بدون محدودیت حجم';
-
-  @override
-  String lkcBenefitBackupsRolling(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count نسخه چرخشی',
-      one: '1 نسخه چرخشی',
-    );
-    return '$_temp0 برای هر برنامه';
-  }
-
-  @override
-  String get lkcBenefitBackupsRollingUnlimited =>
-      'نسخه‌های چرخشی نامحدود برای هر برنامه';
-
-  @override
-  String lkcBenefitBackupsTotalBytes(String size) {
-    return '$size مشترک بین همه برنامه‌ها';
-  }
-
-  @override
-  String get lkcBenefitRelay => 'رله، tailnet و Push';
-
-  @override
-  String lkcBenefitRelayDetail(String rate) {
-    return 'ترافیک نامحدود، $rate، بدون تضمین دسترس‌پذیری';
-  }
-
-  @override
-  String get lkcBenefitRelayUnlimited =>
-      'ترافیک و سرعت نامحدود، بدون تضمین دسترس‌پذیری';
-
-  @override
-  String get lkcBenefitShareLinks => 'پیوندهای اشتراک‌گذاری';
-
-  @override
-  String get lkcBenefitShareLinksDetail => 'با تاریخ انقضا';
-
-  @override
-  String lkcBenefitStorageDetail(String file) {
-    return 'هر فایل تا $file';
-  }
-
-  @override
-  String get lkcBenefitSync => 'همگام‌سازی';
-
-  @override
-  String get lkcBenefitSyncDetail => 'بلادرنگ، با رمزگذاری سرتاسری';
-
-  @override
-  String get lkcBenefitUptime => 'بررسی قطعی سرویس';
-
-  @override
-  String lkcBenefitUptimeDetail(int minutes, int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '$minutes دقیقه',
-      one: 'دقیقه',
-    );
-    String _temp1 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count هدف',
-      one: '1 هدف',
-    );
-    return 'هر $_temp0، تا $_temp1';
-  }
-
-  @override
-  String lkcBenefitUptimeTargets(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count هدف',
-      one: '1 هدف',
-    );
-    return 'تا $_temp0';
-  }
-
-  @override
-  String get lkcBenefitUptimeTargetsUnlimited => 'هدف‌های نامحدود';
-
-  @override
-  String lkcBenefitUptimeUnlimited(int minutes) {
-    String _temp0 = intl.Intl.pluralLogic(
-      minutes,
-      locale: localeName,
-      other: '$minutes دقیقه',
-      one: 'دقیقه',
-    );
-    return 'هر $_temp0، هدف‌های نامحدود';
-  }
-
-  @override
   String lkcCancelsOn(String date) {
     return 'لغو در $date';
-  }
-
-  @override
-  String get lkcConduitConcurrency => 'هم‌زمانی';
-
-  @override
-  String lkcConduitConcurrencyDetail(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count درخواست',
-      one: '1 درخواست',
-    );
-    return '$_temp0 هم‌زمان';
-  }
-
-  @override
-  String get lkcConduitCredit => 'اعتبار';
-
-  @override
-  String lkcConduitCreditMonthly(String credit) {
-    return '$credit در ماه';
-  }
-
-  @override
-  String lkcConduitCreditWeekly(String credit) {
-    return '$credit در هفته';
   }
 
   @override
@@ -818,9 +678,6 @@ class LibLocalizationsFa extends LibLocalizations {
 
   @override
   String get lkcSubscribe => 'اشتراک';
-
-  @override
-  String get lkcUnlimited => 'نامحدود';
 
   @override
   String lkcUsageOf(String used, String quota) {
