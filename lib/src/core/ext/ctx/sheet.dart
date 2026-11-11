@@ -67,6 +67,7 @@ extension SheetX on BuildContext {
     bool dismissible = true,
     double restLimit = PromptSheet.restLimit,
     ValueSetter<VoidCallback>? onShown,
+    void Function(SheetStack stack, SheetPage page)? onPage,
   }) async {
     if (!mounted) return null;
     final (stack, page, answered) = SheetStack.show(
@@ -77,13 +78,19 @@ extension SheetX on BuildContext {
       restLimit: restLimit,
     );
     onShown?.call(() => stack.remove(page));
+    onPage?.call(stack, page);
     final result = await answered;
     // The route is untyped: a page over the first pops its own type through
     // it.
     return result is T ? result : null;
   }
 
-  /// [timeout] is the timeout of the Future [fn] (default `null`).
+  /// [timeout] is the timeout of the Future [fn] (default `null`). It is the
+  /// work's, not the user's: while a page raised from inside [fn] is over the
+  /// loading one — a password, a host's prompt — the clock is stopped, and it
+  /// starts over once that page is gone. Timed out under a prompt, the failure
+  /// was said while the prompt stayed up, and answering it went on to do what
+  /// had been reported as failed.
   ///
   /// If an error occurs:
   /// - the sheet will be closed and an error sheet will be displayed
@@ -102,19 +109,53 @@ extension SheetX on BuildContext {
     // password asked from inside it — is not what ends here, and a pop of the
     // top would leave this one up, holding back.
     VoidCallback? close;
+    SheetStack? stack;
+    SheetPage? page;
     final shown = _raise<void>(
       dismissible: dismissible,
       onShown: (c) => close = c,
+      onPage: (s, p) {
+        stack = s;
+        page = p;
+      },
       builder: (_) => const PromptSheet(
         child: Center(heightFactor: 1, child: SizedLoading.medium),
       ),
     );
 
+    Future<T> timed(Duration limit) {
+      final done = Completer<T>();
+      Timer? timer;
+      void arm() {
+        timer?.cancel();
+        final s = stack;
+        if (done.isCompleted || s != null && !identical(s.top, page)) return;
+        timer = Timer(limit, () {
+          if (!done.isCompleted) done.completeError(TimeoutException(null, limit), StackTrace.current);
+        });
+      }
+
+      stack?.addListener(arm);
+      arm();
+      fn().then(
+        (v) {
+          if (!done.isCompleted) done.complete(v);
+        },
+        onError: (Object e, StackTrace s) {
+          if (!done.isCompleted) done.completeError(e, s);
+        },
+      );
+      return done.future.whenComplete(() {
+        timer?.cancel();
+        stack?.removeListener(arm);
+      });
+    }
+
     return Resx.tryCatch(
       () async {
         final ret = switch (timeout) {
           null => await fn(),
-          _ => await fn().timeout(timeout),
+          _ => await timed(timeout),
         };
         close?.call();
         // Returned once it is off the screen, as every sheet answers.

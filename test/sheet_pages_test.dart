@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -465,4 +467,55 @@ void main() {
     });
   }
 
+
+  testWidgets('a loading sheet does not time out under a prompt', (
+    tester,
+  ) async {
+    // The time is the work's: timed out while a prompt raised from inside it
+    // was up, the failure was said and answering the prompt still did the
+    // work.
+    final ctx = await pump(tester);
+    (String?, Object?)? ended;
+    ctx
+        .showLoadingSheet<String?>(
+          timeout: const Duration(seconds: 1),
+          showErr: false,
+          fn: () => ctx.showSheet<String>(
+            title: 'prompt',
+            actions: [
+              TextButton(
+                onPressed: () => ctx.popSheet('answer'),
+                child: const Text('answer'),
+              ),
+            ],
+          ),
+        )
+        .then((r) => ended = r);
+    await step(tester);
+    await tester.pump(const Duration(seconds: 3));
+    expect(ended, isNull);
+    expect(find.text('prompt'), findsOneWidget);
+
+    await tester.tap(find.text('answer'));
+    await step(tester);
+    await step(tester);
+    expect(ended, ('answer', null));
+  });
+
+  testWidgets('a loading sheet with nothing over it times out', (tester) async {
+    final ctx = await pump(tester);
+    (void, Object?)? ended;
+    ctx
+        .showLoadingSheet<void>(
+          timeout: const Duration(seconds: 1),
+          showErr: false,
+          fn: () => Completer<void>().future,
+        )
+        .then((r) => ended = r);
+    await step(tester);
+    await tester.pump(const Duration(seconds: 1));
+    await step(tester);
+    expect(ended?.$2, isA<TimeoutException>());
+    expect(find.byType(PromptSheet), findsNothing);
+  });
 }
