@@ -13,6 +13,15 @@ extension DialogX on BuildContext {
   static const _actionsPadding = EdgeInsets.only(left: 13, right: 13, bottom: 7);
   static const _contentPadding = EdgeInsets.all(24);
 
+  /// The round dialogs on screen, the newest last.
+  static final _open = <ModalRoute<Object?>>[];
+
+  /// The round dialog in front of everything else, if one is.
+  static ModalRoute<Object?>? get topDialog {
+    final route = _open.lastOrNull;
+    return route != null && route.isCurrent ? route : null;
+  }
+
   /// Shows a dialog with a title, content, and actions.
   ///
   /// - [child] is the content of the dialog.
@@ -35,31 +44,40 @@ extension DialogX on BuildContext {
   }) async {
     if (!mounted) return null;
 
-    return await showDialog<T>(
-      context: this,
-      barrierDismissible: barrierDismiss,
-      // Stated rather than inherited. The default is being deprecated, and it
-      // stops being a formality once there is more than one navigator: a
-      // dialog on the nearest one is clipped to whatever pane raised it, so a
-      // confirmation for a destructive action would appear inside a column.
-      useRootNavigator: true,
-      builder: (ctx) {
-        final title_ = switch (titleBuilder) {
-          null => title != null ? Text(title, maxLines: titleMaxLines) : null,
-          _ => titleBuilder(ctx),
-        };
-        final child_ = childBuilder?.call(ctx) ?? child;
-        final actions_ = actionsBuilder?.call(ctx) ?? actions;
+    ModalRoute<Object?>? route;
+    try {
+      return await showDialog<T>(
+        context: this,
+        barrierDismissible: barrierDismiss,
+        // Stated rather than inherited. The default is being deprecated, and it
+        // stops being a formality once there is more than one navigator: a
+        // dialog on the nearest one is clipped to whatever pane raised it, so a
+        // confirmation for a destructive action would appear inside a column.
+        useRootNavigator: true,
+        builder: (ctx) {
+          if (route == null) {
+            route = ModalRoute.of(ctx);
+            if (route != null) _open.add(route!);
+          }
+          final title_ = switch (titleBuilder) {
+            null => title != null ? Text(title, maxLines: titleMaxLines) : null,
+            _ => titleBuilder(ctx),
+          };
+          final child_ = childBuilder?.call(ctx) ?? child;
+          final actions_ = actionsBuilder?.call(ctx) ?? actions;
 
-        return AlertDialog(
-          title: title_,
-          content: child_,
-          actions: actions_,
-          actionsPadding: actions_?.isEmpty == true ? EdgeInsets.zero : actionsPadding,
-          contentPadding: contentPadding,
-        );
-      },
-    );
+          return AlertDialog(
+            title: title_,
+            content: child_,
+            actions: actions_,
+            actionsPadding: actions_?.isEmpty == true ? EdgeInsets.zero : actionsPadding,
+            contentPadding: contentPadding,
+          );
+        },
+      );
+    } finally {
+      _open.remove(route);
+    }
   }
 
   /// [timeout] is the timeout of the Future [fn] (default `null`).

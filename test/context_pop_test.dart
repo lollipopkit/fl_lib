@@ -26,4 +26,46 @@ void main() {
     expect(stale.canPop, isFalse);
     expect(() => stale.pop(), returnsNormally);
   });
+
+  testWidgets('popDialog closes a dialog whose page is gone', (tester) async {
+    // The dialog is on the root navigator, so it outlives a page that a
+    // layout switch remounts, and its buttons hold that page's context.
+    final wide = ValueNotifier(false);
+    addTearDown(wide.dispose);
+    late BuildContext page;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder(
+          valueListenable: wide,
+          builder: (_, wide, _) => Builder(
+            key: ValueKey(wide),
+            builder: (context) {
+              if (!wide) page = context;
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    final closed = page.showRoundDialog<bool>(
+      actions: [
+        TextButton(
+          onPressed: () => page.popDialog(true),
+          child: const Text('close'),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    wide.value = true;
+    await tester.pumpAndSettle();
+    expect(page.mounted, isFalse);
+
+    await tester.tap(find.text('close'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('close'), findsNothing);
+    expect(await closed, isTrue);
+    expect(DialogX.topDialog, isNull);
+  });
 }
