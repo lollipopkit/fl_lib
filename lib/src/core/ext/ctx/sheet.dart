@@ -137,7 +137,9 @@ extension SheetX on BuildContext {
 
       stack?.addListener(arm);
       arm();
-      fn().then(
+      // `sync`: a throw before [fn] returns its future ends here too, with
+      // the timer and the listener taken back.
+      Future<T>.sync(fn).then(
         (v) {
           if (!done.isCompleted) done.complete(v);
         },
