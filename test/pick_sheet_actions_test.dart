@@ -2,10 +2,10 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// [showPickDialog] adds its OK to a list of its own.
+/// [showPickSheet] adds its OK to a list of its own.
 ///
 /// It appended to the caller's: a list kept for the next call grew an OK each
-/// time, and a const one threw before the dialog opened.
+/// time, and a const one threw before the sheet opened.
 void main() {
   testWidgets('the caller\'s actions are left as they were', (tester) async {
     final actions = <Widget>[const Text('extra')];
@@ -22,7 +22,7 @@ void main() {
     );
 
     for (final list in [actions, const <Widget>[]]) {
-      final picked = ctx.showPickDialog<String>(
+      final picked = ctx.showPickSheet<String>(
         items: const ['a'],
         initial: const ['a'],
         actions: list,

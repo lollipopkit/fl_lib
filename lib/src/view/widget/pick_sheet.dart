@@ -2,11 +2,10 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// What `showPickDialog` is on a phone: the items as rows with a tick, in a
-/// [showResizableSheet], rather than a wrap of chips in a dialog.
+/// What `showPickSheet` raises: the items as rows with a tick, in a
+/// [showResizableSheet].
 ///
-/// Pops `true` with [onChanged] having said the choice — the dialog's own
-/// contract, so its callers read the answer the same way from either.
+/// Pops `true` with [onChanged] having said the choice.
 class PickSheet<T> extends StatefulWidget {
   const PickSheet({
     super.key,
@@ -65,7 +64,7 @@ class _PickSheetState<T> extends State<PickSheet<T>> {
     if (!widget.multi) {
       final next = on && widget.clearable ? <T>[] : [item];
       widget.onChanged(next);
-      context.popDialog(true);
+      context.popSheet(true);
       return;
     }
     // Choice's rule: without [clearable] the last one stays.
@@ -76,70 +75,46 @@ class _PickSheetState<T> extends State<PickSheet<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final header = Padding(
-      padding: const EdgeInsets.fromLTRB(17, 0, 7, 3),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.title ?? l10n.select,
-              style: theme.textTheme.titleMedium,
-            ),
+    final header = Row(
+      children: [
+        Expanded(child: Text(widget.title ?? l10n.select)),
+        widget.ascend.listenVal(
+          (asc) => IconButton(
+            icon: Icon(switch (asc) {
+              true => Icons.arrow_upward,
+              false => Icons.arrow_downward,
+              null => Icons.sort,
+            }),
+            tooltip: l10n.sort,
+            onPressed: _sort,
           ),
-          widget.ascend.listenVal(
-            (asc) => IconButton(
-              icon: Icon(switch (asc) {
-                true => Icons.arrow_upward,
-                false => Icons.arrow_downward,
-                null => Icons.sort,
-              }),
-              tooltip: l10n.sort,
-              onPressed: _sort,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
 
     final rows = widget.showLoading.listenVal((loading) {
       if (loading) return const Center(child: SizedLoading.medium);
-      // The rows' own bottom inset is the footer's: it is the last thing.
-      return MediaQuery.removePadding(
-        context: context,
-        removeBottom: widget.actions.isNotEmpty,
-        child: RowsSheet(
-          children: [
-            for (final item in _items)
-              SheetChoiceTile(
-                key: ValueKey(item),
-                title: _label(item),
-                leading: widget.avatar?.call(item),
-                selected: _selected.contains(item),
-                onTap: () => _tap(item),
-              ),
-          ],
-        ),
+      return RowsSheet(
+        children: [
+          for (final item in _items)
+            SheetChoiceTile(
+              key: ValueKey(item),
+              title: _label(item),
+              leading: widget.avatar?.call(item),
+              selected: _selected.contains(item),
+              onTap: () => _tap(item),
+            ),
+        ],
       );
     });
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        header,
-        Flexible(child: rows),
-        if (widget.actions.isNotEmpty)
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(13, 3, 13, 7),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: widget.actions,
-              ),
-            ),
-          ),
-      ],
+    return PromptSheet(
+      title: header,
+      // The sort button brings its own room.
+      titlePadding: const EdgeInsets.fromLTRB(17, 0, 7, 3),
+      contentPadding: EdgeInsets.zero,
+      actions: widget.actions,
+      child: rows,
     );
   }
 }

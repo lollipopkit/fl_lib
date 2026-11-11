@@ -1,6 +1,6 @@
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n_en.dart';
-import 'package:fl_lib/src/core/ext/ctx/dialog.dart';
+import 'package:fl_lib/src/core/ext/ctx/sheet.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -8,24 +8,24 @@ import 'package:responsive_framework/responsive_framework.dart';
 extension ContextX on BuildContext {
   /// Pops the current route off the navigator if possible.
   /// Returns without action if [canPop] is false.
-  /// Closes a dialog raised by [DialogX.showRoundDialog].
+  /// Closes a sheet raised by [SheetX.showSheet] and the sheets built on it.
   ///
   /// Those are pinned to the root navigator, so [pop] from a page's context
   /// closes the *page* instead once that page lives in a nested navigator — a
-  /// pane, or a tab that keeps its own stack. The dialog then stays up with
+  /// pane, or a tab that keeps its own stack. The sheet then stays up with
   /// nothing behind it.
   ///
-  /// Actions built with `actionsBuilder` get the dialog's own context and can
+  /// Actions built with `actionsBuilder` get the sheet's own context and can
   /// use [pop] directly; this is for the ones that only have the page's.
   ///
-  /// The page can be gone while its dialog is still up — a layout switch
-  /// remounts the page, and the dialog is on the root navigator — so a context
-  /// that is no longer mounted closes the dialog in front instead.
-  void popDialog<T extends Object?>([T? result]) {
+  /// The page can be gone while its sheet is still up — a layout switch
+  /// remounts the page, and the sheet is on the root navigator — so a context
+  /// that is no longer mounted closes the sheet in front instead.
+  void popSheet<T extends Object?>([T? result]) {
     if (mounted) {
       Navigator.of(this, rootNavigator: true).pop<T>(result);
     } else {
-      DialogX.topDialog?.navigator?.pop<T>(result);
+      SheetX.topSheet?.navigator?.pop<T>(result);
     }
   }
 

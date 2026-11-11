@@ -240,7 +240,7 @@ final class Btn extends StatelessWidget {
   /// {@template btn_cancel_pop}
   /// It pops nothing — a null result — if [onTap] is null.
   ///
-  /// Not `false`, which it used to pop: a `showRoundDialog<T>` is a
+  /// Not `false`, which it used to pop: a `showSheet<T>` is a
   /// `Route<T>`, and popping a bool through one typed for anything else threw
   /// on the way out, leaving the dialog on screen with a cancel button that
   /// did nothing. Null is the one result every `T` accepts, and a caller

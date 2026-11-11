@@ -27,8 +27,8 @@ void main() {
     expect(() => stale.pop(), returnsNormally);
   });
 
-  testWidgets('popDialog closes a dialog whose page is gone', (tester) async {
-    // The dialog is on the root navigator, so it outlives a page that a
+  testWidgets('popSheet closes a sheet whose page is gone', (tester) async {
+    // The sheet is on the root navigator, so it outlives a page that a
     // layout switch remounts, and its buttons hold that page's context.
     final wide = ValueNotifier(false);
     addTearDown(wide.dispose);
@@ -48,10 +48,10 @@ void main() {
       ),
     );
 
-    final closed = page.showRoundDialog<bool>(
+    final closed = page.showSheet<bool>(
       actions: [
         TextButton(
-          onPressed: () => page.popDialog(true),
+          onPressed: () => page.popSheet(true),
           child: const Text('close'),
         ),
       ],
@@ -66,6 +66,6 @@ void main() {
 
     expect(find.text('close'), findsNothing);
     expect(await closed, isTrue);
-    expect(DialogX.topDialog, isNull);
+    expect(SheetX.topSheet, isNull);
   });
 }

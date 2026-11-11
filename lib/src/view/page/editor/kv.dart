@@ -124,16 +124,16 @@ class _KvEditorState extends State<KvEditor> {
           ? l10n.existsFmt(newK)
           : null;
       if (err != null) {
-        context.popDialog();
-        await context.showRoundDialog(title: l10n.fail, child: Text(err));
+        context.popSheet();
+        await context.showSheet(title: l10n.fail, child: Text(err));
         return;
       }
       _map.remove(k);
       _map[newK] = newV;
-      contextSafe?.popDialog(true);
+      contextSafe?.popSheet(true);
     }
 
-    final result = await context.showRoundDialog<bool>(
+    final result = await context.showSheet<bool>(
       title: l10n.edit,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -171,15 +171,15 @@ class _KvEditorState extends State<KvEditor> {
           ? l10n.existsFmt(k)
           : null;
       if (err != null) {
-        context.popDialog();
-        context.showRoundDialog(title: l10n.fail, child: Text(err));
+        context.popSheet();
+        context.showSheet(title: l10n.fail, child: Text(err));
         return;
       }
       _map[k] = v;
-      context.popDialog(true);
+      context.popSheet(true);
     }
 
-    final result = await context.showRoundDialog(
+    final result = await context.showSheet(
       title: l10n.add,
       child: Column(
         mainAxisSize: MainAxisSize.min,

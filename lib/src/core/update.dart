@@ -73,8 +73,8 @@ abstract final class AppUpdateIface {
     if (!context.mounted) return;
     final size = MediaQuery.sizeOf(context);
 
-    void showUpdateDialog([bool force = false]) {
-      context.showRoundDialog(
+    void showUpdateSheet([bool force = false]) {
+      context.showSheet(
         title: title,
         childBuilder: (ctx) {
           final notice = noticeBuilder?.call(ctx);
@@ -92,11 +92,11 @@ abstract final class AppUpdateIface {
             ),
           );
         },
-        barrierDismiss: !force,
+        dismissible: !force,
         actions: [
           TextButton(
             onPressed: () {
-              if (!force) context.popDialog();
+              if (!force) context.popSheet();
               _doUpdate(context, fileUrl);
             },
             child: Text(l10n.update),
@@ -112,10 +112,10 @@ abstract final class AppUpdateIface {
           // Longer than the default: an update notice whose button is gone
           // after three seconds is a notice the user cannot act on.
           duration: const Duration(seconds: 10),
-          action: ToastAction(label: l10n.update, onTap: showUpdateDialog),
+          action: ToastAction(label: l10n.update, onTap: showUpdateSheet),
         ),
-      AppUpdateLevel.recommended => showUpdateDialog(),
-      AppUpdateLevel.forced => showUpdateDialog(true),
+      AppUpdateLevel.recommended => showUpdateSheet(),
+      AppUpdateLevel.forced => showUpdateSheet(true),
       AppUpdateLevel.nil => (),
     };
   }
@@ -132,7 +132,7 @@ abstract final class AppUpdateIface {
     List<AppUpdateReleaseNote> notes,
   ) {
     // One version, or a source that has no per-version notes (the JSON
-    // manifest): the dialog title already names it, so an expander would only
+    // manifest): the sheet title already names it, so an expander would only
     // hide the text behind a tap.
     if (notes.length <= 1) return SimpleMarkdown(data: changelog);
 
@@ -177,7 +177,7 @@ abstract final class AppUpdateIface {
         await url.launchUrl();
         break;
       default:
-        context.showRoundDialog(
+        context.showSheet(
           title: 'Error',
           child: Text('Unsupported platform: ${Pfs.type}'),
         );

@@ -3,14 +3,14 @@ import 'package:flutter/widgets.dart';
 /// Disposes [notifiers] when this leaves the tree, rather than when the code
 /// that made them stops waiting.
 ///
-/// For the controllers a dialog is built from. `showRoundDialog` — like
-/// `showDialog` under it — completes when the route is **popped**, not when it
+/// For the controllers a sheet is built from. `showSheet` — like
+/// `showModalBottomSheet` under it — completes when the route is **popped**, not when it
 /// has finished going away, so the usual shape
 ///
 /// ```dart
 /// final controller = TextEditingController();
 /// try {
-///   return await context.showRoundDialog(child: Input(controller: controller));
+///   return await context.showSheet(child: Input(controller: controller));
 /// } finally {
 ///   controller.dispose();
 /// }
@@ -24,9 +24,9 @@ import 'package:flutter/widgets.dart';
 /// time, depending on how fast the answer came.
 ///
 /// Not disposing at all is the other half of the same mistake: it does not
-/// crash, so it survives review, and every dialog opened leaks its controller.
+/// crash, so it survives review, and every sheet opened leaks its controller.
 ///
-/// Wrapping the dialog's own child hands the question to the framework, which
+/// Wrapping the sheet's own child hands the question to the framework, which
 /// already knows when the element is finished with.
 ///
 /// [notifiers] is read once. A widget that needs to swap one out wants its own

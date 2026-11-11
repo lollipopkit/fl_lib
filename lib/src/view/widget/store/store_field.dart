@@ -33,7 +33,7 @@ class StoreField<T extends Object> extends StatefulWidget {
   /// If true, renders the bare input without Card/extra padding.
   final bool noWrap;
 
-  /// If true, display value as text and edit on tap via dialog.
+  /// If true, display value as text and edit on tap in a sheet.
   /// If false, render an inline `Input` field directly.
   /// Default is `true`.
   final bool tapToEdit;
@@ -107,7 +107,7 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
           return field;
         }
 
-        // Tap-to-edit mode: show text then open dialog to edit
+        // Tap-to-edit mode: show text then open a sheet to edit
         Widget text = _buildDisplayText(strVal);
         if (isBusy) {
           text = Row(
@@ -125,7 +125,7 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
 
         final child = InkWell(
           borderRadius: BorderRadius.circular(7),
-          onTap: () => _openEditDialog(initial: strVal),
+          onTap: () => _openEditSheet(initial: strVal),
           child: Padding(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5), child: text),
         );
 
@@ -181,19 +181,19 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
     }
   }
 
-  void _openEditDialog({required String initial}) {
+  void _openEditSheet({required String initial}) {
     // `withTextFieldController` keeps the controller alive a while after the
-    // dialog answers: disposing it on return, as this did, pulled it out from
-    // under the dialog's exit animation, which still builds the field.
+    // sheet answers: disposing it on return, as this did, pulled it out from
+    // under the sheet's exit animation, which still builds the field.
     withTextFieldController((ctrl) async {
       ctrl.text = initial;
-      // Closed through the dialog's own context. This field's can be gone by
+      // Closed through the sheet's own context. This field's can be gone by
       // the time a button is pressed — the settings page closed under the
-      // dialog — and `context` then fails a null check. `pop` from the
-      // field's context was also the page's navigator, not the dialog's.
-      final result = await context.showRoundDialog<String>(
+      // sheet — and `context` then fails a null check. `pop` from the
+      // field's context was also the page's navigator, not the sheet's.
+      final result = await context.showSheet<String>(
         title: widget.label,
-        childBuilder: (dialog) => Input(
+        childBuilder: (sheet) => Input(
           controller: ctrl,
           hint: widget.hint,
           maxLength: widget.maxLength,
@@ -202,11 +202,11 @@ class _StoreFieldState<T extends Object> extends State<StoreField<T>> {
           action: TextInputAction.done,
           autoFocus: true,
           noWrap: true,
-          onSubmitted: dialog.pop,
+          onSubmitted: sheet.pop,
         ),
-        actionsBuilder: (dialog) => [
-          TextButton(onPressed: dialog.pop, child: Text(libL10n.cancel)),
-          TextButton(onPressed: () => dialog.pop(ctrl.text), child: Text(libL10n.ok)),
+        actionsBuilder: (sheet) => [
+          TextButton(onPressed: sheet.pop, child: Text(libL10n.cancel)),
+          TextButton(onPressed: () => sheet.pop(ctrl.text), child: Text(libL10n.ok)),
         ],
       );
       if (result == null) return;

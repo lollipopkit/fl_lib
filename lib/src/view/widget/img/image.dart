@@ -92,7 +92,7 @@ class _ImageCardState extends State<ImageCard> {
   Widget _buildErr(Object? err, StackTrace? trace) {
     return InkWell(
       onTap: () {
-        context.showErrDialog(err, trace);
+        context.showErrSheet(err, trace);
       },
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

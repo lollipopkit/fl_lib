@@ -42,7 +42,7 @@ final class QrShareBtn extends StatelessWidget {
       text: libL10n.share,
       icon: const Icon(Icons.share),
       onTap: () {
-        context.showRoundDialog(title: libL10n.share, child: qrWidget, actions: Btnx.oks);
+        context.showSheet(title: libL10n.share, child: Center(heightFactor: 1, child: qrWidget), actions: Btnx.oks);
       },
     );
   }

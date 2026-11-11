@@ -324,7 +324,7 @@ extension on _EditorPageState {
     final text = _controller.text;
     final path = widget.args?.path;
     if (path != null) {
-      final (res, _) = await context.showLoadingDialog(
+      final (res, _) = await context.showLoadingSheet(
         fn: () => File(path).writeAsString(text),
       );
       if (res == null) {
@@ -349,20 +349,20 @@ extension on _EditorPageState {
 
   /// Save and leave, leave without saving, or stay.
   Future<bool> _confirmLeave() async {
-    // `popDialog`, not `pop`. `showRoundDialog` puts the dialog on the root
+    // `popSheet`, not `pop`. `showSheet` puts the sheet on the root
     // navigator, while this context's nearest navigator is the one holding
     // the *page* — a different one wherever the editor was pushed inside a
     // pane or a tab.
-    final shouldSave = await contextSafe?.showRoundDialog<bool>(
+    final shouldSave = await contextSafe?.showSheet<bool>(
       title: libL10n.attention,
       child: Text(libL10n.actionAndAction(libL10n.save, libL10n.exit)),
       actions: [
         TextButton(
-          onPressed: () => contextSafe?.popDialog(false),
+          onPressed: () => contextSafe?.popSheet(false),
           child: Text(libL10n.exitDirectly),
         ),
         TextButton(
-          onPressed: () => contextSafe?.popDialog(true),
+          onPressed: () => contextSafe?.popSheet(true),
           child: Text(libL10n.ok),
         ),
       ],

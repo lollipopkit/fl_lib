@@ -25,7 +25,7 @@ void main() {
 
   testWidgets('a phone picks one from rows in a sheet', (tester) async {
     final ctx = await pump(tester, const Size(400, 800));
-    final picked = ctx.showPickSingleDialog<String>(
+    final picked = ctx.showPickSingleSheet<String>(
       items: const ['a', 'b', 'c'],
       initial: 'a',
     );
@@ -41,7 +41,7 @@ void main() {
 
   testWidgets('a phone picks several, and OK ends it', (tester) async {
     final ctx = await pump(tester, const Size(400, 800));
-    final picked = ctx.showPickDialog<String>(
+    final picked = ctx.showPickSheet<String>(
       items: const ['a', 'b', 'c'],
       initial: const ['a'],
     );
@@ -60,18 +60,20 @@ void main() {
 
   testWidgets('dismissing the sheet answers null', (tester) async {
     final ctx = await pump(tester, const Size(400, 800));
-    final picked = ctx.showPickDialog<String>(items: const ['a', 'b']);
+    final picked = ctx.showPickSheet<String>(items: const ['a', 'b']);
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(200, 20));
     await tester.pumpAndSettle();
     expect(await picked, isNull);
   });
 
-  testWidgets('a wide window keeps the dialog', (tester) async {
-    final ctx = await pump(tester, const Size(1200, 800));
-    ctx.showPickDialog<String>(items: const ['a', 'b']);
+  testWidgets('a wide window gets the sheet, as wide as every other', (
+    tester,
+  ) async {
+    final ctx = await pump(tester, const Size(1600, 900));
+    ctx.showPickSheet<String>(items: const ['a', 'b']);
     await tester.pumpAndSettle();
-    expect(find.byType(PickSheet<String>), findsNothing);
-    expect(find.byType(ChoiceWidget<String>), findsOneWidget);
+    expect(find.byType(PickSheet<String>), findsOneWidget);
+    expect(tester.getSize(find.byType(ResizableSheet)).width, 640);
   });
 }

@@ -1,4 +1,4 @@
-import 'package:fl_lib/src/core/ext/ctx/dialog.dart';
+import 'package:fl_lib/src/core/ext/ctx/sheet.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:fl_lib/src/res/ui.dart';
 import 'package:fl_lib/src/view/widget/btn/btn.dart';
@@ -63,7 +63,7 @@ final class TipText extends StatelessWidget {
 }
 
 /// The help glyph [TipText] puts after its text, which opens [tip] in a
-/// dialog: for a label drawn some other way.
+/// sheet: for a label drawn some other way.
 final class TipButton extends StatelessWidget {
   const TipButton(this.tip, {super.key, this.isMarkdown = false});
 
@@ -83,9 +83,9 @@ final class TipButton extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () {
-          context.showRoundDialog(
+          context.showSheet(
             title: l10n.note,
-            // The dialog does not scroll its content: a long tip does here.
+            // The sheet does not scroll its content: a long tip does here.
             child: SingleChildScrollView(
               child: isMarkdown ? SimpleMarkdown(data: tip) : Text(tip),
             ),

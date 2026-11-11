@@ -32,7 +32,7 @@ final class ThemeModeTile extends StatelessWidget {
       onTap: locked != null
           ? null
           : () async {
-              final selected = await context.showPickSingleDialog(
+              final selected = await context.showPickSingleSheet(
                 title: title,
                 items: List.generate(ThemeMode.values.length, (i) => i),
                 display: label,

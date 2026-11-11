@@ -824,7 +824,7 @@ enum AppUpdateLevel {
   /// Show snackbar
   normal,
 
-  /// Show dialog
+  /// Show a sheet
   recommended,
 
   /// Forced to update

@@ -8,12 +8,8 @@ import 'package:icons_plus/icons_plus.dart';
 typedef TagNoteBuilder =
     String Function(String tag, bool selected, bool matching);
 
-/// The tag editor, as a dialog on a wide window and a bottom sheet on a narrow
-/// one.
-///
-/// Wide it is a dialog because the page behind it is still the subject; narrow
-/// it comes up from the bottom and takes the width, which is the only shape
-/// that leaves room for a list plus a field a thumb can reach.
+/// The tag editor, in a bottom sheet: room for a list plus a field a thumb
+/// can reach, and as wide as every other sheet on a wide window.
 Future<void> showTagEditor(
   BuildContext context, {
   required ValueNotifier<Set<String>> tags,
@@ -44,30 +40,12 @@ Future<void> showTagEditor(
     footer: footer,
   );
 
-  // The window, not the surface: a pane hands its child a narrow box on a wide
-  // screen, and a dialog centred in the window is still right there.
-  final narrow = MediaQuery.sizeOf(context).width < 500;
-  if (narrow) {
-    // The editor is its own surface, so it carries the grip — see [SheetGrip].
-    return showResizableSheet<void>(
-      context,
-      showGrip: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => editor,
-    );
-  }
-  return showDialog<void>(
-    context: context,
-    useRootNavigator: true,
-    builder: (_) => Padding(
-      padding: const EdgeInsets.all(34),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: editor,
-        ),
-      ),
-    ),
+  // The editor is its own surface, so it carries the grip — see [SheetGrip].
+  return showResizableSheet<void>(
+    context,
+    showGrip: false,
+    backgroundColor: Colors.transparent,
+    builder: (_) => editor,
   );
 }
 
@@ -183,7 +161,7 @@ class _TagEditorState extends State<TagEditor> {
     final ctrl = TextEditingController(text: tag);
     void onSave() {
       final next = ctrl.text.trim();
-      context.popDialog();
+      context.popSheet();
       if (next.isEmpty || next == tag) return;
       widget.onRename?.call(tag, next);
       setState(() {
@@ -202,7 +180,7 @@ class _TagEditorState extends State<TagEditor> {
       }
     }
 
-    await context.showRoundDialog(
+    await context.showSheet(
       title: l10n.rename,
       child: Input(
         controller: ctrl,
@@ -263,7 +241,7 @@ class _TagEditorState extends State<TagEditor> {
             button: true,
             label: l10n.close,
             child: InkWell(
-              onTap: context.popDialog,
+              onTap: context.popSheet,
               child: Icon(Icons.close, size: 19, color: scheme.onSurfaceVariant),
             ),
           ),
@@ -451,7 +429,7 @@ class _TagEditorState extends State<TagEditor> {
             borderRadius: BorderRadius.circular(30),
             clipBehavior: Clip.hardEdge,
             child: InkWell(
-              onTap: context.popDialog,
+              onTap: context.popSheet,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 17,
