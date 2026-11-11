@@ -518,4 +518,25 @@ void main() {
     expect(ended?.$2, isA<TimeoutException>());
     expect(find.byType(PromptSheet), findsNothing);
   });
+
+  testWidgets('work that throws before it starts ends the loading sheet', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    (void, Object?)? ended;
+    ctx
+        .showLoadingSheet<void>(
+          timeout: const Duration(seconds: 1),
+          showErr: false,
+          fn: () => throw StateError('at once'),
+        )
+        .then((r) => ended = r);
+    await step(tester);
+    await step(tester);
+    expect(ended?.$2, isA<StateError>());
+    expect(find.byType(PromptSheet), findsNothing);
+    // Nothing left to fire: a timer still armed would time out into nobody.
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull);
+  });
 }
