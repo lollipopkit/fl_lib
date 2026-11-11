@@ -48,7 +48,7 @@ class _FullscreenEditWidgetState extends State<PlainEditPage> {
   }
 
   Future<bool> _confirm() async {
-    final sure = await context.showRoundDialog<bool>(
+    final sure = await context.showSheet<bool>(
       title: libL10n.attention,
       child: Text(libL10n.askContinue(libL10n.exit)),
       actions: Btnx.cancelOk,

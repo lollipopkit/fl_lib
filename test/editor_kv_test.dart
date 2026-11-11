@@ -18,11 +18,18 @@ void main() {
   }
 
   Future<void> edit(WidgetTester tester, {required String key}) async {
+    // A frame to start the sheet's slide in, and one past its end: the first
+    // frame of a route is the start of its animation.
+    Future<void> settle() async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
     await tester.tap(find.byTooltip(libL10n.edit).first);
-    await tester.pump(const Duration(milliseconds: 300));
+    await settle();
     await tester.enterText(find.byType(TextField).first, key);
     await tester.tap(find.text(libL10n.ok));
-    await tester.pump(const Duration(milliseconds: 300));
+    await settle();
   }
 
   testWidgets('renaming onto a key that is there is refused', (tester) async {

@@ -475,7 +475,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
   }
 
   Future<void> _signOut() async {
-    final ok = await context.showRoundDialog<bool>(
+    final ok = await context.showSheet<bool>(
       title: '${l10n.logout}?',
       actions: Btnx.cancelOk,
     );
@@ -486,7 +486,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
     final store = await context._runLkc(_client.hasStoreSubscription);
     final name = _client.user.value?.name;
     if (store == null || name == null || !mounted) return;
-    final ok = await context.showRoundDialog<bool>(
+    final ok = await context.showSheet<bool>(
       title: l10n.lkcDeleteAccount,
       child: Text(
         [
@@ -499,7 +499,7 @@ final class _LkcAccountPageState extends State<LkcAccountPage> {
         Btn.text(
           text: l10n.delete,
           textStyle: TextStyle(color: Theme.of(context).colorScheme.error),
-          onTap: () => context.popDialog(true),
+          onTap: () => context.popSheet(true),
         ),
       ],
     );
@@ -681,7 +681,7 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
   }
 
   Future<void> _delete(LkcFile file) async {
-    final ok = await context.showRoundDialog<bool>(
+    final ok = await context.showSheet<bool>(
       title: l10n.delete,
       child: Text(l10n.askContinue('${l10n.delete} ${file.displayName}')),
       actions: Btnx.cancelRedOk,
@@ -698,9 +698,10 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
     final path = picked?.path;
     if (picked == null || path == null || !mounted) return;
     final progress = ValueNotifier<double?>(null);
-    unawaited(
-      context.showRoundDialog(
-        barrierDismiss: false,
+    VoidCallback? close;
+    final shown = context.showSheet(
+        dismissible: false,
+        onShown: (c) => close = c,
         child: ValBuilder(
           listenable: progress,
           builder: (v) => Column(
@@ -712,8 +713,7 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
             ],
           ),
         ),
-      ),
-    );
+      );
     try {
       await _client.uploadFile(
         File(path),
@@ -722,35 +722,28 @@ final class _LkcFilesPageState extends State<LkcFilesPage> {
           if (total > 0) progress.value = sent / total;
         },
       );
-      if (mounted) context.popDialog();
+      close?.call();
       await _load();
     } catch (e) {
-      if (!mounted) return;
-      context.popDialog();
-      context._showLkcErr(e);
+      close?.call();
+      if (mounted) context._showLkcErr(e);
     } finally {
-      progress.dispose();
+      // Once the sheet is gone: its exit still listens.
+      unawaited(shown.whenComplete(progress.dispose));
     }
   }
 }
 
 extension on BuildContext {
-  /// Run [fn] behind a loading dialog, an error told in the user's words.
+  /// Run [fn] behind a loading sheet, an error told in the user's words.
   Future<T?> _runLkc<T>(Future<T> Function() fn) async {
-    unawaited(
-      showRoundDialog(child: SizedLoading.medium, barrierDismiss: false),
-    );
-    try {
-      final ret = await fn();
-      if (mounted) popDialog();
-      return ret;
-    } catch (e) {
-      if (mounted) {
-        popDialog();
-        _showLkcErr(e);
-      }
+    // The sheet closes itself, whether or not this context is still here.
+    final (ret, err) = await showLoadingSheet(fn: fn, timeout: null, showErr: false);
+    if (err != null) {
+      if (mounted) _showLkcErr(err);
       return null;
     }
+    return ret;
   }
 
   void _showLkcErr(Object? e) {
@@ -759,7 +752,7 @@ extension on BuildContext {
       final LkcException e => e.text(l10n),
       _ => '$e',
     };
-    showRoundDialog(title: l10n.fail, child: Text(text), actions: Btnx.oks);
+    showSheet(title: l10n.fail, child: Text(text), actions: Btnx.oks);
   }
 }
 

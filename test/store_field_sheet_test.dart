@@ -4,17 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  const prop = PrefPropDefault<String>('store_field_dialog_test', 'old');
+  const prop = PrefPropDefault<String>('store_field_sheet_test', 'old');
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await PrefStore.shared.init();
   });
 
-  testWidgets('the edit dialog still closes after its field is gone', (
+  testWidgets('the edit sheet still closes after its field is gone', (
     tester,
   ) async {
-    // The settings page can close under the dialog. Its buttons read the
+    // The settings page can close under the sheet. Its buttons read the
     // field's context when pressed, which by then failed a null check.
     final showField = ValueNotifier(true);
     await tester.pumpWidget(
@@ -32,7 +32,7 @@ void main() {
 
     await tester.tap(find.text('old'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(PromptSheet), findsOneWidget);
 
     showField.value = false;
     await tester.pump();
@@ -41,9 +41,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(PromptSheet), findsNothing);
     expect(prop.get(), 'new', reason: 'what was typed is still saved');
-    // The controller outlives the dialog by a few seconds on purpose.
+    // The controller outlives the sheet by a few seconds on purpose.
     await tester.pump(const Duration(seconds: 3));
   });
 }

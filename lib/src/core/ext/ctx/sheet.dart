@@ -9,90 +9,106 @@ import 'package:fl_lib/src/res/l10n.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:icons_plus/icons_plus.dart';
 
-extension DialogX on BuildContext {
-  static const _actionsPadding = EdgeInsets.only(left: 13, right: 13, bottom: 7);
-  static const _contentPadding = EdgeInsets.all(24);
+extension SheetX on BuildContext {
+  /// The sheet in front of everything else, if one is.
+  static ModalRoute<Object?>? get topSheet => frontSheet?.route;
 
-  /// The round dialogs on screen, the newest last.
-  static final _open = <ModalRoute<Object?>>[];
+  /// The pages of [topSheet].
+  static SheetStack? get frontSheet => SheetStack.front;
 
-  /// The round dialog in front of everything else, if one is.
-  static ModalRoute<Object?>? get topDialog {
-    final route = _open.lastOrNull;
-    return route != null && route.isCurrent ? route : null;
-  }
-
-  /// Shows a dialog with a title, content, and actions.
+  /// A bottom sheet with a title, content, and actions: a [PromptSheet] in a
+  /// [showResizableSheet], on the root navigator — one on the nearest is
+  /// clipped to whatever pane raised it.
   ///
-  /// - [child] is the content of the dialog.
-  /// - [actions] is the list of actions.
-  /// - [title] is the title of the dialog.
-  /// - [barrierDismiss] allows tapping the barrier to dismiss the dialog.
+  /// - [dismissible] false keeps it open against the barrier and a drag.
   /// - [titleBuilder], [childBuilder], and [actionsBuilder] override their
-  ///   corresponding values when provided.
-  Future<T?> showRoundDialog<T>({
+  ///   corresponding values when provided, with the sheet's own context.
+  /// - [onShown] is handed what closes this sheet and nothing else — not a
+  ///   page raised over it meanwhile — from any context: for one that closes
+  ///   itself, a progress.
+  ///
+  /// Closed by [ContextX.popSheet].
+  Future<T?> showSheet<T>({
     Widget? child,
     List<Widget>? actions,
     String? title,
-    bool barrierDismiss = true,
+    bool dismissible = true,
     int? titleMaxLines,
-    EdgeInsetsGeometry? actionsPadding = _actionsPadding,
-    EdgeInsetsGeometry? contentPadding = _contentPadding,
+    EdgeInsetsGeometry actionsPadding = PromptSheet.defaultActionsPadding,
+    EdgeInsetsGeometry contentPadding = PromptSheet.defaultContentPadding,
     Widget? Function(BuildContext ctx)? titleBuilder,
     Widget? Function(BuildContext ctx)? childBuilder,
     List<Widget>? Function(BuildContext ctx)? actionsBuilder,
+    ValueSetter<VoidCallback>? onShown,
+  }) {
+    return _raise<T>(
+      dismissible: dismissible,
+      onShown: onShown,
+      builder: (ctx) => PromptSheet(
+        title: switch (titleBuilder) {
+          null => title != null ? Text(title, maxLines: titleMaxLines) : null,
+          _ => titleBuilder(ctx),
+        },
+        actions: actionsBuilder?.call(ctx) ?? actions,
+        contentPadding: contentPadding,
+        actionsPadding: actionsPadding,
+        child: childBuilder?.call(ctx) ?? child,
+      ),
+    );
+  }
+
+  /// Raises [builder] as the next page of the sheet in front, or in a sheet of
+  /// its own on the root navigator — decided by what is in front rather than
+  /// by this context, which is most often the page's, not the sheet's.
+  ///
+  /// Answered once gone: see [SheetStack].
+  Future<T?> _raise<T>({
+    required WidgetBuilder builder,
+    bool dismissible = true,
+    double restLimit = PromptSheet.restLimit,
+    ValueSetter<VoidCallback>? onShown,
   }) async {
     if (!mounted) return null;
-
-    ModalRoute<Object?>? route;
-    try {
-      return await showDialog<T>(
-        context: this,
-        barrierDismissible: barrierDismiss,
-        // Stated rather than inherited. The default is being deprecated, and it
-        // stops being a formality once there is more than one navigator: a
-        // dialog on the nearest one is clipped to whatever pane raised it, so a
-        // confirmation for a destructive action would appear inside a column.
-        useRootNavigator: true,
-        builder: (ctx) {
-          if (route == null) {
-            route = ModalRoute.of(ctx);
-            if (route != null) _open.add(route!);
-          }
-          final title_ = switch (titleBuilder) {
-            null => title != null ? Text(title, maxLines: titleMaxLines) : null,
-            _ => titleBuilder(ctx),
-          };
-          final child_ = childBuilder?.call(ctx) ?? child;
-          final actions_ = actionsBuilder?.call(ctx) ?? actions;
-
-          return AlertDialog(
-            title: title_,
-            content: child_,
-            actions: actions_,
-            actionsPadding: actions_?.isEmpty == true ? EdgeInsets.zero : actionsPadding,
-            contentPadding: contentPadding,
-          );
-        },
-      );
-    } finally {
-      _open.remove(route);
-    }
+    final (stack, page, answered) = SheetStack.show(
+      this,
+      builder: builder,
+      join: true,
+      dismissible: dismissible,
+      restLimit: restLimit,
+    );
+    onShown?.call(() => stack.remove(page));
+    final result = await answered;
+    // The route is untyped: a page over the first pops its own type through
+    // it.
+    return result is T ? result : null;
   }
 
   /// [timeout] is the timeout of the Future [fn] (default `null`).
   ///
   /// If an error occurs:
-  /// - the dialog will be closed and an error dialog will be displayed
+  /// - the sheet will be closed and an error sheet will be displayed
   /// - the [onErr] function will be called (awaited)
   /// - the return value will be `null`
-  Future<FnRes<T>> showLoadingDialog<T>({
+  ///
+  /// [showErr] false leaves saying the error to the caller.
+  Future<FnRes<T>> showLoadingSheet<T>({
     required Future<T> Function() fn,
-    bool barrierDismiss = false,
+    bool dismissible = false,
+    bool showErr = true,
     FutureOr<void> Function(Object e, StackTrace s)? onErr,
     Duration? timeout = const Duration(seconds: 17),
   }) async {
-    showRoundDialog(child: SizedLoading.medium, barrierDismiss: barrierDismiss);
+    // Closed by its own handle: a page raised over it while [fn] runs — a
+    // password asked from inside it — is not what ends here, and a pop of the
+    // top would leave this one up, holding back.
+    VoidCallback? close;
+    final shown = _raise<void>(
+      dismissible: dismissible,
+      onShown: (c) => close = c,
+      builder: (_) => const PromptSheet(
+        child: Center(heightFactor: 1, child: SizedLoading.medium),
+      ),
+    );
 
     return Resx.tryCatch(
       () async {
@@ -100,58 +116,93 @@ extension DialogX on BuildContext {
           null => await fn(),
           _ => await fn().timeout(timeout),
         };
-        popDialog();
+        close?.call();
+        // Returned once it is off the screen, as every sheet answers.
+        await shown;
         return ret;
       },
-      onErr: (e, s) {
-        popDialog();
-        showErrDialog(e, s);
-        onErr?.call(e, s);
+      onErr: (e, s) async {
+        close?.call();
+        await shown;
+        if (showErr) showErrSheet(e, s);
+        await onErr?.call(e, s);
       },
+    );
+  }
+
+  /// A sheet with one field, answered with what was typed — by OK or by
+  /// submitting the field — or null.
+  Future<String?> showInputSheet({
+    String? title,
+    String? initial,
+    String? label,
+    String? hint,
+    IconData? icon,
+    TextInputType? type,
+    bool obscureText = false,
+    int maxLines = 1,
+    int? minLines,
+  }) {
+    // Made by the sheet, which owns it: a context gone already raises none.
+    TextEditingController? made;
+    TextEditingController ctrl() => made ??= TextEditingController(text: initial);
+    return showSheet<String>(
+      title: title,
+      childBuilder: (ctx) => DisposeWith(
+        notifiers: [ctrl()],
+        child: Input(
+          controller: ctrl(),
+          autoFocus: true,
+          type: type,
+          obscureText: obscureText,
+          maxLines: maxLines,
+          minLines: minLines,
+          icon: icon,
+          hint: hint,
+          // Empty is no label: an empty one would still take the room a label
+          // floats into, and push the text below the middle of the field.
+          label: label == null || label.isEmpty ? null : label,
+          onSubmitted: (val) => ctx.popSheet(val),
+        ),
+      ),
+      actionsBuilder: (ctx) => [
+        Btn.cancel(),
+        Btn.ok(onTap: () => ctx.popSheet(ctrl().text)),
+      ],
     );
   }
 
   static final _recoredPwd = <String, String>{};
 
-  /// Show a dialog to input password.
+  /// [showInputSheet] for a password.
   ///
   /// - [id] is the key to record the password.
   /// - [remember] if true, the password will be recorded. Only works when [id] is not null.
-  Future<String?> showPwdDialog({String? title, String? label, String? id, bool remember = true}) async {
-    if (!mounted) return null;
-    return await showRoundDialog<String>(
+  Future<String?> showPwdSheet({String? title, String? label, String? id, bool remember = true}) async {
+    final pwd = await showInputSheet(
       title: title,
-      child: Input(
-        controller: TextEditingController(text: _recoredPwd[id]),
-        autoFocus: true,
-        type: TextInputType.visiblePassword,
-        obscureText: true,
-        onSubmitted: (val) {
-          popDialog(val);
-          if (remember && id != null) {
-            _recoredPwd[id] = val;
-          }
-        },
-        // Empty is no label: an empty one would still take the room a label
-        // floats into, and push the text below the middle of the field.
-        label: label == null || label.isEmpty ? l10n.pwd : label,
-      ),
+      initial: _recoredPwd[id],
+      type: TextInputType.visiblePassword,
+      obscureText: true,
+      label: label == null || label.isEmpty ? l10n.pwd : label,
     );
+    if (pwd != null && remember && id != null) _recoredPwd[id] = pwd;
+    return pwd;
   }
 
-  /// Show a dialog to pick a value from a list.
+  /// Show a sheet to pick a value from a list.
   ///
-  /// - [title] is the title of the dialog.
+  /// - [title] is the title of the sheet.
   /// - [items] is the list of items to pick.
   /// - [display] is the function to display the item.
   /// - [multi] if true, the user can pick multiple items.
-  /// - [initial] is the initial value(s) of the dialog.
+  /// - [initial] is the initial value(s) of the sheet.
   /// - [clearable] if true, the user can clear the selected items.
   /// - [actions] is the list of actions.
-  /// - [addOkBtn] if true, the dialog will have an OK button.
+  /// - [addOkBtn] if true, the sheet will have an OK button.
   /// - [showLoading] is the state to show the loading.
   /// - [ascend] is the state to sort the items.
-  Future<List<T>?> showPickDialog<T>({
+  Future<List<T>?> showPickSheet<T>({
     String? title,
     required List<T> items,
     String Function(T)? display,
@@ -165,111 +216,46 @@ extension DialogX on BuildContext {
     VNode<bool>? ascend,
   }) async {
     var vals = initial ?? <T>[];
-    // A list of its own: the caller's may be reused for the next dialog, or
+    // A list of its own: the caller's may be reused for the next sheet, or
     // const, and appending to it would grow it by an OK each time or throw.
     final btns = <Widget>[
       ...?actions,
-      if (multi && addOkBtn) TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)),
+      if (multi && addOkBtn) TextButton(onPressed: () => popSheet(true), child: Text(l10n.ok)),
     ];
 
-    final itemsList = items.toList();
-    final isAscending = ascend ?? nvn<bool>();
-    showLoading ??= false.vn;
-
-    // A phone gets rows in a sheet, as `showTagEditor` does; the window, not
-    // the surface, decides — see there.
-    if (MediaQuery.sizeOf(this).width < 500) {
-      final sure = await showResizableSheet<bool>(
-        this,
-        builder: (_) => PickSheet<T>(
-          title: title,
-          items: itemsList,
-          initial: vals,
-          onChanged: (value) => vals = value,
-          display: display,
-          avatar: avatar,
-          multi: multi,
-          clearable: clearable,
-          actions: btns,
-          showLoading: showLoading!,
-          ascend: isAscending,
-        ),
-      );
-      return sure == true ? vals : null;
-    }
-
-    Widget buildChoice() {
-      return ChoiceWidget<T>(
-        onChanged: (value) {
-          vals = value;
-          if (!multi) popDialog(true);
-        },
-        multi: multi,
-        clearable: clearable,
-        items: itemsList,
-        selected: vals,
+    final loading = showLoading ?? false.vn;
+    final asc = ascend ?? nvn<bool>();
+    final sure = await _raise<bool>(
+      // A list, which scrolls: as tall as every other one.
+      restLimit: ResizableSheet.restFactor,
+      builder: (_) => PickSheet<T>(
+        title: title,
+        items: items,
+        initial: vals,
+        onChanged: (value) => vals = value,
         display: display,
         avatar: avatar,
-      );
-    }
-
-    Widget buildTitle(BuildContext context) {
-      Widget buildSortIcon(bool? asc) {
-        return AnimatedSwitcher(
-          duration: Durations.medium1,
-          child: IconButton(
-            key: ValueKey(asc),
-            tooltip: libL10n.sort,
-            icon: Icon(switch (asc) {
-              true => Icons.arrow_upward,
-              false => Icons.arrow_downward,
-              null => Icons.sort,
-            }),
-            onPressed: () {
-              final asc_ = asc ?? true;
-              isAscending.value = !asc_;
-              itemsList.sort((a, b) {
-                final aStr = display?.call(a) ?? a.toString();
-                final bStr = display?.call(b) ?? b.toString();
-                return asc_ ? aStr.compareTo(bStr) : bStr.compareTo(aStr);
-              });
-            },
-          ),
-        );
-      }
-
-      return Row(
-        children: [
-          Expanded(child: Text(title ?? l10n.select)),
-          isAscending.listenVal(buildSortIcon),
-        ],
-      );
-    }
-
-    Widget buildBody(bool loading) {
-      return loading ? SizedLoading.medium : isAscending.listen(buildChoice);
-    }
-
-    final sure = await showRoundDialog<bool>(
-      titleBuilder: buildTitle,
-      child: SingleChildScrollView(child: showLoading.listenVal(buildBody)),
-      actions: btns.isEmpty ? null : btns,
+        multi: multi,
+        clearable: clearable,
+        actions: btns,
+        showLoading: loading,
+        ascend: asc,
+      ),
     );
-    if (sure == true) return vals;
-    return null;
+    return sure == true ? vals : null;
   }
 
-  /// Show a dialog to pick a single value from a list.
+  /// Show a sheet to pick a single value from a list.
   ///
-  /// - [title] is the title of the dialog.
+  /// - [title] is the title of the sheet.
   /// - [items] is the list of items to pick.
   /// - [display] is the function to display the item.
-  /// - [initial] is the initial value of the dialog.
+  /// - [initial] is the initial value of the sheet.
   /// - [clearable] if true, the user can clear the selected item.
   /// - [actions] is the list of actions.
-  /// - [addOkBtn] if true, the dialog will have an OK button.
+  /// - [addOkBtn] if true, the sheet will have an OK button.
   /// - [showLoading] is the state to show the loading.
-  Future<T?> showPickSingleDialog<T>({
+  Future<T?> showPickSingleSheet<T>({
     String? title,
     required List<T> items,
     String Function(T)? display,
@@ -280,7 +266,7 @@ extension DialogX on BuildContext {
     bool addOkBtn = true,
     VNode<bool>? showLoading,
   }) async {
-    final vals = await showPickDialog<T>(
+    final vals = await showPickSheet<T>(
       title: title,
       items: items,
       display: display,
@@ -298,19 +284,19 @@ extension DialogX on BuildContext {
     return null;
   }
 
-  /// Show a dialog to pick a value from a list with tags.
+  /// Show a sheet to pick a value from a list with tags.
   ///
-  /// - [title] is the title of the dialog.
+  /// - [title] is the title of the sheet.
   /// - [itemsBuilder] is the function to build the items with the tag.
   /// - [tags] is the set of tags.
   /// - [display] is the function to display the item.
-  /// - [initial] is the initial value(s) of the dialog.
+  /// - [initial] is the initial value(s) of the sheet.
   /// - [clearable] if true, the user can clear the selected items.
   /// - [multi] if true, the user can pick multiple items.
   /// - [actions] is the list of actions.
   /// - [showLoading] is the state to show the loading.
   /// - [ascend] is the state to sort the items.
-  Future<List<T>?> showPickWithTagDialog<T>({
+  Future<List<T>?> showPickWithTagSheet<T>({
     String? title,
     required List<T?> Function(String tag) itemsBuilder,
     required ValueNotifier<Set<String>> tags,
@@ -345,7 +331,7 @@ extension DialogX on BuildContext {
       );
     });
 
-    final sure = await showRoundDialog<bool>(
+    final sure = await showSheet<bool>(
       title: title,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -361,7 +347,7 @@ extension DialogX on BuildContext {
       ),
       actions: [
         ...?actions,
-        TextButton(onPressed: () => popDialog(true), child: Text(l10n.ok)),
+        TextButton(onPressed: () => popSheet(true), child: Text(l10n.ok)),
       ],
     );
     if (sure == true && vals.isNotEmpty) {
@@ -370,42 +356,42 @@ extension DialogX on BuildContext {
     return null;
   }
 
-  /// Show a dialog of error.
+  /// Show a sheet of error.
   ///
   /// - [e] is the error.
   /// - [s] is the stack trace.
   /// - [operation] is the operation of the error.
-  void showErrDialog([Object? e, StackTrace? s, String? operation]) {
-    showRoundDialog(
+  void showErrSheet([Object? e, StackTrace? s, String? operation]) {
+    showSheet(
       title: operation ?? l10n.fail,
       child: ErrorView.es(e, s),
       actions: [TextButton(onPressed: () => Pfs.copy('$e\n$s'), child: Text(l10n.copy))],
     );
   }
 
-  /// Show a dialog to import data from file, network or clipboard.
-  /// - [title] is the title of the dialog
+  /// Show a sheet to import data from file, network or clipboard.
+  /// - [title] is the title of the sheet
   /// - [modelDef] is the [Map] definition of the model, it will be displayed like:
   ///   ```jsonc
   ///   {"name": "", "age": 0}
   ///   ```
-  Future<Uint8List?> showImportDialog({required String title, Map<String, dynamic>? modelDef}) async {
+  Future<Uint8List?> showImportSheet({required String title, Map<String, dynamic>? modelDef}) async {
     title = '$title - ${l10n.import}';
-    final from = await showRoundDialog<_ImportFrom>(
+    final from = await showSheet<_ImportFrom>(
       title: title,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Btn.tile(onTap: () => popDialog(_ImportFrom.file), text: l10n.file, icon: const Icon(MingCute.file_line)),
-          Btn.tile(onTap: () => popDialog(_ImportFrom.network), text: l10n.network, icon: const Icon(ZondIcons.network)),
-          Btn.tile(onTap: () => popDialog(_ImportFrom.clipboard), text: l10n.clipboard, icon: const Icon(MingCute.clipboard_line)),
+          Btn.tile(onTap: () => popSheet(_ImportFrom.file), text: l10n.file, icon: const Icon(MingCute.file_line)),
+          Btn.tile(onTap: () => popSheet(_ImportFrom.network), text: l10n.network, icon: const Icon(ZondIcons.network)),
+          Btn.tile(onTap: () => popSheet(_ImportFrom.clipboard), text: l10n.clipboard, icon: const Icon(MingCute.clipboard_line)),
           if (modelDef != null)
             Btn.tile(
               text: l10n.example,
               icon: const Icon(MingCute.paragraph_fill),
               onTap: () {
                 final content = const JsonEncoder.withIndent('\t\t').convert([modelDef]);
-                showRoundDialog(
+                showSheet(
                   title: l10n.example,
                   child: SingleChildScrollView(
                     child: SimpleMarkdown(
@@ -435,7 +421,7 @@ $content
       case _ImportFrom.network:
         final urlCtrl = TextEditingController();
         final headersCtrl = TextEditingController();
-        await showRoundDialog(
+        await showSheet(
           title: title,
           child: SingleChildScrollView(
             child: Column(
@@ -448,7 +434,7 @@ $content
                   controller: urlCtrl,
                   maxLines: 3,
                   minLines: 1,
-                  onSubmitted: (p0) => popDialog(),
+                  onSubmitted: (p0) => popSheet(),
                 ),
                 UIs.height7,
                 Input(
@@ -458,7 +444,7 @@ $content
                   controller: headersCtrl,
                   maxLines: 5,
                   minLines: 2,
-                  onSubmitted: (p0) => popDialog(),
+                  onSubmitted: (p0) => popSheet(),
                 ),
               ],
             ),
@@ -475,7 +461,7 @@ $content
             headers[parts[0].trim()] = parts[1].trim();
           }
         } catch (e, s) {
-          Loggers.app.warning('showImportDialog parse headers', e, s);
+          Loggers.app.warning('showImportSheet parse headers', e, s);
         }
         if (url.isEmpty) return null;
         final resp = await myDio.get(
@@ -490,11 +476,11 @@ $content
     }
   }
 
-  /// Show a dialog to migrate the configuration.
+  /// Show a sheet to migrate the configuration.
   ///
   /// - [tip] is the tip of the migration.
-  Future<bool?> showMigrationDialog(String tip) {
-    return showRoundDialog<bool>(
+  Future<bool?> showMigrationSheet(String tip) {
+    return showSheet<bool>(
       title: l10n.migrateCfg,
       child: SingleChildScrollView(
         child: SimpleMarkdown(

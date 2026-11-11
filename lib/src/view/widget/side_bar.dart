@@ -461,7 +461,7 @@ final _kTileRadius = BorderRadius.circular(9);
 /// Opens at itself rather than in the middle of the screen. A tap on a button
 /// leaves nothing covering the button, so the menu can come out beside it —
 /// unlike a long press, where a finger is over the spot and
-/// [showContextMenu] falls back to a dialog.
+/// [showContextMenu] falls back to a sheet.
 final class _MenuButton extends StatelessWidget {
   const _MenuButton({required this.onMenu});
 

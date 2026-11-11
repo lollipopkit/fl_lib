@@ -311,7 +311,7 @@ final class ThemeAppearance {
         trailing: const Icon(Icons.keyboard_arrow_right),
         onTap: () async {
           final source = await context
-              .showPickSingleDialog<_ThemeInstallSource>(
+              .showPickSingleSheet<_ThemeInstallSource>(
             title: label,
             items: [
               _ThemeInstallSource.file,
@@ -383,7 +383,7 @@ final class ThemeAppearance {
     Future<ThemeInstallation> Function() install,
   ) async {
     final (installed, error) = await context
-        .showLoadingDialog<ThemeInstallation>(fn: install);
+        .showLoadingSheet<ThemeInstallation>(fn: install);
     if (!context.mounted) return;
     if (error != null || installed == null) {
       Loggers.app.warning('Theme installation failed: ${error.runtimeType}');
@@ -409,7 +409,7 @@ final class ThemeAppearance {
     // Disposed with the field, not when the dialog answers: what the answer
     // starts (installing a theme, which rebuilds the app) runs while the
     // dialog is still animating out. See [DisposeWith].
-    return (await context.showRoundDialog<String>(
+    return (await context.showSheet<String>(
       title: title,
       child: DisposeWith(
         notifiers: [controller],
@@ -417,12 +417,12 @@ final class ThemeAppearance {
           controller: controller,
           autoFocus: true,
           hint: hint,
-          onSubmitted: (_) => context.popDialog(controller.text.trim()),
+          onSubmitted: (_) => context.popSheet(controller.text.trim()),
         ),
       ),
       actions: [
         Btn.cancel(),
-        Btn.ok(onTap: () => context.popDialog(controller.text.trim())),
+        Btn.ok(onTap: () => context.popSheet(controller.text.trim())),
       ],
     ))?.trim();
   }
@@ -531,7 +531,7 @@ final class ThemeAppearance {
           (style) => Text(_iconStyleLabel(style)),
         ),
         onTap: () async {
-          final style = await context.showPickSingleDialog<IconStyle>(
+          final style = await context.showPickSingleSheet<IconStyle>(
             title: label,
             items: IconStyle.values,
             initial: _setting.appIconStyle.fetch(),
@@ -596,7 +596,7 @@ final class ThemeAppearance {
           (radius) => Text('${radius.round()}'),
         ),
         onTap: () async {
-          final radius = await context.showPickSingleDialog<double>(
+          final radius = await context.showPickSingleSheet<double>(
             title: label,
             items: [0.0, 6.0, 9.0, 13.0, 20.0, 30.0, 40.0],
             initial: property.fetch(),
@@ -704,7 +704,7 @@ final class ThemeAppearance {
           (opacity) => Text('${(opacity * 100).round()}%'),
         ),
         onTap: () async {
-          final opacity = await context.showPickSingleDialog<double>(
+          final opacity = await context.showPickSingleSheet<double>(
             title: label,
             items: [0, 0.1, 0.18, 0.3, 0.45, 0.6],
             initial: _setting.appBackgroundOpacity.fetch(),
@@ -735,7 +735,7 @@ final class ThemeAppearance {
           ),
           onTap: () async {
             var radius = _setting.appBackgroundBlur.fetch().clamp(0.0, 30.0);
-            final selected = await context.showRoundDialog<double>(
+            final selected = await context.showSheet<double>(
               title: label,
               child: StatefulBuilder(
                 builder: (context, setState) => Column(
@@ -755,7 +755,7 @@ final class ThemeAppearance {
               ),
               actions: [
                 Btn.cancel(),
-                Btn.ok(onTap: () => context.popDialog(radius)),
+                Btn.ok(onTap: () => context.popSheet(radius)),
               ],
             );
             if (selected == null) return;
@@ -794,7 +794,7 @@ final class ThemeAppearance {
           );
           // With the field: the answer rebuilds the whole app while the
           // dialog is still leaving. See [DisposeWith].
-          final value = await context.showRoundDialog<String>(
+          final value = await context.showSheet<String>(
             title: label,
             child: DisposeWith(
               notifiers: [controller],
@@ -812,7 +812,7 @@ final class ThemeAppearance {
             ),
             actions: [
               Btn.cancel(),
-              Btn.ok(onTap: () => context.popDialog(controller.text)),
+              Btn.ok(onTap: () => context.popSheet(controller.text)),
             ],
           );
           if (value == null || !context.mounted) return;
@@ -864,7 +864,7 @@ final class ThemeAppearance {
             hint: suggested,
           );
           if (name == null || name.isEmpty || !context.mounted) return;
-          final (_, error) = await context.showLoadingDialog<void>(
+          final (_, error) = await context.showLoadingSheet<void>(
             fn: () => AppFont.importFile(path, name),
           );
           if (!context.mounted) return;
@@ -884,7 +884,7 @@ final class ThemeAppearance {
   void _onTapAppColor() {
     withTextFieldController((ctrl) async {
       ctrl.text = Color(_setting.colorSeed.fetch()).toHex;
-      await context.showRoundDialog(
+      await context.showSheet(
         title: libL10n.primaryColorSeed,
         child: StatefulBuilder(
           builder: (context, setState) {
@@ -961,9 +961,9 @@ final class ThemeAppearance {
     }
 
     RNodes.app.notify();
-    // `popDialog`: reached from the colour dialog's OK, with the settings
+    // `popSheet`: reached from the colour sheet's OK, with the settings
     // page's `context`.
-    context.popDialog();
+    context.popSheet();
   }
 
   ThemeSettingRow _buildThemeMode() => ThemeSettingRow(

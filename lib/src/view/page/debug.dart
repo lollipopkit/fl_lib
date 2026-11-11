@@ -39,12 +39,12 @@ class DebugPage extends StatelessWidget {
           Btn.icon(
             text: l10n.clear,
             onTap: () {
-              context.showRoundDialog(
+              context.showSheet(
                 title: '${l10n.clear}?',
                 actions: Btn.ok(
                   onTap: () {
                     DebugProvider.clear();
-                    context.popDialog();
+                    context.popSheet();
                   },
                 ).toList,
               );

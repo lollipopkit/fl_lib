@@ -126,8 +126,8 @@ class _JsonListEditorState extends State<JsonListEditor> {
     void onSave() {
       final jsonStr = ctrl.text;
       if (jsonStr.isEmpty) {
-        context.popDialog();
-        context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
+        context.popSheet();
+        context.showSheet(title: l10n.fail, child: Text(l10n.empty));
 
         return;
       }
@@ -135,14 +135,14 @@ class _JsonListEditorState extends State<JsonListEditor> {
       try {
         final parsed = Fns.parseWithPriority(jsonStr);
         _list[idx] = parsed;
-        contextSafe?.popDialog(true);
+        contextSafe?.popSheet(true);
       } catch (e) {
-        contextSafe?.popDialog();
-        contextSafe?.showRoundDialog(title: l10n.fail, child: Text('Invalid input: $e'));
+        contextSafe?.popSheet();
+        contextSafe?.showSheet(title: l10n.fail, child: Text('Invalid input: $e'));
       }
     }
 
-    final result = await context.showRoundDialog<bool>(
+    final result = await context.showSheet<bool>(
       title: l10n.edit,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -154,7 +154,6 @@ class _JsonListEditorState extends State<JsonListEditor> {
       ],
     );
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(item, idx, animation)));
       _listKey.currentState?.insertItem(idx, duration: Durations.medium1);
     }
@@ -166,8 +165,8 @@ class _JsonListEditorState extends State<JsonListEditor> {
     void onSave() {
       final jsonStr = ctrl.text;
       if (jsonStr.isEmpty) {
-        context.popDialog();
-        context.showRoundDialog(title: l10n.fail, child: Text(l10n.empty));
+        context.popSheet();
+        context.showSheet(title: l10n.fail, child: Text(l10n.empty));
 
         return;
       }
@@ -175,14 +174,14 @@ class _JsonListEditorState extends State<JsonListEditor> {
       try {
         final parsed = Fns.parseWithPriority(jsonStr);
         _list.add(parsed);
-        contextSafe?.popDialog(true);
+        contextSafe?.popSheet(true);
       } catch (e) {
-        context.popDialog();
-        context.showRoundDialog(title: l10n.fail, child: Text('Invalid input: $e'));
+        context.popSheet();
+        context.showSheet(title: l10n.fail, child: Text('Invalid input: $e'));
       }
     }
 
-    final result = await context.showRoundDialog(
+    final result = await context.showSheet(
       title: l10n.add,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -195,7 +194,6 @@ class _JsonListEditorState extends State<JsonListEditor> {
     );
 
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.insertItem(_list.length - 1, duration: Durations.medium1);
     }
   }

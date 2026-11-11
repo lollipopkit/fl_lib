@@ -241,10 +241,10 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
 
   Future<void> _create() async {
     final ctrl = TextEditingController();
-    final name = await context.showRoundDialog<String>(
+    final name = await context.showSheet<String>(
       title: l10n.lkcTeamNew,
-      child: Input(controller: ctrl, autoFocus: true, label: l10n.lkcTeamName, onSubmitted: (v) => context.popDialog(v.trim())),
-      actions: [Btn.cancel(), Btn.ok(onTap: () => context.popDialog(ctrl.text.trim()))],
+      child: Input(controller: ctrl, autoFocus: true, label: l10n.lkcTeamName, onSubmitted: (v) => context.popSheet(v.trim())),
+      actions: [Btn.cancel(), Btn.ok(onTap: () => context.popSheet(ctrl.text.trim()))],
     );
     if (name == null || name.isEmpty || !mounted) return;
     final id = await context._runTeam(() async => (await _client.teams()).create(name: name));
@@ -255,10 +255,10 @@ final class _LkcTeamsPageState extends State<LkcTeamsPage> {
 
   Future<void> _join() async {
     final ctrl = TextEditingController();
-    final link = await context.showRoundDialog<String>(
+    final link = await context.showSheet<String>(
       title: l10n.lkcTeamJoin,
-      child: Input(controller: ctrl, autoFocus: true, label: l10n.lkcTeamJoinLink, onSubmitted: (v) => context.popDialog(v.trim())),
-      actions: [Btn.cancel(), Btn.ok(onTap: () => context.popDialog(ctrl.text.trim()))],
+      child: Input(controller: ctrl, autoFocus: true, label: l10n.lkcTeamJoinLink, onSubmitted: (v) => context.popSheet(v.trim())),
+      actions: [Btn.cancel(), Btn.ok(onTap: () => context.popSheet(ctrl.text.trim()))],
     );
     if (link == null || link.isEmpty || !mounted) return;
     final (token, secret) = _parseInvite(link);
@@ -752,7 +752,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
           await _after(() => _keys.transfer(team: team, userId: m.userId, fingerprint: fp!));
         }
       case 'remove':
-        final ok = await context.showRoundDialog<bool>(
+        final ok = await context.showSheet<bool>(
           title: l10n.lkcTeamRemove,
           child: Text(l10n.lkcTeamRemoveConfirm(m.name)),
           actions: Btnx.cancelRedOk,
@@ -770,7 +770,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
   /// they tick that it matches.
   Future<bool> _gate(LkcMember m, String title, String action, {String? note}) async {
     var ok = false;
-    final res = await context.showRoundDialog<bool>(
+    final res = await context.showSheet<bool>(
       title: title,
       childBuilder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => Column(
@@ -792,7 +792,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
       ),
       actionsBuilder: (ctx) => [
         Btn.cancel(),
-        Btn.text(text: action, onTap: () => ctx.popDialog(true)),
+        Btn.text(text: action, onTap: () => ctx.popSheet(true)),
       ],
     );
     // The tick is the confirmation: an OK without it confirms nothing.
@@ -801,7 +801,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
 
   Future<void> _acceptChange(String userId, String signingKey, String? before, String? now) async {
     final name = _status?.members.where((m) => m.userId == userId).firstOrNull?.name ?? userId;
-    final res = await context.showRoundDialog<bool>(
+    final res = await context.showSheet<bool>(
       title: l10n.lkcTeamKeyChangedTitle(name),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -814,9 +814,9 @@ final class _TeamDetailState extends State<_TeamDetail> {
         ],
       ),
       actions: [
-        Btn.text(text: l10n.lkcTeamDontTrust, onTap: () => context.popDialog(false)),
+        Btn.text(text: l10n.lkcTeamDontTrust, onTap: () => context.popSheet(false)),
         // Nothing to compare: not taken.
-        if (now != null) Btn.text(text: l10n.lkcTeamTrustNew, onTap: () => context.popDialog(true)),
+        if (now != null) Btn.text(text: l10n.lkcTeamTrustNew, onTap: () => context.popSheet(true)),
       ],
     );
     if (res != true || !mounted) return;
@@ -834,7 +834,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
     final owner = error.users.first;
     final (epoch, signingKey, fp) = (error.epoch!, error.signingKey!, error.fingerprint);
     final name = _status?.members.where((m) => m.userId == owner).firstOrNull?.name ?? owner;
-    final res = await context.showRoundDialog<bool>(
+    final res = await context.showSheet<bool>(
       title: l10n.lkcTeamRecoveryTitle(name),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -843,8 +843,8 @@ final class _TeamDetailState extends State<_TeamDetail> {
         children: [Text(l10n.lkcTeamRecoveryTip), if (fp != null) _FingerprintCard(l10n.lkcTeamCurrent, fp)],
       ),
       actions: [
-        Btn.text(text: l10n.lkcTeamDontTrust, onTap: () => context.popDialog(false)),
-        if (fp != null) Btn.text(text: l10n.lkcTeamAcceptRecovery, onTap: () => context.popDialog(true)),
+        Btn.text(text: l10n.lkcTeamDontTrust, onTap: () => context.popSheet(false)),
+        if (fp != null) Btn.text(text: l10n.lkcTeamAcceptRecovery, onTap: () => context.popSheet(true)),
       ],
     );
     if (res != true || !mounted) return;
@@ -863,7 +863,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
   Future<List<String>?> _compareAll(List<LkcMember> members, String action) async {
     if (members.isEmpty) return const [];
     final ticked = <String>{};
-    return context.showRoundDialog<List<String>>(
+    return context.showSheet<List<String>>(
       title: l10n.lkcTeamCompare,
       childBuilder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => SizedBox(
@@ -898,14 +898,14 @@ final class _TeamDetailState extends State<_TeamDetail> {
         Btn.cancel(),
         Btn.text(
           text: action,
-          onTap: () => ctx.popDialog([for (final m in members) if (ticked.contains(m.userId)) m.fingerprint!]),
+          onTap: () => ctx.popSheet([for (final m in members) if (ticked.contains(m.userId)) m.fingerprint!]),
         ),
       ],
     );
   }
 
   Future<void> _rotate() async {
-    final ok = await context.showRoundDialog<bool>(
+    final ok = await context.showSheet<bool>(
       title: l10n.lkcTeamRotate,
       child: Text(l10n.lkcTeamRotateConfirm),
       actions: Btnx.cancelOk,
@@ -917,13 +917,13 @@ final class _TeamDetailState extends State<_TeamDetail> {
   Future<void> _rotateWith(List<String> confirmed) async {
     final team = _team.id;
     final progress = ValueNotifier(l10n.lkcTeamRotating);
-    unawaited(
-      context.showRoundDialog(
-        barrierDismiss: false,
-        child: ValueListenableBuilder(
-          valueListenable: progress,
-          builder: (_, text, _) => Row(spacing: 13, children: [const SizedLoading(23), Expanded(child: Text(text))]),
-        ),
+    VoidCallback? close;
+    final shown = context.showSheet(
+      dismissible: false,
+      onShown: (c) => close = c,
+      child: ValueListenableBuilder(
+        valueListenable: progress,
+        builder: (_, text, _) => Row(spacing: 13, children: [const SizedLoading(23), Expanded(child: Text(text))]),
       ),
     );
     Object? failure;
@@ -940,7 +940,9 @@ final class _TeamDetailState extends State<_TeamDetail> {
     } catch (e) {
       failure = e;
     }
-    if (mounted) context.popDialog();
+    close?.call();
+    // Once the sheet is gone: its exit still listens.
+    await shown;
     progress.dispose();
     if (!mounted) return;
     if (failure case LkcTeamError(kind: LkcTeamErrorKind.unconfirmed, :final users)) {
@@ -966,7 +968,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
 
   Future<void> _invite() async {
     var days = 7.0, uses = 1.0, keyed = true;
-    final go = await context.showRoundDialog<bool>(
+    final go = await context.showSheet<bool>(
       title: l10n.lkcTeamInvite,
       childBuilder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => Column(
@@ -1008,7 +1010,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
           ],
         ),
       ),
-      actions: [Btn.cancel(), Btn.text(text: l10n.lkcTeamCreateLink, onTap: () => context.popDialog(true))],
+      actions: [Btn.cancel(), Btn.text(text: l10n.lkcTeamCreateLink, onTap: () => context.popSheet(true))],
     );
     if (go != true || !mounted) return;
     final link = await context._runTeam(
@@ -1017,7 +1019,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
     if (link == null || !mounted) return;
     final scheme = Theme.of(context).colorScheme;
     final until = DateTime.tryParse(link.expiresAt);
-    await context.showRoundDialog<void>(
+    await context.showSheet<void>(
       title: l10n.lkcTeamInviteLink,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1047,7 +1049,7 @@ final class _TeamDetailState extends State<_TeamDetail> {
   }
 
   Future<void> _leave() async {
-    final ok = await context.showRoundDialog<bool>(
+    final ok = await context.showSheet<bool>(
       title: l10n.lkcTeamLeave,
       child: Text(l10n.lkcTeamLeaveConfirm(_team.name)),
       actions: Btnx.cancelRedOk,
@@ -1204,23 +1206,18 @@ final class _GroupLabel extends StatelessWidget {
 
 extension on BuildContext {
   Future<T?> _runTeam<T>(Future<T> Function() fn) async {
-    unawaited(showRoundDialog(child: SizedLoading.medium, barrierDismiss: false));
-    try {
-      final ret = await fn();
-      if (mounted) popDialog();
-      return ret;
-    } catch (e) {
-      if (mounted) {
-        popDialog();
-        _showTeamErr(e);
-      }
+    // The sheet closes itself, whether or not this context is still here.
+    final (ret, err) = await showLoadingSheet(fn: fn, timeout: null, showErr: false);
+    if (err != null) {
+      if (mounted) _showTeamErr(err);
       return null;
     }
+    return ret;
   }
 
   void _showTeamErr(Object? e) {
     if (e == null) return;
-    showRoundDialog(title: l10n.fail, child: Text(_teamErrText(e)), actions: Btnx.oks);
+    showSheet(title: l10n.fail, child: Text(_teamErrText(e)), actions: Btnx.oks);
   }
 }
 

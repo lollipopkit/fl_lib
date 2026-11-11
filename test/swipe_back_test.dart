@@ -180,21 +180,17 @@ void main() {
     expect(find.text('level 1'), findsOneWidget);
   });
 
-  // A dialog does not cover what is under it the way a page does — the page
+  // A sheet does not cover what is under it the way a page does — the page
   // keeps its tickers and its focus — but it is on top of the route holding
-  // the navigator, and back is the dialog's.
-  testWidgets('a page under a dialog is not on screen', (tester) async {
+  // the navigator, and back is the sheet's.
+  testWidgets('a page under a sheet is not on screen', (tester) async {
     await tester.pumpWidget(nested());
     await tester.tap(find.text('tab 0'));
     await tester.pumpAndSettle();
     final level = ModalRoute.of(tester.element(find.text('level 0')))!;
     expect(isRouteOnScreen(level), isTrue);
 
-    showDialog<void>(
-      context: tester.element(find.text('level 0')),
-      useRootNavigator: true,
-      builder: (_) => const AlertDialog(content: Text('dialog')),
-    );
+    tester.element(find.text('level 0')).showSheet<void>(child: const Text('sheet'));
     await tester.pumpAndSettle();
     expect(isRouteOnScreen(level), isFalse);
     expect(level.popGestureEnabled, isFalse);

@@ -127,7 +127,7 @@ final class _FileCardViewState extends State<FileCardView> with AutomaticKeepAli
 extension on _FileCardViewState {
   void _onTapCard() {
     if (_error != null) {
-      return context.showErrDialog(_error);
+      return context.showErrSheet(_error);
     }
 
     FileViewPage.route.go(context, FileViewPageArgs(path: widget.path, name: widget.name));
@@ -138,7 +138,7 @@ extension on _FileCardViewState {
       try {
         await File(widget.path).delete();
       } catch (e, s) {
-        contextSafe?.showErrDialog(e, s, libL10n.delete);
+        contextSafe?.showErrSheet(e, s, libL10n.delete);
       }
     }
   }
@@ -352,7 +352,7 @@ extension on _FileViewPageState {
     try {
       await Pfs.sharePaths(paths: [path], title: widget.args.name);
     } catch (e) {
-      contextSafe?.showErrDialog(e);
+      contextSafe?.showErrSheet(e);
     }
   }
 }

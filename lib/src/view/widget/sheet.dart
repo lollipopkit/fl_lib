@@ -161,3 +161,100 @@ class RowsSheet extends StatelessWidget {
     );
   }
 }
+
+/// A title, content and actions, as the body of a [showResizableSheet] —
+/// what `showSheet` raises.
+///
+/// The title and the actions are `PickSheet`'s, so a sheet that asks and one
+/// that picks look like one thing.
+class PromptSheet extends StatelessWidget {
+  const PromptSheet({
+    super.key,
+    this.title,
+    this.child,
+    this.actions,
+    this.titlePadding = defaultTitlePadding,
+    this.contentPadding = defaultContentPadding,
+    this.actionsPadding = defaultActionsPadding,
+  });
+
+  final Widget? title;
+  final Widget? child;
+  final List<Widget>? actions;
+  final EdgeInsetsGeometry titlePadding;
+  final EdgeInsetsGeometry contentPadding;
+  final EdgeInsetsGeometry actionsPadding;
+
+  static const defaultTitlePadding = EdgeInsets.fromLTRB(17, 0, 17, 3);
+  static const defaultContentPadding = EdgeInsets.fromLTRB(17, 7, 17, 13);
+  static const defaultActionsPadding = EdgeInsets.fromLTRB(13, 3, 13, 7);
+
+  /// Its [ResizableSheet.restLimit]. What it holds is read whole and often
+  /// does not scroll: at 60%, a form of a few fields under a keyboard
+  /// overflowed.
+  static const restLimit = 0.9;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final actions = this.actions;
+    return SafeArea(
+      // The sheet's own top is against the barrier, not against a status bar.
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title case final title?)
+            Padding(
+              padding: titlePadding,
+              // At the start whatever it is given: a title narrower than the
+              // sheet, or one under an inherited alignment, read as centred.
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Semantics(
+                  header: true,
+                  namesRoute: true,
+                  child: DefaultTextStyle.merge(
+                    style: theme.textTheme.titleMedium,
+                    textAlign: TextAlign.start,
+                    child: title,
+                  ),
+                ),
+              ),
+            ),
+          if (child case final child?)
+            Flexible(
+              child: Padding(
+                padding: contentPadding,
+                // Loose, at the start: what has a size of its own — a spinner,
+                // a code capped at a width — keeps it, as in a dialog, rather
+                // than being pulled to the sheet's width. As tall as it is.
+                child: Align(
+                  alignment: AlignmentDirectional.topStart,
+                  heightFactor: 1,
+                  // An [AlertDialog]'s, so a plain text reads as it did there.
+                  child: DefaultTextStyle.merge(
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          if (actions != null && actions.isNotEmpty)
+            Padding(
+              padding: actionsPadding,
+              child: OverflowBar(
+                alignment: MainAxisAlignment.end,
+                overflowAlignment: OverflowBarAlignment.end,
+                spacing: 8,
+                children: actions,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

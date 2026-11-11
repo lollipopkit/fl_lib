@@ -7,11 +7,11 @@ import 'package:material_ui/material_ui.dart';
 /// One entry in a context menu.
 ///
 /// A description rather than a widget, because the same menu has to be drawn
-/// two ways: a centred dialog for a finger and a popup at the pointer for a
+/// two ways: a sheet for a finger and a popup at the pointer for a
 /// mouse. A `List<Widget>` can only be the first.
 ///
 /// It also moves closing the menu off the action. Every entry used to begin
-/// with `context.popDialog()` — the boilerplate that, forgotten or written as
+/// with `context.popSheet()` — the boilerplate that, forgotten or written as
 /// `context.pop()`, closes the page instead (see the rule in the project's
 /// CLAUDE.md). Here the menu closes itself and then runs [onTap].
 @immutable
@@ -134,9 +134,8 @@ abstract final class ContextMenuUi {
 /// One entry, drawn.
 ///
 /// Public because a menu is not only a popup: the same set of actions is a
-/// sheet on a phone and a dialog where there is nowhere to hang a popup, and
-/// an entry that looked like a different thing in each of them would be three
-/// menus rather than one.
+/// sheet where there is nowhere to hang a popup, and an entry that looked
+/// like a different thing in each would be two menus rather than one.
 ///
 /// Wants a bounded width — see [ContextMenuUi.width].
 class ContextMenuRow extends StatelessWidget {
@@ -244,16 +243,14 @@ class ContextMenuRow extends StatelessWidget {
 ///
 /// - [at] is a global position — what `WidgetSecondaryX.onSecondary` hands
 ///   over. The menu hangs off it. This is the one that wins when given.
-/// - [sheet] is for the window with nowhere to hang one: a single column under
-///   a finger, where the middle of the screen is where the thing being acted
-///   on is and the top half is out of a thumb's reach.
-/// - Neither is a dialog in the middle, which is what a long press with
-///   nothing to measure falls back to. [title] names it.
+/// - Without it, a sheet: a single column under a finger, where the middle of
+///   the screen is where the thing being acted on is and the top half is out
+///   of a thumb's reach.
 ///
 /// [header] says what the menu is about, inside it, for a caller whose own
 /// shape is too small to have said so. Not an entry: nothing happens when it
-/// is pressed, and the keyboard steps past it. The dialog has [title] instead
-/// and ignores it.
+/// is pressed, and the keyboard steps past it. The sheet shows [title] when
+/// there is no [header].
 /// Where a menu dropped from [context]'s box starts: its lower left, in the
 /// window's coordinates. [showContextMenu] pushes it back inside the window
 /// when the box is near an edge.
@@ -272,7 +269,6 @@ Future<void> showContextMenu(
   String? title,
   Widget? header,
   Offset? at,
-  bool sheet = false,
 }) async {
   if (actions.isEmpty) return;
 
@@ -282,10 +278,12 @@ Future<void> showContextMenu(
   final VoidCallback? chosen;
   if (at != null) {
     chosen = await _showAt(context, actions, at, header);
-  } else if (sheet) {
-    chosen = await _showSheet(context, actions, header);
   } else {
-    chosen = await _showDialog(context, actions, title);
+    chosen = await _showSheet(
+      context,
+      actions,
+      header ?? (title == null ? null : _SheetTitle(title)),
+    );
   }
 
   chosen?.call();
@@ -307,9 +305,13 @@ Future<VoidCallback?> _showSheet(
       // about, so this is worth more here than in the popup — which is why a
       // caller is expected to give one.
       ?switch (header) {
+        // At the start: the rows' column centres what is narrower than it.
         final header? => Padding(
           padding: const EdgeInsets.symmetric(horizontal: ContextMenuUi.pad),
-          child: header,
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: header,
+          ),
         ),
         null => null,
       },
@@ -328,37 +330,6 @@ Future<VoidCallback?> _showSheet(
   );
 }
 
-/// The menu in the middle, for a long press with nothing to hang it off.
-Future<VoidCallback?> _showDialog(
-  BuildContext context,
-  List<ContextMenuAction> actions,
-  String? title,
-) {
-  return context.showRoundDialog<VoidCallback>(
-    title: title,
-    // Scrolls, because how many entries there are is the caller's to decide
-    // and a dialog's height is the window's: a menu of everything that can
-    // be done to a server is a column taller than a laptop screen, and a
-    // `Column` past its box is an overflow rather than a scroll.
-    child: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final action in actions)
-            ContextMenuRow(
-              action: action,
-              // Popped as a value rather than run here, and through
-              // `popDialog` — the root navigator, which is where a dialog is.
-              // `context.pop()` here closes the page under it.
-              onTap: (run) => context.popDialog(run),
-            ),
-        ],
-      ),
-    ),
-  );
-}
-
 Future<VoidCallback?> _showAt(
   BuildContext context,
   List<ContextMenuAction> actions,
@@ -369,7 +340,7 @@ Future<VoidCallback?> _showAt(
   // the window's coordinates, and the root is the only navigator whose overlay
   // is the window. Pushed onto a pane's, the menu would be placed inside the
   // pane and clipped to it — and a menu is a thing over the whole app, which
-  // is the same reason dialogs go here.
+  // is the same reason sheets go here.
   return Navigator.of(context, rootNavigator: true).push(
     _ContextMenuRoute(
       actions: actions,
@@ -662,5 +633,20 @@ class ContextMenuButton extends StatelessWidget {
       final t? => Tooltip(message: t, child: btn),
       null => btn,
     };
+  }
+}
+
+/// [showContextMenu]'s title in a sheet, as `PickSheet` sets its own.
+class _SheetTitle extends StatelessWidget {
+  const _SheetTitle(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    );
   }
 }

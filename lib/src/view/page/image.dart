@@ -78,7 +78,7 @@ final class ImagePage extends StatelessWidget {
         // Share
         IconButton(
           onPressed: () async {
-            final (path, err) = await context.showLoadingDialog(
+            final (path, err) = await context.showLoadingSheet(
               fn: () => _getImgData(args.url),
             );
             if (err != null || path == null) return;
@@ -93,10 +93,10 @@ final class ImagePage extends StatelessWidget {
         // Delete
         IconButton(
           onPressed: () async {
-            final sure = await context.showRoundDialog(
+            final sure = await context.showSheet(
               title: l10n.delete,
               child: Text(l10n.delFmt(args.title ?? '???', l10n.image)),
-              actions: Btnx.oks,
+              actions: Btnx.okReds,
             );
             if (sure != true || !context.mounted) return;
             context.pop(const ImagePageRet(isDeleted: true));

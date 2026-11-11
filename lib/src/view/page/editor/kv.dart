@@ -124,16 +124,16 @@ class _KvEditorState extends State<KvEditor> {
           ? l10n.existsFmt(newK)
           : null;
       if (err != null) {
-        context.popDialog();
-        await context.showRoundDialog(title: l10n.fail, child: Text(err));
+        context.popSheet();
+        await context.showSheet(title: l10n.fail, child: Text(err));
         return;
       }
       _map.remove(k);
       _map[newK] = newV;
-      contextSafe?.popDialog(true);
+      contextSafe?.popSheet(true);
     }
 
-    final result = await context.showRoundDialog<bool>(
+    final result = await context.showSheet<bool>(
       title: l10n.edit,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -149,7 +149,6 @@ class _KvEditorState extends State<KvEditor> {
       ],
     );
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(k, oldV, idx, animation)));
       final newIdx = _map.keys.toList().indexOf(ctrlK.text);
       _listKey.currentState?.insertItem(newIdx, duration: Durations.medium1);
@@ -171,15 +170,15 @@ class _KvEditorState extends State<KvEditor> {
           ? l10n.existsFmt(k)
           : null;
       if (err != null) {
-        context.popDialog();
-        context.showRoundDialog(title: l10n.fail, child: Text(err));
+        context.popSheet();
+        context.showSheet(title: l10n.fail, child: Text(err));
         return;
       }
       _map[k] = v;
-      context.popDialog(true);
+      context.popSheet(true);
     }
 
-    final result = await context.showRoundDialog(
+    final result = await context.showSheet(
       title: l10n.add,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -196,7 +195,6 @@ class _KvEditorState extends State<KvEditor> {
     );
 
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.insertItem(_map.length - 1, duration: Durations.medium1);
     }
   }

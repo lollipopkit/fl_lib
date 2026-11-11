@@ -690,7 +690,7 @@ extension on _ThemeStorePageState {
       Toast.error(libL10n.appearanceThemeNeedsNewerApp(item.newestVersion ?? ''));
       return;
     }
-    final (theme, error) = await context.showLoadingDialog<ThemeInstallation>(
+    final (theme, error) = await context.showLoadingSheet<ThemeInstallation>(
       // No timeout: this waits on a download, and a slow link is not a reason
       // to call it failed.
       timeout: null,
@@ -711,7 +711,7 @@ extension on _ThemeStorePageState {
   /// use stays in use, now drawn from the new version; one that is not in use
   /// is not applied — updating is not choosing.
   Future<void> _update(ThemeStoreItem item) async {
-    final (theme, error) = await context.showLoadingDialog<ThemeInstallation>(
+    final (theme, error) = await context.showLoadingSheet<ThemeInstallation>(
       timeout: null,
       fn: () => ThemeRepos.install(item),
     );
@@ -726,13 +726,13 @@ extension on _ThemeStorePageState {
   }
 
   Future<void> _delete(ThemeInstallation theme) async {
-    final confirmed = await context.showRoundDialog<bool>(
+    final confirmed = await context.showSheet<bool>(
       title: libL10n.delete,
       child: Text(switch (theme) {
         ThemePackage() => libL10n.themeStoreDeleteTheme(theme.name),
         ThemeIconPack() => libL10n.themeStoreDeleteIconPack(theme.name),
       }),
-      actions: Btnx.cancelOk,
+      actions: Btnx.cancelRedOk,
     );
     if (confirmed != true || !mounted) return;
 

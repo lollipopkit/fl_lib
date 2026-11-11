@@ -1,50 +1,89 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
+import 'package:fl_lib/src/view/widget/sheet_pages.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A modal bottom sheet with three heights, moved between by dragging its
 /// grip: closed, its own, and the whole window.
 ///
-/// Its own is the height of its content, up to [ResizableSheet.restFactor] of
-/// the window — of what the keyboard leaves of it, which the sheet sits on.
+/// Its own is the height of its content, up to [restLimit] of the window
+/// ([ResizableSheet.restFactor] unless given) — of what the keyboard leaves of it, which the sheet sits on.
 /// The content sets no cap of its own, nor room for the keyboard: a cap would
 /// stop it following the sheet up, and the room would be made twice.
 ///
 /// [showGrip] false is for a [builder] that draws its own surface — a sheet
 /// with a transparent background — and places a [SheetGrip] on it.
+///
+/// [isDismissible] false closes it neither by the barrier nor by a drag: it
+/// still resizes, and comes back to its own height from below it.
+///
+/// A sheet of its own, always; a `showSheet` raised while it is in front is
+/// its next page. It answers as `showSheet` does: once off the screen — see
+/// [SheetStack].
 Future<T?> showResizableSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
   bool showGrip = true,
+  bool isDismissible = true,
+  double restLimit = ResizableSheet.restFactor,
   bool useRootNavigator = true,
   bool useSafeArea = true,
   Color? backgroundColor,
   BoxConstraints? constraints,
   AnimationStyle? sheetAnimationStyle,
-}) {
-  return showModalBottomSheet<T>(
-    context: context,
+}) async {
+  final (_, _, answered) = SheetStack.show(
+    context,
+    builder: builder,
+    join: false,
+    dismissible: isDismissible,
+    restLimit: restLimit,
+    showGrip: showGrip,
+    backgroundColor: backgroundColor,
     useRootNavigator: useRootNavigator,
     useSafeArea: useSafeArea,
-    // What lets it grow past 9/16 at all; [ResizableSheet] decides the height.
-    isScrollControlled: true,
-    // [SheetGrip] instead: Material's handle only closes the sheet.
-    showDragHandle: false,
-    backgroundColor: backgroundColor,
     constraints: constraints,
     sheetAnimationStyle: sheetAnimationStyle,
-    builder: (ctx) => ResizableSheet(showGrip: showGrip, child: builder(ctx)),
   );
+  final result = await answered;
+  // The route is untyped: a page over the first pops its own type through it.
+  return result is T ? result : null;
 }
 
 /// The body of a [showResizableSheet]: the grip and the height it sets.
 class ResizableSheet extends StatefulWidget {
-  const ResizableSheet({super.key, required this.child, this.showGrip = true});
+  const ResizableSheet({
+    super.key,
+    required this.child,
+    this.showGrip = true,
+    this.dismissible = true,
+    this.restLimit = restFactor,
+    this.onDismiss,
+    this.gripLeading,
+    this.contentKey,
+  });
 
   final Widget child;
   final bool showGrip;
 
+  /// Whether a drag below half its own height closes it.
+  final bool dismissible;
+
   /// The most of the window a sheet takes before it is asked for more.
   static const restFactor = 0.6;
+
+  /// This one's [restFactor].
+  final double restLimit;
+
+  /// What a drag down closes it with; [Navigator.maybePop] unless given.
+  final VoidCallback? onDismiss;
+
+  /// Beside the grip, at its start: a sheet's way back to its previous page.
+  final Widget? gripLeading;
+
+  /// Changed when [child] is other content — a sheet's next page — so that
+  /// content decides the height again.
+  final Object? contentKey;
 
   @override
   State<ResizableSheet> createState() => _ResizableSheetState();
@@ -66,6 +105,23 @@ class _ResizableSheetState extends State<ResizableSheet> {
   bool _dragging = false;
 
   static const _flingVelocity = 700.0;
+
+  @override
+  void didUpdateWidget(ResizableSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contentKey != widget.contentKey) {
+      _height = null;
+      _restHeight = null;
+      _dragging = false;
+    }
+  }
+
+  Future<bool> _dismiss() async {
+    final onDismiss = widget.onDismiss;
+    if (onDismiss == null) return Navigator.maybePop(context);
+    onDismiss();
+    return true;
+  }
 
   /// Its own height, measured while it still has it.
   double? _rest() {
@@ -109,12 +165,19 @@ class _ResizableSheetState extends State<ResizableSheet> {
     } else {
       target = full;
     }
+    if (target == 0 && !widget.dismissible) {
+      setState(() {
+        _dragging = false;
+        _height = rest;
+      });
+      return;
+    }
     if (target == 0) {
       // Left where it is: growing back while the route slid it away read as
       // the sheet bouncing before it closed. Back to its own height only if it
       // stays.
       setState(() => _dragging = false);
-      Navigator.maybePop(context).then((closed) {
+      _dismiss().then((closed) {
         if (!closed && mounted) setState(() => _height = rest);
       });
       return;
@@ -146,7 +209,25 @@ class _ResizableSheetState extends State<ResizableSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (widget.showGrip) const SheetGrip(),
+              if (widget.showGrip)
+                switch (widget.gripLeading) {
+                  null => const SheetGrip(),
+                  // Room for a button the line's own padding does not give.
+                  final leading => SizedBox(
+                    height: 40,
+                    child: Stack(
+                      children: [
+                        const Positioned.fill(child: SheetGrip()),
+                        PositionedDirectional(
+                          start: 4,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(child: leading),
+                        ),
+                      ],
+                    ),
+                  ),
+                },
               Flexible(child: widget.child),
             ],
           ),
@@ -162,13 +243,36 @@ class _ResizableSheetState extends State<ResizableSheet> {
                 ? Duration.zero
                 : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
+            // Back at its own height, it follows its content again, and the
+            // next drag measures it again: content that grew since — a list
+            // that was loading — was clipped to the old height.
+            onEnd: () {
+              if (_dragging || _height == null || _height != _restHeight) return;
+              setState(() {
+                _height = null;
+                _restHeight = null;
+              });
+            },
             height: height?.clamp(0.0, _maxHeight),
             constraints: height == null
                 ? BoxConstraints(
-                    maxHeight: _maxHeight * ResizableSheet.restFactor,
+                    maxHeight: _maxHeight * widget.restLimit,
                   )
                 : null,
-            child: content,
+            // Below its own height it is cut, not squeezed: content that does
+            // not scroll overflowed under a drag down.
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                fit: OverflowBoxFit.deferToChild,
+                minHeight: 0,
+                maxHeight: switch ((height, _restHeight)) {
+                  (final h?, final rest?) when h < rest => rest,
+                  _ => null,
+                },
+                child: content,
+              ),
+            ),
           ),
         );
       },
@@ -189,7 +293,7 @@ class _SheetScope extends InheritedWidget {
 ///
 /// Drawn by the sheet itself unless it was opened with `showGrip: false`, in
 /// which case its content places one. Outside a [ResizableSheet] — the same
-/// content shown in a dialog — it is nothing.
+/// content shown elsewhere — it is nothing.
 class SheetGrip extends StatelessWidget {
   const SheetGrip({super.key});
 
@@ -218,9 +322,10 @@ class SheetGrip extends StatelessWidget {
       ),
     );
     final l10n = MaterialLocalizations.of(context);
+    final dismissible = state.widget.dismissible;
     return Semantics(
-      label: l10n.modalBarrierDismissLabel,
-      onTap: () => Navigator.maybePop(context),
+      label: dismissible ? l10n.modalBarrierDismissLabel : null,
+      onTap: dismissible ? state._dismiss : null,
       onIncrease: () => state._step(true),
       onDecrease: () => state._step(false),
       child: MouseRegion(
