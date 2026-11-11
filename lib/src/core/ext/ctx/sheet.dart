@@ -10,17 +10,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:icons_plus/icons_plus.dart';
 
 extension SheetX on BuildContext {
-  /// The sheets [showSheet] raised that are on screen, the newest last.
-  static final _open = <SheetStack>[];
-
   /// The sheet in front of everything else, if one is.
   static ModalRoute<Object?>? get topSheet => frontSheet?.route;
 
   /// The pages of [topSheet].
-  static SheetStack? get frontSheet {
-    final stack = _open.lastOrNull;
-    return stack != null && stack.route.isCurrent ? stack : null;
-  }
+  static SheetStack? get frontSheet => SheetStack.front;
 
   /// A bottom sheet with a title, content, and actions: a [PromptSheet] in a
   /// [showResizableSheet], on the root navigator — one on the nearest is
@@ -63,12 +57,11 @@ extension SheetX on BuildContext {
     );
   }
 
-  /// Raises [builder] in a sheet on the root navigator, kept in [_open] while
-  /// it is up so [ContextX.popSheet] finds it from a context gone since.
+  /// Raises [builder] as the next page of the sheet in front, or in a sheet of
+  /// its own on the root navigator — decided by what is in front rather than
+  /// by this context, which is most often the page's, not the sheet's.
   ///
-  /// With one of these sheets in front, [builder] is its next page instead —
-  /// decided by what is in front rather than by this context, which is most
-  /// often the page's, not the sheet's.
+  /// Answered once gone: see [SheetStack].
   Future<T?> _raise<T>({
     required WidgetBuilder builder,
     bool dismissible = true,
@@ -76,47 +69,15 @@ extension SheetX on BuildContext {
     ValueSetter<VoidCallback>? onShown,
   }) async {
     if (!mounted) return null;
-
-    if (frontSheet case final front?) {
-      final (page, answered) = front.push(
-        builder,
-        dismissible: dismissible,
-        restLimit: restLimit,
-      );
-      onShown?.call(() => front.remove(page));
-      final result = await answered;
-      return result is T ? result : null;
-    }
-
-    final (stack, popped) = SheetStack.raise(
+    final (stack, page, answered) = SheetStack.show(
       this,
       builder: builder,
+      join: true,
       dismissible: dismissible,
       restLimit: restLimit,
     );
-    onShown?.call(() => stack.remove(stack.first));
-    _open.add(stack);
-    final Object? result;
-    try {
-      result = await popped;
-    } finally {
-      _open.remove(stack);
-    }
-    try {
-      // Answered once the sheet is off the screen, not when it starts to
-      // leave: its exit still builds what it holds, and what a caller does
-      // next — disposing a field's controller — must not be under it. The
-      // pages over the first answer before it does, innermost first. This
-      // waits for frames: a paused app answers on resume.
-      await stack.route.completed;
-      for (final answered in stack.ended()) {
-        await answered;
-      }
-    } finally {
-      stack
-        ..released()
-        ..dispose();
-    }
+    onShown?.call(() => stack.remove(page));
+    final result = await answered;
     // The route is untyped: a page over the first pops its own type through
     // it.
     return result is T ? result : null;
@@ -141,7 +102,7 @@ extension SheetX on BuildContext {
     // password asked from inside it — is not what ends here, and a pop of the
     // top would leave this one up, holding back.
     VoidCallback? close;
-    _raise<void>(
+    final shown = _raise<void>(
       dismissible: dismissible,
       onShown: (c) => close = c,
       builder: (_) => const PromptSheet(
@@ -156,12 +117,15 @@ extension SheetX on BuildContext {
           _ => await fn().timeout(timeout),
         };
         close?.call();
+        // Returned once it is off the screen, as every sheet answers.
+        await shown;
         return ret;
       },
-      onErr: (e, s) {
+      onErr: (e, s) async {
         close?.call();
+        await shown;
         if (showErr) showErrSheet(e, s);
-        onErr?.call(e, s);
+        await onErr?.call(e, s);
       },
     );
   }

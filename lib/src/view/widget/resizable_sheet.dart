@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
+import 'package:fl_lib/src/view/widget/sheet_pages.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A modal bottom sheet with three heights, moved between by dragging its
@@ -15,6 +16,10 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// [isDismissible] false closes it neither by the barrier nor by a drag: it
 /// still resizes, and comes back to its own height from below it.
+///
+/// A sheet of its own, always; a `showSheet` raised while it is in front is
+/// its next page. It answers as `showSheet` does: once off the screen — see
+/// [SheetStack].
 Future<T?> showResizableSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
@@ -26,27 +31,23 @@ Future<T?> showResizableSheet<T>(
   Color? backgroundColor,
   BoxConstraints? constraints,
   AnimationStyle? sheetAnimationStyle,
-}) {
-  return showModalBottomSheet<T>(
-    context: context,
+}) async {
+  final (_, _, answered) = SheetStack.show(
+    context,
+    builder: builder,
+    join: false,
+    dismissible: isDismissible,
+    restLimit: restLimit,
+    showGrip: showGrip,
+    backgroundColor: backgroundColor,
     useRootNavigator: useRootNavigator,
     useSafeArea: useSafeArea,
-    // What lets it grow past 9/16 at all; [ResizableSheet] decides the height.
-    isScrollControlled: true,
-    // [SheetGrip] instead: Material's handle only closes the sheet.
-    showDragHandle: false,
-    isDismissible: isDismissible,
-    enableDrag: isDismissible,
-    backgroundColor: backgroundColor,
     constraints: constraints,
     sheetAnimationStyle: sheetAnimationStyle,
-    builder: (ctx) => ResizableSheet(
-      showGrip: showGrip,
-      dismissible: isDismissible,
-      restLimit: restLimit,
-      child: builder(ctx),
-    ),
   );
+  final result = await answered;
+  // The route is untyped: a page over the first pops its own type through it.
+  return result is T ? result : null;
 }
 
 /// The body of a [showResizableSheet]: the grip and the height it sets.

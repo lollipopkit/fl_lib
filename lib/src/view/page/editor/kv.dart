@@ -149,7 +149,6 @@ class _KvEditorState extends State<KvEditor> {
       ],
     );
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(k, oldV, idx, animation)));
       final newIdx = _map.keys.toList().indexOf(ctrlK.text);
       _listKey.currentState?.insertItem(newIdx, duration: Durations.medium1);
@@ -196,7 +195,6 @@ class _KvEditorState extends State<KvEditor> {
     );
 
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.insertItem(_map.length - 1, duration: Durations.medium1);
     }
   }

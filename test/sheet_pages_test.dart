@@ -170,26 +170,117 @@ void main() {
   testWidgets('a loading sheet closes itself, not a page raised over it', (
     tester,
   ) async {
+    // What is raised while the loading is up is raised by someone else — an
+    // update, an error from elsewhere — and outlives it with what was typed.
     final ctx = await pump(tester);
     outer(ctx);
     await step(tester);
     Future<int?>? over;
     final done = ctx.showLoadingSheet(
       fn: () async {
-        over = ctx.showSheet<int>(title: 'over');
+        over = ctx.showSheet<int>(
+          title: 'over',
+          child: const TextField(key: Key('over field')),
+        );
         await Future<void>.delayed(const Duration(seconds: 1));
         return 1;
       },
     );
     await step(tester);
-    expect(find.text('over'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('over field')), 'kept');
     await tester.pump(const Duration(seconds: 1));
     await step(tester);
     expect((await done).$1, 1);
-    expect(await over, isNull);
-    expect(find.byType(SizedLoading), findsNothing);
-    expect(find.text('outer'), findsOneWidget);
+    expect(find.byType(SizedLoading, skipOffstage: false), findsNothing);
+    expect(find.text('over'), findsOneWidget);
+    expect(find.text('kept'), findsOneWidget);
     expect(sheetRoutes(tester), 1);
+
+    // Under it, the outer page; and the loading is not on the way back.
+    ctx.popSheet(2);
+    await step(tester);
+    expect(await over, 2);
+    expect(find.text('outer'), findsOneWidget);
+  });
+
+  testWidgets('the first page closing leaves the pages over it up', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    VoidCallback? close;
+    var firstDone = false;
+    ctx
+        .showSheet<void>(title: 'first', onShown: (c) => close = c)
+        .then((_) => firstDone = true);
+    await step(tester);
+    final over = ctx.showSheet<int>(title: 'over');
+    await step(tester);
+    close!();
+    await step(tester);
+    expect(firstDone, isTrue);
+    expect(find.text('over'), findsOneWidget);
+    expect(sheetRoutes(tester), 1);
+    expect(find.byTooltip(MaterialLocalizations.of(ctx).backButtonTooltip),
+        findsNothing);
+
+    ctx.popSheet(3);
+    await step(tester);
+    expect(await over, 3);
+    expect(find.byType(PromptSheet, skipOffstage: false), findsNothing);
+  });
+
+  testWidgets('a sheet raised while another leaves takes taps once up', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    final first = ctx.showSheet<bool>(title: 'first', actions: Btnx.cancelOk);
+    await step(tester);
+    await tester.tap(find.text(libL10n.ok));
+    await tester.pump();
+    // Raised in the exit window, by code rather than by a tap.
+    final second = ctx.showSheet<bool>(title: 'second', actions: Btnx.cancelOk);
+    await step(tester);
+    expect(await first, isTrue);
+    await tester.tap(find.text(libL10n.ok));
+    await step(tester);
+    expect(await second, isTrue);
+  });
+
+  testWidgets('a body of its own takes a sheet raised from it as a page', (
+    tester,
+  ) async {
+    // The tag editor: its own surface and grip, then Rename from inside it.
+    final ctx = await pump(tester);
+    var closed = false;
+    showResizableSheet<void>(
+      ctx,
+      showGrip: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const Material(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [SheetGrip(), TextField(key: Key('own'))],
+        ),
+      ),
+    ).then((_) => closed = true);
+    await step(tester);
+    await tester.enterText(find.byKey(const Key('own')), 'typed');
+    final rename = ctx.showSheet<String>(title: 'rename');
+    await step(tester);
+    expect(
+      ModalRoute.of(tester.element(find.byType(PromptSheet))),
+      ModalRoute.of(
+        tester.element(find.byKey(const Key('own'), skipOffstage: false)),
+      ),
+    );
+    expect(find.byTooltip(MaterialLocalizations.of(ctx).backButtonTooltip),
+        findsOneWidget);
+
+    ctx.popSheet('new');
+    await step(tester);
+    expect(await rename, 'new');
+    expect(find.text('typed'), findsOneWidget);
+    expect(closed, isFalse);
   });
 
   testWidgets('nothing under a leaving sheet takes a tap before it answers', (

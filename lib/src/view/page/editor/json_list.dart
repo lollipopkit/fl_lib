@@ -154,7 +154,6 @@ class _JsonListEditorState extends State<JsonListEditor> {
       ],
     );
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.removeItem(idx, (context, animation) => FadeTransition(opacity: animation, child: _buildItem(item, idx, animation)));
       _listKey.currentState?.insertItem(idx, duration: Durations.medium1);
     }
@@ -195,7 +194,6 @@ class _JsonListEditorState extends State<JsonListEditor> {
     );
 
     if (result == true) {
-      await Future.delayed(Durations.short3);
       _listKey.currentState?.insertItem(_list.length - 1, duration: Durations.medium1);
     }
   }

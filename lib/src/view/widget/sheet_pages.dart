@@ -1,32 +1,44 @@
 import 'dart:async';
 
 import 'package:fl_lib/src/core/ext/ctx/motion.dart';
+import 'package:fl_lib/src/core/ext/iter.dart';
 import 'package:fl_lib/src/view/widget/resizable_sheet.dart';
 import 'package:flutter/rendering.dart' show BoxHitTestResult, RenderProxyBox;
 import 'package:flutter/scheduler.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// The pages of one sheet `showSheet` raised: one modal route, and what is
-/// raised while it is in front goes on as its next page rather than as a
-/// second sheet stacked on it.
+/// The pages of one modal sheet: what `showResizableSheet` raises, and what
+/// `showSheet` raised while one is in front goes on as its next page rather
+/// than as a second sheet stacked on it.
 ///
 /// A pop of the route — `Navigator.pop`, `popSheet`, `context.pop`, back, the
 /// barrier — pops the top page while there is more than one; a drag down on
 /// the grip closes the whole sheet, when every page may be closed.
 ///
-/// An answer waits for frames: a page's comes once it has left the tree, the
-/// sheet's once it is off the screen. A paused or backgrounded app delivers
-/// it on resume.
+/// Every page answers its own caller, and only once it is gone: a page once it
+/// has left the tree, the last ones once the sheet is off the screen. What a
+/// caller does with an answer — disposing a field's controller — is then never
+/// under something still built, and nothing under a leaving sheet takes a tap
+/// until its answers are delivered. An answer waits for frames: a paused or
+/// backgrounded app delivers it on resume.
 final class SheetStack extends ChangeNotifier {
-  SheetStack._(WidgetBuilder first, bool dismissible, double restLimit) {
-    _pages.add(SheetPage._(first, dismissible, restLimit, null));
-  }
+  SheetStack._();
+
+  /// The sheets on screen, the newest last.
+  static final _open = <SheetStack>[];
+
+  /// The sheet in front of everything else, if one is.
+  static SheetStack? get front =>
+      _open.lastWhereOrNull((s) => s._route.isCurrent);
 
   final _pages = <SheetPage>[];
   late final SheetRoute _route;
 
   /// Set while the whole sheet is closing, when a pop is the route's own.
   bool _closing = false;
+
+  /// What the route was popped with: the top page's answer.
+  Object? _result;
 
   ModalRoute<Object?> get route => _route;
   int get depth => _pages.length;
@@ -44,22 +56,39 @@ final class SheetStack extends ChangeNotifier {
   int _answering = 0;
   bool get answering => _answering > 0;
 
-  /// Over the navigator from the sheet's pop until its answer is delivered:
-  /// the exit animation leaves the page beneath tappable, and a second tap on
-  /// what raised the sheet raised a second one before the first was acted on.
-  OverlayEntry? _absorber;
-
-  /// Raises [builder] in a new sheet on [navigator]; its future is the first
-  /// page's answer.
-  static (SheetStack, Future<Object?>) raise(
+  /// Raises [builder]: as the next page of the sheet in front when [join]
+  /// and there is one, else in a sheet of its own. The future is this page's
+  /// answer, once it is gone.
+  static (SheetStack, SheetPage, Future<Object?>) show(
     BuildContext context, {
     required WidgetBuilder builder,
-    required bool dismissible,
-    required double restLimit,
+    required bool join,
+    bool dismissible = true,
+    double restLimit = ResizableSheet.restFactor,
+    bool showGrip = true,
+    Color? backgroundColor,
+    bool useRootNavigator = true,
+    bool useSafeArea = true,
+    BoxConstraints? constraints,
+    AnimationStyle? sheetAnimationStyle,
   }) {
-    final navigator = Navigator.of(context, rootNavigator: true);
+    final page = SheetPage._(
+      builder,
+      dismissible: dismissible,
+      restLimit: restLimit,
+      showGrip: showGrip,
+      backgroundColor: backgroundColor,
+    );
+    final over = join ? front : null;
+    if (over != null) {
+      over._pages.add(page);
+      over._changed();
+      return (over, page, page._done.future);
+    }
+
+    final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
     final l10n = MaterialLocalizations.of(context);
-    final stack = SheetStack._(builder, dismissible, restLimit);
+    final stack = SheetStack._().._pages.add(page);
     stack._route = SheetRoute._(
       stack,
       capturedThemes: InheritedTheme.capture(
@@ -69,64 +98,44 @@ final class SheetStack extends ChangeNotifier {
       barrierLabel: l10n.scrimLabel,
       barrierOnTapHint: l10n.scrimOnTapHint(l10n.bottomSheetLabel),
       modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
+      useSafeArea: useSafeArea,
+      constraints: constraints,
+      sheetAnimationStyle: sheetAnimationStyle,
     );
-    return (stack, navigator.push<Object?>(stack._route));
-  }
-
-  /// The first page: what takes the route with it when removed.
-  SheetPage get first => _pages.first;
-
-  /// Puts [builder] on as the next page; its future completes when that page
-  /// is taken away.
-  (SheetPage, Future<Object?>) push(
-    WidgetBuilder builder, {
-    required bool dismissible,
-    required double restLimit,
-  }) {
-    final page = SheetPage._(
-      builder,
-      dismissible,
-      restLimit,
-      Completer<Object?>(),
-    );
-    _pages.add(page);
-    _changed();
-    return (page, page._done!.future);
+    _open.add(stack);
+    unawaited(navigator.push<Object?>(stack._route));
+    unawaited(stack._route.completed.then((_) => stack._finish()));
+    return (stack, page, page._done.future);
   }
 
   /// Pops the top page with [result]; false when it is the only one.
   bool popPage([Object? result]) {
     if (_pages.length < 2) return false;
-    _take(result);
+    _deliverLater(_pages.removeLast(), result);
     _changed();
     return true;
   }
 
-  /// Takes [page] away with every page over it, innermost first; the first
-  /// page takes the sheet. What raised a page closes that page, not whatever
-  /// was raised over it meanwhile.
+  /// Takes [page] away, and only it: pages raised over it meanwhile were
+  /// raised by whoever raised them, and stay with what was typed in them. The
+  /// last page takes the sheet.
   void remove(SheetPage page) {
-    final i = _pages.indexOf(page);
-    if (i < 0) return;
-    if (i == 0) {
+    if (!_pages.contains(page)) return;
+    if (_pages.length == 1) {
       close();
       return;
     }
-    while (_pages.length > i) {
-      _take(null);
-    }
+    _pages.remove(page);
+    _deliverLater(page, null);
     _changed();
   }
 
-  void _take(Object? result) {
-    final page = _pages.removeLast();
+  /// Answered once it has left the tree, not before.
+  void _deliverLater(SheetPage page, Object? result) {
     _answering++;
-    // Answered once it has left the tree, not before: what a caller does with
-    // the answer — disposing a field's controller — must not be under a page
-    // still built.
     SchedulerBinding.instance
       ..addPostFrameCallback((_) {
-        page._done!.complete(result);
+        page._done.complete(result);
         // After the caller's continuation, which the completion schedules.
         scheduleMicrotask(() {
           _answering--;
@@ -134,6 +143,20 @@ final class SheetStack extends ChangeNotifier {
         });
       })
       ..scheduleFrame();
+  }
+
+  /// The route is off the screen: the pages still on it answer, innermost
+  /// first, the top one with what the route was popped with.
+  Future<void> _finish() async {
+    _open.remove(this);
+    final pages = _pages.reversed.toList();
+    _pages.clear();
+    for (final (i, page) in pages.indexed) {
+      page._done.complete(i == 0 ? _result : null);
+      await page._done.future;
+    }
+    _released();
+    dispose();
   }
 
   bool _disposed = false;
@@ -144,6 +167,10 @@ final class SheetStack extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Over the navigator from the sheet's pop until its answers are delivered:
+  /// the exit animation leaves the page beneath tappable, and a second tap on
+  /// what raised the sheet raised a second one before the first was acted on.
+  OverlayEntry? _absorber;
   bool _absorbing = false;
 
   void _absorb() {
@@ -161,9 +188,8 @@ final class SheetStack extends ChangeNotifier {
     );
   }
 
-  /// Once the sheet's answer is delivered. Taps go through at once; the
-  /// entry itself goes with the next frame.
-  void released() {
+  /// Taps go through at once; the entry itself goes with the next frame.
+  void _released() {
     _absorbing = false;
     _absorber?.remove();
     _absorber?.dispose();
@@ -181,33 +207,32 @@ final class SheetStack extends ChangeNotifier {
     }
   }
 
-  /// Answers the pages still open above the first with null, innermost
-  /// first: the route is gone.
-  ///
-  /// Their futures, in that order: awaited one by one, whoever was waiting
-  /// for a page hears before whoever waits for the next.
-  List<Future<Object?>> ended() => [
-    for (; _pages.length > 1;)
-      (_pages.removeLast()._done!..complete(null)).future,
-  ];
-
   void _changed() {
     notifyListeners();
-    // The route reads the top page for its barrier and drag.
+    // The route reads the top page for its barrier, drag and surface.
     if (_route.isActive) _route.changedExternalState();
   }
 }
 
 /// One page of a [SheetStack].
 final class SheetPage {
-  SheetPage._(this.builder, this.dismissible, this.restLimit, this._done);
+  SheetPage._(
+    this.builder, {
+    required this.dismissible,
+    required this.restLimit,
+    required this.showGrip,
+    required this.backgroundColor,
+  });
 
   final WidgetBuilder builder;
   final bool dismissible;
   final double restLimit;
 
-  /// Null for the first page, whose answer is the route's.
-  final Completer<Object?>? _done;
+  /// False for a page that draws its own surface and grip.
+  final bool showGrip;
+  final Color? backgroundColor;
+
+  final _done = Completer<Object?>();
 
   /// Built once: a rebuild of the stack is no reason to build every page.
   late final Widget _widget = Builder(builder: builder);
@@ -215,7 +240,8 @@ final class SheetPage {
 
 /// The modal route of a [SheetStack].
 ///
-/// A `ModalBottomSheetRoute` whose barrier, drag and pop read the top page.
+/// A `ModalBottomSheetRoute` whose barrier, drag, surface and pop read the top
+/// page.
 final class SheetRoute extends ModalBottomSheetRoute<Object?> {
   SheetRoute._(
     this.stack, {
@@ -223,10 +249,12 @@ final class SheetRoute extends ModalBottomSheetRoute<Object?> {
     super.barrierLabel,
     super.barrierOnTapHint,
     super.modalBarrierColor,
+    super.useSafeArea,
+    super.constraints,
+    super.sheetAnimationStyle,
   }) : super(
          builder: (_) => _SheetPagesHost(stack),
          isScrollControlled: true,
-         useSafeArea: true,
          showDragHandle: false,
        );
 
@@ -247,8 +275,12 @@ final class SheetRoute extends ModalBottomSheetRoute<Object?> {
   bool get barrierDismissible => stack.dismissible;
 
   @override
+  Color? get backgroundColor => stack._pages.isEmpty ? null : stack.top.backgroundColor;
+
+  @override
   bool didPop(Object? result) {
     if (!stack._closing && stack.popPage(result)) return false;
+    stack._result = result;
     stack._absorb();
     return super.didPop(result);
   }
@@ -271,6 +303,7 @@ class _SheetPagesHost extends StatelessWidget {
           // holds against it.
           canPop: dismissible,
           child: ResizableSheet(
+            showGrip: top.showGrip,
             // The grip closes every page: not over one that holds.
             dismissible: stack.allDismissible,
             restLimit: top.restLimit,
