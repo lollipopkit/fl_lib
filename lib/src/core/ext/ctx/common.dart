@@ -1,5 +1,6 @@
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n_en.dart';
+import 'package:fl_lib/src/core/ext/ctx/dialog.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -16,8 +17,16 @@ extension ContextX on BuildContext {
   ///
   /// Actions built with `actionsBuilder` get the dialog's own context and can
   /// use [pop] directly; this is for the ones that only have the page's.
+  ///
+  /// The page can be gone while its dialog is still up — a layout switch
+  /// remounts the page, and the dialog is on the root navigator — so a context
+  /// that is no longer mounted closes the dialog in front instead.
   void popDialog<T extends Object?>([T? result]) {
-    Navigator.of(this, rootNavigator: true).pop<T>(result);
+    if (mounted) {
+      Navigator.of(this, rootNavigator: true).pop<T>(result);
+    } else {
+      DialogX.topDialog?.navigator?.pop<T>(result);
+    }
   }
 
   void pop<T extends Object?>([T? result]) {

@@ -74,7 +74,9 @@ class _PaneDividerState extends State<PaneDivider> {
   }
 
   void _setPressed(bool value) {
-    if (_pressed == value) return;
+    // A pointer that went down on it is still told of its end after the
+    // widget has left the tree.
+    if (!mounted || _pressed == value) return;
     setState(() => _pressed = value);
   }
 
