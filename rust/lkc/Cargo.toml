@@ -21,6 +21,9 @@ url = "2"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # Teams' keys: age wraps and seals, Ed25519 signatures.
 age = { version = "0.11", default-features = false, features = ["armor"] }
+# age embeds its translations with rust-embed, which otherwise records each
+# file's mtime (the registry's unpack time): a reproducible build needs it fixed.
+rust-embed = { version = "8.13", default-features = false, features = ["deterministic-timestamps"] }
 bech32 = "0.9"
 ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize"] }
 getrandom = "0.3"
