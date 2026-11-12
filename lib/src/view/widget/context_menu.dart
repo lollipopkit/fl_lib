@@ -279,7 +279,7 @@ Future<void> showContextMenu(
   if (at != null) {
     chosen = await _showAt(context, actions, at, header);
   } else {
-    chosen = header == null && _fitButtons(actions)
+    chosen = header == null && _fitButtons(context, actions)
         ? await _showButtons(context, actions, title)
         : await _showSheet(context, actions, title, header);
   }
@@ -288,8 +288,12 @@ Future<void> showContextMenu(
 }
 
 /// Whether [actions] are few and plain enough to be a sheet's own buttons.
-bool _fitButtons(List<ContextMenuAction> actions) =>
+///
+/// Not at a large text size: the buttons then stand one over another and do
+/// not scroll, as rows do.
+bool _fitButtons(BuildContext context, List<ContextMenuAction> actions) =>
     actions.length <= 3 &&
+    MediaQuery.textScalerOf(context).scale(10) <= 15 &&
     actions.every((a) => a.note == null && a.checked == null && a.trailing == null);
 
 /// A short menu as a sheet: its title, and the entries where every sheet has
@@ -301,6 +305,7 @@ Future<VoidCallback?> _showButtons(
 ) {
   return context.showSheet<VoidCallback>(
     title: title,
+    titleMaxLines: 2,
     actionsBuilder: (ctx) {
       final danger = Theme.of(ctx).colorScheme.error;
       return [

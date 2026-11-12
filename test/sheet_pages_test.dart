@@ -232,6 +232,33 @@ void main() {
     });
   }
 
+  testWidgets("the theme's width for a sheet stands on a desktop", (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late BuildContext ctx;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          platform: TargetPlatform.macOS,
+          bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints(maxWidth: 500)),
+        ),
+        home: Builder(
+          builder: (context) {
+            ctx = context;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    ctx.showSheet<void>(title: 'title');
+    await step(tester);
+    final surface = tester.getRect(
+      find.ancestor(of: find.byType(ResizableSheet), matching: find.byType(Material)).first,
+    );
+    expect(surface.width, 500 - SheetRoute.margin * 2);
+  });
+
   testWidgets('pages switch with animations off', (tester) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);

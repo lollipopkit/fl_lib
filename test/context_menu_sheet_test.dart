@@ -56,6 +56,15 @@ void main() {
     expect(deleted, isTrue);
   });
 
+  testWidgets('a short menu at a large text size is rows, which scroll', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final ctx = await pump(tester);
+    showContextMenu(ctx, [ContextMenuAction(text: 'delete', onTap: () {})], title: 'chat');
+    await step(tester);
+    expect(find.byType(ContextMenuRow), findsOneWidget);
+  });
+
   testWidgets('a long menu is rows', (tester) async {
     final ctx = await pump(tester);
     showContextMenu(ctx, [

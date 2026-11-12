@@ -99,9 +99,10 @@ final class SheetStack extends ChangeNotifier {
       barrierOnTapHint: l10n.scrimOnTapHint(l10n.bottomSheetLabel),
       modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
       useSafeArea: useSafeArea,
-      // Its margin is inside the route's box, and not out of its width.
+      // Its margin is inside the route's box, and not out of its width. The
+      // caller's first, then the theme's, which the route reads itself.
       constraints: constraints ??
-          (SheetRoute.floats(context)
+          (Theme.of(context).bottomSheetTheme.constraints == null && SheetRoute.floats(context)
               ? const BoxConstraints(maxWidth: SheetRoute.width + SheetRoute.margin * 2)
               : null),
       sheetAnimationStyle: sheetAnimationStyle,
