@@ -183,6 +183,44 @@ void main() {
     expect(shown(), 1);
     await tester.pumpAndSettle();
   });
+  testWidgets("nothing is laid over the app's background under a page while another arrives or leaves (Android)", (
+    tester,
+  ) async {
+    ThemePackages.preview.value = _gradient;
+    addTearDown(() => ThemePackages.preview.value = null);
+    final nav = GlobalKey<NavigatorState>();
+    Future<void> pump(PageTransitionsTheme transitions) => tester.pumpWidget(
+      MaterialApp(
+        key: ObjectKey(transitions),
+        navigatorKey: nav,
+        theme: ThemeData(platform: TargetPlatform.android, pageTransitionsTheme: transitions),
+        home: const Text('below'),
+      ),
+    );
+    // What is painted between the app's background and the page below.
+    bool covered() => tester
+        .widgetList<ColoredBox>(find.ancestor(of: find.text('below'), matching: find.byType(ColoredBox)))
+        .any((box) => box.color.a > 0);
+    Future<bool> coveredWhileMoving(VoidCallback move) async {
+      move();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final result = covered();
+      await tester.pumpAndSettle();
+      return result;
+    }
+
+    void push() => nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => const Text('arriving')));
+    void pop() => nav.currentState!.pop();
+
+    await pump(AppPageTransitions.backgrounded);
+    expect(await coveredWhileMoving(push), isFalse);
+    expect(await coveredWhileMoving(pop), isFalse);
+
+    // Opaque pages keep Material's fill.
+    await pump(AppPageTransitions.plain);
+    expect(await coveredWhileMoving(push), isTrue);
+  });
 }
 
 const _gradient = ThemePackage(

@@ -346,6 +346,7 @@ abstract final class AppPageTransitions {
   /// For a theme whose pages are transparent.
   static final backgrounded = _wrap(
     (builder) => _SafeSides(_Backgrounded(_MotionAware(builder))),
+    over: _seeThrough,
   );
 
   /// [current] ([plain] or [backgrounded]) with a slide across on every
@@ -371,12 +372,28 @@ abstract final class AppPageTransitions {
     TargetPlatform.macOS: const SwipeBackPageTransitionsBuilder(),
   };
 
+  /// Material's transitions without the surface colour they lay under the
+  /// page below for as long as it moves: that page is transparent, and the
+  /// colour covered the app's background until the transition was over.
+  static const _seeThrough = <TargetPlatform, PageTransitionsBuilder>{
+    TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
+      fallbackColor: Colors.transparent,
+    ),
+    TargetPlatform.windows: ZoomPageTransitionsBuilder(
+      backgroundColor: Colors.transparent,
+    ),
+    TargetPlatform.linux: ZoomPageTransitionsBuilder(
+      backgroundColor: Colors.transparent,
+    ),
+  };
+
   static PageTransitionsTheme _wrap(
-    PageTransitionsBuilder Function(PageTransitionsBuilder) wrap,
-  ) => PageTransitionsTheme(
+    PageTransitionsBuilder Function(PageTransitionsBuilder) wrap, {
+    Map<TargetPlatform, PageTransitionsBuilder> over = const {},
+  }) => PageTransitionsTheme(
     builders: {
       for (final MapEntry(key: platform, value: builder) in _platform.entries)
-        platform: wrap(builder),
+        platform: wrap(over[platform] ?? builder),
     },
   );
 
