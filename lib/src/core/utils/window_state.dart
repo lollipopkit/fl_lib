@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:json_annotation/json_annotation.dart';
@@ -23,6 +25,7 @@ class WindowState {
 final class WindowStateListener extends WindowListener {
   final StoreProp<WindowState> windowSize;
   Future<void> _updateTail = Future.value();
+  Timer? _pending;
 
   WindowStateListener(this.windowSize);
 
@@ -48,31 +51,29 @@ final class WindowStateListener extends WindowListener {
     return update;
   }
 
-  @override
-  void onWindowMove() {
-    Fns.throttle(
-      _updateState,
-      id: 'WindowStateListener.onWindowMove',
-      duration: 100,
-    );
+  // Saved once a drag has paused: Linux reports no end of one.
+  void _updateLater() {
+    _pending?.cancel();
+    _pending = Timer(const Duration(milliseconds: 100), _updateState);
+  }
+
+  void _updateNow() {
+    _pending?.cancel();
+    _updateState();
   }
 
   @override
-  void onWindowResize() {
-    Fns.throttle(
-      _updateState,
-      id: 'WindowStateListener.onWindowResize',
-      duration: 100,
-    );
-  }
-
-  // The throttle drops the last events of a drag; these end one (Windows and
-  // macOS).
-  @override
-  void onWindowMoved() => _updateState();
+  void onWindowMove() => _updateLater();
 
   @override
-  void onWindowResized() => _updateState();
+  void onWindowResize() => _updateLater();
+
+  // The end of a drag (Windows and macOS).
+  @override
+  void onWindowMoved() => _updateNow();
+
+  @override
+  void onWindowResized() => _updateNow();
 }
 
 class _SizeJsonConverter implements JsonConverter<Size, Map<String, dynamic>> {

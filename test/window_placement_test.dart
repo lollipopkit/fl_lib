@@ -136,4 +136,26 @@ void main() {
       );
     });
   });
+
+  test('oversized and reachable only by the width the display cuts off', () {
+    expect(
+      place(const Offset(-2000, 100), [laptop], saved: const Size(2560, 700)),
+      const WindowPlacement(size: Size(1920, 700), position: Offset(0, 166)),
+    );
+  });
+
+  test('a window shorter than the title strip, above the top', () {
+    expect(
+      place(const Offset(100, -16), [laptop], saved: const Size(100, 10)),
+      const WindowPlacement(size: Size(100, 10), position: Offset(910, 511)),
+    );
+  });
+
+  test('centered on a primary at another scale (Windows)', () {
+    const primary = WindowDisplay(Rect.fromLTWH(1920, 0, 1280, 688), scale: 1.5);
+    expect(
+      place(null, [laptop, primary], primary: primary),
+      const WindowPlacement(size: Size(1000, 688), position: Offset(3090, 0)),
+    );
+  });
 }

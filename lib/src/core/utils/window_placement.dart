@@ -24,13 +24,6 @@ final class WindowDisplay {
   /// Window logical pixels per display logical pixel at startup: on Windows
   /// the display's scale factor over the window's, elsewhere 1.
   final double scale;
-
-  Rect get _areaInWindowSpace => Rect.fromLTWH(
-        area.left * scale,
-        area.top * scale,
-        area.width * scale,
-        area.height * scale,
-      );
 }
 
 /// The size and position to open a window with.
@@ -82,27 +75,31 @@ WindowPlacement placeWindow({
   }
 
   if (size == null) return const WindowPlacement();
-  final target = (primary ?? displays.first)._areaInWindowSpace;
-  final fitted = _clamp(size, target.size);
-  return WindowPlacement(
-    size: fitted,
-    position: target.topLeft +
-        Offset(
-          (target.width - fitted.width) / 2,
-          (target.height - fitted.height) / 2,
-        ),
-  );
+  final target = primary ?? displays.first;
+  // As above: once on the display the size is in its pixels, the position
+  // still in the window's.
+  final fitted = _clamp(size, target.area.size);
+  final centered = target.area.topLeft +
+      Offset(
+        (target.area.width - fitted.width) / 2,
+        (target.area.height - fitted.height) / 2,
+      );
+  return WindowPlacement(size: fitted, position: centered * target.scale);
 }
 
+/// The display the title strip can be dragged from, with the window no larger
+/// than that display.
 WindowDisplay? _hostDisplay(Offset position, Size size, List<WindowDisplay> displays) {
-  final strip = Rect.fromLTWH(position.dx, position.dy, size.width, kWindowTitleStripHeight);
-  final minWidth = math.min(kWindowMinVisibleTitleWidth, size.width);
   WindowDisplay? best;
   var bestArea = 0.0;
   for (final display in displays) {
+    final fitted = _clamp(size, display.area.size);
+    final stripHeight = math.min(kWindowTitleStripHeight, fitted.height);
+    final strip = Rect.fromLTWH(position.dx, position.dy, fitted.width, stripHeight);
     if (!strip.overlaps(display.area)) continue;
     final visible = strip.intersect(display.area);
-    if (visible.height < kWindowMinVisibleTitleHeight || visible.width < minWidth) {
+    if (visible.height < math.min(kWindowMinVisibleTitleHeight, stripHeight) ||
+        visible.width < math.min(kWindowMinVisibleTitleWidth, fitted.width)) {
       continue;
     }
     final area = visible.width * visible.height;
