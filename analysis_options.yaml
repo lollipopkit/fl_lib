@@ -5,7 +5,7 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
-    - lib/l10n/gen_l10n/*
+    - lib/generated/**
     - build/**
     - android/**
     - ios/**
