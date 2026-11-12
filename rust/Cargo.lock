@@ -720,6 +720,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.3.4",
  "reqwest",
+ "rust-embed",
  "rustls",
  "serde",
  "serde_json",
