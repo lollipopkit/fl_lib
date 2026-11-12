@@ -36,12 +36,12 @@ void main() {
       child: const Text('body'),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsOneWidget);
+    expect(find.byType(SheetScaffold), findsOneWidget);
     expect(SheetX.topSheet, isA<SheetRoute>());
 
     ctx.popSheet(7);
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
     expect(await closed, 7);
     expect(SheetX.topSheet, isNull);
   });
@@ -59,7 +59,7 @@ void main() {
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
       expect(await closed, answer);
-      expect(find.byType(PromptSheet), findsNothing);
+      expect(find.byType(SheetScaffold), findsNothing);
     }
   });
 
@@ -82,7 +82,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.fling(find.text('body'), const Offset(0, 400), 2000);
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsOneWidget);
+    expect(find.byType(SheetScaffold), findsOneWidget);
     expect(closed, isFalse);
 
     ctx.popSheet();
@@ -98,13 +98,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(200, 20));
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
 
     ctx.showSheet<void>(child: const Text('body'));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(SheetGrip), const Offset(0, 400));
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
   });
 
   testWidgets('an autofocused field sits above the keyboard', (tester) async {
@@ -144,7 +144,7 @@ void main() {
     final ctx = await pump(tester, size: const Size(1600, 1000));
     ctx.showSheet<void>(child: const Text('body'));
     await tester.pumpAndSettle();
-    final round = tester.getRect(find.byType(PromptSheet));
+    final round = tester.getRect(find.byType(SheetScaffold));
     Navigator.of(ctx, rootNavigator: true).pop();
     await tester.pumpAndSettle();
 
@@ -188,7 +188,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     expect((await done).$1, 1);
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
   });
 
   testWidgets('the input sheet answers what was typed, by OK', (
@@ -215,7 +215,7 @@ void main() {
       actions: Btnx.cancelRedOk,
     );
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsOneWidget);
+    expect(find.byType(SheetScaffold), findsOneWidget);
     await tester.tap(find.text(libL10n.ok));
     await tester.pumpAndSettle();
     expect(await closed, isTrue);
@@ -256,5 +256,26 @@ void main() {
     expect(find.text('typed'), findsNothing);
     expect(answered, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the tag bar stays under the title while the choices scroll', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    final tags = {'prod', 'dev'}.vn;
+    addTearDown(tags.dispose);
+    ctx.showPickWithTagSheet<String>(
+      title: 'pick',
+      tags: tags,
+      itemsBuilder: (_) => [for (var i = 0; i < 200; i++) 'item $i'],
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final bar = tester.getRect(find.byType(TagSwitcher));
+    expect(bar.top, greaterThanOrEqualTo(tester.getRect(find.text('pick')).bottom));
+    await tester.drag(find.text('item 0'), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(TagSwitcher)), bar);
+    expect(find.text('item 0').hitTestable(), findsNothing);
   });
 }

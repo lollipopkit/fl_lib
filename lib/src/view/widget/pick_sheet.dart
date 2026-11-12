@@ -3,7 +3,7 @@ import 'package:fl_lib/src/res/l10n.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// What `showPickSheet` raises: the items as rows with a tick, in a
-/// [showResizableSheet].
+/// [SheetScaffold.rows].
 ///
 /// Pops `true` with [onChanged] having said the choice.
 class PickSheet<T> extends StatefulWidget {
@@ -75,7 +75,7 @@ class _PickSheetState<T> extends State<PickSheet<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final header = Row(
+    final title = Row(
       children: [
         Expanded(child: Text(widget.title ?? l10n.select)),
         widget.ascend.listenVal(
@@ -92,10 +92,22 @@ class _PickSheetState<T> extends State<PickSheet<T>> {
       ],
     );
 
-    final rows = widget.showLoading.listenVal((loading) {
-      if (loading) return const Center(child: SizedLoading.medium);
-      return RowsSheet(
-        children: [
+    // The sort button brings its own room.
+    const titlePadding = EdgeInsets.fromLTRB(17, 0, 7, 3);
+    return widget.showLoading.listenVal((loading) {
+      if (loading) {
+        return SheetScaffold(
+          title: title,
+          titlePadding: titlePadding,
+          actions: widget.actions,
+          child: const Center(heightFactor: 1, child: SizedLoading.medium),
+        );
+      }
+      return SheetScaffold.rows(
+        title: title,
+        titlePadding: titlePadding,
+        actions: widget.actions,
+        rows: [
           for (final item in _items)
             SheetChoiceTile(
               key: ValueKey(item),
@@ -107,14 +119,5 @@ class _PickSheetState<T> extends State<PickSheet<T>> {
         ],
       );
     });
-
-    return PromptSheet(
-      title: header,
-      // The sort button brings its own room.
-      titlePadding: const EdgeInsets.fromLTRB(17, 0, 7, 3),
-      contentPadding: EdgeInsets.zero,
-      actions: widget.actions,
-      child: rows,
-    );
   }
 }

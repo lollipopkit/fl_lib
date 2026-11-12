@@ -16,7 +16,8 @@ extension SheetX on BuildContext {
   /// The pages of [topSheet].
   static SheetStack? get frontSheet => SheetStack.front;
 
-  /// A bottom sheet with a title, content, and actions: a [PromptSheet] in a
+  /// A bottom sheet with a title, a header, content, and actions: a
+  /// [SheetScaffold] in a
   /// [showResizableSheet], on the root navigator — one on the nearest is
   /// clipped to whatever pane raised it.
   ///
@@ -32,10 +33,11 @@ extension SheetX on BuildContext {
     Widget? child,
     List<Widget>? actions,
     String? title,
+    Widget? header,
     bool dismissible = true,
     int? titleMaxLines,
-    EdgeInsetsGeometry actionsPadding = PromptSheet.defaultActionsPadding,
-    EdgeInsetsGeometry contentPadding = PromptSheet.defaultContentPadding,
+    EdgeInsetsGeometry actionsPadding = SheetScaffold.defaultActionsPadding,
+    EdgeInsetsGeometry contentPadding = SheetScaffold.defaultContentPadding,
     Widget? Function(BuildContext ctx)? titleBuilder,
     Widget? Function(BuildContext ctx)? childBuilder,
     List<Widget>? Function(BuildContext ctx)? actionsBuilder,
@@ -44,11 +46,12 @@ extension SheetX on BuildContext {
     return _raise<T>(
       dismissible: dismissible,
       onShown: onShown,
-      builder: (ctx) => PromptSheet(
+      builder: (ctx) => SheetScaffold(
         title: switch (titleBuilder) {
           null => title != null ? Text(title, maxLines: titleMaxLines) : null,
           _ => titleBuilder(ctx),
         },
+        header: header,
         actions: actionsBuilder?.call(ctx) ?? actions,
         contentPadding: contentPadding,
         actionsPadding: actionsPadding,
@@ -65,7 +68,7 @@ extension SheetX on BuildContext {
   Future<T?> _raise<T>({
     required WidgetBuilder builder,
     bool dismissible = true,
-    double restLimit = PromptSheet.restLimit,
+    double restLimit = SheetScaffold.restLimit,
     ValueSetter<VoidCallback>? onShown,
     void Function(SheetStack stack, SheetPage page)? onPage,
   }) async {
@@ -118,7 +121,7 @@ extension SheetX on BuildContext {
         stack = s;
         page = p;
       },
-      builder: (_) => const PromptSheet(
+      builder: (_) => const SheetScaffold(
         child: Center(heightFactor: 1, child: SizedLoading.medium),
       ),
     );
@@ -354,7 +357,6 @@ extension SheetX on BuildContext {
   }) async {
     var vals = initial ?? <T>[];
     final tag = ''.vn;
-    final size = MediaQuery.sizeOf(this);
     final choices = tag.listenVal((tVal) {
       return Choice<T>(
         onChanged: (value) => vals = value,
@@ -376,18 +378,15 @@ extension SheetX on BuildContext {
 
     final sure = await showSheet<bool>(
       title: title,
-      child: Column(
+      header: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TagSwitcher(tags: tags, initTag: tag.value, onTagChanged: (e) => tag.value = e),
           const Divider(color: Color.fromARGB(30, 158, 158, 158)),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: size.height * 0.5),
-            child: SingleChildScrollView(child: choices),
-          ),
         ],
       ),
+      child: SingleChildScrollView(child: choices),
       actions: [
         ...?actions,
         TextButton(onPressed: () => popSheet(true), child: Text(l10n.ok)),

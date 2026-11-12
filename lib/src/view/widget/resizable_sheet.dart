@@ -17,14 +17,17 @@ import 'package:material_ui/material_ui.dart';
 /// [isDismissible] false closes it neither by the barrier nor by a drag: it
 /// still resizes, and comes back to its own height from below it.
 ///
-/// A sheet of its own, always; a `showSheet` raised while it is in front is
-/// its next page. It answers as `showSheet` does: once off the screen — see
+/// Raised from a sheet it is that sheet's next page, as every sheet is: no
+/// sheet stands over another. [standalone] is for the one that must, and the
+/// route's own settings ([constraints], [useSafeArea], [sheetAnimationStyle],
+/// [useRootNavigator]) apply to it alone. It answers once off the screen — see
 /// [SheetStack].
 Future<T?> showResizableSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
   bool showGrip = true,
   bool isDismissible = true,
+  bool standalone = false,
   double restLimit = ResizableSheet.restFactor,
   bool useRootNavigator = true,
   bool useSafeArea = true,
@@ -35,7 +38,7 @@ Future<T?> showResizableSheet<T>(
   final (_, _, answered) = SheetStack.show(
     context,
     builder: builder,
-    join: false,
+    join: !standalone,
     dismissible: isDismissible,
     restLimit: restLimit,
     showGrip: showGrip,
@@ -259,18 +262,26 @@ class _ResizableSheetState extends State<ResizableSheet> {
                     maxHeight: _maxHeight * widget.restLimit,
                   )
                 : null,
-            // Below its own height it is cut, not squeezed: content that does
-            // not scroll overflowed under a drag down.
-            child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.topCenter,
-                fit: OverflowBoxFit.deferToChild,
-                minHeight: 0,
-                maxHeight: switch ((height, _restHeight)) {
-                  (final h?, final rest?) when h < rest => rest,
-                  _ => null,
-                },
-                child: content,
+            // The cap again, at once: the container's is animated, and content
+            // that fills its room (a list) came through at the last cap first,
+            // a sheet too tall and then right.
+            child: ConstrainedBox(
+              constraints: height == null
+                  ? BoxConstraints(maxHeight: _maxHeight * widget.restLimit)
+                  : const BoxConstraints(),
+              // Below its own height it is cut, not squeezed: content that
+              // does not scroll overflowed under a drag down.
+              child: ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.topCenter,
+                  fit: OverflowBoxFit.deferToChild,
+                  minHeight: 0,
+                  maxHeight: switch ((height, _restHeight)) {
+                    (final h?, final rest?) when h < rest => rest,
+                    _ => null,
+                  },
+                  child: content,
+                ),
               ),
             ),
           ),

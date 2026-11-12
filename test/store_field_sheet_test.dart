@@ -32,7 +32,7 @@ void main() {
 
     await tester.tap(find.text('old'));
     await tester.pumpAndSettle();
-    expect(find.byType(PromptSheet), findsOneWidget);
+    expect(find.byType(SheetScaffold), findsOneWidget);
 
     showField.value = false;
     await tester.pump();
@@ -41,7 +41,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
     expect(prop.get(), 'new', reason: 'what was typed is still saved');
     // The controller outlives the sheet by a few seconds on purpose.
     await tester.pump(const Duration(seconds: 3));

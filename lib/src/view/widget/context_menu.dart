@@ -234,6 +234,18 @@ class ContextMenuRow extends StatelessWidget {
   }
 }
 
+/// Where a menu dropped from [context]'s box starts: its lower left, in the
+/// window's coordinates. [showContextMenu] pushes it back inside the window
+/// when the box is near an edge.
+///
+/// Null when the box has not been laid out, which [showContextMenu] reads as
+/// nothing to hang the menu from.
+Offset? contextMenuAnchorBelow(BuildContext context) {
+  final box = context.findRenderObject();
+  if (box is! RenderBox || !box.hasSize) return null;
+  return box.localToGlobal(box.size.bottomLeft(Offset.zero));
+}
+
 /// Shows [actions], in whichever of the three places there is room for them.
 ///
 /// One menu, and that is the point of this being one function: the same
@@ -251,18 +263,6 @@ class ContextMenuRow extends StatelessWidget {
 /// shape is too small to have said so. Not an entry: nothing happens when it
 /// is pressed, and the keyboard steps past it. The sheet shows [title] when
 /// there is no [header].
-/// Where a menu dropped from [context]'s box starts: its lower left, in the
-/// window's coordinates. [showContextMenu] pushes it back inside the window
-/// when the box is near an edge.
-///
-/// Null when the box has not been laid out, which [showContextMenu] reads as
-/// nothing to hang the menu from.
-Offset? contextMenuAnchorBelow(BuildContext context) {
-  final box = context.findRenderObject();
-  if (box is! RenderBox || !box.hasSize) return null;
-  return box.localToGlobal(box.size.bottomLeft(Offset.zero));
-}
-
 Future<void> showContextMenu(
   BuildContext context,
   List<ContextMenuAction> actions, {
@@ -279,14 +279,45 @@ Future<void> showContextMenu(
   if (at != null) {
     chosen = await _showAt(context, actions, at, header);
   } else {
-    chosen = await _showSheet(
-      context,
-      actions,
-      header ?? (title == null ? null : _SheetTitle(title)),
-    );
+    chosen = header == null && _fitButtons(actions)
+        ? await _showButtons(context, actions, title)
+        : await _showSheet(context, actions, title, header);
   }
 
   chosen?.call();
+}
+
+/// Whether [actions] are few and plain enough to be a sheet's own buttons.
+bool _fitButtons(List<ContextMenuAction> actions) =>
+    actions.length <= 3 &&
+    actions.every((a) => a.note == null && a.checked == null && a.trailing == null);
+
+/// A short menu as a sheet: its title, and the entries where every sheet has
+/// its actions.
+Future<VoidCallback?> _showButtons(
+  BuildContext context,
+  List<ContextMenuAction> actions,
+  String? title,
+) {
+  return context.showSheet<VoidCallback>(
+    title: title,
+    actionsBuilder: (ctx) {
+      final danger = Theme.of(ctx).colorScheme.error;
+      return [
+        for (final action in actions)
+          TextButton.icon(
+            icon: switch (action.icon) {
+              final icon? => Icon(icon),
+              null => null,
+            },
+            label: Text(action.text),
+            style: action.destructive ? TextButton.styleFrom(foregroundColor: danger) : null,
+            // Answered rather than run here, as the rows are.
+            onPressed: action.enabled ? () => Navigator.of(ctx).pop(action.onTap) : null,
+          ),
+      ];
+    },
+  );
 }
 
 /// The menu as a sheet, for a phone.
@@ -296,14 +327,16 @@ Future<void> showContextMenu(
 Future<VoidCallback?> _showSheet(
   BuildContext context,
   List<ContextMenuAction> actions,
+  String? title,
   Widget? header,
 ) {
   return showRowsSheet<VoidCallback>(
     context,
+    // A sheet is at the bottom of the window rather than beside what it is
+    // about, so this is worth more here than in the popup — which is why a
+    // caller is expected to give one.
+    title: header == null ? title : null,
     rows: (ctx) => [
-      // A sheet is at the bottom of the window rather than beside what it is
-      // about, so this is worth more here than in the popup — which is why a
-      // caller is expected to give one.
       ?switch (header) {
         // At the start: the rows' column centres what is narrower than it.
         final header? => Padding(
@@ -633,20 +666,5 @@ class ContextMenuButton extends StatelessWidget {
       final t? => Tooltip(message: t, child: btn),
       null => btn,
     };
-  }
-}
-
-/// [showContextMenu]'s title in a sheet, as `PickSheet` sets its own.
-class _SheetTitle extends StatelessWidget {
-  const _SheetTitle(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-    );
   }
 }

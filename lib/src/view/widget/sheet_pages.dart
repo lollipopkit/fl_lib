@@ -99,7 +99,11 @@ final class SheetStack extends ChangeNotifier {
       barrierOnTapHint: l10n.scrimOnTapHint(l10n.bottomSheetLabel),
       modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
       useSafeArea: useSafeArea,
-      constraints: constraints,
+      // Its margin is inside the route's box, and not out of its width.
+      constraints: constraints ??
+          (SheetRoute.floats(context)
+              ? const BoxConstraints(maxWidth: SheetRoute.width + SheetRoute.margin * 2)
+              : null),
       sheetAnimationStyle: sheetAnimationStyle,
     );
     _open.add(stack);
@@ -260,6 +264,26 @@ final class SheetRoute extends ModalBottomSheetRoute<Object?> {
 
   final SheetStack stack;
 
+  /// Material's width for a sheet.
+  static const width = 640.0;
+
+  /// Around a sheet that [floats]: at its sides and under it.
+  static const margin = 12.0;
+
+  /// Whether a sheet stands clear of the window's edges: on a desktop. On a
+  /// phone it is against the bottom, its content inside the safe area.
+  static bool floats(BuildContext context) => switch (Theme.of(context).platform) {
+    TargetPlatform.macOS || TargetPlatform.windows || TargetPlatform.linux => true,
+    _ => false,
+  };
+
+  // The surface is the host's, which can stand it clear of the edges.
+  @override
+  double? get elevation => 0;
+
+  @override
+  ShapeBorder? get shape => const RoundedRectangleBorder();
+
   /// Material's own drag closes the route at once; with pages under the top
   /// one, only the grip's does, which closes them all.
   @override
@@ -275,7 +299,7 @@ final class SheetRoute extends ModalBottomSheetRoute<Object?> {
   bool get barrierDismissible => stack.dismissible;
 
   @override
-  Color? get backgroundColor => stack._pages.isEmpty ? null : stack.top.backgroundColor;
+  Color? get backgroundColor => Colors.transparent;
 
   @override
   bool didPop(Object? result) {
@@ -286,59 +310,139 @@ final class SheetRoute extends ModalBottomSheetRoute<Object?> {
   }
 }
 
-class _SheetPagesHost extends StatelessWidget {
+class _SheetPagesHost extends StatefulWidget {
   const _SheetPagesHost(this.stack);
 
   final SheetStack stack;
 
   @override
+  State<_SheetPagesHost> createState() => _SheetPagesHostState();
+}
+
+class _SheetPagesHostState extends State<_SheetPagesHost> {
+  SheetPage? _top;
+
+  /// While one page takes another's place: the sheet stands on the window's
+  /// bottom, so a height that follows the pages from the top would carry the
+  /// page up or down with it.
+  var _switching = false;
+
+  void _settled() {
+    if (!_switching || !mounted) return;
+    // A page with no way in to play settles while it is being built.
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => _settled());
+      return;
+    }
+    setState(() => _switching = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final stack = widget.stack;
     return ListenableBuilder(
       listenable: stack,
       builder: (context, _) {
         final dismissible = stack.dismissible;
         final top = stack.top;
+        if (!identical(top, _top)) {
+          _switching = _top != null;
+          _top = top;
+        }
+        final floats = SheetRoute.floats(context);
         return PopScope(
           // Back pops a page through [SheetRoute.didPop]; a page that holds
           // holds against it.
           canPop: dismissible,
-          child: ResizableSheet(
-            showGrip: top.showGrip,
-            // The grip closes every page: not over one that holds.
-            dismissible: stack.allDismissible,
-            restLimit: top.restLimit,
-            contentKey: top,
-            onDismiss: stack.close,
-            gripLeading: stack.depth > 1 && dismissible
-                ? IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: const BackButtonIcon(),
-                    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                    onPressed: () => stack.popPage(),
-                  )
-                : null,
-            child: AnimatedSize(
-              duration: context.motion(const Duration(milliseconds: 220)),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: _Absorb(
-                absorbing: () => stack.answering,
-                child: Stack(
-                  children: [
-                    for (final (i, page) in stack._pages.indexed)
-                      _Page(
-                        key: ObjectKey(page),
-                        active: page == top,
-                        enters: i > 0,
-                        child: page._widget,
-                      ),
-                  ],
+          child: _Surface(
+            floats: floats,
+            color: top.backgroundColor,
+            child: ResizableSheet(
+              showGrip: top.showGrip,
+              // The grip closes every page: not over one that holds.
+              dismissible: stack.allDismissible,
+              restLimit: top.restLimit,
+              contentKey: top,
+              onDismiss: stack.close,
+              gripLeading: stack.depth > 1 && dismissible
+                  ? IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const BackButtonIcon(),
+                      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                      onPressed: () => stack.popPage(),
+                    )
+                  : null,
+              child: AnimatedSize(
+                duration: context.motion(const Duration(milliseconds: 220)),
+                curve: Curves.easeOutCubic,
+                alignment: _switching ? Alignment.bottomCenter : Alignment.topCenter,
+                child: _Absorb(
+                  absorbing: () => stack.answering,
+                  child: Stack(
+                    children: [
+                      for (final (i, page) in stack._pages.indexed)
+                        _Page(
+                          key: ObjectKey(page),
+                          active: page == top,
+                          enters: i > 0,
+                          onSettled: page == top ? _settled : null,
+                          child: page._widget,
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// The sheet's surface: the theme's, or the page's own colour; on a desktop
+/// clear of the window's edges, every corner rounded.
+class _Surface extends StatelessWidget {
+  const _Surface({required this.floats, required this.color, required this.child});
+
+  final bool floats;
+  final Color? color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sheet = theme.bottomSheetTheme;
+    final color = this.color ??
+        sheet.modalBackgroundColor ??
+        sheet.backgroundColor ??
+        theme.colorScheme.surfaceContainerLow;
+    final themed = sheet.shape ??
+        const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        );
+    final shape = switch (themed) {
+      final RoundedRectangleBorder rounded when floats => rounded.copyWith(
+        borderRadius: BorderRadius.all(
+          rounded.borderRadius.resolve(Directionality.of(context)).topLeft,
+        ),
+      ),
+      _ => themed,
+    };
+    return Padding(
+      padding: floats
+          ? const EdgeInsets.fromLTRB(SheetRoute.margin, 0, SheetRoute.margin, SheetRoute.margin)
+          : EdgeInsets.zero,
+      child: Material(
+        color: color,
+        // A page that draws its own has none of the sheet's.
+        elevation: color.a == 0 ? 0 : sheet.modalElevation ?? sheet.elevation ?? 1,
+        shadowColor: sheet.shadowColor,
+        surfaceTintColor: sheet.surfaceTintColor,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      ),
     );
   }
 }
@@ -351,9 +455,13 @@ class _Page extends StatefulWidget {
     required this.active,
     required this.enters,
     required this.child,
+    this.onSettled,
   });
 
   final bool active;
+
+  /// Its way in is over.
+  final VoidCallback? onSettled;
 
   /// Whether it comes in over a page, rather than with the sheet.
   final bool enters;
@@ -367,7 +475,9 @@ class _PageState extends State<_Page> with SingleTickerProviderStateMixin {
   late final _controller = AnimationController(
     vsync: this,
     value: widget.enters ? 0 : 1,
-  );
+  )..addStatusListener((status) {
+    if (status.isCompleted) widget.onSettled?.call();
+  });
   late final _curved = CurvedAnimation(
     parent: _controller,
     curve: Curves.easeOutCubic,
