@@ -379,6 +379,12 @@ abstract final class AppPageTransitions {
     TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
       fallbackColor: Colors.transparent,
     ),
+    TargetPlatform.iOS: SwipeBackPageTransitionsBuilder(
+      fallbackColor: Colors.transparent,
+    ),
+    TargetPlatform.macOS: SwipeBackPageTransitionsBuilder(
+      fallbackColor: Colors.transparent,
+    ),
     TargetPlatform.windows: ZoomPageTransitionsBuilder(
       backgroundColor: Colors.transparent,
     ),
