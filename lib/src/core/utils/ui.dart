@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
+
+import 'window_placement.dart';
 
 abstract final class FontUtils {
   /// Loads a font from a local file path.
@@ -60,7 +63,8 @@ abstract final class SystemUIs {
   ///
   /// - [hideTitleBar] whether to hide the window title bar
   /// - [size] initial window size, if not provided uses default
-  /// - [position] initial window position, if not provided centers the window
+  /// - [position] initial window position, if not provided or on no connected
+  ///   display centers the window
   /// - [listener] optional window event listener
   static Future<void> initDesktopWindow({
     required bool hideTitleBar,
@@ -71,6 +75,10 @@ abstract final class SystemUIs {
     if (!isDesktop) return;
 
     await windowManager.ensureInitialized();
+
+    final placement = await _placeWindow(size, position);
+    size = placement.size;
+    position = placement.position;
 
     final windowOptions = WindowOptions(
       center: position == null,
@@ -97,6 +105,35 @@ abstract final class SystemUIs {
         windowManager.addListener(listener);
       }
     });
+  }
+
+  /// Keeps a saved window on a connected display (a display unplugged since,
+  /// a position saved while minimized). Saved values stand when the displays
+  /// cannot be read.
+  static Future<WindowPlacement> _placeWindow(Size? size, Offset? position) async {
+    if (size == null && position == null) return const WindowPlacement();
+    try {
+      // On Windows, `window_manager` converts with the window's scale factor
+      // and `screen_retriever` with each display's own.
+      final windowScale = windowManager.getDevicePixelRatio();
+      WindowDisplay toDisplay(Display d) {
+        final origin = d.visiblePosition ?? Offset.zero;
+        final scale = d.scaleFactor?.toDouble();
+        return WindowDisplay(
+          origin & (d.visibleSize ?? d.size),
+          scale: isWindows && scale != null && scale > 0 && windowScale > 0
+              ? scale / windowScale
+              : 1,
+        );
+      }
+
+      final displays = (await screenRetriever.getAllDisplays()).map(toDisplay).toList();
+      final primary = toDisplay(await screenRetriever.getPrimaryDisplay());
+      return placeWindow(size: size, position: position, displays: displays, primary: primary);
+    } catch (e, s) {
+      Loggers.app.warning('Reading displays', e, s);
+      return WindowPlacement(size: size, position: position);
+    }
   }
 
   /// Updates the title bar style at runtime without restarting the app.

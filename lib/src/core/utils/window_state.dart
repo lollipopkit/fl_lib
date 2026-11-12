@@ -28,6 +28,13 @@ final class WindowStateListener extends WindowListener {
 
   Future<void> _updateState() {
     final update = _updateTail.then((_) async {
+      // Only the normal bounds are restored: a minimized window on Windows is
+      // at (-32000, -32000), a maximized one overhangs its display.
+      if (await windowManager.isMinimized() ||
+          await windowManager.isMaximized() ||
+          await windowManager.isFullScreen()) {
+        return;
+      }
       final state = WindowState(
         await windowManager.getSize(),
         await windowManager.getPosition(),
@@ -58,6 +65,14 @@ final class WindowStateListener extends WindowListener {
       duration: 100,
     );
   }
+
+  // The throttle drops the last events of a drag; these end one (Windows and
+  // macOS).
+  @override
+  void onWindowMoved() => _updateState();
+
+  @override
+  void onWindowResized() => _updateState();
 }
 
 class _SizeJsonConverter implements JsonConverter<Size, Map<String, dynamic>> {
