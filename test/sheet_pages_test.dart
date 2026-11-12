@@ -37,7 +37,7 @@ void main() {
 
   int sheetRoutes(WidgetTester tester) {
     final routes = <Route<dynamic>>{};
-    for (final e in find.byType(PromptSheet, skipOffstage: false).evaluate()) {
+    for (final e in find.byType(SheetScaffold, skipOffstage: false).evaluate()) {
       routes.add(ModalRoute.of(e)!);
     }
     return routes.length;
@@ -73,6 +73,205 @@ void main() {
     expect(find.text('typed'), findsOneWidget);
     expect(find.byTooltip(MaterialLocalizations.of(ctx).backButtonTooltip),
         findsNothing);
+  });
+
+  testWidgets('a list of rows over a sheet is its next page too', (tester) async {
+    final ctx = await pump(tester);
+    outer(ctx);
+    await step(tester);
+    final sheet = ModalRoute.of(tester.element(find.byType(SheetScaffold)))!;
+
+    final picked = showRowsSheet<String>(
+      ctx,
+      rows: (rowsCtx) => [
+        ListTile(title: const Text('row'), onTap: () => Navigator.of(rowsCtx).pop('row')),
+      ],
+    );
+    await step(tester);
+    expect(ModalRoute.of(tester.element(find.text('row'))), same(sheet));
+    expect(SheetX.frontSheet!.depth, 2);
+
+    await tester.tap(find.text('row'));
+    await step(tester);
+    expect(await picked, 'row');
+    expect(SheetX.frontSheet!.depth, 1);
+    expect(find.byKey(const Key('field')), findsOneWidget);
+  });
+
+  testWidgets('a sheet with a body of its own is a page too, unless standalone', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    outer(ctx);
+    await step(tester);
+    final sheet = ModalRoute.of(tester.element(find.byType(SheetScaffold)))!;
+
+    showResizableSheet<void>(ctx, builder: (_) => const Text('panel'));
+    await step(tester);
+    expect(ModalRoute.of(tester.element(find.text('panel'))), same(sheet));
+    expect(SheetX.frontSheet!.depth, 2);
+
+    showResizableSheet<void>(ctx, standalone: true, builder: (_) => const Text('apart'));
+    await step(tester);
+    expect(ModalRoute.of(tester.element(find.text('apart'))), isNot(same(sheet)));
+    expect(SheetX.frontSheet!.depth, 1);
+  });
+
+  testWidgets('back to a taller page: it stands still while the sheet grows', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    ctx.showSheet<void>(child: const SizedBox(key: Key('tall'), height: 300));
+    await step(tester);
+    ctx.showSheet<void>(child: const SizedBox(key: Key('short'), height: 40));
+    await step(tester);
+
+    ctx.popSheet();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final moving = tester.getRect(find.byKey(const Key('tall'))).bottom;
+    await step(tester);
+    expect(tester.getRect(find.byKey(const Key('tall'))).bottom, moving);
+  });
+
+  testWidgets('an answer that raises the next page: the sheet does not open on the page between', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    ctx.showSheet<void>(child: const SizedBox(key: Key('tall'), height: 300));
+    await step(tester);
+    // A menu over it, whose answer asks a second question.
+    unawaited(() async {
+      final go = await ctx.showSheet<bool>(
+        child: const SizedBox(height: 40),
+        actions: Btnx.oks,
+      );
+      if (go == true) {
+        await ctx.showSheet<void>(child: const SizedBox(key: Key('ask'), height: 60));
+      }
+    }());
+    await step(tester);
+    double height() => tester.getSize(find.byType(AnimatedSize).last).height;
+    final short = height();
+
+    await tester.tap(find.text(libL10n.ok));
+    var highest = 0.0;
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (height() > highest) highest = height();
+    }
+    expect(find.byKey(const Key('ask')), findsOneWidget);
+    // Between the two short pages, never the tall one's height.
+    expect(highest, lessThan(short + 25));
+  });
+
+  testWidgets('back to a page that fills its room: never taller than it ends', (
+    tester,
+  ) async {
+    final ctx = await pump(tester);
+    // A list: as tall as it is let be, under a cap lower than a prompt's.
+    showResizableSheet<void>(
+      ctx,
+      restLimit: 0.5,
+      builder: (_) => ListView(key: const Key('list'), children: const [SizedBox(height: 2000)]),
+    );
+    await step(tester);
+    final rest = tester.getSize(find.byKey(const Key('list'))).height;
+    ctx.showSheet<void>(child: const SizedBox(height: 40));
+    await step(tester);
+
+    ctx.popSheet();
+    var highest = 0.0;
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final h = tester.getSize(find.byType(AnimatedSize).last).height;
+      if (h > highest) highest = h;
+    }
+    expect(tester.getSize(find.byKey(const Key('list'))).height, rest);
+    expect(highest, lessThanOrEqualTo(rest + 1));
+  });
+
+  for (final (platform, floats) in [(TargetPlatform.macOS, true), (TargetPlatform.android, false)]) {
+    testWidgets('on ${platform.name} the sheet ${floats ? 'stands clear of' : 'is against'} the bottom', (
+      tester,
+    ) async {
+      Future<Rect> surface(Size size) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        late BuildContext ctx;
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey(size),
+            theme: ThemeData(platform: platform),
+            home: Builder(
+              builder: (context) {
+                ctx = context;
+                return const Scaffold();
+              },
+            ),
+          ),
+        );
+        ctx.showSheet<void>(title: 'title', child: const SizedBox(height: 40));
+        await step(tester);
+        return tester.getRect(
+          find.ancestor(of: find.byType(ResizableSheet), matching: find.byType(Material)).first,
+        );
+      }
+
+      final gap = floats ? SheetRoute.margin : 0.0;
+      final narrow = await surface(const Size(400, 800));
+      expect(narrow.bottom, 800 - gap);
+      expect(narrow.left, gap);
+      expect(narrow.right, 400 - gap);
+
+      final wide = await surface(const Size(1600, 1000));
+      expect(wide.bottom, 1000 - gap);
+      expect(wide.width, SheetRoute.width);
+      expect(wide.center.dx, 800);
+    });
+  }
+
+  testWidgets("the theme's width for a sheet stands on a desktop", (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    late BuildContext ctx;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          platform: TargetPlatform.macOS,
+          bottomSheetTheme: const BottomSheetThemeData(constraints: BoxConstraints(maxWidth: 500)),
+        ),
+        home: Builder(
+          builder: (context) {
+            ctx = context;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    ctx.showSheet<void>(title: 'title');
+    await step(tester);
+    final surface = tester.getRect(
+      find.ancestor(of: find.byType(ResizableSheet), matching: find.byType(Material)).first,
+    );
+    expect(surface.width, 500 - SheetRoute.margin * 2);
+  });
+
+  testWidgets('pages switch with animations off', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final ctx = await pump(tester);
+    ctx.showSheet<void>(child: const SizedBox(key: Key('tall'), height: 300));
+    await step(tester);
+    ctx.showSheet<void>(child: const SizedBox(height: 40));
+    await step(tester);
+    ctx.popSheet();
+    await step(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('tall')), findsOneWidget);
   });
 
   testWidgets('Btnx.cancelOk on the inner page answers its own caller', (
@@ -142,7 +341,7 @@ void main() {
     await step(tester);
     await tester.pump(const Duration(milliseconds: 400));
     expect(order, ['inner null', 'again null', 'outer null']);
-    expect(find.byType(PromptSheet, skipOffstage: false), findsNothing);
+    expect(find.byType(SheetScaffold, skipOffstage: false), findsNothing);
   });
 
   testWidgets('the grip springs back over a page under it that holds', (
@@ -228,7 +427,7 @@ void main() {
     ctx.popSheet(3);
     await step(tester);
     expect(await over, 3);
-    expect(find.byType(PromptSheet, skipOffstage: false), findsNothing);
+    expect(find.byType(SheetScaffold, skipOffstage: false), findsNothing);
   });
 
   testWidgets('a sheet raised while another leaves takes taps once up', (
@@ -270,7 +469,7 @@ void main() {
     final rename = ctx.showSheet<String>(title: 'rename');
     await step(tester);
     expect(
-      ModalRoute.of(tester.element(find.byType(PromptSheet))),
+      ModalRoute.of(tester.element(find.byType(SheetScaffold))),
       ModalRoute.of(
         tester.element(find.byKey(const Key('own'), skipOffstage: false)),
       ),
@@ -450,19 +649,19 @@ void main() {
       final ctx = await pump(tester, size: size);
       ctx.showSheet<void>(title: 'title', child: const Text('body'));
       await step(tester);
-      final sheet = tester.getRect(find.byType(PromptSheet));
-      final inset = PromptSheet.defaultTitlePadding.left;
+      final sheet = tester.getRect(find.byType(SheetScaffold));
+      final inset = SheetScaffold.defaultTitlePadding.left;
       expect(tester.getRect(find.text('title')).left, sheet.left + inset);
       expect(
         tester.getRect(find.text('body')).left,
-        sheet.left + PromptSheet.defaultContentPadding.left,
+        sheet.left + SheetScaffold.defaultContentPadding.left,
       );
       ctx.popSheet();
       await step(tester);
 
       ctx.showPickSheet<String>(title: 'pick', items: const ['a']);
       await step(tester);
-      final pick = tester.getRect(find.byType(PromptSheet));
+      final pick = tester.getRect(find.byType(SheetScaffold));
       expect(tester.getRect(find.text('pick')).left, pick.left + inset);
     });
   }
@@ -516,7 +715,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await step(tester);
     expect(ended?.$2, isA<TimeoutException>());
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
   });
 
   testWidgets('work that throws before it starts ends the loading sheet', (
@@ -534,7 +733,7 @@ void main() {
     await step(tester);
     await step(tester);
     expect(ended?.$2, isA<StateError>());
-    expect(find.byType(PromptSheet), findsNothing);
+    expect(find.byType(SheetScaffold), findsNothing);
     // Nothing left to fire: a timer still armed would time out into nobody.
     await tester.pump(const Duration(seconds: 2));
     expect(tester.takeException(), isNull);

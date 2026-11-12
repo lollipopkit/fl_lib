@@ -76,4 +76,40 @@ void main() {
     expect(find.byType(PickSheet<String>), findsOneWidget);
     expect(tester.getSize(find.byType(ResizableSheet)).width, 640);
   });
+
+  testWidgets('loading, then rows: both under its title, its actions at the end', (
+    tester,
+  ) async {
+    final ctx = await pump(tester, const Size(400, 800));
+    final loading = true.vn;
+    addTearDown(loading.dispose);
+    ctx.showPickSheet<String>(items: const ['a', 'b'], showLoading: loading);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    void check(Finder body) {
+      final sheet = tester.getRect(find.byType(SheetScaffold));
+      final title = tester.getRect(find.text(libL10n.select));
+      final ok = tester.getRect(find.widgetWithText(TextButton, libL10n.ok));
+      final rect = tester.getRect(body);
+      expect(title.bottom, lessThanOrEqualTo(rect.top));
+      expect(title.left, lessThan(sheet.center.dx));
+      expect(ok.top, greaterThanOrEqualTo(rect.bottom));
+      expect(ok.left, greaterThan(sheet.center.dx));
+    }
+
+    expect(find.byType(SheetChoiceTile), findsNothing);
+    check(find.byType(SizedLoading));
+
+    loading.value = false;
+    await tester.pump();
+    expect(find.byType(SizedLoading), findsNothing);
+    check(find.byType(SheetChoiceTile).last);
+    // A row keeps its own text style, not the body's of a prompt.
+    final scheme = Theme.of(tester.element(find.byType(SheetChoiceTile).first)).colorScheme;
+    expect(
+      DefaultTextStyle.of(tester.element(find.byType(SheetChoiceTile).first)).style.color,
+      isNot(scheme.onSurfaceVariant),
+    );
+  });
 }
