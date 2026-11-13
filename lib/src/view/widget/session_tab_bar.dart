@@ -1,6 +1,5 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 /// What a session's row says under its name, or null for a one-line row.
 typedef SessionDetailOf = String? Function(int index);
@@ -41,7 +40,7 @@ final class SessionTabBar extends StatelessWidget implements PreferredSizeWidget
     required this.leadingActions,
     this.sessionMenu,
     this.sessionMenuActions = const [],
-    this.leadingIcon = MingCute.add_circle_fill,
+    this.leadingIcon = Icons.add_circle,
     this.detailOf,
     this.leadingOf,
     this.search,
@@ -411,7 +410,7 @@ final class _SessionRow extends StatelessWidget {
               style: UIs.textGrey,
             ),
       trailing: IconButton(
-        icon: const Icon(MingCute.close_line, size: _iconSize),
+        icon: const Icon(Icons.close, size: _iconSize),
         color: scheme.onSurfaceVariant,
         tooltip: libL10n.close,
         onPressed: onClose,

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/theme/host.dart';
 import 'package:fl_lib/src/theme/package.dart';
-import 'package:icons_plus/icons_plus.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// The theme mode row: system, light or dark, picked from a list; disabled
@@ -23,7 +22,7 @@ final class ThemeModeTile extends StatelessWidget {
     final settings = ThemeHost.settings;
     final locked = ThemePackages.activeTheme?.lockedMode;
     return ListTile(
-      leading: const Icon(MingCute.moon_stars_fill),
+      leading: const Icon(Icons.dark_mode),
       title: Text(title),
       subtitle: locked == null
           ? null

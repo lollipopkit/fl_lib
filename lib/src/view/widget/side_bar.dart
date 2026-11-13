@@ -1,6 +1,5 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 /// The rail beside a [SessionTabsView]: what is running, above what can be
 /// started.
@@ -502,7 +501,7 @@ class _CloseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: const Icon(MingCute.close_circle_fill, size: 15),
+      icon: const Icon(Icons.cancel, size: 15),
       tooltip: libL10n.close,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       padding: EdgeInsets.zero,

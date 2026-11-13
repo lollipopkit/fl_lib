@@ -1,7 +1,6 @@
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 /// What a row says beside a tag's name — how many things carry it, whether
 /// this one does, whether it is why the row survived the filter.
@@ -186,7 +185,7 @@ class _TagEditorState extends State<TagEditor> {
         controller: ctrl,
         type: TextInputType.text,
         label: l10n.tag,
-        icon: MingCute.hashtag_line,
+        icon: Icons.tag,
         autoFocus: true,
         onSubmitted: (_) => onSave(),
       ),
@@ -225,7 +224,7 @@ class _TagEditorState extends State<TagEditor> {
       padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 13),
       child: Row(
         children: [
-          Icon(MingCute.hashtag_line, color: scheme.onSurfaceVariant),
+          Icon(Icons.tag, color: scheme.onSurfaceVariant),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
