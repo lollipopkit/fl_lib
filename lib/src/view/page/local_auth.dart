@@ -4,7 +4,6 @@ import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 final class LocalAuthPageArgs {
   final bool autoReqAuth;
@@ -62,7 +61,7 @@ final class _LocalAuthPageState extends State<LocalAuthPage> with AfterLayoutMix
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                const Icon(IonIcons.finger_print, size: 77),
+                const Icon(Icons.fingerprint, size: 77),
                 UIs.height13,
                 Text(l10n.tapToAuth),
                 if (_failureText case final text?) ...[

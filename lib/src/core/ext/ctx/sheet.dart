@@ -7,7 +7,6 @@ import 'package:dio/dio.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/res/l10n.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 extension SheetX on BuildContext {
   /// The sheet in front of everything else, if one is.
@@ -424,13 +423,13 @@ extension SheetX on BuildContext {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Btn.tile(onTap: () => popSheet(_ImportFrom.file), text: l10n.file, icon: const Icon(MingCute.file_line)),
-          Btn.tile(onTap: () => popSheet(_ImportFrom.network), text: l10n.network, icon: const Icon(ZondIcons.network)),
-          Btn.tile(onTap: () => popSheet(_ImportFrom.clipboard), text: l10n.clipboard, icon: const Icon(MingCute.clipboard_line)),
+          Btn.tile(onTap: () => popSheet(_ImportFrom.file), text: l10n.file, icon: const Icon(Icons.insert_drive_file_outlined)),
+          Btn.tile(onTap: () => popSheet(_ImportFrom.network), text: l10n.network, icon: const Icon(Icons.language)),
+          Btn.tile(onTap: () => popSheet(_ImportFrom.clipboard), text: l10n.clipboard, icon: const Icon(Icons.content_paste)),
           if (modelDef != null)
             Btn.tile(
               text: l10n.example,
-              icon: const Icon(MingCute.paragraph_fill),
+              icon: const Icon(Icons.notes),
               onTap: () {
                 final content = const JsonEncoder.withIndent('\t\t').convert([modelDef]);
                 showSheet(
@@ -470,7 +469,7 @@ $content
               mainAxisSize: MainAxisSize.min,
               children: [
                 Input(
-                  icon: ZondIcons.network,
+                  icon: Icons.language,
                   label: 'Url',
                   hint: 'https://a.com',
                   controller: urlCtrl,
@@ -480,7 +479,7 @@ $content
                 ),
                 UIs.height7,
                 Input(
-                  icon: HeroIcons.queue_list,
+                  icon: Icons.list,
                   label: 'Headers',
                   hint: 'key1: value1\nkey2: value2',
                   controller: headersCtrl,
