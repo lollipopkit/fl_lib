@@ -179,6 +179,7 @@ export 'src/view/widget/page_columns.dart';
 export 'src/view/widget/page_issue.dart';
 export 'src/view/widget/exit_confirm.dart';
 export 'src/view/widget/fade_in.dart';
+export 'src/view/widget/frosted.dart';
 export 'src/view/widget/future_widget.dart';
 export 'src/view/widget/guide.dart';
 export 'src/view/widget/hide_on_scroll.dart';
