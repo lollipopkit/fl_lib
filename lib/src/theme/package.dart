@@ -548,12 +548,14 @@ abstract final class ThemePackages {
       if (preset == null) return;
       await loadBuiltin(preset);
     } catch (error, stack) {
+      // The selection stays: it is drawn as the default until it loads, and
+      // writing the default would sync it to every device — see
+      // [_deselectRemoved].
       Loggers.app.warning(
         'Could not load selected built-in theme',
         error,
         stack,
       );
-      _selectDefaultFallback();
     }
   }
 
@@ -1195,7 +1197,7 @@ abstract final class ThemePackages {
       _activeId = null;
       _active = null;
     }
-    reconcileSelection();
+    if (rootDirectory == null) _deselectRemoved(installationId);
     installedChanged.value++;
     return true;
   }
@@ -1225,8 +1227,12 @@ abstract final class ThemePackages {
     final variant = variantOf(ThemeHost.settings.appThemePreset.fetch());
     final key = variant == null ? installationId : '$installationId#$variant';
     if (_activeId != key) {
+      final theme = installed(installationId, variant: variant);
+      // Not kept before Rust has loaded: every read is null until then, and
+      // the theme in use would stay the default until the selection changed.
+      if (theme == null && !ThemeRust.ready) return null;
       _activeId = key;
-      _active = installed(installationId, variant: variant);
+      _active = theme;
     }
     return _active;
   }
@@ -1301,28 +1307,19 @@ abstract final class ThemePackages {
     );
   }
 
-  static void reconcileSelection() {
+  /// The user removed [installationId]: a selection naming it goes back to
+  /// the default.
+  ///
+  /// Only then. A selection this device cannot draw *yet* — its package not
+  /// synced here, Rust not loaded, a build that predates the preset — is left
+  /// as it is and drawn as the default ([activeTheme] is null): writing the
+  /// default would be an edit like any other, synced to every device, undoing
+  /// a choice made on one that has the package.
+  static void _deselectRemoved(String installationId) {
     final preset = ThemeHost.settings.appThemePreset.fetch();
-    if (installationIdOf(preset) case final installationId?
-        when installed(installationId) == null) {
-      // A backup reinstalls what it can first; see [ThemeBackup.restore].
+    if (installationIdOf(preset) == installationId ||
+        ThemeHost.settings.appThemePackage.fetch() == installationId) {
       _selectDefaultFallback();
-    } else if (installationIdOf(preset) == null &&
-        preset != customPreset &&
-        BuiltinTheme.fromId(preset) == null) {
-      // A bundled theme this build no longer carries (the ones that moved to
-      // the theme store), or a preset from a newer build: nothing to show it.
-      _selectDefaultFallback();
-    }
-    final background = ThemeHost.settings.appBackgroundPath.fetch();
-    if (preset == customPreset &&
-        (ThemeHost.settings.appBackgroundStyle.fetch() != BackgroundStyle.image ||
-            background.isEmpty ||
-            !File(background).existsSync())) {
-      _selectDefaultFallback();
-    } else if (preset == customPreset) {
-      ThemeHost.settings.appThemePackage.put('');
-      ThemeHost.settings.appThemePaletteEnabled.put(false);
     }
   }
 

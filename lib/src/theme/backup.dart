@@ -266,8 +266,8 @@ abstract final class ThemeBackup {
   /// installation it is, and the path of its background. The rest — the mode,
   /// dynamic color, the radii — is what the user set, restored as it was;
   /// [ThemePackages.select] would overwrite it with the theme's defaults.
-  /// A theme that could not be installed leaves nothing to point at, and
-  /// [ThemePackages.reconcileSelection] falls back to the default.
+  /// A theme that could not be installed is left selected, drawn as the
+  /// default until it is: see [ThemePackages.activeTheme].
   static void reselect(ThemeRestoreReport report) {
     final settings = ThemeHost.settings;
     final preset = settings.appThemePreset.fetch();
@@ -287,8 +287,6 @@ abstract final class ThemeBackup {
     if (report.installedAs[pack] case final to? when to != pack) {
       settings.appIconPack.put(to);
     }
-    ThemePackages.reconcileSelection();
-    ThemeIconPacks.reconcileSelection();
   }
 
   static ThemeStoreItem? _storeItemFor(ThemeStore? store, String digest) {

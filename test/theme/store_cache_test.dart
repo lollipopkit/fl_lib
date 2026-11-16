@@ -293,7 +293,7 @@ void main() {
   group('removing an installed theme', () {
     // Installed and removed through the app's own root rather than an override
     // one: what makes a remove button worth having is that the theme in use is
-    // reconciled, and `reconcileSelection` looks in the app's root.
+    // deselected, and only in the app's root.
     setUp(() async {
       final themes = Directory(Paths.doc.joinPath('themes'));
       if (await themes.exists()) await themes.delete(recursive: true);
@@ -334,15 +334,20 @@ void main() {
       expect(setting.appThemePackage.fetch(), isEmpty);
     });
 
-    test('a bundled theme this build no longer carries falls back', () {
-      // A bundled theme of an earlier build, since moved to the store.
+    test('a selection this device cannot draw is left as it is', () {
+      // A bundled theme of an earlier build, since moved to the store; and a
+      // package not synced here yet. Both are drawn as the default, and
+      // neither is written over: the default would sync to every device.
       setting.appThemePreset.put('dracula');
-      ThemePackages.reconcileSelection();
-      expect(setting.appThemePreset.fetch(), BuiltinTheme.defaultTheme.id);
+      expect(ThemePackages.activeTheme, isNull);
+      expect(setting.appThemePreset.fetch(), 'dracula');
 
-      setting.appThemePreset.put(BuiltinTheme.amoled.id);
-      ThemePackages.reconcileSelection();
-      expect(setting.appThemePreset.fetch(), BuiltinTheme.amoled.id);
+      const missing = 'package:'
+          '0000000000000000000000000000000000000000000000000000000000000000';
+      setting.appThemePreset.put(missing);
+      setting.appThemePackage.put(missing.substring('package:'.length));
+      expect(ThemePackages.activeTheme, isNull);
+      expect(setting.appThemePreset.fetch(), missing);
     });
   });
 }
