@@ -38,8 +38,11 @@ abstract final class ThemeIconPacks {
     final installationId = ThemeHost.settings.appIconPack.fetch();
     if (installationId.isEmpty) return null;
     if (_activeId != installationId) {
+      final pack = installed(installationId);
+      // See [ThemePackages.activeTheme]: nothing reads before Rust loads.
+      if (pack == null && !ThemeRust.ready) return null;
       _activeId = installationId;
-      _active = installed(installationId);
+      _active = pack;
     }
     return _active;
   }
@@ -159,7 +162,7 @@ abstract final class ThemeIconPacks {
     if (rootDirectory == null) {
       _activeId = null;
       _active = null;
-      reconcileSelection();
+      if (ThemeHost.settings.appIconPack.fetch() == installationId) select(null);
     }
     ThemePackages.installedChanged.value++;
     return true;
@@ -172,9 +175,4 @@ abstract final class ThemeIconPacks {
     String? rootDirectory,
   }) => readSource(rootDirectory ?? root, installationId);
 
-  /// Goes back to the theme's icons when the chosen pack is gone.
-  static void reconcileSelection() {
-    final chosen = ThemeHost.settings.appIconPack.fetch();
-    if (chosen.isNotEmpty && installed(chosen) == null) select(null);
-  }
 }
