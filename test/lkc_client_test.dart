@@ -45,6 +45,7 @@ void main() {
   late _Adapter store;
   late _Adapter idp;
   late _Adapter conduit;
+  late _Adapter uptimer;
   late LkcClient client;
   late LkcMemoryCache cache;
   Future<bool> Function(Uri url) browser = (_) async => false;
@@ -57,6 +58,7 @@ void main() {
       ..on('GET /v2/entitlements', {'data': []});
     store = _Adapter();
     conduit = _Adapter();
+    uptimer = _Adapter();
     idp = _Adapter()
       ..on('GET /auth/v1/.well-known/openid-configuration', _discovery);
     cache = LkcMemoryCache();
@@ -70,6 +72,7 @@ void main() {
       api: Dio()..httpClientAdapter = api,
       store: Dio()..httpClientAdapter = store,
       conduit: Dio()..httpClientAdapter = conduit,
+      uptimer: Dio()..httpClientAdapter = uptimer,
       idp: Dio()..httpClientAdapter = idp,
       openBrowser: (url) => browser(url),
       loopback: true,
@@ -665,6 +668,82 @@ void main() {
     expect(plan.line, LkcLine.conduit);
     expect(plan.stripe?.amount, 500);
     expect(api.requests.single.headers.keys, isNot(contains('Authorization')));
+  });
+
+  group('uptimer', () {
+    test('default url and push url', () {
+      expect(client.uptimerUrl, Uri.parse('https://up.lolli.tech'));
+      expect(
+        client.uptimerPushUrl('tok_abc'),
+        Uri.parse('https://up.lolli.tech/api/v1/push/tok_abc'),
+      );
+    });
+
+    test('sends Bearer token and decodes JSON reply', () async {
+      await signedIn();
+      uptimer.on('GET /api/v1/me/page', {
+        'overall_status': 'up',
+        'monitors': [],
+      });
+
+      final res = await client.uptimerCall('GET', '/api/v1/me/page');
+      expect(res, {'overall_status': 'up', 'monitors': []});
+      expect(
+        uptimer.requests.single.headers[HttpHeaders.authorizationHeader],
+        'Bearer a1',
+      );
+    });
+
+    test('maps structured error without signing out the LKC session', () async {
+      await signedIn();
+      uptimer.onFn(
+        'POST /api/v1/me/monitors',
+        (_) => (
+          401,
+          {
+            'error': {
+              'code': 'UNAUTHORIZED',
+              'message': 'Token audience rejected',
+            },
+          },
+        ),
+      );
+
+      await expectLater(
+        client.uptimerCall('POST', '/api/v1/me/monitors', body: {'name': 'x'}),
+        throwsA(
+          isA<LkcException>()
+              .having((e) => e.status, 'status', 401)
+              .having((e) => e.reason, 'reason', 'UNAUTHORIZED')
+              .having((e) => e.message, 'message', 'Token audience rejected'),
+        ),
+      );
+      expect(client.signedIn, isTrue);
+      expect(client.user.value?.id, 'u1');
+    });
+
+    test('handles non-string error fields without throwing TypeError', () async {
+      await signedIn();
+      uptimer.onFn(
+        'GET /api/v1/me/page',
+        (_) => (
+          500,
+          {
+            'error': {'code': 500, 'message': ['boom']},
+          },
+        ),
+      );
+
+      await expectLater(
+        client.uptimerCall('GET', '/api/v1/me/page'),
+        throwsA(
+          isA<LkcException>()
+              .having((e) => e.status, 'status', 500)
+              .having((e) => e.reason, 'reason', isNull)
+              .having((e) => e.message, 'message', isNull),
+        ),
+      );
+    });
   });
 }
 

@@ -55,6 +55,9 @@ final class LkcClient {
   /// Conduit, LK Cloud's model gateway.
   static const defaultConduitUrl = 'https://cpa.lolli.tech';
 
+  /// Uptimer, LK Cloud's uptime monitoring service.
+  static const defaultUptimerUrl = 'https://up.lolli.tech';
+
   // Not on the object store: an upload of 5 GB takes as long as it takes.
   static const _connectTimeout = Duration(seconds: 15);
   static const _receiveTimeout = Duration(seconds: 30);
@@ -64,6 +67,9 @@ final class LkcClient {
 
   /// Where Conduit serves: [conduitKey] and the OpenAI API (`/v1`).
   final Uri conduitUrl;
+
+  /// Where Uptimer serves (`/api/v1/me/...`).
+  final Uri uptimerUrl;
 
   /// Whether this app may sell plans by the web checkout.
   ///
@@ -79,6 +85,7 @@ final class LkcClient {
   /// Talks to the object store: never sends the token.
   final Dio _store;
   final Dio _conduit;
+  final Dio _uptimer;
   final LkcIdp _idp;
 
   /// The session, restored from [tokenProp] the first time it is asked for.
@@ -108,11 +115,13 @@ final class LkcClient {
     required this.oidc,
     Uri? baseUrl,
     Uri? conduitUrl,
+    Uri? uptimerUrl,
     bool? webCheckout,
     this.tokenProp = SecureStoreProps.lkcToken,
     Dio? api,
     Dio? store,
     Dio? conduit,
+    Dio? uptimer,
     Dio? idp,
     @visibleForTesting Future<bool> Function(Uri url)? openBrowser,
     @visibleForTesting bool? loopback,
@@ -120,10 +129,12 @@ final class LkcClient {
   }) : cache = cache ?? LkcCache(),
        baseUrl = baseUrl ?? Uri.parse(defaultBaseUrl),
        conduitUrl = conduitUrl ?? Uri.parse(defaultConduitUrl),
+       uptimerUrl = uptimerUrl ?? Uri.parse(defaultUptimerUrl),
        webCheckout = webCheckout ?? (!isIOS && !isMacOS),
        _api = api ?? Dio(),
        _store = store ?? Dio(),
        _conduit = conduit ?? Dio(),
+       _uptimer = uptimer ?? Dio(),
        _idp = LkcIdp(
          oidc,
          _timed(idp ?? Dio()),
@@ -136,6 +147,9 @@ final class LkcClient {
     _store.options.validateStatus = (_) => true;
     _timed(_conduit).options
       ..baseUrl = this.conduitUrl.toString()
+      ..validateStatus = (_) => true;
+    _timed(_uptimer).options
+      ..baseUrl = this.uptimerUrl.toString()
       ..validateStatus = (_) => true;
     // The amounts the paywall was worded from here before homebase worded it.
     // TODO: rm once no install keeps them.
@@ -482,6 +496,67 @@ final class LkcClient {
       status: status,
       message: error is String ? error : null,
     );
+  }
+
+  // Uptimer
+
+  /// The heartbeat push URL for a one-time [token] issued by Uptimer.
+  Uri uptimerPushUrl(String token) =>
+      uptimerUrl.resolve('/api/v1/push/${Uri.encodeComponent(token)}');
+
+  /// Sends an authenticated request to Uptimer ([uptimerUrl]) using the
+  /// signed-in LK Cloud access token. Uptimer's refusal says nothing of the
+  /// LK Cloud session, which stays.
+  Future<Object?> uptimerCall(
+    String method,
+    String path, {
+    Map<String, dynamic>? query,
+    Object? body,
+  }) async {
+    final token = await _accessToken();
+    final Response<Object?> res;
+    try {
+      res = await _uptimer.request<Object?>(
+        path,
+        queryParameters: query,
+        data: body,
+        options: Options(
+          method: method,
+          headers: {
+            HttpHeaders.authorizationHeader: 'Bearer $token',
+            HttpHeaders.acceptHeader: 'application/json',
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      throw LkcException(message: e.message ?? e.type.name);
+    }
+    final status = res.statusCode ?? 0;
+    Object? data = res.data;
+    if (data is String && data.isNotEmpty) {
+      try {
+        data = jsonDecode(data);
+      } on FormatException {
+        if (status >= 200 && status < 300) {
+          throw LkcException(status: status, message: 'Invalid JSON reply');
+        }
+      }
+    }
+    if (status >= 200 && status < 300) return data;
+    String? reason;
+    String? message;
+    if (data is Map) {
+      final err = data['error'];
+      if (err is Map) {
+        final code = err['code'];
+        final msg = err['message'];
+        if (code is String) reason = code;
+        if (msg is String) message = msg;
+      } else if (err is String) {
+        message = err;
+      }
+    }
+    throw LkcException(status: status, reason: reason, message: message);
   }
 
   // Push devices
@@ -856,6 +931,8 @@ final class LkcClient {
     entitlements.dispose();
     _api.close();
     _store.close();
+    _conduit.close();
+    _uptimer.close();
   }
 }
 
