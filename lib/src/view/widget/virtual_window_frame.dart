@@ -49,11 +49,11 @@ class _VirtualWindowFrameState extends State<VirtualWindowFrame> {
     final content = switch (CustomAppBar.sysStatusBarHeight) {
       0.0 => widget.child,
       _ when WindowFrameConfig.showCaption => Column(
-          children: [
-            _WindowCaption(title: widget.title),
-            Expanded(child: widget.child),
-          ],
-        ),
+        children: [
+          _WindowCaption(title: widget.title),
+          Expanded(child: widget.child),
+        ],
+      ),
       _ => widget.child,
     };
     return wm.VirtualWindowFrame(child: content);
@@ -68,7 +68,7 @@ class _WindowCaption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    final bar = Container(
       color: theme.scaffoldBackgroundColor,
       height: CustomAppBar.sysStatusBarHeight,
       width: double.infinity,
@@ -91,9 +91,11 @@ class _WindowCaption extends StatelessWidget {
             wm.WindowCaption(
               backgroundColor: Colors.transparent,
               brightness: theme.brightness,
-            )
+            ),
         ],
       ),
     );
+    if (isMacOS) return wm.DragToMoveArea(child: bar);
+    return bar;
   }
 }

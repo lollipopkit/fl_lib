@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dynamic_color/dynamic_color.dart';
@@ -46,11 +47,7 @@ enum _ThemeInstallSource { file, folder, url }
 /// [setState], because a row here changes what the others show — picking the
 /// custom preset brings its own rows in.
 final class ThemeAppearance {
-  ThemeAppearance(
-    this.context,
-    this.setState, {
-    this.storeTarget,
-  });
+  ThemeAppearance(this.context, this.setState, {this.storeTarget});
 
   final BuildContext context;
   final void Function(VoidCallback fn) setState;
@@ -232,9 +229,7 @@ final class ThemeAppearance {
         ]),
         builder: (context, _) {
           final packs = ThemeIconPacks.listInstalled();
-          final chosen = ThemeIconPacks.installed(
-            _setting.appIconPack.fetch(),
-          );
+          final chosen = ThemeIconPacks.installed(_setting.appIconPack.fetch());
           return ListTile(
             leading: const Icon(Icons.interests_outlined),
             title: Text(label),
@@ -275,7 +270,9 @@ final class ThemeAppearance {
       ThemeIconPacks.preview.value = null;
     }
     if (picked == null || !context.mounted) return;
-    ThemeIconPacks.select(identical(picked, ThemeIconPack.none) ? null : picked);
+    ThemeIconPacks.select(
+      identical(picked, ThemeIconPack.none) ? null : picked,
+    );
     setState(() {});
   }
 
@@ -310,8 +307,7 @@ final class ThemeAppearance {
         ),
         trailing: const Icon(Icons.keyboard_arrow_right),
         onTap: () async {
-          final source = await context
-              .showPickSingleSheet<_ThemeInstallSource>(
+          final source = await context.showPickSingleSheet<_ThemeInstallSource>(
             title: label,
             items: [
               _ThemeInstallSource.file,
@@ -332,21 +328,28 @@ final class ThemeAppearance {
                 allowedExtensions: ['fsbt'],
               );
               if (picked == null || !context.mounted) return;
-              if (await picked.length() > ThemePackages.maxPackageBytes) {
+              final len = await picked.length();
+              if (!context.mounted) return;
+              if (len != null && len > ThemePackages.maxPackageBytes) {
+                Toast.error(libL10n.appearanceInvalidTheme);
+                return;
+              }
+              await _completeThemeInstall(() async {
+                final bytes = await _readBoundedBytes(
+                  picked,
+                  ThemePackages.maxPackageBytes,
+                );
+                return ThemePackages.installAny(bytes);
+              });
+            case _ThemeInstallSource.folder:
+              final folder = await FilePicker.pickDirectory(dialogTitle: label);
+              if (folder == null || !context.mounted) return;
+              if (!folder.isScheme('file')) {
                 Toast.error(libL10n.appearanceInvalidTheme);
                 return;
               }
               await _completeThemeInstall(
-                () async =>
-                    ThemePackages.installAny(await picked.readAsBytes()),
-              );
-            case _ThemeInstallSource.folder:
-              final folder = await FilePicker.getDirectoryPath(
-                dialogTitle: label,
-              );
-              if (folder == null || !context.mounted) return;
-              await _completeThemeInstall(
-                () => ThemePackages.installFolderAny(folder),
+                () => ThemePackages.installFolderAny(folder.toFilePath()),
               );
             case _ThemeInstallSource.url:
               final url = await _promptAppText(
@@ -376,6 +379,21 @@ final class ThemeAppearance {
       ),
       keywords: 'theme catalog store repository',
     );
+  }
+
+  /// Reads [picked] up to [maxBytes], throwing before allocating beyond it.
+  static Future<Uint8List> _readBoundedBytes(
+    PlatformFile picked,
+    int maxBytes,
+  ) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in picked.readAsByteStream()) {
+      if (builder.length + chunk.length > maxBytes) {
+        throw StateError('File exceeds $maxBytes bytes');
+      }
+      builder.add(chunk);
+    }
+    return builder.takeBytes();
   }
 
   /// Installs a theme and applies it, or an icon pack and draws it.
@@ -454,7 +472,11 @@ final class ThemeAppearance {
     final card = (data['card'] as num).toDouble();
     final tile = (data['tile'] as num).toDouble();
     final button = (data['button'] as num).toDouble();
-    if (mode < 0 || mode > 2 || seed < 0 || seed > 0xffffffff || icons == null) {
+    if (mode < 0 ||
+        mode > 2 ||
+        seed < 0 ||
+        seed > 0xffffffff ||
+        icons == null) {
       throw const FormatException('Invalid custom theme');
     }
     return ThemePackage(
@@ -850,7 +872,9 @@ final class ThemeAppearance {
           );
           if (picked == null || !context.mounted) return;
           final path = picked.path;
-          if (path == null || await picked.length() > AppFont.maxBytes) {
+          final len = await picked.length();
+          if (!context.mounted) return;
+          if (path == null || (len != null && len > AppFont.maxBytes)) {
             Toast.error(libL10n.invalid);
             return;
           }
