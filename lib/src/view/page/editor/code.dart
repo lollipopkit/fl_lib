@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:computer/computer.dart';
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_highlight/themes/a11y-light.dart';
 import 'package:flutter_highlight/themes/monokai.dart';
@@ -288,7 +288,7 @@ extension on _EditorPageState {
     if (path != null) {
       final String? code;
       try {
-        code = await Computer.shared.startNoParam(() => editorReadUtf8(path));
+        code = await compute(editorReadUtf8, path);
       } catch (e, s) {
         Loggers.app.warning('Editor: read $path', e, s);
         _closeWith(libL10n.fail);

@@ -70,66 +70,88 @@ abstract final class SystemUIs {
     required bool hideTitleBar,
     Size? size,
     Offset? position,
-    WindowListener? listener,
+    WindowStateListener? listener,
   }) async {
     if (!isDesktop) return;
 
-    await windowManager.ensureInitialized();
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) {
+      Loggers.app.warning('initDesktopWindow: no current window');
+      return;
+    }
 
-    final placement = await _placeWindow(size, position);
+    final placement = _placeWindow(size, position);
     size = placement.size;
     position = placement.position;
 
-    final windowOptions = WindowOptions(
-      center: position == null,
-      // Left alone on macOS, where the system title bar draws the window's
-      // background: `window_manager` turns a transparent color into
-      // `NSColor.clear`, and on macOS 27 a visible title bar with that
-      // background is fully see-through (alpha 0 in a rendered frame, against
-      // 1 with the default). The default, `windowBackgroundColor`, follows the
-      // system appearance, as the title text drawn on it does. With the title
-      // bar hidden the Flutter view covers that area, so nothing else shows it.
-      backgroundColor: isMacOS ? null : Colors.transparent,
-      skipTaskbar: false,
-      titleBarStyle: hideTitleBar ? TitleBarStyle.hidden : null,
-      minimumSize: const Size(300, 300),
-      size: size,
-    );
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    if (hideTitleBar) {
+      window.titleBarStyle = TitleBarStyle.hidden;
+      if (isMacOS) window.isWindowControlButtonsVisible = true;
+    }
+    if (window.isFullScreen) window.isFullScreen = false;
+    if (window.isMaximized) window.unmaximize();
+    if (window.isMinimized) window.restore();
+    // Left alone on macOS, where the system title bar draws the window's
+    // background: a transparent color turns into `NSColor.clear`, and on
+    // macOS 27 a visible title bar with that background is fully see-through
+    // (alpha 0 in a rendered frame, against 1 with the default). The default,
+    // `windowBackgroundColor`, follows the system appearance, as the title text
+    // drawn on it does. With the title bar hidden the Flutter view covers that
+    // area, so nothing else shows it.
+    if (!isMacOS) {
+      window.backgroundColor = Colors.transparent.toNative();
+    }
+    window.isVisibleInTaskbar = true;
+    window.minimumSize = const Size(300, 300).toNative();
+    if (size != null && position != null) {
+      window.bounds = (position & size).toNative();
+    } else {
+      if (size != null) {
+        window.setSize(size.toNative(), false);
+      }
       if (position != null) {
-        await windowManager.setPosition(position);
+        window.position = position.toNative();
+      } else {
+        window.center();
       }
-      await windowManager.show();
-      await windowManager.focus();
-      if (listener != null) {
-        windowManager.addListener(listener);
-      }
-    });
+    }
+    window.show();
+    window.focus();
+    listener?.attach(window);
   }
 
   /// Keeps a saved window on a connected display (a display unplugged since,
   /// a position saved while minimized). Saved values stand when the displays
   /// cannot be read.
-  static Future<WindowPlacement> _placeWindow(Size? size, Offset? position) async {
+  static WindowPlacement _placeWindow(Size? size, Offset? position) {
     if (size == null && position == null) return const WindowPlacement();
     try {
-      // On Windows, `window_manager` converts with the window's scale factor
-      // and `screen_retriever` with each display's own.
-      final windowScale = windowManager.getDevicePixelRatio();
       WindowDisplay toDisplay(Display d) {
-        final origin = d.visiblePosition ?? Offset.zero;
-        final scale = d.scaleFactor?.toDouble();
+        final workArea = d.workArea.toRect();
         return WindowDisplay(
-          origin & (d.visibleSize ?? d.size),
-          scale: isWindows && scale != null && scale > 0 && windowScale > 0
-              ? scale / windowScale
-              : 1,
+          workArea.isEmpty ? d.position.toOffset() & d.size.toSize() : workArea,
         );
       }
 
-      final displays = (await screenRetriever.getAllDisplays()).map(toDisplay).toList();
-      final primary = toDisplay(await screenRetriever.getPrimaryDisplay());
-      return placeWindow(size: size, position: position, displays: displays, primary: primary);
+      final rawDisplays = DisplayManager.instance.getAll();
+      final primaryDisplay = DisplayManager.instance.getPrimary();
+      try {
+        final displays = rawDisplays.map(toDisplay).toList();
+        final primary = primaryDisplay != null
+            ? toDisplay(primaryDisplay)
+            : null;
+        return placeWindow(
+          size: size,
+          position: position,
+          displays: displays,
+          primary: primary,
+        );
+      } finally {
+        for (final d in rawDisplays) {
+          d.dispose();
+        }
+        primaryDisplay?.dispose();
+      }
     } catch (e, s) {
       Loggers.app.warning('Reading displays', e, s);
       return WindowPlacement(size: size, position: position);
@@ -141,14 +163,22 @@ abstract final class SystemUIs {
   /// Only works on desktop platforms.
   static Future<void> updateTitleBarStyle({required bool hideTitleBar}) async {
     if (!isDesktop) return;
-    await windowManager.setTitleBarStyle(
-      hideTitleBar ? TitleBarStyle.hidden : TitleBarStyle.normal,
-    );
+    final window = WindowManager.instance.getCurrent();
+    if (window != null) {
+      window.titleBarStyle = hideTitleBar
+          ? TitleBarStyle.hidden
+          : TitleBarStyle.normal;
+      if (isMacOS && hideTitleBar) {
+        window.isWindowControlButtonsVisible = true;
+      }
+    }
     WindowFrameConfig.setShowCaption(hideTitleBar);
   }
 }
 
-void withTextFieldController(Future<void> Function(TextEditingController) callback) async {
+void withTextFieldController(
+  Future<void> Function(TextEditingController) callback,
+) async {
   final controller = TextEditingController();
   try {
     await callback(controller);
