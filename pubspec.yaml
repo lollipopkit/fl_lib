@@ -74,10 +74,6 @@ dependencies:
   webdav_client_plus: ^3.0.0
   window_manager: ^0.7.1
   screen_retriever: ^0.4.1
-  computer:
-    git:
-      url: https://github.com/lollipopkit/dart_computer
-      ref: v1.0.88
   flutter_staggered_grid_view: ^0.7.0
   material_ui: ^1.5.0
   # Theme packages and the store are read in Rust (`rust/`, `hook/build.dart`).
