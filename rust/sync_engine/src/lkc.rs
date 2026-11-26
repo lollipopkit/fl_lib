@@ -31,7 +31,7 @@ pub struct LkcLog<S: Store>(pub Arc<SyncClient<S>>);
 
 impl<S: Store> BlobStore for LkcLog<S> {
     async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
-        match self.0.upload_bytes(&name, body, Condition::Absent).await {
+        match self.0.upload_blob_bytes(&name, body).await {
             Ok(_) => Ok(()),
             // Named by its content: the one there is this one.
             Err(e) if e.kind == Kind::Changed => Ok(()),
@@ -40,7 +40,7 @@ impl<S: Store> BlobStore for LkcLog<S> {
     }
 
     async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
-        Ok(self.0.download_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
+        Ok(self.0.download_blob_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
     }
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {

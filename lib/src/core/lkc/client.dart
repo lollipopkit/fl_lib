@@ -344,6 +344,7 @@ final class LkcClient {
   Future<bool> ensurePersonalAuth(String app) async {
     final uid = user.value?.id;
     if (uid == null) return false;
+    SyncKeyring.syncLkcAccount(uid);
     if (_personalAuth case (final id, final auth)) {
       if (id == uid) {
         final gen = _personalAuthGen;
@@ -470,6 +471,7 @@ final class LkcClient {
     }
     if (!stillValid()) return null;
     if (opened.twoFactor()) await markAccountKey2fa(uid);
+    SyncKeyring.clearAccountKeySealed(uid);
     return opened.key();
   }
 
@@ -493,23 +495,74 @@ final class LkcClient {
       await t.fetchAccountKey(passphrase: pwd, allowLegacy: true);
     } on LkcTeamError catch (e) {
       if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
-      SyncKeyring.accountKeySealed();
+      if (!stillValid()) return null;
+      final staged = await SyncKeyring.pendingSecretKey();
+      if (!stillValid()) return null;
+      if (staged != null && staged.isNotEmpty) {
+        LkcOpenedAccountKey? recovered;
+        var stagedWrongPassphrase = false;
+        try {
+          recovered = await t.fetchAccountKey(
+            passphrase: pwd,
+            secretKey: staged,
+            allowLegacy: false,
+          );
+        } on LkcTeamError catch (stagedErr) {
+          if (stagedErr.kind != LkcTeamErrorKind.wrongPassphrase) {
+            throw _mapTeamError(stagedErr, uid);
+          }
+          stagedWrongPassphrase = true;
+        }
+        if (!stillValid()) return null;
+        if (!stagedWrongPassphrase) {
+          if (recovered == null) return null;
+          if (recovered.twoFactor()) {
+            await SyncKeyring.commitSecretKey(staged);
+            if (!stillValid()) return null;
+            await markAccountKey2fa(uid);
+            SyncKeyring.clearAccountKeySealed(uid);
+            final LkcOpenedAccountKey published;
+            try {
+              published = await t.accountKey(
+                passphrase: pwd,
+                secretKey: staged,
+                allowLegacy: false,
+              );
+            } on LkcTeamError catch (pubErr) {
+              throw _mapTeamError(pubErr, uid);
+            }
+            if (!stillValid() || !published.twoFactor()) return null;
+            return published.key();
+          }
+        } else {
+          await SyncKeyring.clearExternalSecretKeyCommit(staged);
+          if (!stillValid()) return null;
+        }
+      }
+      if (!stillValid()) return null;
+      SyncKeyring.accountKeySealed(uid);
       return null;
     }
     if (!stillValid()) return null;
     final candidate = await SyncKeyring.secretKeyCandidate();
     if (candidate == null || !stillValid()) return null;
+    await SyncKeyring.stageExternalSecretKeyCommit(candidate);
+    if (!stillValid()) return null;
     final LkcOpenedAccountKey opened;
     try {
       opened = await t.accountKey(passphrase: pwd, secretKey: candidate, allowLegacy: !await isAccountKey2fa(uid));
     } on LkcTeamError catch (e) {
       // Sealed with another device's meanwhile.
       if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
-      SyncKeyring.accountKeySealed();
+      await SyncKeyring.clearExternalSecretKeyCommit(candidate);
+      if (!stillValid()) return null;
+      SyncKeyring.accountKeySealed(uid);
       return null;
     }
+    if (!opened.twoFactor() || !stillValid()) return null;
     await SyncKeyring.commitSecretKey(candidate);
-    if (opened.twoFactor()) await markAccountKey2fa(uid);
+    await markAccountKey2fa(uid);
+    SyncKeyring.clearAccountKeySealed(uid);
     return opened.key();
   }
 
@@ -845,6 +898,7 @@ final class LkcClient {
   Future<LkcUser> _refreshUser() async {
     final data = await _call('GET', '/auth/user');
     final u = LkcUser.fromJson(data as Map<String, dynamic>);
+    SyncKeyring.syncLkcAccount(u.id);
     user.value = u;
     cache.write(_kUser, data);
     return u;
@@ -925,6 +979,7 @@ final class LkcClient {
     for (final s in _resolvedSyncs.values) {
       s.clearPersonalAuth();
     }
+    SyncKeyring.clearAccountKeySealed();
     _refreshedAt = null;
     usage.value = null;
     user.value = null;

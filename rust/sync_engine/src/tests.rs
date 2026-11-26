@@ -2315,3 +2315,431 @@ async fn a_key_file_sealed_with_a_secret_key_is_told_without_writing() {
     none.ring.recheck().await;
     assert!(none.ring.secret_key_missing().borrow().is_empty());
 }
+
+#[tokio::test]
+async fn two_factor_key_file_rejects_epoch_rollback_and_allows_equal_or_newer() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw1");
+    let sk = a.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let ka = a.key(&file).await.unwrap();
+
+    // Advance epoch from 0 -> 1 via password change, then save epoch 0 snapshot.
+    let epoch0_body = file.file.lock().unwrap().clone().unwrap().0;
+    a.ring.password_changed(Some("pw1".into())).await.unwrap();
+    *a.secrets.password.lock().unwrap() = Some("pw2".into());
+    ka.check(true, true).await.unwrap();
+    assert_eq!(a.secrets.epochs.lock().unwrap().get("account"), Some(&1));
+
+    // Change back to pw1 (epoch 2) so epoch0_body opens with current (pw1, sk)
+    // but carries stale epoch 0 < recorded floor 2.
+    a.ring.password_changed(Some("pw2".into())).await.unwrap();
+    *a.secrets.password.lock().unwrap() = Some("pw1".into());
+    ka.check(true, true).await.unwrap();
+    assert_eq!(a.secrets.epochs.lock().unwrap().get("account"), Some(&2));
+    let epoch2_body = file.file.lock().unwrap().clone().unwrap().0;
+
+    // Server replays epoch 0 file -> MUST be rejected as Untrusted.
+    *file.file.lock().unwrap() = Some((epoch0_body, "v-rollback".into()));
+    let err = ka.check(true, true).await.unwrap_err();
+    assert!(matches!(err, Error::Untrusted(_)), "expected Untrusted, got {err:?}");
+
+    // Equal epoch (epoch 2) from another device merges cleanly.
+    let b = Device::new("pw1");
+    *b.secrets.secret_key.lock().unwrap() = Some(sk);
+    *file.file.lock().unwrap() = Some((epoch2_body, "v-equal".into()));
+    b.key(&file).await.unwrap();
+    ka.check(true, true).await.unwrap();
+}
+
+#[tokio::test]
+async fn stale_probe_cannot_mark_missing_after_successful_open() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    let sk = a.secrets.secret_key.lock().unwrap().clone().unwrap();
+    a.key(&file).await.unwrap();
+
+    // Device starts without secret key; probe starts reading while another task
+    // imports the secret key and opens the key file before the probe returns.
+    let b = Device::new("pw");
+    *b.secrets.secret_key.lock().unwrap() = None;
+
+    let read_started = Arc::new(tokio::sync::Notify::new());
+    let release_read = Arc::new(tokio::sync::Notify::new());
+    struct SlowProbeFile {
+        inner: Arc<MemKeyFile>,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+    impl KeyFile for SlowProbeFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(self.inner.file.lock().unwrap().clone())
+            })
+        }
+        fn write(&self, _: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(false) })
+        }
+    }
+
+    let probe_ring = b.ring.clone();
+    let probe_file = Arc::new(SlowProbeFile {
+        inner: file.clone(),
+        started: read_started.clone(),
+        release: release_read.clone(),
+    });
+    let probe = tokio::spawn(async move { probe_ring.sealed_with_secret_key(probe_file).await.unwrap() });
+    read_started.notified().await;
+
+    // Import secret key and open successfully while probe is in flight.
+    b.ring.store_secret_key(&sk).await.unwrap();
+    b.key(&file).await.unwrap();
+    assert!(b.ring.secret_key_missing().borrow().is_empty());
+
+    release_read.notify_one();
+    assert!(probe.await.unwrap());
+    // Stale probe must NOT mark the opened key missing again.
+    assert!(b.ring.secret_key_missing().borrow().is_empty());
+}
+
+#[tokio::test]
+async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
+    let inner = Arc::new(MemKeyFile::default());
+    // Seed a legacy passphrase-only key file (epoch 0).
+    let legacy_id = {
+        use age::secrecy::ExposeSecret;
+        age::x25519::Identity::generate().to_string().expose_secret().to_string()
+    };
+    let legacy_body = crate::key::seal_with_password(format!("# test, epoch 0\n{legacy_id}").as_bytes(), "pw").unwrap();
+    *inner.file.lock().unwrap() = Some((legacy_body, "v1".into()));
+
+    struct FailFirstPersistKeyFile {
+        inner: Arc<MemKeyFile>,
+        writes: AtomicUsize,
+        fail_persist: AtomicBool,
+        committed_body: Mutex<Option<(Vec<u8>, Option<String>, String)>>,
+    }
+    impl KeyFile for FailFirstPersistKeyFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                // Retry of already-committed body flushes local state without re-writing remote.
+                if let Some((ref prev_body, ref prev_if, ref ver)) = *self.committed_body.lock().unwrap()
+                    && prev_body == &body
+                    && prev_if == &if_version
+                {
+                    if self.fail_persist.load(Ordering::SeqCst) {
+                        return Err(Error::KeyFilePersistFailed { version: ver.clone(), detail: "still failing".into() });
+                    }
+                    return Ok(Some(ver.clone()));
+                }
+                self.writes.fetch_add(1, Ordering::SeqCst);
+                let mut f = self.inner.file.lock().unwrap();
+                if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
+                    return Ok(None);
+                }
+                let ver = "v2".to_string();
+                *f = Some((body.clone(), ver.clone()));
+                *self.committed_body.lock().unwrap() = Some((body, if_version, ver.clone()));
+                if self.fail_persist.load(Ordering::SeqCst) {
+                    return Err(Error::KeyFilePersistFailed { version: ver, detail: "watermark save failed".into() });
+                }
+                Ok(Some(ver))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    let kf = Arc::new(FailFirstPersistKeyFile {
+        inner: inner.clone(),
+        writes: AtomicUsize::new(0),
+        fail_persist: AtomicBool::new(true),
+        committed_body: Mutex::new(None),
+    });
+    let d = Device::new("pw");
+
+    // Restore (`create = false`) upgrades legacy file; PUT commits, local save fails.
+    assert!(matches!(d.ring.of(kf.clone(), false).await, Err(Error::Host(_))));
+    assert_eq!(kf.writes.load(Ordering::SeqCst), 1);
+
+    // Local save recovers; next restore retries flush without resending PUT.
+    kf.fail_persist.store(false, Ordering::SeqCst);
+    let key = d.ring.of(kf.clone(), false).await.unwrap();
+    assert_eq!(kf.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(key.open(&key.seal(b"restored").unwrap()).unwrap(), b"restored");
+}
+
+#[tokio::test]
+async fn rotate_uses_verified_credential_across_concurrent_password_change() {
+    let inner = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw1");
+    let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+    let _ = d.key(&inner).await.unwrap();
+
+    // Intercept the read inside rotate's check_locked so a password change
+    // happens right after check_locked opens v1 under pw1 and before rotate
+    // writes v2.
+    struct RaceOnRotateWrite {
+        inner: Arc<MemKeyFile>,
+        secrets: Arc<MemSecrets>,
+        ring: KeyRing,
+        trigger: AtomicBool,
+    }
+    impl KeyFile for RaceOnRotateWrite {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                if self.trigger.swap(false, Ordering::SeqCst) {
+                    self.ring.password_changed(Some("pw1".into())).await?;
+                    *self.secrets.password.lock().unwrap() = Some("pw2".into());
+                }
+                let mut f = self.inner.file.lock().unwrap();
+                if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
+                    return Ok(None);
+                }
+                let ver = format!("v-rot-{}", f.as_ref().map_or(0, |(_, v)| v.len() + 1));
+                *f = Some((body, ver.clone()));
+                Ok(Some(ver))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    let rf = Arc::new(RaceOnRotateWrite {
+        inner: inner.clone(),
+        secrets: d.secrets.clone(),
+        ring: d.ring.clone(),
+        trigger: AtomicBool::new(true),
+    });
+    let key = d.ring.of(rf, true).await.unwrap();
+    key.rotate().await.unwrap();
+
+    // Rotate sealed with pw1 (matching epoch 0 and pending["account"] = "pw1").
+    let raw_after_rotate = inner.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw_after_rotate, &sk.combine_passphrase("pw1")).unwrap().is_some());
+
+    // Subsequent check migrates cleanly from pw1 -> pw2 at epoch 1, preserving the rotated key.
+    let sealed_with_rotated = key.seal(b"after-rotate").unwrap();
+    key.check(true, true).await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&1));
+    assert!(d.secrets.pending.lock().unwrap().is_empty());
+    let raw_after_migrate = inner.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw_after_migrate, &sk.combine_passphrase("pw2")).unwrap().is_some());
+    assert_eq!(key.open(&sealed_with_rotated).unwrap(), b"after-rotate");
+}
+
+#[tokio::test]
+async fn store_secret_key_rejects_conflicting_import_after_staged_commit() {
+    let inner = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+
+    // Simulate a remote write that committed staged key A, then failed
+    // `set_secret_key` (leaving A staged + 2fa marker written).
+    d.secrets.fail_set_secret_key.store(true, Ordering::SeqCst);
+    assert!(d.key(&inner).await.is_err());
+    let staged_a = d.secrets.pending_secret_key.lock().unwrap().clone().expect("staged key A must remain");
+    assert!(d.secrets.secret_key.lock().unwrap().is_none());
+
+    // Conflicting import B must be rejected and must NOT clear or replace staged key A.
+    d.secrets.fail_set_secret_key.store(false, Ordering::SeqCst);
+    let key_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    assert!(d.ring.store_secret_key(&key_b).await.is_err());
+    assert!(d.secrets.secret_key.lock().unwrap().is_none());
+    assert_eq!(d.secrets.pending_secret_key.lock().unwrap().as_deref(), Some(staged_a.as_str()));
+
+    // Recovery still promotes staged key A cleanly.
+    let recovered = d.key(&inner).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(staged_a.as_str()));
+    assert!(d.secrets.pending_secret_key.lock().unwrap().is_none());
+    assert_eq!(recovered.open(&recovered.seal(b"ok").unwrap()).unwrap(), b"ok");
+}
+
+#[tokio::test]
+async fn join_retry_landing_on_new_log_does_not_mark_new_log_joined() {
+    let log = MemLog::new();
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+
+    for i in 0..20u32 {
+        let mut payload = String::with_capacity(40_000);
+        let mut h = blake3::Hasher::new();
+        h.update(&i.to_le_bytes());
+        let mut reader = h.finalize_xof();
+        let mut buf = [0u8; 20_000];
+        reader.fill(&mut buf);
+        for b in buf {
+            payload.push_str(&format!("{b:02x}"));
+        }
+        d.host.edit("servers", &format!("s{i:02}"), Some(json!({ "blob": payload })));
+    }
+
+    let sync = LogSync::new(d.host.clone(), log.clone(), key);
+    // Batch 1 commits on log-1; fail persist so join stops with join_sent recorded on log-1.
+    log.fail_persist_append.store(true, Ordering::SeqCst);
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(d.host.state(vec!["log.log".into()]).await.unwrap()[0].as_deref(), Some("log-1"));
+    assert!(d.host.state(vec!["log.join_sent".into()]).await.unwrap()[0].is_some());
+
+    // Transport wrapper: `read` still reports log-1 (no 410 yet), while the next
+    // `append` (batch 2, selected from log-1's join_sent) lands on a newly
+    // created log-2.
+    struct SwitchOnAppendLog {
+        inner: Arc<MemLog>,
+        switched: AtomicBool,
+    }
+    impl BlobStore for SwitchOnAppendLog {
+        async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
+            self.inner.put_blob(name, body).await
+        }
+        async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
+            self.inner.get_blob(name).await
+        }
+        async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
+            self.inner.blobs(prefix).await
+        }
+        async fn delete_blob(&self, name: String) -> Result<()> {
+            self.inner.delete_blob(name).await
+        }
+    }
+    impl LogTransport for SwitchOnAppendLog {
+        async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
+            if self.switched.swap(false, Ordering::SeqCst) {
+                let mut s = self.inner.lock();
+                s.log = "log-2".into();
+                s.batches.clear();
+                s.dropped = 0;
+                s.snapshot = None;
+            }
+            self.inner.append(key, body).await
+        }
+        async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
+            self.inner.read(after, log).await
+        }
+        async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
+            self.inner.put_snapshot(seq, body).await
+        }
+        async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
+            self.inner.snapshot().await
+        }
+    }
+
+    let switching = Arc::new(SwitchOnAppendLog { inner: log.clone(), switched: AtomicBool::new(true) });
+    let sync_switch = LogSync::new(d.host.clone(), switching, d.key(&file).await.unwrap());
+    // Sync sends batch 2 (which lands on log-2). log-2 MUST NOT be marked JOINED!
+    sync_switch.sync().await.unwrap();
+    assert_ne!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].as_deref(), Some("log-2"));
+
+    // Next sync discovers log-2 and completes a full join onto log-2 so another device sees all 20 records.
+    sync_switch.sync().await.unwrap();
+    assert_eq!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].as_deref(), Some("log-2"));
+    let d2 = Device::new("pw");
+    let k2 = d2.key(&file).await.unwrap();
+    LogSync::new(d2.host.clone(), log.clone(), k2).sync().await.unwrap();
+    assert_eq!(d2.host.values(), d.host.values());
+}
+
+#[tokio::test]
+async fn append_checkpoint_put_failure_retries_without_resending_batch() {
+    struct FailOncePutHost {
+        inner: Arc<MemHost>,
+        fail_next_put: AtomicBool,
+    }
+    impl Host for FailOncePutHost {
+        async fn device(&self) -> Result<u64> {
+            self.inner.device().await
+        }
+        async fn stamp(&self) -> Result<()> {
+            self.inner.stamp().await
+        }
+        async fn all(&self) -> Result<Vec<Stamped>> {
+            self.inner.all().await
+        }
+        async fn pending(&self, after: Option<Hlc>) -> Result<Vec<Stamped>> {
+            self.inner.pending(after).await
+        }
+        async fn read(&self, ids: Vec<(String, String)>) -> Result<Vec<Read>> {
+            self.inner.read(ids).await
+        }
+        async fn apply(&self, ops: Vec<Op>) -> Result<Vec<Op>> {
+            self.inner.apply(ops).await
+        }
+        async fn not_carried(&self) -> Result<HashSet<String>> {
+            self.inner.not_carried().await
+        }
+        async fn after_read(&self, nc: HashSet<String>) -> Result<()> {
+            self.inner.after_read(nc).await
+        }
+        async fn state(&self, keys: Vec<String>) -> Result<Vec<Option<String>>> {
+            self.inner.state(keys).await
+        }
+        async fn state_prefixed(&self, prefix: String) -> Result<Vec<(String, String)>> {
+            self.inner.state_prefixed(prefix).await
+        }
+        async fn set_state(&self, values: Vec<(String, Option<String>)>) -> Result<()> {
+            if self.fail_next_put.swap(false, Ordering::SeqCst) {
+                return Err(Error::Host("sqlite busy".into()));
+            }
+            self.inner.set_state(values).await
+        }
+        async fn clear_state(&self, prefix: String, keep: Vec<String>) -> Result<()> {
+            self.inner.clear_state(prefix, keep).await
+        }
+        async fn pass(&self, engine: String, ops: Vec<Op>) -> Result<()> {
+            self.inner.pass(engine, ops).await
+        }
+        async fn passed(&self, engine: String) -> Result<Vec<Op>> {
+            self.inner.passed(engine).await
+        }
+        async fn forget_passed(&self, engine: String) -> Result<()> {
+            self.inner.forget_passed(engine).await
+        }
+        fn warn(&self, message: String) {
+            self.inner.warn(message);
+        }
+    }
+
+    let log = MemLog::new();
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+
+    let host = Arc::new(FailOncePutHost { inner: d.host.clone(), fail_next_put: AtomicBool::new(true) });
+    let sync = LogSync::new(host, log.clone(), key);
+    log.fail_persist_append.store(true, Ordering::SeqCst);
+
+    // Remote append commits (AppendPersistFailed) AND local core.put(state) fails.
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
+    assert!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].is_none());
+
+    // Retry applies the retained checkpoint WITHOUT calling transport.append again,
+    // advancing local state cleanly.
+    sync.sync().await.unwrap();
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1, "retained checkpoint must be applied without resending batch");
+    assert_eq!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].as_deref(), Some("log-1"));
+    assert_eq!(d.host.state(vec!["log.cursor".into()]).await.unwrap()[0].as_deref(), Some("1"));
+}

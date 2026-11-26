@@ -369,19 +369,54 @@ struct PersonalSlot {
     generation: u64,
 }
 
+struct FileMutationTracker {
+    seq: u64,
+    active: usize,
+}
+
 #[derive(Default)]
 struct PendingCommits {
     /// Matches [`PersonalSlot::generation`] so stale in-flight writes from a previous
     /// auth cannot insert or reuse recovery entries after `set_personal`.
     generation: u64,
     files: HashMap<(String, Condition, [u8; 32]), (String, i64)>,
-    /// Per-file monotonic mutation counter advanced on every committed upload
-    /// or delete (204/404) so an `upload_bytes` whose local watermark save
-    /// fails never inserts a recovery entry after a later DELETE or PUT
-    /// superseded that file.
-    file_mutations: HashMap<String, u64>,
+    next_mutation_seq: u64,
+    /// Per-file mutation tracker retained only while at least one in-flight
+    /// `upload_bytes` / `upload_blob_bytes` is between remote PUT commit and
+    /// local watermark persistence and could still insert a recovery entry.
+    file_mutations: HashMap<String, FileMutationTracker>,
     batches: HashMap<(String, [u8; 32]), Appended>,
     snapshots: HashMap<(i64, [u8; 32]), String>,
+}
+
+impl PendingCommits {
+    fn bump_if_tracked(&mut self, name: &str) {
+        if let Some(entry) = self.file_mutations.get_mut(name) {
+            self.next_mutation_seq = self.next_mutation_seq.wrapping_add(1);
+            entry.seq = self.next_mutation_seq;
+        }
+    }
+}
+
+struct FileRecoveryToken<'a> {
+    pending: &'a Mutex<PendingCommits>,
+    name: String,
+    auth_gen: u64,
+    seq: u64,
+}
+
+impl Drop for FileRecoveryToken<'_> {
+    fn drop(&mut self) {
+        let mut guard = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.generation == self.auth_gen
+            && let Some(entry) = guard.file_mutations.get_mut(&self.name)
+        {
+            entry.active = entry.active.saturating_sub(1);
+            if entry.active == 0 {
+                guard.file_mutations.remove(&self.name);
+            }
+        }
+    }
 }
 
 /// One app's sync, on a signed-in [`Session`]: the person's own files, or a
@@ -396,6 +431,9 @@ pub struct SyncClient<S: Store> {
     /// The version each name was last written at by this device, so its own
     /// writes heard back on [`SyncClient::events`] are not taken for another's.
     written: Mutex<HashMap<String, String>>,
+    /// Per-file async ordering locks serializing PUT response/ETag commits and
+    /// DELETE completion for the same name.
+    file_locks: Mutex<HashMap<String, Weak<AsyncMutex<()>>>>,
     /// Committed remote writes whose local watermark save failed, keyed so a
     /// retry flushes local persistence and returns the committed result without
     /// resending the remote write.
@@ -415,6 +453,7 @@ impl<S: Store> SyncClient<S> {
             personal: Mutex::new(PersonalSlot::default()),
             clock: Clock::default(),
             written: Mutex::new(HashMap::new()),
+            file_locks: Mutex::new(HashMap::new()),
             pending_commits: Mutex::new(PendingCommits::default()),
         }
     }
@@ -484,6 +523,19 @@ impl<S: Store> SyncClient<S> {
         lock
     }
 
+    /// Per-name lock serializing PUT response/ETag commits and DELETE
+    /// completion for [name], pruned automatically when no holders remain.
+    fn file_lock(&self, name: &str) -> Arc<AsyncMutex<()>> {
+        let mut map = self.file_locks.lock().unwrap_or_else(|e| e.into_inner());
+        map.retain(|_, v| v.strong_count() > 0);
+        if let Some(lock) = map.get(name).and_then(Weak::upgrade) {
+            return lock;
+        }
+        let lock = Arc::new(AsyncMutex::new(()));
+        map.insert(name.to_string(), Arc::downgrade(&lock));
+        lock
+    }
+
     /// [app]'s files of team [team] (its id), written under key [epoch].
     pub(crate) fn for_team(session: Arc<Session<S>>, team: &str, app: &str, epoch: i64) -> Self {
         // Canonical, so homebase's events name it alike however it was given.
@@ -495,6 +547,7 @@ impl<S: Store> SyncClient<S> {
             personal: Mutex::new(PersonalSlot::default()),
             clock: Clock::default(),
             written: Mutex::new(HashMap::new()),
+            file_locks: Mutex::new(HashMap::new()),
             pending_commits: Mutex::new(PendingCommits::default()),
         }
     }
@@ -542,12 +595,26 @@ impl<S: Store> SyncClient<S> {
     /// [name]'s bytes, version and its writer's signature (when signed);
     /// `None` when there is no such file.
     pub async fn download_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
+        self.download_bytes_inner(name, false).await
+    }
+
+    /// Write-once log blob variant of [`Self::download_bytes`]: verifies the
+    /// signature without recording a per-file version watermark.
+    pub async fn download_blob_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
+        self.download_bytes_inner(name, true).await
+    }
+
+    async fn download_bytes_inner(&self, name: &str, write_once_blob: bool) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
         let mut body = Vec::new();
         let mut signed = None;
         match self.fetch_with(&self.file_path(name)?, Target::Memory(&mut body), None, |r| signed = Signed::of(r)).await? {
             Fetched::Saved(etag) => {
                 if let Some(auth) = self.personal_auth() {
-                    auth.verify_file(&self.app, name, &body, signed.as_ref(), true).await?;
+                    if write_once_blob {
+                        auth.verify_blob(&self.app, name, &body, signed.as_ref()).await?;
+                    } else {
+                        auth.verify_file(&self.app, name, &body, signed.as_ref(), true).await?;
+                    }
                 }
                 Ok(Some((body, etag, signed)))
             }
@@ -574,6 +641,17 @@ impl<S: Store> SyncClient<S> {
     /// When personal signing is attached, signs the write and advances the
     /// monotonic file version automatically.
     pub async fn upload_bytes(&self, name: &str, body: Vec<u8>, condition: Condition) -> Result<String, Error> {
+        self.upload_bytes_inner(name, body, condition, false).await
+    }
+
+    /// Write-once log blob upload (`Condition::Absent`): signs the write when
+    /// personal signing is attached, and records blob signing without adding a
+    /// per-file version watermark.
+    pub async fn upload_blob_bytes(&self, name: &str, body: Vec<u8>) -> Result<String, Error> {
+        self.upload_bytes_inner(name, body, Condition::Absent, true).await
+    }
+
+    async fn upload_bytes_inner(&self, name: &str, body: Vec<u8>, condition: Condition, write_once_blob: bool) -> Result<String, Error> {
         let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
             return self.upload_signed(name, body, condition, None).await;
         };
@@ -601,21 +679,26 @@ impl<S: Store> SyncClient<S> {
         }
         auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
-        let mut version = auth.next_file_version(&self.app, name).await?;
+        let mut version = if write_once_blob { 1 } else { auth.next_file_version(&self.app, name).await? };
         let mut republished = false;
         let mut version_retried = false;
         loop {
             let sig = auth.sign_file(&self.app, name, version, &body).await;
-            match self.upload_signed_bytes(name, body.clone(), condition.clone(), Some(&sig), auth_gen).await {
-                Ok((etag, mutation_seq)) => {
-                    if let Err(e) = auth.record_file_version(&self.app, name, version).await {
+            match self.upload_signed_bytes(name, body.clone(), condition.clone(), Some(&sig), auth_gen, true).await {
+                Ok((etag, recovery)) => {
+                    let recorded = if write_once_blob {
+                        auth.record_blob_written(&self.app).await
+                    } else {
+                        auth.record_file_version(&self.app, name, version).await
+                    };
+                    if let Err(e) = recorded {
                         if e.kind == Kind::Invalid {
-                            if let Some(seq) = mutation_seq {
+                            if let Some(ref token) = recovery {
                                 let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
                                 if slot.generation == auth_gen {
                                     let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                                     if guard.generation == auth_gen
-                                        && guard.file_mutations.get(name).copied() == Some(seq)
+                                        && guard.file_mutations.get(name).map(|m| m.seq) == Some(token.seq)
                                     {
                                         guard.files.insert(commit_key, (etag.clone(), version));
                                     }
@@ -647,15 +730,25 @@ impl<S: Store> SyncClient<S> {
     /// [upload_bytes], signed by its writer ([sig]): a team's every write is.
     pub async fn upload_signed(&self, name: &str, body: Vec<u8>, condition: Condition, sig: Option<&WriteSig>) -> Result<String, Error> {
         let start_gen = self.personal_generation();
-        self.upload_signed_bytes(name, bytes::Bytes::from(body), condition, sig, start_gen).await.map(|(etag, _)| etag)
+        self.upload_signed_bytes(name, bytes::Bytes::from(body), condition, sig, start_gen, false).await.map(|(etag, _)| etag)
     }
 
-    async fn upload_signed_bytes(&self, name: &str, bytes: bytes::Bytes, condition: Condition, sig: Option<&WriteSig>, expected_gen: u64) -> Result<(String, Option<u64>), Error> {
+    async fn upload_signed_bytes(
+        &self,
+        name: &str,
+        bytes: bytes::Bytes,
+        condition: Condition,
+        sig: Option<&WriteSig>,
+        expected_gen: u64,
+        track_recovery: bool,
+    ) -> Result<(String, Option<FileRecoveryToken<'_>>), Error> {
         let path = self.file_path(name)?;
         let size = bytes.len() as u64;
         if size > MAX_BYTES {
             return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
         }
+        let lock = self.file_lock(name);
+        let _file_guard = lock.lock().await;
         let etag = if size <= DIRECT_MAX {
             let response = self
                 .send(Method::PUT, &path, |r| {
@@ -674,26 +767,34 @@ impl<S: Store> SyncClient<S> {
             self.store_upload(&begun.url, bytes).await?;
             self.complete(&path, &begun.id).await?
         };
-        let mutation_seq = {
+        let recovery = {
             let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
             if slot.generation == expected_gen {
                 let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                let seq = if guard.generation == expected_gen {
+                let token = if guard.generation == expected_gen {
                     guard.files.retain(|(file_name, _, _), _| file_name != name);
-                    let entry = guard.file_mutations.entry(name.to_string()).or_insert(0);
-                    *entry = entry.wrapping_add(1);
-                    Some(*entry)
+                    if track_recovery {
+                        guard.next_mutation_seq = guard.next_mutation_seq.wrapping_add(1);
+                        let seq = guard.next_mutation_seq;
+                        let entry = guard.file_mutations.entry(name.to_string()).or_insert(FileMutationTracker { seq: 0, active: 0 });
+                        entry.seq = seq;
+                        entry.active += 1;
+                        Some(FileRecoveryToken { pending: &self.pending_commits, name: name.to_string(), auth_gen: expected_gen, seq })
+                    } else {
+                        guard.bump_if_tracked(name);
+                        None
+                    }
                 } else {
                     None
                 };
                 drop(guard);
                 self.written.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), etag.clone());
-                seq
+                token
             } else {
                 None
             }
         };
-        Ok((etag, mutation_seq))
+        Ok((etag, recovery))
     }
 
     /// [bytes] to an upload's presigned [url]: the store's own address, so no
@@ -750,9 +851,12 @@ impl<S: Store> SyncClient<S> {
     /// Removes [name], if [if_match] (when given) is its version. `false`
     /// when there was no such file.
     pub async fn delete(&self, name: &str, if_match: Option<&str>) -> Result<bool, Error> {
+        let path = self.file_path(name)?;
         let start_gen = self.personal_generation();
+        let lock = self.file_lock(name);
+        let _file_guard = lock.lock().await;
         let response = self
-            .send(Method::DELETE, &self.file_path(name)?, |r| match if_match {
+            .send(Method::DELETE, &path, |r| match if_match {
                 Some(etag) => r.header(header::IF_MATCH, quote(etag)),
                 None => r,
             })
@@ -764,8 +868,7 @@ impl<S: Store> SyncClient<S> {
                     let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                     if pending.generation == start_gen {
                         pending.files.retain(|(file_name, _, _), _| file_name != name);
-                        let entry = pending.file_mutations.entry(name.to_string()).or_insert(0);
-                        *entry = entry.wrapping_add(1);
+                        pending.bump_if_tracked(name);
                     }
                     drop(pending);
                     self.written.lock().unwrap_or_else(|e| e.into_inner()).remove(name);
@@ -987,11 +1090,11 @@ impl<S: Store> SyncClient<S> {
         if let Some(auth) = self.personal_auth() {
             let lock = self.dest_lock(to);
             let _guard = lock.lock().await;
-            let mut part = PartGuard::new(part_path(to));
+            let mut part = None;
             let mut found = None;
             let mut digest = [0u8; 32];
             let fetched = self
-                .fetch_with(&format!("{}/snapshot", self.app_path()?), Target::FileHashed(part.path(), &mut digest), None, |response| {
+                .fetch_with(&format!("{}/snapshot", self.app_path()?), Target::FileHashed(to, &mut part, &mut digest), None, |response| {
                     let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
                     found = header("sync-log").zip(header("sync-seq").and_then(|v| v.parse().ok())).map(|(log, seq)| Snapshot { log, seq, signed: Signed::of(response) });
                 })
@@ -1003,8 +1106,9 @@ impl<S: Store> SyncClient<S> {
                         return Err(Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq"));
                     };
                     auth.verify_snapshot_digest(&self.app, &snap, &digest).await?;
-                    tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
-                    part.disarm();
+                    let mut staged = part.ok_or_else(|| Error::new(Kind::Invalid, "missing staged snapshot file"))?;
+                    tokio::fs::rename(staged.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+                    staged.disarm();
                     Ok(Some(snap))
                 }
                 Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a snapshot answered 304")),
@@ -1149,14 +1253,15 @@ impl<S: Store> SyncClient<S> {
         };
         let lock = self.dest_lock(to);
         let _guard = lock.lock().await;
-        let mut part = PartGuard::new(part_path(to));
+        let mut part = None;
         let mut signed = None;
         let mut digest = [0u8; 32];
-        let fetched = self.fetch_with(path, Target::FileHashed(part.path(), &mut digest), known, |r| signed = Signed::of(r)).await?;
+        let fetched = self.fetch_with(path, Target::FileHashed(to, &mut part, &mut digest), known, |r| signed = Signed::of(r)).await?;
         if let Fetched::Saved(_) = &fetched {
             auth.verify_file_digest(&self.app, name, &digest, signed.as_ref(), enforce_monotonic).await?;
-            tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
-            part.disarm();
+            let mut staged = part.ok_or_else(|| Error::new(Kind::Invalid, "missing staged file"))?;
+            tokio::fs::rename(staged.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+            staged.disarm();
         }
         Ok(fetched)
     }
@@ -1212,7 +1317,12 @@ impl<S: Store> SyncClient<S> {
                 let _guard = lock.lock().await;
                 save(body, to).await?
             }
-            Target::FileHashed(part, digest) => *digest = save_hashed(body, part).await?,
+            Target::FileHashed(to, part, digest) => {
+                let (file, guard) = create_part(to).await?;
+                let part_path = guard.path().to_path_buf();
+                *part = Some(guard);
+                *digest = save_hashed(body, file, &part_path).await?;
+            }
             Target::Memory(buffer) => *buffer = read_limited(body, MAX_READ as usize).await?,
         }
         Ok(Fetched::Saved(etag))
@@ -1390,19 +1500,34 @@ fn stale_epoch(response: &reqwest::Response, sent: Option<i64>) -> Option<i64> {
 /// Where a download goes.
 enum Target<'a> {
     File(&'a Path),
-    /// Streams directly to a `.part` path while computing its blake3 digest;
-    /// caller verifies signatures before renaming into place.
-    FileHashed(&'a Path, &'a mut [u8; 32]),
+    /// Exclusively creates a unique temporary file beside the destination and
+    /// streams into it while computing its blake3 digest; caller verifies
+    /// signatures before renaming that same file into place.
+    FileHashed(&'a Path, &'a mut Option<PartGuard>, &'a mut [u8; 32]),
     Memory(&'a mut Vec<u8>),
 }
 
-/// Where a download to [to] is staged, under its destination's lock: one
-/// name per destination, so what a download cut short left is written over
-/// by the next.
-fn part_path(to: &Path) -> PathBuf {
-    let mut name = to.as_os_str().to_os_string();
-    name.push(".part");
-    PathBuf::from(name)
+/// Exclusively creates a unique temporary file in [to]'s directory and arms a
+/// [`PartGuard`] only after creation succeeds.
+async fn create_part(to: &Path) -> Result<(tokio::fs::File, PartGuard), Error> {
+    let dir = to.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    let base = to.file_name().and_then(|n| n.to_str()).unwrap_or("download");
+    for _ in 0..16 {
+        let mut rnd = [0u8; 8];
+        getrandom::fill(&mut rnd).map_err(|e| Error::new(Kind::Invalid, format!("random temp name: {e}")))?;
+        let mut suffix = String::with_capacity(16);
+        for b in rnd {
+            use std::fmt::Write as _;
+            let _ = write!(suffix, "{b:02x}");
+        }
+        let path = dir.join(format!(".{base}.{suffix}.part"));
+        match tokio::fs::OpenOptions::new().write(true).create_new(true).open(&path).await {
+            Ok(file) => return Ok((file, PartGuard::new(path))),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(Error::new(Kind::Invalid, format!("{}: {e}", path.display()))),
+        }
+    }
+    Err(Error::new(Kind::Invalid, format!("{}: could not allocate unique temp file", to.display())))
 }
 
 async fn read_file(from: &Path) -> Result<Vec<u8>, Error> {
@@ -1420,8 +1545,8 @@ async fn read_limited(mut response: reqwest::Response, max: usize) -> Result<Vec
     Ok(body)
 }
 
-/// Removes a staged `.part` file on drop (error or cancellation) unless
-/// disarmed after its atomic rename succeeds.
+/// Removes an exclusively created temporary file on drop (error or
+/// cancellation) unless disarmed after its atomic rename succeeds.
 struct PartGuard(Option<PathBuf>);
 
 impl PartGuard {
@@ -1446,20 +1571,21 @@ impl Drop for PartGuard {
     }
 }
 
-/// [response]'s body into [to], through a file beside it renamed into place:
-/// a download cut short leaves the old file and removes the staged `.part`.
+/// [response]'s body into [to], through a unique file beside it renamed into
+/// place: a download cut short leaves the old file and removes the temp file.
 async fn save(response: reqwest::Response, to: &Path) -> Result<(), Error> {
-    let mut part = PartGuard::new(part_path(to));
-    save_hashed(response, part.path()).await?;
+    let (file, mut part) = create_part(to).await?;
+    let part_path = part.path().to_path_buf();
+    save_hashed(response, file, &part_path).await?;
     tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
     part.disarm();
     Ok(())
 }
 
-/// Streams [response]'s body into [part] and returns its blake3 digest.
-async fn save_hashed(response: reqwest::Response, part: &Path) -> Result<[u8; 32], Error> {
+/// Streams [response]'s body into an already-created [file] at [part] and
+/// returns its blake3 digest.
+async fn save_hashed(response: reqwest::Response, mut file: tokio::fs::File, part: &Path) -> Result<[u8; 32], Error> {
     let io = |e: std::io::Error| Error::new(Kind::Invalid, format!("{}: {e}", part.display()));
-    let mut file = tokio::fs::File::create(part).await.map_err(io)?;
     let mut stream = response.bytes_stream();
     let mut hasher = blake3::Hasher::new();
     let mut written = 0u64;
@@ -1467,7 +1593,6 @@ async fn save_hashed(response: reqwest::Response, part: &Path) -> Result<[u8; 32
         let chunk = chunk.map_err(|e| Error::new(Kind::Unreachable, e.to_string()))?;
         written += chunk.len() as u64;
         if written > MAX_READ {
-            let _ = tokio::fs::remove_file(part).await;
             return Err(Error::new(Kind::TooLarge, "the file outgrew homebase's limit"));
         }
         hasher.update(&chunk);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
+import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -402,5 +403,164 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('page-0'), findsOneWidget);
+  });
+
+  testWidgets('horizontal pointer-scroll respects canProceed gate and runs onBeforeNext hook', (tester) async {
+    final gate = false.vn;
+    addTearDown(gate.dispose);
+    var allowHook = false;
+    var hookCalls = 0;
+    var doneCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: const [
+              Center(child: Text('page-0')),
+              Center(child: Text('page-1')),
+              Center(child: Text('page-2')),
+            ],
+            canProceed: (page) => page == 1 ? gate : null,
+            onBeforeNext: (page) => page == 2
+                ? () async {
+                    hookCalls++;
+                    return allowHook;
+                  }
+                : null,
+            onDone: (_) => doneCalls++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> scrollHorizontal(double dx) async {
+      final center = tester.getCenter(find.byType(PageView));
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(center));
+      await tester.sendEventToBinding(pointer.scroll(Offset(dx, 0)));
+      await tester.pumpAndSettle();
+    }
+
+    // Move to gated page-1 via Next.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+
+    // Forward horizontal pointer-scroll (> half viewport) on locked page-1 must not advance.
+    await scrollHorizontal(500);
+    expect(find.text('page-1'), findsOneWidget);
+
+    // Backward horizontal pointer-scroll still navigates back.
+    await scrollHorizontal(-500);
+    expect(find.text('page-0'), findsOneWidget);
+
+    // Unlock page-1 and advance to hook-guarded final page-2.
+    gate.value = true;
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('page-2'), findsOneWidget);
+
+    // Forward horizontal pointer-scroll runs onBeforeNext; returning false stays.
+    await scrollHorizontal(500);
+    expect(hookCalls, 1);
+    expect(doneCalls, 0);
+    expect(find.text('page-2'), findsOneWidget);
+
+    // When onBeforeNext succeeds on the last page, matches Done behavior.
+    allowHook = true;
+    await scrollHorizontal(500);
+    expect(hookCalls, 2);
+    expect(doneCalls, 1);
+  });
+
+  testWidgets('onBeforeNext completion is discarded if user scrolled back while awaiting', (tester) async {
+    final pending = Completer<bool>();
+    var doneCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: const [
+              Center(child: Text('page-0')),
+              Center(child: Text('page-1')),
+              Center(child: Text('page-2')),
+            ],
+            onBeforeNext: (page) => page == 1 ? () => pending.future : null,
+            onDone: (_) => doneCalls++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Go to page-1 and start async onBeforeNext via Next.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+
+    // Swipe back to page-0 while page-1's hook is still pending.
+    await tester.drag(find.byType(PageView), const Offset(600, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('page-0'), findsOneWidget);
+
+    // Hook resolves true: stale completion must be discarded, staying on page-0.
+    pending.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.text('page-0'), findsOneWidget);
+    expect(doneCalls, 0);
+  });
+
+  testWidgets('onBeforeNext completion is discarded after ABA page navigation (1 -> 0 -> 1)', (tester) async {
+    final pending = Completer<bool>();
+    var doneCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: const [
+              Center(child: Text('page-0')),
+              Center(child: Text('page-1')),
+              Center(child: Text('page-2')),
+            ],
+            onBeforeNext: (page) => page == 1 ? () => pending.future : null,
+            onDone: (_) => doneCalls++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Go to page-1 and start async onBeforeNext.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+
+    // Navigate 1 -> 0 -> 1 while the original hook is still pending.
+    await tester.drag(find.byType(PageView), const Offset(600, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('page-0'), findsOneWidget);
+
+    await tester.drag(find.byType(PageView), const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+
+    // Original hook resolves true: ABA navigation must still discard it.
+    pending.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+    expect(doneCalls, 0);
   });
 }

@@ -154,6 +154,11 @@ impl SyncKeys {
         self.0.secret_key_missing().borrow().iter().cloned().collect()
     }
 
+    /// The secret key currently staged in the pending slot, if any (read only).
+    pub async fn pending_secret_key(&self) -> R<Option<String>> {
+        Ok(self.0.pending_secret_key().await?)
+    }
+
     /// The secret key LK Cloud's account key is first sealed with: the one
     /// held, else one staged for it, made now when the app allows; null when
     /// none may be made. [commit_secret_key] once the account key holds it.
@@ -175,6 +180,24 @@ impl SyncKeys {
     /// [candidate] as this device's secret key.
     pub async fn commit_secret_key(&self, candidate: String) -> R<()> {
         Ok(self.0.commit_secret_key(&candidate).await?)
+    }
+
+    /// Marks [candidate] as having an in-flight/unconfirmed external remote
+    /// commit (such as LK Cloud's account key).
+    pub async fn stage_external_secret_key_commit(&self, candidate: String) -> R<()> {
+        Ok(self.0.stage_external_secret_key_commit(&candidate).await?)
+    }
+
+    /// Clears the external commit marker for [candidate] when the remote write
+    /// is known not to have committed.
+    pub async fn clear_external_secret_key_commit(&self, candidate: String) -> R<()> {
+        Ok(self.0.clear_external_secret_key_commit(&candidate).await?)
+    }
+
+    /// Imports [key] as this device's secret key, coordinated with all remote
+    /// key-file staging/write/promotion operations on this ring.
+    pub async fn store_secret_key(&self, key: String, expect_empty_before: bool) -> R<()> {
+        Ok(self.0.store_secret_key_with_prior(&key, expect_empty_before).await?)
     }
 
     #[frb(sync)]

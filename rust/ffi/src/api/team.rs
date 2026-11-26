@@ -351,11 +351,16 @@ impl LkcTeams {
         Ok(self.files.fetch_with(&passphrase, sk.as_ref(), allow_legacy).await?.map(Into::into))
     }
 
-    /// The account key, made now if no device has, and published.
+    /// The account key, made now if no device has, and published without
+    /// resetting an existing signing chain. When a secret key is supplied,
+    /// requires confirmed two-factor sealing before publishing or returning.
     pub async fn account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<LkcOpenedAccountKey, LkcTeamError> {
         let sk = parse_secret_key(secret_key)?;
         let opened = self.files.load_or_create_with(&passphrase, sk.as_ref(), allow_legacy).await?;
-        self.api().publish(&opened.key).await?;
+        if sk.is_some() && !opened.two_factor {
+            return Err(TeamError::Unreachable("account key two-factor sealing not confirmed".into()).into());
+        }
+        self.api().publish_no_reset(&opened.key).await?;
         Ok(LkcOpenedAccountKey(opened))
     }
 

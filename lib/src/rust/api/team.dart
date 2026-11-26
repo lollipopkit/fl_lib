@@ -181,7 +181,9 @@ abstract class LkcTeamSpace implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeams>>
 abstract class LkcTeams implements RustOpaqueInterface {
-  /// The account key, made now if no device has, and published.
+  /// The account key, made now if no device has, and published without
+  /// resetting an existing signing chain. When a secret key is supplied,
+  /// requires confirmed two-factor sealing before publishing or returning.
   Future<LkcOpenedAccountKey> accountKey({
     required String passphrase,
     String? secretKey,

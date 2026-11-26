@@ -107,6 +107,15 @@ struct Batch {
 }
 
 #[derive(Clone)]
+struct PendingAppend {
+    batch: Batch,
+    sent_at: i64,
+    /// Retained once the remote accepted [batch], until `core.put(state)`
+    /// commits the local checkpoint.
+    accepted: Option<Appended>,
+}
+
+#[derive(Clone)]
 struct PendingSnapshot {
     log: Option<String>,
     seq: i64,
@@ -120,9 +129,10 @@ struct PendingSnapshot {
 pub struct LogSync<H, T, S> {
     core: Core<H, T, S>,
     transport: Arc<T>,
-    /// A batch sealed and not yet answered: sent again as it is, so the
-    /// server takes it once; and when it was first sent.
-    unanswered: Mutex<Option<(Batch, i64)>>,
+    /// A batch sealed and not yet checkpointed durably into local state: resent
+    /// with its original key while unaccepted, or checkpointed directly without
+    /// resending once accepted.
+    unanswered: Mutex<Option<PendingAppend>>,
     /// A snapshot committed remotely whose local watermark save failed: retried
     /// with the exact same bytes so transport flushes local state without
     /// resending, then sweeps covered blobs.
@@ -269,14 +279,15 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let unanswered = {
             let mut held = self.unanswered.lock().unwrap_or_else(|e| e.into_inner());
             // Not sent as far as this device knows: what was sent did not
-            // move, so its records are read and sent again below.
-            if held.as_ref().is_some_and(|(_, at)| now_ms() - at > UNANSWERED_MAX_MS) {
+            // move, so its records are read and sent again below. Never expire
+            // an already-accepted batch awaiting local checkpoint persistence.
+            if held.as_ref().is_some_and(|p| p.accepted.is_none() && now_ms() - p.sent_at > UNANSWERED_MAX_MS) {
                 *held = None;
             }
-            held.as_ref().map(|(b, _)| b.clone())
+            held.clone()
         };
-        if let Some(batch) = unanswered {
-            compact |= self.append(run, batch).await?;
+        if let Some(pending) = unanswered {
+            compact |= self.append_pending(run, pending).await?.compact;
         }
         core.host.stamp().await?;
         let log = core.get(LOG).await?;
@@ -305,7 +316,9 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let mine = core.device().await?;
         let mut last = sent;
         let mut join_last = join_sent.clone();
+        let mut join_log = if joining && join_sent.is_some() { log.clone() } else { None };
         let batches = core.batches(ops)?;
+        let had_batches = !batches.is_empty();
         let last_idx = batches.len().saturating_sub(1);
         for (idx, (chunk, body)) in batches.into_iter().enumerate() {
             for op in &chunk {
@@ -321,20 +334,25 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             }
             let mark_joined = joining && complete && idx == last_idx;
             let batch_join = if joining && !mark_joined { join_last.clone() } else { None };
-            let join_for_log = if joining && (join_sent.is_some() || idx > 0) {
-                core.get(LOG).await?
-            } else {
-                None
-            };
-            compact |= self.append(run, Batch { key: engine::new_key(), body, last, join_last: batch_join, join_for_log, mark_joined }).await?;
+            let join_for_log = if joining { join_log.clone() } else { None };
+            let appended = self
+                .append(run, Batch { key: engine::new_key(), body, last, join_last: batch_join, join_for_log, mark_joined })
+                .await?;
+            if joining && join_log.is_none() {
+                join_log = Some(appended.log);
+            }
+            compact |= appended.compact;
         }
         // Past what was left out too, so it is not looked at again.
         let newest = stamped.iter().map(|r| r.h).filter(|h| h.device == mine).fold(last, |a, h| if Some(h) > a { Some(h) } else { a });
         if newest != last {
             core.put(vec![(SENT, Some(hlc_text(newest)))]).await?;
         }
-        if joining && complete {
-            core.put(vec![(JOINED, core.get(LOG).await?), (JOIN_LOG, None), (JOIN_SENT, None)]).await?;
+        // For joins with batches, only a generation-matched final append marks
+        // JOINED; an empty join completes here bound strictly to the log used
+        // to select records.
+        if !had_batches && joining && complete && log.is_some() && core.get(LOG).await? == log {
+            core.put(vec![(JOINED, log), (JOIN_LOG, None), (JOIN_SENT, None)]).await?;
         }
         let mut wrote_snapshot = false;
         if compact {
@@ -344,63 +362,82 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         Ok(wrote_snapshot)
     }
 
-    /// Sends [batch]; whether a snapshot is due. A full log is compacted
-    /// first, then sent again.
-    async fn append(&self, run: &Run<'_>, batch: Batch) -> Result<bool> {
+    /// Sends [batch]; answers the server's [Appended] result. A full log is
+    /// compacted first, then sent again.
+    async fn append(&self, run: &Run<'_>, batch: Batch) -> Result<Appended> {
+        self.append_pending(run, PendingAppend { batch, sent_at: now_ms(), accepted: None }).await
+    }
+
+    async fn append_pending(&self, run: &Run<'_>, mut pending: PendingAppend) -> Result<Appended> {
         let core = &self.core;
-        let mut compacted = false;
-        loop {
-            {
-                let mut held = self.unanswered.lock().unwrap_or_else(|e| e.into_inner());
-                let at = match held.as_ref() {
-                    Some((b, at)) if b.key == batch.key => *at,
-                    _ => now_ms(),
-                };
-                *held = Some((batch.clone(), at));
-            }
-            let (appended, persist_err) = match self.transport.append(batch.key.clone(), batch.body.clone()).await {
-                Err(Error::LogFull) if !compacted => {
-                    self.pull_in(run).await?;
-                    if !self.write_snapshot(run).await? {
-                        return Err(Error::LogFull);
+        let (appended, persist_err) = if let Some(accepted) = pending.accepted.clone() {
+            (accepted, None)
+        } else {
+            let mut compacted = false;
+            loop {
+                {
+                    let mut held = self.unanswered.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Some(prev) = held.as_ref()
+                        && prev.batch.key == pending.batch.key
+                    {
+                        pending.sent_at = prev.sent_at;
                     }
-                    compacted = true;
-                    continue;
+                    *held = Some(pending.clone());
                 }
-                Err(Error::AppendPersistFailed { appended, detail }) => (appended, Some(detail)),
-                other => (other?, None),
-            };
-            *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = None;
-            let log = core.get(LOG).await?;
-            let cursor = core.get_int(CURSOR).await?;
-            let mut state = vec![(SENT, Some(hlc_text(batch.last)))];
-            if log.is_none() {
-                state.push((LOG, Some(appended.log.clone())));
-            }
-            // Only advance join progress when the batch landed on the same log
-            // its preceding join batches belonged to (never mark a recreated log
-            // joined from a stale unanswered batch).
-            if batch.join_for_log.as_deref().is_none_or(|exp| exp == appended.log) {
-                if batch.mark_joined {
-                    state.push((JOINED, Some(appended.log.clone())));
-                    state.push((JOIN_LOG, None));
-                    state.push((JOIN_SENT, None));
-                } else if let Some(j) = &batch.join_last {
-                    state.push((JOIN_LOG, Some(appended.log.clone())));
-                    state.push((JOIN_SENT, Some(j.encode())));
+                match self.transport.append(pending.batch.key.clone(), pending.batch.body.clone()).await {
+                    Err(Error::LogFull) if !compacted => {
+                        self.pull_in(run).await?;
+                        if !self.write_snapshot(run).await? {
+                            return Err(Error::LogFull);
+                        }
+                        compacted = true;
+                        continue;
+                    }
+                    Err(Error::AppendPersistFailed { appended, detail }) => {
+                        pending.accepted = Some(appended.clone());
+                        *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = Some(pending.clone());
+                        break (appended, Some(detail));
+                    }
+                    Ok(appended) => {
+                        pending.accepted = Some(appended.clone());
+                        *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = Some(pending.clone());
+                        break (appended, None);
+                    }
+                    Err(e) => return Err(e),
                 }
             }
-            // Right after the cursor: nothing between to read, and this batch
-            // is what is here already.
-            if (log.is_none() || log.as_deref() == Some(&appended.log)) && appended.seq == cursor + 1 {
-                state.push((CURSOR, Some(appended.seq.to_string())));
-            }
-            core.put(state).await?;
-            if let Some(detail) = persist_err {
-                return Err(Error::Host(detail));
-            }
-            return Ok(appended.compact);
+        };
+        let batch = &pending.batch;
+        let log = core.get(LOG).await?;
+        let cursor = core.get_int(CURSOR).await?;
+        let mut state = vec![(SENT, Some(hlc_text(batch.last)))];
+        if log.is_none() {
+            state.push((LOG, Some(appended.log.clone())));
         }
+        // Only advance join progress when the batch landed on the same log
+        // its preceding join batches belonged to (never mark a recreated log
+        // joined from a stale unanswered batch).
+        if batch.join_for_log.as_deref().is_none_or(|exp| exp == appended.log) {
+            if batch.mark_joined {
+                state.push((JOINED, Some(appended.log.clone())));
+                state.push((JOIN_LOG, None));
+                state.push((JOIN_SENT, None));
+            } else if let Some(j) = &batch.join_last {
+                state.push((JOIN_LOG, Some(appended.log.clone())));
+                state.push((JOIN_SENT, Some(j.encode())));
+            }
+        }
+        // Right after the cursor: nothing between to read, and this batch
+        // is what is here already.
+        if (log.is_none() || log.as_deref() == Some(&appended.log)) && appended.seq == cursor + 1 {
+            state.push((CURSOR, Some(appended.seq.to_string())));
+        }
+        core.put(state).await?;
+        *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        if let Some(detail) = persist_err {
+            return Err(Error::Host(detail));
+        }
+        Ok(appended)
     }
 
     async fn flush_pending_snapshot(&self) -> Result<Option<PendingSnapshot>> {

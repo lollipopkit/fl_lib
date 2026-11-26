@@ -81,6 +81,7 @@ final class LkcLogSync {
       final now = client.user.value?.id;
       if (now == user) return;
       user = now;
+      SyncKeyring.syncLkcAccount(now);
       final was = _account;
       if (was != null && was != now) unawaited(SyncKeyring.forget(was));
       reset();

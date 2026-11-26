@@ -220,6 +220,10 @@ impl Secrets for DartSecrets {
         Box::pin(async move { self.0.call::<Value>("secrets.setSecretKey", key).await.map(|_| ()) })
     }
 
+    fn import_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move { self.0.call::<Value>("secrets.importSecretKey", key).await.map(|_| ()) })
+    }
+
     fn pending_secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
         Box::pin(async { self.0.call("secrets.pendingSecretKey", ()).await })
     }

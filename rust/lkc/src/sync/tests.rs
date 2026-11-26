@@ -712,7 +712,7 @@ async fn upload_signed_replacement_invalidates_cached_pending_commit_only_on_suc
                 0 => written("e1"),
                 1 => Response::status(412),
                 2 => written("e2-signed"),
-                _ => written("e3"),
+                _ => Response::status(412),
             }
         }
         _ => Response::status(404),
@@ -736,11 +736,11 @@ async fn upload_signed_replacement_invalidates_cached_pending_commit_only_on_suc
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
 
     // 3. Successful upload_signed replacement invalidates the cached entry so a later
-    //    upload_bytes sends a fresh PUT rather than returning stale "e1".
+    //    upload_bytes sends a fresh PUT and hits 412 Kind::Changed rather than returning stale "e1".
     assert_eq!(sync.upload_signed(NAME, b"replaced".to_vec(), Condition::Match("e1".into()), None).await.unwrap(), "e2-signed");
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
     keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
-    assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e3");
+    assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err().kind, Kind::Changed);
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 4);
 }
 
@@ -846,4 +846,86 @@ async fn stale_upload_does_not_insert_written_marker_after_set_personal() {
     assert_eq!(sync.upload_bytes(NAME, b"v2".to_vec(), Condition::Absent).await.unwrap(), "e-fresh");
     let fresh_ev = json!({ "event": "sync", "app": "serverbox", "name": NAME, "etag": "e-fresh" });
     assert_eq!(sync.heard(&fresh_ev), None);
+}
+
+#[tokio::test]
+async fn file_mutations_stays_bounded_across_deletes_404s_and_non_personal_clients() {
+    let (_fake, sync) = homebase(|r| match (r.method.as_str(), r.path()) {
+        ("PUT", _) => written("e1"),
+        ("DELETE", p) if p.ends_with("present.age") => Response::status(204),
+        ("DELETE", _) => Response::status(404),
+        _ => Response::status(404),
+    })
+    .await;
+
+    // Without personal auth: uploads, deletes, and 404s must not leave entries in file_mutations.
+    assert_eq!(sync.upload_bytes("present.age", b"a".to_vec(), Condition::Absent).await.unwrap(), "e1");
+    assert!(sync.delete("present.age", None).await.unwrap());
+    assert!(!sync.delete("never-existed.age", None).await.unwrap());
+    assert!(sync.pending_commits.lock().unwrap().file_mutations.is_empty());
+
+    // With personal auth: completed upload clears its tracking entry, and untracked deletes/404s do not insert.
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let (_fake2, sync2) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", _) => written("e1"),
+        ("DELETE", _) => Response::status(404),
+        _ => Response::status(404),
+    })
+    .await;
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    sync2.set_personal(Some(auth));
+
+    assert_eq!(sync2.upload_bytes("tracked.age", b"body".to_vec(), Condition::Absent).await.unwrap(), "e1");
+    assert!(sync2.pending_commits.lock().unwrap().file_mutations.is_empty());
+    assert!(!sync2.delete("untracked.age", None).await.unwrap());
+    assert!(sync2.pending_commits.lock().unwrap().file_mutations.is_empty());
+}
+
+#[tokio::test]
+async fn download_404_leaves_existing_destination_and_unrelated_part_file_untouched() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let (_fake, sync) = homebase(|_| Response::status(404)).await;
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    sync.set_personal(Some(auth));
+
+    let dir = tempdir::Dir::new();
+    let dest = file(&dir, "bak.age", b"existing-dest");
+    let unrelated_part = file(&dir, "bak.age.part", b"unrelated-staged");
+
+    assert_eq!(sync.download("bak.age", &dest, None).await.unwrap(), Fetched::Missing);
+    assert_eq!(std::fs::read(&dest).unwrap(), b"existing-dest");
+    assert_eq!(std::fs::read(&unrelated_part).unwrap(), b"unrelated-staged");
+
+    assert!(sync.download_snapshot(&dest).await.unwrap().is_none());
+    assert_eq!(std::fs::read(&dest).unwrap(), b"existing-dest");
+    assert_eq!(std::fs::read(&unrelated_part).unwrap(), b"unrelated-staged");
+}
+
+#[tokio::test]
+async fn concurrent_delete_after_put_does_not_leave_put_etag_cached() {
+    let (_fake, sync) = homebase(|r| match r.method.as_str() {
+        "PUT" => written("e-put"),
+        "DELETE" => Response::status(204),
+        _ => Response::status(404),
+    })
+    .await;
+
+    // Acquire the per-name lock to simulate PUT holding it until response + ETag
+    // commit complete while DELETE waits for ordering.
+    let s1 = sync.clone();
+    let s2 = sync.clone();
+    let put = tokio::spawn(async move { s1.upload_signed(NAME, b"x".to_vec(), Condition::Absent, None).await.unwrap() });
+    let del = tokio::spawn(async move {
+        tokio::task::yield_now().await;
+        s2.delete(NAME, None).await.unwrap()
+    });
+    assert_eq!(put.await.unwrap(), "e-put");
+    assert!(del.await.unwrap());
+    // Whichever order the two tasks acquired the per-name lock, once we run a
+    // DELETE after a PUT completes, the ETag cache never retains the PUT's ETag.
+    assert!(sync.delete(NAME, None).await.unwrap());
+    assert!(sync.written.lock().unwrap().get(NAME).is_none());
 }

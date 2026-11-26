@@ -79,22 +79,27 @@ abstract final class SyncKeyring {
     }
   }
 
-  /// LK Cloud's account key is sealed with a secret key this device does not
-  /// hold; until [recheck].
-  static bool _accountKeySealed = false;
+  /// The LK Cloud account whose account key is sealed with a secret key this
+  /// device does not hold; cleared on account change, sign-out, [release],
+  /// [forget], or [recheck].
+  static String? _accountKeySealedFor;
 
   static void _syncNotifiers() {
     final ring = _keys;
     final mismatchNow = ring == null ? const <String>{} : ring.mismatch().toSet();
     if (!setEquals(mismatchNow, passwordMismatch.value)) passwordMismatch.value = mismatchNow;
-    final missingNow = _accountKeySealed || (ring != null && ring.secretKeyMissing().isNotEmpty);
+    final missingNow = _accountKeySealedFor != null || (ring != null && ring.secretKeyMissing().isNotEmpty);
     if (missingNow != secretKeyMissing.value) secretKeyMissing.value = missingNow;
   }
 
   /// The key of [account] on LK Cloud. Without [create] (a restore, nothing
   /// synced), none is made where there is none: [SyncKeyNotHere].
-  static Future<SyncKeyHandle> ofLkc(LkcSync sync, String account, {bool create = true}) =>
-      _said(() => _ring.ofLkc(lkc: sync, account: account, create: create));
+  static Future<SyncKeyHandle> ofLkc(LkcSync sync, String account, {bool create = true}) {
+    if (_accountKeySealedFor != null && _accountKeySealedFor != account) {
+      _accountKeySealedFor = null;
+    }
+    return _said(() => _ring.ofLkc(lkc: sync, account: account, create: create));
+  }
 
   /// The key beside a folder's segments.
   static Future<SyncKeyHandle> ofFiles(SyncKeyFile file, {bool create = true}) =>
@@ -111,23 +116,85 @@ abstract final class SyncKeyring {
   }
 
   /// [key] (normalized) as this device's secret key, entered or imported by
-  /// the person; [recheck] after.
-  static Future<void> storeSecretKey(String key) => withSecretKeyLock(() async {
-    await SecureStoreProps.syncSecretKey.write(key, limited: false);
-    await _pendingSecretKeyProp.write(null, limited: false);
-  });
+  /// the person; [recheck] after. Coordinates with Rust key-file writes across
+  /// the full remote-write lifecycle and rejects conflicting imports when a
+  /// staged secret key has already committed to a remote.
+  static Future<void> storeSecretKey(String key) async {
+    final before = await SecureStoreProps.syncSecretKey.read(limited: false);
+    final expectEmptyBefore = before == null || before.isEmpty;
+    return withSecretKeyLock(() async {
+      final current = await SecureStoreProps.syncSecretKey.read(limited: false);
+      if (expectEmptyBefore &&
+          current != null &&
+          current.isNotEmpty &&
+          current != key) {
+        throw StateError('A staged secret key already committed while importing');
+      }
+      if (ready) {
+        await _said(() => _ring.storeSecretKey(key: key, expectEmptyBefore: expectEmptyBefore));
+        return;
+      }
+      final staged = await _pendingSecretKeyProp.read(limited: false);
+      if (staged != null && staged.isNotEmpty && staged != key) {
+        final epochs = _decoded(_epochsProp.get());
+        final pending = _decoded(await _pendingProp.storage.read(key: _pendingProp.key));
+        final hasDurableCommit =
+            (current == null || current.isEmpty) &&
+            (epochs.keys.any((k) => k.startsWith('2fa:')) ||
+                pending.keys.any((k) => k.startsWith('intent:')));
+        if (hasDurableCommit) {
+          throw StateError('A staged secret key has a committed remote write; refusing conflicting import');
+        }
+      }
+      await SecureStoreProps.syncSecretKey.write(key, limited: false);
+      await _pendingSecretKeyProp.write(null, limited: false);
+    });
+  }
 
   /// Whether [account]'s key file on LK Cloud ([sync]'s `identity.age`) is
   /// sealed with a secret key, read only: one to import here. Said through
   /// [secretKeyMissing].
-  static Future<bool> lkcSealedWithSecretKey(LkcSync sync, String account) =>
-      _said(() => _ring.lkcSealedWithSecretKey(lkc: sync, account: account));
+  static Future<bool> lkcSealedWithSecretKey(LkcSync sync, String account) {
+    if (_accountKeySealedFor != null && _accountKeySealedFor != account) {
+      _accountKeySealedFor = null;
+    }
+    return _said(() => _ring.lkcSealedWithSecretKey(lkc: sync, account: account));
+  }
 
-  /// LK Cloud's account key is sealed with a secret key this device does not
-  /// hold: said through [secretKeyMissing] until [recheck].
-  static void accountKeySealed() {
-    _accountKeySealed = true;
+  /// [account]'s LK Cloud account key is sealed with a secret key this device
+  /// does not hold: said through [secretKeyMissing] until [recheck] or an
+  /// account change / sign-out.
+  static void accountKeySealed(String account) {
+    _accountKeySealedFor = account;
     _syncNotifiers();
+  }
+
+  /// Clears [_accountKeySealedFor] when signed out (`account == null`) or when
+  /// it was recorded for [account].
+  static void clearAccountKeySealed([String? account]) {
+    if (_accountKeySealedFor == null) return;
+    if (account == null || _accountKeySealedFor == account) {
+      _accountKeySealedFor = null;
+      _syncNotifiers();
+    }
+  }
+
+  /// Updates the active LK Cloud account, clearing any stale account-key
+  /// sealed flag left by a different account before notifying listeners.
+  static void syncLkcAccount(String? account) {
+    if (_accountKeySealedFor != null && _accountKeySealedFor != account) {
+      _accountKeySealedFor = null;
+      _syncNotifiers();
+    }
+  }
+
+  /// The secret key currently staged in the pending slot, if any (read only).
+  static Future<String?> pendingSecretKey() async {
+    if (ready) {
+      return _said(() => _ring.pendingSecretKey());
+    }
+    final staged = await _pendingSecretKeyProp.read(limited: false);
+    return staged == null || staged.isEmpty ? null : staged;
   }
 
   /// The secret key LK Cloud's account key is first sealed with: the one
@@ -145,8 +212,19 @@ abstract final class SyncKeyring {
   /// [candidate] ([secretKeyCandidate]) as this device's secret key.
   static Future<void> commitSecretKey(String candidate) => _said(() => _ring.commitSecretKey(candidate: candidate));
 
+  /// Marks [candidate] as having an in-flight external remote commit so a
+  /// conflicting import cannot erase it if a post-write step fails.
+  static Future<void> stageExternalSecretKeyCommit(String candidate) =>
+      _said(() => _ring.stageExternalSecretKeyCommit(candidate: candidate));
+
+  /// Clears the external commit marker for [candidate] when the remote write
+  /// is confirmed not to have committed.
+  static Future<void> clearExternalSecretKeyCommit(String candidate) =>
+      _said(() => _ring.clearExternalSecretKeyCommit(candidate: candidate));
+
   /// [id]'s remote is not synced here any more: read again next time.
   static void release(String id) {
+    if (_accountKeySealedFor == id) _accountKeySealedFor = null;
     // None opened yet: nothing to release.
     _keys?.release(id: id);
     _syncNotifiers();
@@ -156,7 +234,10 @@ abstract final class SyncKeyring {
   }
 
   /// [id]'s remote is gone from this device: what it knew of its file goes.
-  static Future<void> forget(String id) => _said(() => _ring.forget(id: id));
+  static Future<void> forget(String id) {
+    if (_accountKeySealedFor == id) _accountKeySealedFor = null;
+    return _said(() => _ring.forget(id: id));
+  }
 
   /// Before the backup password here changes from [previous].
   static Future<void> passwordChanged(String? previous) => _said(() => _ring.passwordChanged(previous: previous));
@@ -164,7 +245,7 @@ abstract final class SyncKeyring {
   /// Every key in use checked again now: the password or the secret key here
   /// changed.
   static Future<void> recheck() {
-    _accountKeySealed = false;
+    _accountKeySealedFor = null;
     return _said(() => _ring.recheck());
   }
 
@@ -228,6 +309,10 @@ abstract final class SyncKeyring {
         await SecureStoreProps.syncSecretKey.write(key, limited: false);
         secretKeyGenerated.value = key;
       }),
+      'secrets.importSecretKey' => syncReply(() async {
+        final key = a as String;
+        await SecureStoreProps.syncSecretKey.write(key, limited: false);
+      }),
       'secrets.pendingSecretKey' => syncReply(() async {
         final key = await _pendingSecretKeyProp.read(limited: false);
         return key == null || key.isEmpty ? null : key;
@@ -273,7 +358,7 @@ abstract final class SyncKeyring {
     secretKeyMissing.value = false;
     secretKeyGenerated.value = null;
     allowAutoGenerateSecretKey = null;
-    _accountKeySealed = false;
+    _accountKeySealedFor = null;
     _secretKeyLock = Future.value();
   }
 }

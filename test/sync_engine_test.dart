@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -265,4 +266,81 @@ void main() {
     expect(SyncKeyring.sealedToKey(sealed), isTrue);
     expect(await SyncKeyring.openAny(sealed), [1, 2, 3]);
   });
+
+  test('accountKeySealed is scoped per account and clears on account switch or sign-out', () {
+    SyncKeyring.accountKeySealed('account-a');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // Same account keeps the sealed flag.
+    SyncKeyring.syncLkcAccount('account-a');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // Switching to another account clears it before listeners observe secretKeyMissing.
+    SyncKeyring.syncLkcAccount('account-b');
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+
+    // Releasing or signing out clears the sealed account as well.
+    SyncKeyring.accountKeySealed('account-b');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+    SyncKeyring.release('account-b');
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+
+    SyncKeyring.accountKeySealed('account-c');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+    SyncKeyring.syncLkcAccount(null);
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+  });
+
+  test('storeSecretKey rejects conflicting import when a staged key committed via ofFiles', () async {
+    final folder = _Folder();
+    await _freshDevice();
+    final writeStarted = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final inner = FilesKeyFile(folder, 'folder');
+    final slowFile = _BlockingKeyFile(inner, writeStarted, releaseWrite);
+
+    // Start ofFiles which generates staged key A and writes remotely.
+    final opening = SyncKeyring.ofFiles(slowFile);
+    await writeStarted.future;
+
+    // Concurrently attempt to import conflicting secret key B while write is in flight.
+    final keyB = SyncKeyring.generateSecretKey();
+    final importing = SyncKeyring.storeSecretKey(keyB);
+
+    // Allow the remote write with staged key A to commit and promote.
+    releaseWrite.complete();
+    final handle = await opening;
+    final committedA = await SecureStoreProps.syncSecretKey.read(limited: false);
+    expect(committedA, isNotNull);
+    expect(committedA, isNot(keyB));
+
+    // Conflicting import B must be rejected rather than overwriting committed key A.
+    await expectLater(importing, throwsA(anything));
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), committedA);
+    expect(await handle.open(sealed: await handle.seal(plain: Uint8List.fromList([7, 8]))), [7, 8]);
+  });
+}
+
+final class _BlockingKeyFile implements SyncKeyFile {
+  final SyncKeyFile inner;
+  final Completer<void> writeStarted;
+  final Completer<void> releaseWrite;
+
+  _BlockingKeyFile(this.inner, this.writeStarted, this.releaseWrite);
+
+  @override
+  String get id => inner.id;
+
+  @override
+  Future<({Uint8List body, String version})?> read() => inner.read();
+
+  @override
+  Future<String?> write(Uint8List body, {required String? ifVersion}) async {
+    if (!writeStarted.isCompleted) writeStarted.complete();
+    await releaseWrite.future;
+    return inner.write(body, ifVersion: ifVersion);
+  }
+
+  @override
+  Future<bool> canCreate() => inner.canCreate();
 }

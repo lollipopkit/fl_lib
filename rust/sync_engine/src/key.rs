@@ -19,6 +19,7 @@ use std::future::Future;
 use std::io::{Read as _, Write as _};
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -64,6 +65,12 @@ pub trait Secrets: Send + Sync + 'static {
 
     /// Persists a generated secret key in the synced keychain.
     fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>>;
+
+    /// Persists a user-imported secret key in the synced keychain without
+    /// flagging it as auto-generated. Defaults to [`Self::set_secret_key`].
+    fn import_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+        self.set_secret_key(key)
+    }
 
     /// Durable device-local staging slot for a candidate secret key generated
     /// before committing a remote key file, so a failure after the remote write
@@ -241,6 +248,15 @@ pub struct SyncKey {
     checking: Mutex<()>,
 }
 
+#[derive(Default)]
+struct SecretKeyInitState {
+    /// Staged secret key that has already committed to a remote key file (or
+    /// opened a remote key file sealed with it) and has not yet finished
+    /// promotion into `secrets.secret_key()`. While set, conflicting imports
+    /// are rejected so the staged key stays recoverable.
+    committed_staged: Option<String>,
+}
+
 struct RingInner {
     secrets: Arc<dyn Secrets>,
     /// The comment the key file starts with: `<label>, epoch <n>`.
@@ -248,17 +264,33 @@ struct RingInner {
     keys: StdMutex<HashMap<String, Arc<SyncKey>>>,
     mismatch: watch::Sender<BTreeSet<String>>,
     secret_key_missing: watch::Sender<BTreeSet<String>>,
+    /// Monotonic counter bumped on opens, rechecks, and secret-key commits so a
+    /// stale read-only probe cannot overwrite shared missing status afterward.
+    status_gen: AtomicU64,
     /// Serializes read-modify-write updates to the shared `epochs` metadata map.
     epochs_lock: Mutex<()>,
     /// Serializes read-modify-write updates to the shared `pending` map and
     /// coordinates outstanding `password_changed` notifications.
     pending_lock: Mutex<PendingState>,
-    /// Serializes secret-key generation/staging/persistence across all remotes
-    /// sharing this [`KeyRing`].
-    secret_key_init: Mutex<()>,
+    /// Serializes secret-key generation/staging/import/persistence across all
+    /// remotes sharing this [`KeyRing`].
+    secret_key_init: Mutex<SecretKeyInitState>,
 }
 
+const EXTERNAL_COMMIT_ID: &str = "lkc-account-key";
+
 impl RingInner {
+    async fn clear_external_commit_intent(&self) -> Result<()> {
+        self.clear_write_intent(EXTERNAL_COMMIT_ID).await
+    }
+
+    fn status_gen(&self) -> u64 {
+        self.status_gen.load(Ordering::Acquire)
+    }
+
+    fn bump_status_gen(&self) {
+        self.status_gen.fetch_add(1, Ordering::AcqRel);
+    }
     fn said_mismatch(&self, id: &str) {
         self.secret_key_missing.send_if_modified(|now| now.remove(id));
         self.mismatch.send_if_modified(|now| now.insert(id.to_string()));
@@ -316,13 +348,18 @@ impl RingInner {
 
     /// [candidate] as this device's secret key, `secret_key_init` held, now
     /// that a remote holds what it sealed.
-    async fn commit_locked(&self, candidate: &SecretKey) -> Result<()> {
+    async fn commit_locked(&self, init: &mut SecretKeyInitState, candidate: &SecretKey) -> Result<()> {
+        let formatted = candidate.format().to_string();
+        init.committed_staged = Some(formatted.clone());
         match self.secret_key().await? {
-            Some(existing) if existing.format().as_str() == candidate.format().as_str() => {}
+            Some(existing) if existing.format().as_str() == formatted.as_str() => {}
             Some(_) => return Err(Error::Host("another secret key was stored meanwhile".into())),
-            None => self.secrets.set_secret_key(candidate.format().to_string()).await?,
+            None => self.secrets.set_secret_key(formatted).await?,
         }
+        init.committed_staged = None;
+        let _ = self.clear_external_commit_intent().await;
         let _ = self.secrets.set_pending_secret_key(None).await;
+        self.bump_status_gen();
         Ok(())
     }
 
@@ -451,9 +488,10 @@ impl KeyRing {
             keys: StdMutex::new(HashMap::new()),
             mismatch: watch::Sender::new(BTreeSet::new()),
             secret_key_missing: watch::Sender::new(BTreeSet::new()),
+            status_gen: AtomicU64::new(0),
             epochs_lock: Mutex::new(()),
             pending_lock: Mutex::new(PendingState::default()),
-            secret_key_init: Mutex::new(()),
+            secret_key_init: Mutex::new(SecretKeyInitState::default()),
         }))
     }
 
@@ -469,6 +507,12 @@ impl KeyRing {
         self.0.secret_key_missing.subscribe()
     }
 
+    /// The secret key currently staged in the pending slot, if any (read only).
+    pub async fn pending_secret_key(&self) -> Result<Option<String>> {
+        let _init = self.0.secret_key_init.lock().await;
+        Ok(self.0.pending_secret_key().await?.map(|k| k.format().to_string()))
+    }
+
     /// The secret key a first remote write outside this ring (LK Cloud's
     /// account key) seals with: the one held, else one staged for it, made
     /// now when the app allows ([Error::SecretKeyMissing] otherwise). Kept
@@ -482,8 +526,93 @@ impl KeyRing {
     /// key: a remote holds what it sealed.
     pub async fn commit_secret_key(&self, candidate: &str) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
-        let _init = self.0.secret_key_init.lock().await;
-        self.0.commit_locked(&candidate).await
+        let mut init = self.0.secret_key_init.lock().await;
+        self.0.commit_locked(&mut init, &candidate).await
+    }
+
+    /// Records that an external remote write (such as LK Cloud's account key)
+    /// is about to commit using staged [candidate], so a conflicting import
+    /// cannot clear or replace [candidate] if the flow fails after the remote
+    /// write succeeds (e.g. during `/v2/keys` publish or on a lost response).
+    pub async fn stage_external_secret_key_commit(&self, candidate: &str) -> Result<()> {
+        let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
+        let formatted = candidate.format().to_string();
+        let mut init = self.0.secret_key_init.lock().await;
+        self.0.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &formatted).await?;
+        init.committed_staged = Some(formatted);
+        Ok(())
+    }
+
+    /// Clears an external commit marker staged for [candidate] once the caller
+    /// knows the remote write did not commit (e.g. wrong passphrase because
+    /// another device already sealed the file).
+    pub async fn clear_external_secret_key_commit(&self, candidate: &str) -> Result<()> {
+        let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
+        let formatted = candidate.format().to_string();
+        let mut init = self.0.secret_key_init.lock().await;
+        if init.committed_staged.as_deref() == Some(formatted.as_str()) {
+            init.committed_staged = None;
+        }
+        self.0.clear_external_commit_intent().await
+    }
+
+    /// Imports [key] as this device's secret key, serialized with all remote
+    /// key-file staging/write/promotion operations on this [`KeyRing`].
+    ///
+    /// Rejects a conflicting import when a staged key has already committed to
+    /// a remote (either in-flight in this process or recorded durably before
+    /// promotion finished), preserving that staged key so recovery can finish.
+    pub async fn store_secret_key(&self, key: &str) -> Result<()> {
+        let expect_empty_before = self.0.secret_key().await?.is_none();
+        self.store_secret_key_with_prior(key, expect_empty_before).await
+    }
+
+    /// Like [`Self::store_secret_key`], accepting whether the caller already
+    /// observed an empty secret-key slot before acquiring external locks so an
+    /// intervening concurrent commit between Dart and Rust cannot be overwritten.
+    pub async fn store_secret_key_with_prior(&self, key: &str, expect_empty_before: bool) -> Result<()> {
+        let parsed = SecretKey::parse(key).map_err(|e| Error::Unreadable(e.to_string()))?;
+        let formatted = parsed.format().to_string();
+        let mut init = self.0.secret_key_init.lock().await;
+        let existing = self.0.secret_key().await?;
+        if expect_empty_before
+            && let Some(ref cur) = existing
+            && cur.format().as_str() != formatted.as_str()
+        {
+            return Err(Error::Host("a staged secret key committed while importing".into()));
+        }
+        if let Some(ref committed) = init.committed_staged
+            && committed.as_str() != formatted.as_str()
+        {
+            return Err(Error::Host("a staged secret key already committed to a remote; refusing conflicting import".into()));
+        }
+        let staged = self.0.pending_secret_key().await?;
+        if let Some(ref staged_key) = staged
+            && staged_key.format().as_str() != formatted.as_str()
+        {
+            let has_pending_write = {
+                let keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                keys.values().any(|k| k.lock().pending_write.is_some())
+            };
+            if has_pending_write {
+                return Err(Error::Host("a staged secret key has a pending remote commit; refusing conflicting import".into()));
+            }
+            if existing.is_none() {
+                let epochs = self.0.secrets.epochs().await?;
+                let pending = self.0.secrets.pending().await?;
+                let has_durable_commit = epochs.keys().any(|k| k.starts_with(TWO_FA_PREFIX))
+                    || pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX));
+                if has_durable_commit {
+                    return Err(Error::Host("a staged secret key has a committed remote write; refusing conflicting import".into()));
+                }
+            }
+        }
+        self.0.secrets.import_secret_key(formatted).await?;
+        init.committed_staged = None;
+        let _ = self.0.clear_external_commit_intent().await;
+        let _ = self.0.secrets.set_pending_secret_key(None).await;
+        self.0.bump_status_gen();
+        Ok(())
     }
 
     fn keys(&self) -> Vec<Arc<SyncKey>> {
@@ -512,10 +641,11 @@ impl KeyRing {
         };
         if let Err(e) = key.check(false, create).await {
             // A restore's lookup leaves nothing behind for a remote nothing
-            // syncs to; a sync's stays, to be checked again.
+            // syncs to; retain the handle if a committed remote write still has
+            // a pending local watermark flush so the next restore can retry it.
             if !create && fresh {
                 let mut keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                if keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) {
+                if keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) && key.lock().pending_write.is_none() {
                     keys.remove(&id);
                 }
             }
@@ -527,7 +657,9 @@ impl KeyRing {
     /// [id]'s remote is not synced here any more (turned off): its key is read
     /// again next time, and nothing is said of it meanwhile.
     pub fn release(&self, id: &str) {
-        self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
+        let mut keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        keys.remove(id);
+        self.0.bump_status_gen();
         self.0.said_ok(id);
     }
 
@@ -615,16 +747,27 @@ impl KeyRing {
     /// Whether [file] is there sealed with a secret key, read without opening
     /// or writing anything: a device holding none is to import the one that
     /// sealed it (or its password is not the file's). Said through
-    /// [Self::secret_key_missing] until a recheck or the file opens here.
+    /// [Self::secret_key_missing] until a recheck or the file opens here, only
+    /// if the credential and open state observed by the probe are still current.
     pub async fn sealed_with_secret_key(&self, file: Arc<dyn KeyFile>) -> Result<bool> {
+        let gen_before = self.0.status_gen();
+        let sk_before = self.0.secret_key().await?;
         let pwd = self.0.password().await?;
         let id = file.id();
         let sealed = match file.read().await? {
             Some((body, _)) => open_with_password(&body, &pwd)?.is_none(),
             None => false,
         };
-        if sealed {
-            self.0.said_missing(&id);
+        if sealed && sk_before.is_none() {
+            let sk_now = self.0.secret_key().await?;
+            let pwd_now = self.0.secrets.password().await?;
+            if sk_now.is_none() && pwd_now.as_deref() == Some(pwd.as_str()) {
+                let keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                let already_opened = keys.get(&id).is_some_and(|k| k.lock().opened.is_some());
+                if !already_opened && self.0.status_gen() == gen_before {
+                    self.0.said_missing(&id);
+                }
+            }
         }
         Ok(sealed)
     }
@@ -632,6 +775,7 @@ impl KeyRing {
     /// Every key in use checked again now: the password or the secret key
     /// here changed.
     pub async fn recheck(&self) {
+        self.0.bump_status_gen();
         let keys = self.keys();
         // What only [Self::sealed_with_secret_key] said is said again when
         // asked again.
@@ -672,10 +816,10 @@ impl SyncKey {
             self.lock().checked_at = None;
         }
         let _checking = self.checking.lock().await;
-        self.check_locked(force, create).await
+        self.check_locked(force, create).await.map(|_| ())
     }
 
-    async fn check_locked(&self, force: bool, create: bool) -> Result<()> {
+    async fn check_locked(&self, force: bool, create: bool) -> Result<Option<(Zeroizing<String>, SecretKey)>> {
         if force {
             self.lock().checked_at = None;
         }
@@ -694,7 +838,7 @@ impl SyncKey {
                     return Err(Error::PasswordMismatch(id));
                 }
                 if self.lock().opened.is_some() {
-                    return Ok(());
+                    return Ok(None);
                 }
             }
         }
@@ -709,28 +853,31 @@ impl SyncKey {
         // the one before is to be sealed with it.
         let mut pwd = self.ring.password().await?;
         self.lock().awaiting_secret_key = false;
-        loop {
-            if let Err(e) = self.open(&pwd, create).await {
-                if matches!(e, Error::PasswordMismatch(_))
-                    || (matches!(e, Error::SecretKeyMissing)
-                        && (self.lock().awaiting_secret_key || self.ring.secret_key_missing.borrow().contains(&self.id())))
-                {
-                    self.lock().checked_at = Some(Instant::now());
+        let opened_sk = loop {
+            let sk = match self.open(&pwd, create).await {
+                Ok(sk) => sk,
+                Err(e) => {
+                    if matches!(e, Error::PasswordMismatch(_))
+                        || (matches!(e, Error::SecretKeyMissing)
+                            && (self.lock().awaiting_secret_key || self.ring.secret_key_missing.borrow().contains(&self.id())))
+                    {
+                        self.lock().checked_at = Some(Instant::now());
+                    }
+                    return Err(e);
                 }
-                return Err(e);
-            }
+            };
             // Reconcile pending immediately for the password that just opened
             // the remote so a concurrent password change before the next loop
             // iteration never sees a stale older pending entry.
             self.ring.clear_pending_if_settled(&self.id(), &pwd).await?;
             let now = self.ring.password().await?;
             if *now == *pwd {
-                break;
+                break sk;
             }
             pwd = now;
-        }
+        };
         self.lock().checked_at = Some(Instant::now());
-        Ok(())
+        Ok(Some((pwd, opened_sk)))
     }
 
     async fn flush_pending_write(&self) -> Result<()> {
@@ -776,7 +923,7 @@ impl SyncKey {
         pwd: &str,
         if_version: Option<String>,
     ) -> Result<Option<(String, SecretKey, Option<String>)>> {
-        let _init = self.ring.secret_key_init.lock().await;
+        let mut init = self.ring.secret_key_init.lock().await;
         let id = self.id();
         let (sk, generated) = match self.ring.candidate_locked().await {
             Err(Error::SecretKeyMissing) => {
@@ -794,18 +941,21 @@ impl SyncKey {
             let _ = self.ring.clear_write_intent(&id).await;
             return Ok(None);
         };
+        if generated {
+            init.committed_staged = Some(sk.format().to_string());
+        }
         // The remote file is now committed under `(pwd, sk)` at `epoch`:
         // persist the epoch, reconcile `pending`, and clear the write intent
         // BEFORE `set_secret_key` or `set_kept`, so a later or concurrent
         // `password_changed` matches `pwd` instead of keeping a stale entry.
         self.ring.record_committed_write(&id, epoch, pwd).await?;
         if generated {
-            self.ring.commit_locked(&sk).await?;
+            self.ring.commit_locked(&mut init, &sk).await?;
         }
         Ok(Some((version, sk, persist_err)))
     }
 
-    async fn open(&self, pwd: &str, create: bool) -> Result<()> {
+    async fn open(&self, pwd: &str, create: bool) -> Result<SecretKey> {
         let id = self.id();
         loop {
             let sk = self.ring.secret_key().await?;
@@ -835,18 +985,30 @@ impl SyncKey {
                 if let Some(detail) = persist_err {
                     return Err(Error::Host(detail));
                 }
-                return self.opened_at(epoch, version, pwd, &sk).await;
+                self.opened_at(epoch, version, pwd, &sk).await?;
+                return Ok(sk);
             };
-            if sk.is_some() && self.lock().opened.as_ref().is_some_and(|(v, t)| v == &version && *t == tag) {
+            if let Some(ref sk) = sk
+                && self.lock().opened.as_ref().is_some_and(|(v, t)| v == &version && *t == tag)
+            {
                 self.ring.said_ok(&id);
-                return Ok(());
+                return Ok(sk.clone());
             }
+            let epochs = self.ring.secrets.epochs().await?;
+            let upgraded_2fa = epochs.contains_key(&two_fa_key(&id));
+            let verified = epochs.get(&id).copied();
             let staged = if sk.is_none() { self.ring.pending_secret_key().await? } else { None };
             if let Some(ref sk) = sk {
                 let derived = sk.combine_passphrase(pwd);
                 if let Some((epoch, identities)) = read(&body, &derived)? {
+                    if let Some(floor) = verified
+                        && epoch < floor
+                    {
+                        self.lock().opened = None;
+                        return Err(Error::Untrusted(format!("{id}: key file epoch rollback ({epoch} < {floor})")));
+                    }
                     if self.take(epoch, identities, version, pwd, sk).await? {
-                        return Ok(());
+                        return Ok(sk.clone());
                     }
                     continue;
                 }
@@ -855,13 +1017,29 @@ impl SyncKey {
                 // `set_secret_key` failed or the process exited.
                 let derived = staged.combine_passphrase(pwd);
                 if let Some((epoch, identities)) = read(&body, &derived)? {
+                    if let Some(floor) = verified
+                        && epoch < floor
+                    {
+                        self.lock().opened = None;
+                        return Err(Error::Untrusted(format!("{id}: key file epoch rollback ({epoch} < {floor})")));
+                    }
                     let use_staged = {
-                        let _init = self.ring.secret_key_init.lock().await;
+                        let mut init = self.ring.secret_key_init.lock().await;
+                        init.committed_staged = Some(staged.format().to_string());
                         if let Some(existing) = self.ring.secret_key().await? {
-                            existing.format().as_str() == staged.format().as_str()
+                            if existing.format().as_str() == staged.format().as_str() {
+                                init.committed_staged = None;
+                                let _ = self.ring.secrets.set_pending_secret_key(None).await;
+                                true
+                            } else {
+                                init.committed_staged = None;
+                                false
+                            }
                         } else {
                             self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
+                            init.committed_staged = None;
                             let _ = self.ring.secrets.set_pending_secret_key(None).await;
+                            self.ring.bump_status_gen();
                             true
                         }
                     };
@@ -869,14 +1047,11 @@ impl SyncKey {
                         continue;
                     }
                     if self.take(epoch, identities, version, pwd, staged).await? {
-                        return Ok(());
+                        return Ok(staged.clone());
                     }
                     continue;
                 }
             }
-            let epochs = self.ring.secrets.epochs().await?;
-            let upgraded_2fa = epochs.contains_key(&two_fa_key(&id));
-            let verified = epochs.get(&id).copied();
             // TODO(migration): drop passphrase-only fallback once existing
             // single-factor `identity.age` files have upgraded to SecretKey.
             // Never allow bare-password fallback once this remote has already
@@ -892,7 +1067,8 @@ impl SyncKey {
                 if let Some(detail) = persist_err {
                     return Err(Error::Host(detail));
                 }
-                return self.opened_at(epoch, written, pwd, &sk).await;
+                self.opened_at(epoch, written, pwd, &sk).await?;
+                return Ok(sk);
             }
             self.lock().opened = None;
             let pending_map = self.ring.secrets.pending().await?;
@@ -917,7 +1093,7 @@ impl SyncKey {
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
                     let (written, persist_err) = {
-                        let _init = self.ring.secret_key_init.lock().await;
+                        let mut init = self.ring.secret_key_init.lock().await;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
@@ -929,18 +1105,17 @@ impl SyncKey {
                             let _ = self.ring.clear_write_intent(&id).await;
                             continue;
                         };
+                        init.committed_staged = Some(staged.format().to_string());
                         self.ring.record_committed_write(&id, epoch, pwd).await?;
-                        if self.ring.secret_key().await?.is_none() {
-                            self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
-                        }
-                        let _ = self.ring.secrets.set_pending_secret_key(None).await;
+                        self.ring.commit_locked(&mut init, staged).await?;
                         (written, persist_err)
                     };
                     self.use_identities(identities, true).await?;
                     if let Some(detail) = persist_err {
                         return Err(Error::Host(detail));
                     }
-                    return self.opened_at(epoch, written, pwd, staged).await;
+                    self.opened_at(epoch, written, pwd, staged).await?;
+                    return Ok(staged.clone());
                 }
                 if let Some(ref k) = sk
                     && let Some((old_epoch, old_identities)) = read(&body, &k.combine_passphrase(&intent.pwd))?
@@ -958,7 +1133,8 @@ impl SyncKey {
                     if let Some(detail) = persist_err {
                         return Err(Error::Host(detail));
                     }
-                    return self.opened_at(epoch, written, pwd, &sk).await;
+                    self.opened_at(epoch, written, pwd, &sk).await?;
+                    return Ok(sk);
                 }
             }
             if let Some(previous) = pending_map.get(&id).cloned()
@@ -974,7 +1150,7 @@ impl SyncKey {
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
                     let (written, persist_err) = {
-                        let _init = self.ring.secret_key_init.lock().await;
+                        let mut init = self.ring.secret_key_init.lock().await;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
@@ -986,23 +1162,22 @@ impl SyncKey {
                             let _ = self.ring.clear_write_intent(&id).await;
                             continue;
                         };
+                        init.committed_staged = Some(staged.format().to_string());
                         // The remote file is now committed under `(pwd, staged)`
                         // at `epoch`: persist the epoch and reconcile `pending`
                         // BEFORE `set_secret_key` so a later or concurrent
                         // `password_changed` matches `pwd` instead of keeping
                         // stale `previous`.
                         self.ring.record_committed_write(&id, epoch, pwd).await?;
-                        if self.ring.secret_key().await?.is_none() {
-                            self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
-                        }
-                        let _ = self.ring.secrets.set_pending_secret_key(None).await;
+                        self.ring.commit_locked(&mut init, staged).await?;
                         (written, persist_err)
                     };
                     self.use_identities(identities, true).await?;
                     if let Some(detail) = persist_err {
                         return Err(Error::Host(detail));
                     }
-                    return self.opened_at(epoch, written, pwd, staged).await;
+                    self.opened_at(epoch, written, pwd, staged).await?;
+                    return Ok(staged.clone());
                 }
                 let old = match &sk {
                     Some(k) => match read(&body, &k.combine_passphrase(&previous))? {
@@ -1026,7 +1201,8 @@ impl SyncKey {
                     if let Some(detail) = persist_err {
                         return Err(Error::Host(detail));
                     }
-                    return self.opened_at(epoch, written, pwd, &sk).await;
+                    self.opened_at(epoch, written, pwd, &sk).await?;
+                    return Ok(sk);
                 }
                 // Keep `pending` when `sk` is missing so importing the secret
                 // key later can still finish sealing the password change.
@@ -1082,18 +1258,21 @@ impl SyncKey {
     }
 
     async fn opened_at(&self, epoch: i64, version: String, pwd: &str, sk: &SecretKey) -> Result<()> {
+        let id = self.id();
         let tag = cred_tag(pwd, Some(sk));
         // Persist the 2FA epoch and marker BEFORE caching `s.opened`, so a
         // metadata persistence failure leaves the opening state uncached and
         // retryable.
-        self.ring.set_epoch_2fa(&self.id(), epoch).await?;
+        self.ring.set_epoch_2fa(&id, epoch).await?;
         {
+            let _keys = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
             let mut s = self.lock();
             s.epoch = epoch;
             s.opened = Some((version, tag));
             s.refused = None;
+            self.ring.bump_status_gen();
+            self.ring.said_ok(&id);
         }
-        self.ring.said_ok(&self.id());
         Ok(())
     }
 
@@ -1102,9 +1281,13 @@ impl SyncKey {
     /// here, when another device changed the file meanwhile.
     pub async fn rotate(&self) -> Result<()> {
         let _checking = self.checking.lock().await;
-        self.check_locked(true, true).await?;
-        let pwd = self.ring.password().await?;
-        let sk = self.ring.secret_key().await?.ok_or(Error::SecretKeyMissing)?;
+        // Seal with the exact `(pwd, sk)` that opened the version validated by
+        // `check_locked`, keeping `epoch` and `pending` consistent even if a
+        // concurrent password change occurs before the PUT commits.
+        let (pwd, sk) = self
+            .check_locked(true, true)
+            .await?
+            .ok_or_else(|| Error::Host("rotate did not verify key credentials".into()))?;
         let (identities, epoch, opened) = {
             let s = self.lock();
             let mut identities = vec![generate()];

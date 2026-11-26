@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 typedef IntroPageBuilder = Widget Function(BuildContext ctx, double padTop);
@@ -117,6 +120,7 @@ final class _IntroPageState extends State<IntroPage> {
 
   /// Next or [IntroPage.nextOf] is turning the page: past what a swipe may.
   var _movingOn = false;
+  var _pageGen = 0;
 
   /// Read through, never cached. The caller rebuilds these args whenever the
   /// layout changes — a rotation, a resized window, a keyboard appearing — and
@@ -157,8 +161,15 @@ final class _IntroPageState extends State<IntroPage> {
               controller: _pageController,
               physics: allowed && !hasCommitHook ? null : _backOnly,
               itemCount: _pageCount,
-              onPageChanged: (index) => _currentPage.value = index,
-              itemBuilder: (_, index) => _args.pages[index],
+              onPageChanged: (index) {
+                _pageGen++;
+                _currentPage.value = index;
+              },
+              itemBuilder: (pageCtx, index) => Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerSignal: (event) => _onPointerSignal(context, pageCtx, event),
+                child: _args.pages[index],
+              ),
             ),
           );
         },
@@ -263,18 +274,54 @@ final class _IntroPageState extends State<IntroPage> {
     );
   }
 
+  double _horizontalScrollDelta(BuildContext context, PointerScrollEvent event) {
+    final modifiers = ScrollConfiguration.of(context).pointerAxisModifiers;
+    final flipAxes = event.kind == PointerDeviceKind.mouse &&
+        HardwareKeyboard.instance.logicalKeysPressed.any(modifiers.contains);
+    final raw = flipAxes ? event.scrollDelta.dy : event.scrollDelta.dx;
+    return Directionality.of(context) == TextDirection.rtl ? -raw : raw;
+  }
+
+  /// Pointer-scroll bypasses [ScrollPhysics.applyBoundaryConditions] via
+  /// `forcePixels`, so intercept forward horizontal scroll signals on gated or
+  /// hook-guarded pages and route hook pages through [_onTapNext].
+  void _onPointerSignal(BuildContext navContext, BuildContext pageCtx, PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_pageController.hasClients) return;
+    final page = _currentPage.value;
+    final allowed = _args.canProceed?.call(page)?.value ?? true;
+    final hasCommitHook = _args.onBeforeNext?.call(page) != null;
+    if (allowed && !hasCommitHook && !_advancing) return;
+    final delta = _horizontalScrollDelta(pageCtx, event);
+    if (delta <= 0) return;
+    final pos = _pageController.position;
+    final limit = page * pos.viewportDimension;
+    if (pos.pixels + delta <= limit) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (!mounted) return;
+      final curPage = _currentPage.value;
+      final curAllowed = _args.canProceed?.call(curPage)?.value ?? true;
+      final curHasHook = _args.onBeforeNext?.call(curPage) != null;
+      if (!curAllowed || _advancing) return;
+      if (curHasHook) {
+        unawaited(_onTapNext(navContext));
+      }
+    });
+  }
+
   var _advancing = false;
 
   Future<void> _onTapNext(BuildContext context) async {
     if (_advancing) return;
     _advancing = true;
     try {
-      final before = _args.onBeforeNext?.call(_currentPage.value);
+      final page = _currentPage.value;
+      final gen = _pageGen;
+      final before = _args.onBeforeNext?.call(page);
       if (before != null) {
         final ok = await before();
-        if (!ok || !mounted) return;
+        if (!ok || !mounted || _pageGen != gen || _currentPage.value != page) return;
       }
-      if (!context.mounted) return;
+      if (!context.mounted || _pageGen != gen || _currentPage.value != page) return;
       if (hasNext) {
         await _toNext();
       } else {

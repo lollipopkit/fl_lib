@@ -25,11 +25,12 @@ use crate::team::crypto::{self, KEY_LEN};
 use crate::team::identity::AccountKey;
 use crate::team::{TeamClient, TeamError};
 
-const VERSIONS_FORMAT: u32 = 1;
+const VERSIONS_FORMAT: u32 = 2;
 /// The sync key file, signed though not an app file.
 const KEY_FILE: &str = "identity.age";
-/// Log blobs (`op-…`): written once each under a name of their own.
-const BLOB_PREFIX: &str = "op-";
+/// Legacy v1 log-blob prefix, used ONLY when migrating v1 persisted JSON.
+// TODO(migration): remove once v1 personal versions JSON is no longer present.
+const LEGACY_BLOB_PREFIX: &str = "op-";
 /// How long after reading the account key file it is not read again for a
 /// signature this key does not know.
 const KEY_REFRESH_EVERY: Duration = Duration::from_secs(30);
@@ -120,7 +121,7 @@ impl PersonalVersions {
             return Ok(Self::default());
         }
         let stored: Stored = serde_json::from_str(json).map_err(|e| Error::new(Kind::Invalid, format!("personal versions: {e}")))?;
-        if stored.v != VERSIONS_FORMAT {
+        if stored.v != 1 && stored.v != VERSIONS_FORMAT {
             return Err(Error::new(Kind::Invalid, format!("personal versions: unsupported version {}", stored.v)));
         }
         let mut out = Self {
@@ -132,11 +133,16 @@ impl PersonalVersions {
             signed_log_ids: stored.signed_log_ids,
             signed_snapshots: stored.signed_snapshots,
         };
-        for (key, version) in stored.files {
-            out.take_file(key, version);
-        }
-        for key in stored.signed_files {
-            out.take_file(key, 0);
+        if stored.v == 1 {
+            // TODO(migration): drop v1 migration branch once devices have saved v2.
+            for (key, version) in stored.files {
+                out.take_legacy_file(key, version);
+            }
+            for key in stored.signed_files {
+                out.take_legacy_file(key, 0);
+            }
+        } else {
+            out.files = stored.files;
         }
         for app in stored.signed_logs {
             let from = out.signed_log_from.entry(app).or_insert(1);
@@ -146,10 +152,11 @@ impl PersonalVersions {
         Ok(out)
     }
 
-    /// An entry of an earlier build's `files`, which also named log blobs.
-    fn take_file(&mut self, key: String, version: i64) {
+    /// An entry of a v1 build's `files`, which also named log blobs.
+    // TODO(migration): remove once v1 personal versions JSON is no longer present.
+    fn take_legacy_file(&mut self, key: String, version: i64) {
         match key.split_once('/') {
-            Some((app, name)) if name.starts_with(BLOB_PREFIX) => {
+            Some((app, name)) if name.starts_with(LEGACY_BLOB_PREFIX) => {
                 self.signed_blobs.insert(app.to_string());
             }
             _ => {
@@ -167,8 +174,8 @@ impl PersonalVersions {
         self.files.get(&file_key(app, name)).copied().unwrap_or(0)
     }
 
-    /// Whether an unsigned answer for [name] of [app] is refused here; with
-    /// no [name], for the app's files in general.
+    /// Whether an unsigned answer for ordinary mutable file [name] of [app] is
+    /// refused here; with no [name], for the app's files in general.
     pub fn requires_signature(&self, app: &str, name: Option<&str>) -> bool {
         let Some(name) = name else {
             return self.signed_apps.contains(app);
@@ -176,17 +183,18 @@ impl PersonalVersions {
         // Signing the sync key file or a log blob does not lock out the
         // app's earlier unsigned backups, while a signed app file locks out
         // every unsigned one.
-        self.signed_apps.contains(app)
-            || if name.starts_with(BLOB_PREFIX) { self.signed_blobs.contains(app) } else { self.files.contains_key(&file_key(app, name)) }
+        self.signed_apps.contains(app) || self.files.contains_key(&file_key(app, name))
     }
 
-    /// [name] of [app] seen or written signed, at [version] (0: only in its
-    /// history, which leaves the highest where it is).
+    /// Whether an unsigned answer on the write-once log-blob path of [app] is
+    /// refused here.
+    pub fn blob_requires_signature(&self, app: &str) -> bool {
+        self.signed_apps.contains(app) || self.signed_blobs.contains(app)
+    }
+
+    /// Ordinary mutable file [name] of [app] seen or written signed, at
+    /// [version] (0: only in its history, which leaves the highest where it is).
     fn saw_file(&mut self, app: &str, name: &str, version: i64) {
-        if name.starts_with(BLOB_PREFIX) {
-            self.signed_blobs.insert(app.to_string());
-            return;
-        }
         // The sync key file signed during migration must not lock out the
         // app's earlier unsigned backups; an app file does.
         if name != KEY_FILE {
@@ -194,6 +202,12 @@ impl PersonalVersions {
         }
         let entry = self.files.entry(file_key(app, name)).or_insert(0);
         *entry = (*entry).max(version);
+    }
+
+    /// A write-once log blob of [app] seen or written signed: skips per-file
+    /// version watermarks so `files` stays bounded.
+    fn saw_blob(&mut self, app: &str) {
+        self.signed_blobs.insert(app.to_string());
     }
 
     fn log_signed_from(&self, app: &str) -> Option<i64> {
@@ -421,6 +435,12 @@ impl PersonalAuth {
         self.record_committed(|v| v.saw_file(app, name, version)).await
     }
 
+    /// Records a committed signed write-once log blob without adding a per-file
+    /// version watermark.
+    pub async fn record_blob_written(&self, app: &str) -> Result<(), Error> {
+        self.record_committed(|v| v.saw_blob(app)).await
+    }
+
     /// Records a committed signed batch append at [seq] of [log].
     pub async fn record_batch_written(&self, app: &str, log: &str, seq: i64) -> Result<(), Error> {
         self.record_committed(|v| v.mark_log_signed_at(app, Some(log), seq)).await
@@ -438,6 +458,37 @@ impl PersonalAuth {
     /// failing on an older version number or moving the current highest.
     pub async fn verify_file(&self, app: &str, name: &str, body: &[u8], signed: Option<&Signed>, enforce_monotonic: bool) -> Result<(), Error> {
         self.verify_file_digest(app, name, &digest(body), signed, enforce_monotonic).await
+    }
+
+    /// Verifies a downloaded write-once log blob's signature without recording
+    /// a per-file version watermark.
+    pub async fn verify_blob(&self, app: &str, name: &str, body: &[u8], signed: Option<&Signed>) -> Result<(), Error> {
+        self.verify_blob_digest(app, name, &digest(body), signed).await
+    }
+
+    /// Streaming variant of [`Self::verify_blob`] taking a precomputed blake3 digest.
+    pub async fn verify_blob_digest(&self, app: &str, name: &str, body_digest: &[u8; KEY_LEN], signed: Option<&Signed>) -> Result<(), Error> {
+        let Some(s) = signed else {
+            // TODO(migration): reject unsigned personal blobs unconditionally
+            // once pre-signing uploads are no longer present.
+            let mut held = self.versions.lock().await;
+            if held.data.blob_requires_signature(app) || held.data.requires_signature(app, Some(name)) {
+                return Err(untrusted(format!("{app}/{name}: server stripped signature")));
+            }
+            return Self::flush(&self.keeper, &mut held).await;
+        };
+        let version = s.version.ok_or_else(|| untrusted(format!("{app}/{name}: signed file missing version")))?;
+        if version <= 0 {
+            return Err(untrusted(format!("{app}/{name}: invalid version {version}")));
+        }
+        let owner = self.verify_own_key(s, &format!("{app}/{name}")).await?;
+        let msg = crypto::sync_file_message(&owner, app, name, 0, version, body_digest);
+        verify_sig(s, &msg, &format!("{app}/{name}"))?;
+        self.persist_checked(|v| {
+            v.saw_blob(app);
+            Ok(())
+        })
+        .await
     }
 
     /// Streaming variant of [`Self::verify_file`] taking a precomputed blake3 digest.
@@ -466,7 +517,6 @@ impl PersonalAuth {
                 v.saw_file(app, name, 0);
                 return Ok(());
             }
-            // Log blobs are written once each: no version of theirs goes back.
             let seen = v.file_version(app, name);
             if version < seen {
                 return Err(untrusted(format!("{app}/{name}: version rollback ({version} < {seen})")));
@@ -740,8 +790,8 @@ mod tests {
         for i in 0..50 {
             let name = format!("op-{i:04}.age");
             let s = signed(&key, auth.sign_file("serverbox", &name, 1, b"blob").await.signature, Some(1));
-            auth.verify_file("serverbox", &name, b"blob", Some(&s), true).await.unwrap();
-            auth.record_file_version("serverbox", &format!("op-w{i:04}.age"), 1).await.unwrap();
+            auth.verify_blob("serverbox", &name, b"blob", Some(&s)).await.unwrap();
+            auth.record_blob_written("serverbox").await.unwrap();
             let batch = signed_batch(&auth, &key, i + 1, &format!("idem-{i:012}"), b"op").await;
             auth.verify_batches("serverbox", Some("log1"), &[batch]).await.unwrap();
             auth.record_batch_written("serverbox", "log1", i + 100).await.unwrap();
@@ -749,7 +799,29 @@ mod tests {
         let saved = keeper.saved.lock().unwrap().clone();
         assert!(saved.len() < 200, "{saved}");
         // An unsigned log blob is still refused.
-        assert_eq!(auth.verify_file("serverbox", "op-evil.age", b"evil", None, true).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(auth.verify_blob("serverbox", "op-evil.age", b"evil", None).await.unwrap_err().kind, Kind::Untrusted);
+    }
+
+    #[tokio::test]
+    async fn mutable_file_named_with_op_prefix_keeps_version_watermark() {
+        let key = AccountKey::generate("u1");
+        let (auth, keeper) = auth_for(key.clone());
+
+        let v1 = signed(&key, auth.sign_file("serverbox", "op-notes.age", 1, b"v1").await.signature, Some(1));
+        auth.verify_file("serverbox", "op-notes.age", b"v1", Some(&v1), true).await.unwrap();
+        assert_eq!(auth.next_file_version("serverbox", "op-notes.age").await.unwrap(), 2);
+
+        // Persisting and reloading keeps the op-notes.age watermark intact.
+        let reloaded = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
+        assert_eq!(reloaded.file_version("serverbox", "op-notes.age"), 1);
+        assert!(reloaded.requires_signature("serverbox", Some("op-notes.age")));
+
+        let v2 = signed(&key, auth.sign_file("serverbox", "op-notes.age", 2, b"v2").await.signature, Some(2));
+        auth.verify_file("serverbox", "op-notes.age", b"v2", Some(&v2), true).await.unwrap();
+        assert_eq!(auth.next_file_version("serverbox", "op-notes.age").await.unwrap(), 3);
+
+        // Rolling op-notes.age back to v1 is rejected.
+        assert_eq!(auth.verify_file("serverbox", "op-notes.age", b"v1", Some(&v1), true).await.unwrap_err().kind, Kind::Untrusted);
     }
 
     #[test]
@@ -760,8 +832,8 @@ mod tests {
         let v = PersonalVersions::from_json(json).unwrap();
         assert_eq!(v.file_version("serverbox", "bak"), 3);
         assert!(v.requires_signature("serverbox", Some("identity.age")));
-        assert!(v.requires_signature("serverbox", Some("op-9.age")));
-        assert!(v.requires_signature("gptbox", Some("op-9.age")));
+        assert!(v.blob_requires_signature("serverbox"));
+        assert!(v.blob_requires_signature("gptbox"));
         assert!(!v.requires_signature("gptbox", Some("bak")));
         assert_eq!(v.log_signed_from("serverbox"), Some(1));
         assert!(v.snapshot_requires_signature("gptbox", "log1", 1));
@@ -887,12 +959,12 @@ mod tests {
         // readable, here and for what asks whether it needs a signature,
         // while their own stripping is refused.
         auth.record_file_version("serverbox", "identity.age", 1).await.unwrap();
-        auth.record_file_version("serverbox", "op-abc.age", 1).await.unwrap();
+        auth.record_blob_written("serverbox").await.unwrap();
         assert!(!auth.requires_signature("serverbox", Some("srvbox_bak_v4.age")).await);
         assert!(!auth.requires_signature("serverbox", None).await);
         auth.verify_file("serverbox", "srvbox_bak_v4.age", b"legacy-backup", None, true).await.unwrap();
         assert_eq!(auth.verify_file("serverbox", "identity.age", b"stripped", None, true).await.unwrap_err().kind, Kind::Untrusted);
-        assert_eq!(auth.verify_file("serverbox", "op-def.age", b"stripped", None, true).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(auth.verify_blob("serverbox", "op-def.age", b"stripped", None).await.unwrap_err().kind, Kind::Untrusted);
 
         // Upgrading from the legacy `signed_logs` marker keeps the threshold
         // at 1 even after observing a higher signed seq.
