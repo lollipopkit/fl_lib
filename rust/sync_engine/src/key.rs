@@ -250,23 +250,51 @@ pub struct SyncKey {
 
 #[derive(Default)]
 struct SecretKeyInitState {
-    /// Staged secret key that has already committed to a remote key file (or
-    /// opened a remote key file sealed with it) and has not yet finished
-    /// promotion into `secrets.secret_key()`. While set, conflicting imports
-    /// are rejected so the staged key stays recoverable.
+    /// Staged secret key that has already committed to a remote key file via
+    /// internal key-file writes and has not yet finished promotion into
+    /// `secrets.secret_key()`. While set, conflicting imports are rejected so
+    /// the staged key stays recoverable.
     committed_staged: Option<String>,
+    /// Per-candidate active count of unresolved external remote writes (such as
+    /// LK Cloud's account key). Protection and the durable external write
+    /// intent remain intact until every staged write for a candidate settles.
+    external_commits: HashMap<String, usize>,
+}
+
+#[derive(Default)]
+struct KeyTable {
+    keys: HashMap<String, Arc<SyncKey>>,
+    /// Per-remote generation bumped whenever that remote's registered handle
+    /// opens or is released, so a stale probe for one remote cannot be
+    /// invalidated by unrelated activity on another remote.
+    gens: HashMap<String, u64>,
+}
+
+impl KeyTable {
+    fn gen_of(&self, id: &str) -> u64 {
+        self.gens.get(id).copied().unwrap_or(0)
+    }
+
+    fn bump_id(&mut self, id: &str) {
+        let entry = self.gens.entry(id.to_string()).or_insert(0);
+        *entry = entry.wrapping_add(1);
+    }
+
+    fn is_current(&self, id: &str, handle: &SyncKey) -> bool {
+        self.keys.get(id).is_some_and(|registered| std::ptr::eq(Arc::as_ptr(registered), handle))
+    }
 }
 
 struct RingInner {
     secrets: Arc<dyn Secrets>,
     /// The comment the key file starts with: `<label>, epoch <n>`.
     label: String,
-    keys: StdMutex<HashMap<String, Arc<SyncKey>>>,
+    keys: StdMutex<KeyTable>,
     mismatch: watch::Sender<BTreeSet<String>>,
     secret_key_missing: watch::Sender<BTreeSet<String>>,
-    /// Monotonic counter bumped on opens, rechecks, and secret-key commits so a
-    /// stale read-only probe cannot overwrite shared missing status afterward.
-    status_gen: AtomicU64,
+    /// Ring-wide generation bumped on credential changes and `recheck()`,
+    /// invalidating in-flight probes across all remotes.
+    recheck_gen: AtomicU64,
     /// Serializes read-modify-write updates to the shared `epochs` metadata map.
     epochs_lock: Mutex<()>,
     /// Serializes read-modify-write updates to the shared `pending` map and
@@ -280,16 +308,33 @@ struct RingInner {
 const EXTERNAL_COMMIT_ID: &str = "lkc-account-key";
 
 impl RingInner {
-    async fn clear_external_commit_intent(&self) -> Result<()> {
-        self.clear_write_intent(EXTERNAL_COMMIT_ID).await
+    async fn clear_external_commit_intent_for(&self, expected: Option<&str>) -> Result<()> {
+        let _st = self.pending_lock.lock().await;
+        let mut all = self.secrets.pending().await?;
+        let key = write_intent_key(EXTERNAL_COMMIT_ID);
+        let should_remove = match (all.get(&key), expected) {
+            (None, _) => false,
+            (Some(_), None) => true,
+            (Some(raw), Some(cand)) => WriteIntent::decode(raw).is_none_or(|w| w.pwd == cand),
+        };
+        if should_remove {
+            all.remove(&key);
+            self.secrets.set_pending(all).await?;
+        }
+        Ok(())
     }
 
-    fn status_gen(&self) -> u64 {
-        self.status_gen.load(Ordering::Acquire)
+    fn recheck_gen(&self) -> u64 {
+        self.recheck_gen.load(Ordering::Acquire)
     }
 
-    fn bump_status_gen(&self) {
-        self.status_gen.fetch_add(1, Ordering::AcqRel);
+    fn bump_recheck_gen(&self) {
+        self.recheck_gen.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn probe_snapshot(&self, id: &str) -> (u64, u64) {
+        let table = self.keys.lock().unwrap_or_else(|e| e.into_inner());
+        (self.recheck_gen(), table.gen_of(id))
     }
     fn said_mismatch(&self, id: &str) {
         self.secret_key_missing.send_if_modified(|now| now.remove(id));
@@ -354,12 +399,15 @@ impl RingInner {
         match self.secret_key().await? {
             Some(existing) if existing.format().as_str() == formatted.as_str() => {}
             Some(_) => return Err(Error::Host("another secret key was stored meanwhile".into())),
-            None => self.secrets.set_secret_key(formatted).await?,
+            None => self.secrets.set_secret_key(formatted.clone()).await?,
         }
         init.committed_staged = None;
-        let _ = self.clear_external_commit_intent().await;
+        init.external_commits.remove(&formatted);
+        if init.external_commits.is_empty() {
+            let _ = self.clear_external_commit_intent_for(Some(&formatted)).await;
+        }
         let _ = self.secrets.set_pending_secret_key(None).await;
-        self.bump_status_gen();
+        self.bump_recheck_gen();
         Ok(())
     }
 
@@ -485,10 +533,10 @@ impl KeyRing {
         Self(Arc::new(RingInner {
             secrets,
             label: label.into(),
-            keys: StdMutex::new(HashMap::new()),
+            keys: StdMutex::new(KeyTable::default()),
             mismatch: watch::Sender::new(BTreeSet::new()),
             secret_key_missing: watch::Sender::new(BTreeSet::new()),
-            status_gen: AtomicU64::new(0),
+            recheck_gen: AtomicU64::new(0),
             epochs_lock: Mutex::new(()),
             pending_lock: Mutex::new(PendingState::default()),
             secret_key_init: Mutex::new(SecretKeyInitState::default()),
@@ -531,29 +579,50 @@ impl KeyRing {
     }
 
     /// Records that an external remote write (such as LK Cloud's account key)
-    /// is about to commit using staged [candidate], so a conflicting import
-    /// cannot clear or replace [candidate] if the flow fails after the remote
-    /// write succeeds (e.g. during `/v2/keys` publish or on a lost response).
+    /// is about to commit using [candidate], so a conflicting import cannot
+    /// clear or replace it if the flow fails after the remote write succeeds.
+    ///
+    /// Validates under `secret_key_init` that [candidate] matches the active
+    /// secret key (when one exists) or else the current staged key, rejecting
+    /// stale candidates before the caller performs the remote write.
     pub async fn stage_external_secret_key_commit(&self, candidate: &str) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
+        if let Some(active) = self.0.secret_key().await? {
+            if active.format().as_str() != formatted.as_str() {
+                return Err(Error::Host("stale secret key candidate does not match active secret key".into()));
+            }
+        } else {
+            let staged = self.0.pending_secret_key().await?;
+            if staged.as_ref().is_none_or(|k| k.format().as_str() != formatted.as_str()) {
+                return Err(Error::Host("stale secret key candidate does not match staged secret key".into()));
+            }
+        }
         self.0.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &formatted).await?;
-        init.committed_staged = Some(formatted);
+        *init.external_commits.entry(formatted).or_insert(0) += 1;
         Ok(())
     }
 
-    /// Clears an external commit marker staged for [candidate] once the caller
-    /// knows the remote write did not commit (e.g. wrong passphrase because
-    /// another device already sealed the file).
+    /// Clears one unresolved external commit marker staged for [candidate] once
+    /// the caller knows that write did not commit. Keeps protection and the
+    /// durable marker intact until every staged write for [candidate] settles.
     pub async fn clear_external_secret_key_commit(&self, candidate: &str) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
-        if init.committed_staged.as_deref() == Some(formatted.as_str()) {
-            init.committed_staged = None;
+        if let Some(count) = init.external_commits.get_mut(&formatted) {
+            if *count > 1 {
+                *count -= 1;
+                return Ok(());
+            }
+            init.external_commits.remove(&formatted);
         }
-        self.0.clear_external_commit_intent().await
+        if let Some(remaining) = init.external_commits.keys().next().cloned() {
+            self.0.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &remaining).await
+        } else {
+            self.0.clear_external_commit_intent_for(Some(&formatted)).await
+        }
     }
 
     /// Imports [key] as this device's secret key, serialized with all remote
@@ -586,13 +655,16 @@ impl KeyRing {
         {
             return Err(Error::Host("a staged secret key already committed to a remote; refusing conflicting import".into()));
         }
+        if init.external_commits.keys().any(|c| c.as_str() != formatted.as_str()) {
+            return Err(Error::Host("a staged secret key has an unresolved external write; refusing conflicting import".into()));
+        }
         let staged = self.0.pending_secret_key().await?;
         if let Some(ref staged_key) = staged
             && staged_key.format().as_str() != formatted.as_str()
         {
             let has_pending_write = {
-                let keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                keys.values().any(|k| k.lock().pending_write.is_some())
+                let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                table.keys.values().any(|k| k.lock().pending_write.is_some())
             };
             if has_pending_write {
                 return Err(Error::Host("a staged secret key has a pending remote commit; refusing conflicting import".into()));
@@ -609,14 +681,15 @@ impl KeyRing {
         }
         self.0.secrets.import_secret_key(formatted).await?;
         init.committed_staged = None;
-        let _ = self.0.clear_external_commit_intent().await;
+        init.external_commits.clear();
+        let _ = self.0.clear_external_commit_intent_for(None).await;
         let _ = self.0.secrets.set_pending_secret_key(None).await;
-        self.0.bump_status_gen();
+        self.0.bump_recheck_gen();
         Ok(())
     }
 
     fn keys(&self) -> Vec<Arc<SyncKey>> {
-        self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+        self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).keys.values().cloned().collect()
     }
 
     /// [file]'s key, opened with the backup password here: one per remote,
@@ -626,15 +699,15 @@ impl KeyRing {
     pub async fn of(&self, file: Arc<dyn KeyFile>, create: bool) -> Result<Arc<SyncKey>> {
         let id = file.id();
         let (key, fresh) = {
-            let mut keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-            match keys.get(&id) {
+            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            match table.keys.get(&id) {
                 Some(k) => {
                     *k.file.lock().unwrap_or_else(|e| e.into_inner()) = file;
                     (k.clone(), false)
                 }
                 None => {
                     let key = Arc::new(SyncKey { file: StdMutex::new(file), ring: self.0.clone(), state: StdMutex::new(State::default()), checking: Mutex::new(()) });
-                    keys.insert(id.clone(), key.clone());
+                    table.keys.insert(id.clone(), key.clone());
                     (key, true)
                 }
             }
@@ -644,9 +717,9 @@ impl KeyRing {
             // syncs to; retain the handle if a committed remote write still has
             // a pending local watermark flush so the next restore can retry it.
             if !create && fresh {
-                let mut keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                if keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) && key.lock().pending_write.is_none() {
-                    keys.remove(&id);
+                let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) && key.lock().pending_write.is_none() {
+                    table.keys.remove(&id);
                 }
             }
             return Err(e);
@@ -657,9 +730,9 @@ impl KeyRing {
     /// [id]'s remote is not synced here any more (turned off): its key is read
     /// again next time, and nothing is said of it meanwhile.
     pub fn release(&self, id: &str) {
-        let mut keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-        keys.remove(id);
-        self.0.bump_status_gen();
+        let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        table.keys.remove(id);
+        table.bump_id(id);
         self.0.said_ok(id);
     }
 
@@ -680,7 +753,7 @@ impl KeyRing {
         let Some(previous) = previous.filter(|p| !p.is_empty()) else { return Ok(()) };
         let mut st = self.0.pending_lock.lock().await;
         let mut pending = self.0.secrets.pending().await?;
-        let ids: Vec<String> = self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect();
+        let ids: Vec<String> = self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).keys.keys().cloned().collect();
         for id in &ids {
             pending.entry(id.clone()).or_insert_with(|| previous.clone());
         }
@@ -726,7 +799,7 @@ impl KeyRing {
         let mut refused = self.0.mismatch.borrow().clone();
         refused.extend(self.0.secret_key_missing.borrow().iter().cloned());
         let mut identities: Vec<String> = Vec::new();
-        for (id, k) in self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        for (id, k) in self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).keys.iter() {
             if !refused.contains(id) {
                 identities.extend(k.lock().identities.clone());
             }
@@ -748,12 +821,13 @@ impl KeyRing {
     /// or writing anything: a device holding none is to import the one that
     /// sealed it (or its password is not the file's). Said through
     /// [Self::secret_key_missing] until a recheck or the file opens here, only
-    /// if the credential and open state observed by the probe are still current.
+    /// if this remote's open/release generation and ring recheck generation are
+    /// still current.
     pub async fn sealed_with_secret_key(&self, file: Arc<dyn KeyFile>) -> Result<bool> {
-        let gen_before = self.0.status_gen();
+        let id = file.id();
+        let (recheck_before, id_gen_before) = self.0.probe_snapshot(&id);
         let sk_before = self.0.secret_key().await?;
         let pwd = self.0.password().await?;
-        let id = file.id();
         let sealed = match file.read().await? {
             Some((body, _)) => open_with_password(&body, &pwd)?.is_none(),
             None => false,
@@ -762,9 +836,9 @@ impl KeyRing {
             let sk_now = self.0.secret_key().await?;
             let pwd_now = self.0.secrets.password().await?;
             if sk_now.is_none() && pwd_now.as_deref() == Some(pwd.as_str()) {
-                let keys = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                let already_opened = keys.get(&id).is_some_and(|k| k.lock().opened.is_some());
-                if !already_opened && self.0.status_gen() == gen_before {
+                let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                let already_opened = table.keys.get(&id).is_some_and(|k| k.lock().opened.is_some());
+                if !already_opened && table.gen_of(&id) == id_gen_before && self.0.recheck_gen() == recheck_before {
                     self.0.said_missing(&id);
                 }
             }
@@ -775,16 +849,20 @@ impl KeyRing {
     /// Every key in use checked again now: the password or the secret key
     /// here changed.
     pub async fn recheck(&self) {
-        self.0.bump_status_gen();
-        let keys = self.keys();
-        // What only [Self::sealed_with_secret_key] said is said again when
-        // asked again.
-        let held: BTreeSet<String> = keys.iter().map(|k| k.id()).collect();
-        self.0.secret_key_missing.send_if_modified(|now| {
-            let before = now.len();
-            now.retain(|id| held.contains(id));
-            now.len() != before
-        });
+        let keys = {
+            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            self.0.bump_recheck_gen();
+            let held: BTreeSet<String> = table.keys.keys().cloned().collect();
+            table.gens.retain(|id, _| held.contains(id));
+            // What only [Self::sealed_with_secret_key] said is said again when
+            // asked again.
+            self.0.secret_key_missing.send_if_modified(|now| {
+                let before = now.len();
+                now.retain(|id| held.contains(id));
+                now.len() != before
+            });
+            table.keys.values().cloned().collect::<Vec<_>>()
+        };
         for k in &keys {
             k.lock().checked_at = None;
         }
@@ -991,7 +1069,11 @@ impl SyncKey {
             if let Some(ref sk) = sk
                 && self.lock().opened.as_ref().is_some_and(|(v, t)| v == &version && *t == tag)
             {
-                self.ring.said_ok(&id);
+                let mut table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+                if table.is_current(&id, self) {
+                    table.bump_id(&id);
+                    self.ring.said_ok(&id);
+                }
                 return Ok(sk.clone());
             }
             let epochs = self.ring.secrets.epochs().await?;
@@ -1039,7 +1121,7 @@ impl SyncKey {
                             self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
                             init.committed_staged = None;
                             let _ = self.ring.secrets.set_pending_secret_key(None).await;
-                            self.ring.bump_status_gen();
+                            self.ring.bump_recheck_gen();
                             true
                         }
                     };
@@ -1265,13 +1347,16 @@ impl SyncKey {
         // retryable.
         self.ring.set_epoch_2fa(&id, epoch).await?;
         {
-            let _keys = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+            let mut table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
             let mut s = self.lock();
             s.epoch = epoch;
             s.opened = Some((version, tag));
             s.refused = None;
-            self.ring.bump_status_gen();
-            self.ring.said_ok(&id);
+            drop(s);
+            if table.is_current(&id, self) {
+                table.bump_id(&id);
+                self.ring.said_ok(&id);
+            }
         }
         Ok(())
     }
@@ -1280,14 +1365,30 @@ impl SyncKey {
     /// meets what it seals finds it there ([refresh]). Fails, changing nothing
     /// here, when another device changed the file meanwhile.
     pub async fn rotate(&self) -> Result<()> {
+        self.rotate_with_hook(|| Box::pin(async { Ok(()) })).await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn rotate_after_check<F>(&self, hook: F) -> Result<()>
+    where
+        F: FnOnce() -> BoxFuture<'static, Result<()>>,
+    {
+        self.rotate_with_hook(hook).await
+    }
+
+    async fn rotate_with_hook<F>(&self, after_check: F) -> Result<()>
+    where
+        F: FnOnce() -> BoxFuture<'static, Result<()>>,
+    {
         let _checking = self.checking.lock().await;
         // Seal with the exact `(pwd, sk)` that opened the version validated by
         // `check_locked`, keeping `epoch` and `pending` consistent even if a
-        // concurrent password change occurs before the PUT commits.
+        // concurrent password change occurs before sealing and PUT commit.
         let (pwd, sk) = self
             .check_locked(true, true)
             .await?
             .ok_or_else(|| Error::Host("rotate did not verify key credentials".into()))?;
+        after_check().await?;
         let (identities, epoch, opened) = {
             let s = self.lock();
             let mut identities = vec![generate()];

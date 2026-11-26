@@ -218,6 +218,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     pub async fn rotate<F: Future<Output = Result<()>> + Send>(&self, rekey: F) -> Result<()> {
         let run = self.core.run().await?;
         self.flush_pending_snapshot().await?;
+        self.flush_accepted_append(&run).await?;
         self.pull_in(&run).await?;
         rekey.await?;
         // A snapshot goes past the last one: a batch makes room for it.
@@ -227,6 +228,19 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         self.pull_in(&run).await?;
         if !self.write_snapshot(&run).await? {
             return Err(Error::Host("no snapshot written".into()));
+        }
+        Ok(())
+    }
+
+    /// Checkpoints any previously accepted append whose local `core.put(state)`
+    /// had not yet succeeded, without resending the batch.
+    async fn flush_accepted_append(&self, run: &Run<'_>) -> Result<()> {
+        let pending = {
+            let held = self.unanswered.lock().unwrap_or_else(|e| e.into_inner());
+            held.as_ref().filter(|p| p.accepted.is_some()).cloned()
+        };
+        if let Some(pending) = pending {
+            self.append_pending(run, pending).await?;
         }
         Ok(())
     }

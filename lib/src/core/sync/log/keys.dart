@@ -115,38 +115,46 @@ abstract final class SyncKeyring {
     return run;
   }
 
-  /// [key] (normalized) as this device's secret key, entered or imported by
-  /// the person; [recheck] after. Coordinates with Rust key-file writes across
+  /// [key] as this device's secret key, entered or imported by the person;
+  /// validated and normalized before either import path modifies secure
+  /// storage; [recheck] after. Coordinates with Rust key-file writes across
   /// the full remote-write lifecycle and rejects conflicting imports when a
   /// staged secret key has already committed to a remote.
   static Future<void> storeSecretKey(String key) async {
-    final before = await SecureStoreProps.syncSecretKey.read(limited: false);
-    final expectEmptyBefore = before == null || before.isEmpty;
+    final canonical = normalizeSecretKey(key);
+    if (canonical == null) {
+      throw ArgumentError.value(key, 'key', 'Invalid sync secret key');
+    }
+    final beforeRaw = await SecureStoreProps.syncSecretKey.read(limited: false);
+    final expectEmptyBefore = beforeRaw == null || beforeRaw.trim().isEmpty;
     return withSecretKeyLock(() async {
-      final current = await SecureStoreProps.syncSecretKey.read(limited: false);
-      if (expectEmptyBefore &&
-          current != null &&
-          current.isNotEmpty &&
-          current != key) {
+      final currentRaw = await SecureStoreProps.syncSecretKey.read(limited: false);
+      final current = currentRaw == null || currentRaw.trim().isEmpty
+          ? null
+          : (normalizeSecretKey(currentRaw) ?? currentRaw.trim());
+      if (expectEmptyBefore && current != null && current != canonical) {
         throw StateError('A staged secret key already committed while importing');
       }
       if (ready) {
-        await _said(() => _ring.storeSecretKey(key: key, expectEmptyBefore: expectEmptyBefore));
+        await _said(() => _ring.storeSecretKey(key: canonical, expectEmptyBefore: expectEmptyBefore));
         return;
       }
-      final staged = await _pendingSecretKeyProp.read(limited: false);
-      if (staged != null && staged.isNotEmpty && staged != key) {
+      final stagedRaw = await _pendingSecretKeyProp.read(limited: false);
+      final staged = stagedRaw == null || stagedRaw.trim().isEmpty
+          ? null
+          : (normalizeSecretKey(stagedRaw) ?? stagedRaw.trim());
+      if (staged != null && staged != canonical) {
         final epochs = _decoded(_epochsProp.get());
         final pending = _decoded(await _pendingProp.storage.read(key: _pendingProp.key));
         final hasDurableCommit =
-            (current == null || current.isEmpty) &&
+            current == null &&
             (epochs.keys.any((k) => k.startsWith('2fa:')) ||
                 pending.keys.any((k) => k.startsWith('intent:')));
         if (hasDurableCommit) {
           throw StateError('A staged secret key has a committed remote write; refusing conflicting import');
         }
       }
-      await SecureStoreProps.syncSecretKey.write(key, limited: false);
+      await SecureStoreProps.syncSecretKey.write(canonical, limited: false);
       await _pendingSecretKeyProp.write(null, limited: false);
     });
   }

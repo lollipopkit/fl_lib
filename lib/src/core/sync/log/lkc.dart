@@ -33,7 +33,7 @@ final class LkcLogSync {
 
   static const _debounce = Duration(milliseconds: 500);
 
-  Future<SyncLogEngine>? _opening;
+  Future<(String, SyncLogEngine)>? _opening;
   Timer? _soon;
 
   /// The account whose key was read last.
@@ -71,7 +71,7 @@ final class LkcLogSync {
         unawaited(SyncLogEngine.forget(host: _host.call));
         return;
       }
-      unawaited(opening.then((s) => s.reset()).then((_) => sync(), onError: (Object _) => SyncLogEngine.forget(host: _host.call)));
+      unawaited(opening.then((s) => s.$2.reset()).then((_) => sync(), onError: (Object _) => SyncLogEngine.forget(host: _host.call)));
     });
     // Signed out, or in as someone else: the next run opens anew, and what
     // this device knew of the account before goes.
@@ -122,9 +122,11 @@ final class LkcLogSync {
     final SyncLogEngine engine;
     final opening = _opening ??= _open();
     try {
-      engine = await opening;
+      final (engineAccount, opened) = await opening;
+      engine = opened;
       // The password still opens the key: nothing syncs while it does not.
-      await key();
+      final k = await key();
+      _ensureAccount(engineAccount, actual: k.id(), releaseOnMismatch: true);
     } catch (e, s) {
       // Opened again next time: the key, the password or the network may be
       // there by then. Only this one: another may have taken its place meanwhile.
@@ -151,8 +153,8 @@ final class LkcLogSync {
     }
   }
 
-  void _ensureAccount(String uid, {bool releaseOnMismatch = false}) {
-    if (client.user.value?.id != uid) {
+  void _ensureAccount(String uid, {String? actual, bool releaseOnMismatch = false}) {
+    if ((actual != null && actual != uid) || client.user.value?.id != uid) {
       if (releaseOnMismatch) SyncKeyring.release(uid);
       throw const LkcException(
         code: LkcCode.perm,
@@ -162,17 +164,17 @@ final class LkcLogSync {
     }
   }
 
-  Future<SyncLogEngine> _open() async {
+  Future<(String, SyncLogEngine)> _open() async {
     final user = client.user.value;
     if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
     final uid = user.id;
     final sync = await client.sync(app);
     _ensureAccount(uid);
     final k = await key();
-    _ensureAccount(uid, releaseOnMismatch: true);
+    _ensureAccount(uid, actual: k.id(), releaseOnMismatch: true);
     await syncCall(() => SyncLogEngine.bind(account: uid, host: _host.call));
     _ensureAccount(uid, releaseOnMismatch: true);
-    return SyncLogEngine(lkc: sync, key: k, host: _host.call);
+    return (uid, SyncLogEngine(lkc: sync, key: k, host: _host.call));
   }
 
   /// The account's sync key, opened with the password here: what the log,
@@ -200,8 +202,10 @@ final class LkcLogSync {
   /// is written from now on is sealed to a new one.
   Future<void> rotateKey() async {
     if (!_wanted) throw StateError('LK Cloud sync is off');
-    final engine = await (_opening ??= _open());
+    final opening = _opening ??= _open();
+    final (engineAccount, engine) = await opening;
     final k = await key();
+    _ensureAccount(engineAccount, actual: k.id(), releaseOnMismatch: true);
     await syncCall(() => engine.rotate(key: k));
   }
 

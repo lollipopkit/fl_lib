@@ -369,6 +369,12 @@ struct PersonalSlot {
     generation: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum UploadMode {
+    File,
+    Blob,
+}
+
 struct FileMutationTracker {
     seq: u64,
     active: usize,
@@ -379,7 +385,7 @@ struct PendingCommits {
     /// Matches [`PersonalSlot::generation`] so stale in-flight writes from a previous
     /// auth cannot insert or reuse recovery entries after `set_personal`.
     generation: u64,
-    files: HashMap<(String, Condition, [u8; 32]), (String, i64)>,
+    files: HashMap<(String, Condition, [u8; 32], UploadMode), (String, i64)>,
     next_mutation_seq: u64,
     /// Per-file mutation tracker retained only while at least one in-flight
     /// `upload_bytes` / `upload_blob_bytes` is between remote PUT commit and
@@ -656,7 +662,8 @@ impl<S: Store> SyncClient<S> {
             return self.upload_signed(name, body, condition, None).await;
         };
         let body = bytes::Bytes::from(body);
-        let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes());
+        let mode = if write_once_blob { UploadMode::Blob } else { UploadMode::File };
+        let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes(), mode);
         let pending = {
             let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
             (guard.generation == auth_gen).then(|| guard.files.get(&commit_key).cloned()).flatten()
@@ -772,7 +779,7 @@ impl<S: Store> SyncClient<S> {
             if slot.generation == expected_gen {
                 let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                 let token = if guard.generation == expected_gen {
-                    guard.files.retain(|(file_name, _, _), _| file_name != name);
+                    guard.files.retain(|(file_name, _, _, _), _| file_name != name);
                     if track_recovery {
                         guard.next_mutation_seq = guard.next_mutation_seq.wrapping_add(1);
                         let seq = guard.next_mutation_seq;
@@ -867,7 +874,7 @@ impl<S: Store> SyncClient<S> {
                 if slot.generation == start_gen {
                     let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                     if pending.generation == start_gen {
-                        pending.files.retain(|(file_name, _, _), _| file_name != name);
+                        pending.files.retain(|(file_name, _, _, _), _| file_name != name);
                         pending.bump_if_tracked(name);
                     }
                     drop(pending);

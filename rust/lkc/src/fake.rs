@@ -35,19 +35,22 @@ pub struct Response {
     pub body: Vec<u8>,
     /// The connection closed with no answer at all.
     pub drop: bool,
+    /// Optional gate held before writing the response so tests can coordinate
+    /// concurrent requests deterministically.
+    pub hold: Option<tokio::sync::oneshot::Receiver<()>>,
 }
 
 impl Response {
     pub fn json(status: u16, value: serde_json::Value) -> Self {
-        Self { status, headers: vec![("content-type".into(), "application/json".into())], body: value.to_string().into_bytes(), drop: false }
+        Self { status, headers: vec![("content-type".into(), "application/json".into())], body: value.to_string().into_bytes(), drop: false, hold: None }
     }
 
     pub fn status(status: u16) -> Self {
-        Self { status, headers: vec![], body: vec![], drop: false }
+        Self { status, headers: vec![], body: vec![], drop: false, hold: None }
     }
 
     pub fn dropped() -> Self {
-        Self { status: 0, headers: vec![], body: vec![], drop: true }
+        Self { status: 0, headers: vec![], body: vec![], drop: true, hold: None }
     }
 
     pub fn header(mut self, name: &str, value: &str) -> Self {
@@ -57,6 +60,11 @@ impl Response {
 
     pub fn body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
+        self
+    }
+
+    pub fn hold(mut self, release: tokio::sync::oneshot::Receiver<()>) -> Self {
+        self.hold = Some(release);
         self
     }
 }
@@ -105,6 +113,9 @@ impl Fake {
                     let request = Request { method, target, headers, body };
                     kept.lock().unwrap().push(request.clone());
                     let response = handler(&request);
+                    if let Some(release) = response.hold {
+                        let _ = release.await;
+                    }
                     if response.drop {
                         return;
                     }

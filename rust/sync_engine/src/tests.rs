@@ -2488,52 +2488,21 @@ async fn rotate_uses_verified_credential_across_concurrent_password_change() {
     let inner = Arc::new(MemKeyFile::default());
     let d = Device::new("pw1");
     let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
-    let _ = d.key(&inner).await.unwrap();
+    let key = d.key(&inner).await.unwrap();
 
-    // Intercept the read inside rotate's check_locked so a password change
-    // happens right after check_locked opens v1 under pw1 and before rotate
-    // writes v2.
-    struct RaceOnRotateWrite {
-        inner: Arc<MemKeyFile>,
-        secrets: Arc<MemSecrets>,
-        ring: KeyRing,
-        trigger: AtomicBool,
-    }
-    impl KeyFile for RaceOnRotateWrite {
-        fn id(&self) -> String {
-            "account".into()
-        }
-        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
-            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
-        }
-        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
-            Box::pin(async move {
-                if self.trigger.swap(false, Ordering::SeqCst) {
-                    self.ring.password_changed(Some("pw1".into())).await?;
-                    *self.secrets.password.lock().unwrap() = Some("pw2".into());
-                }
-                let mut f = self.inner.file.lock().unwrap();
-                if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
-                    return Ok(None);
-                }
-                let ver = format!("v-rot-{}", f.as_ref().map_or(0, |(_, v)| v.len() + 1));
-                *f = Some((body, ver.clone()));
-                Ok(Some(ver))
-            })
-        }
-        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
-            Box::pin(async { Ok(true) })
-        }
-    }
-
-    let rf = Arc::new(RaceOnRotateWrite {
-        inner: inner.clone(),
-        secrets: d.secrets.clone(),
-        ring: d.ring.clone(),
-        trigger: AtomicBool::new(true),
-    });
-    let key = d.ring.of(rf, true).await.unwrap();
-    key.rotate().await.unwrap();
+    // Mutate the stored password immediately after `check_locked` validates the
+    // remote version under `pw1` and BEFORE `rotate` seals the rotated file.
+    let ring = d.ring.clone();
+    let secrets = d.secrets.clone();
+    key.rotate_after_check(move || {
+        Box::pin(async move {
+            ring.password_changed(Some("pw1".into())).await?;
+            *secrets.password.lock().unwrap() = Some("pw2".into());
+            Ok(())
+        })
+    })
+    .await
+    .unwrap();
 
     // Rotate sealed with pw1 (matching epoch 0 and pending["account"] = "pw1").
     let raw_after_rotate = inner.file.lock().unwrap().clone().unwrap().0;
@@ -2742,4 +2711,208 @@ async fn append_checkpoint_put_failure_retries_without_resending_batch() {
     assert_eq!(log.append_calls.load(Ordering::SeqCst), 1, "retained checkpoint must be applied without resending batch");
     assert_eq!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].as_deref(), Some("log-1"));
     assert_eq!(d.host.state(vec!["log.cursor".into()]).await.unwrap()[0].as_deref(), Some("1"));
+}
+
+#[tokio::test]
+async fn external_commit_staging_validates_candidate_and_tracks_concurrent_writes() {
+    let d = Device::new("pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+
+    let stale = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    // No active or staged key yet: staging a stale candidate MUST be rejected.
+    assert!(d.ring.stage_external_secret_key_commit(&stale).await.is_err());
+
+    let candidate = d.ring.secret_key_candidate().await.unwrap();
+    assert!(d.ring.stage_external_secret_key_commit(&stale).await.is_err());
+
+    // Two unresolved external writes stage the same current candidate.
+    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+
+    // Clearing one write MUST keep protection and durable intent intact for the second.
+    d.ring.clear_external_secret_key_commit(&candidate).await.unwrap();
+    let other = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    assert!(d.ring.store_secret_key(&other).await.is_err());
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+
+    // Clearing the second write settles all unresolved writes, permitting import.
+    d.ring.clear_external_secret_key_commit(&candidate).await.unwrap();
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    d.ring.store_secret_key(&other).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(other.as_str()));
+
+    // Once active key is `other`, staging stale `candidate` is rejected while `other` succeeds.
+    assert!(d.ring.stage_external_secret_key_commit(&candidate).await.is_err());
+    d.ring.stage_external_secret_key_commit(&other).await.unwrap();
+    d.ring.clear_external_secret_key_commit(&other).await.unwrap();
+}
+
+#[tokio::test]
+async fn probe_invalidation_is_scoped_per_remote_and_stale_handle_cannot_clear_missing() {
+    let file_a = Arc::new(MemKeyFile::default());
+    let file_b = Arc::new(MemKeyFile::default());
+    let writer = Device::new("pw");
+    writer.ring.of(Arc::new(KeyFileOf(file_a.clone(), "remote-a".into())), true).await.unwrap();
+    writer.ring.of(Arc::new(KeyFileOf(file_b.clone(), "remote-b".into())), true).await.unwrap();
+
+    // Device has no secret key: probe remote-a while remote-b is released.
+    let reader = Device::new("pw");
+    *reader.secrets.secret_key.lock().unwrap() = None;
+
+    let read_started = Arc::new(tokio::sync::Notify::new());
+    let release_read = Arc::new(tokio::sync::Notify::new());
+    struct SlowProbe {
+        id: String,
+        inner: Arc<MemKeyFile>,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+    impl KeyFile for SlowProbe {
+        fn id(&self) -> String {
+            self.id.clone()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(self.inner.file.lock().unwrap().clone())
+            })
+        }
+        fn write(&self, _: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(false) })
+        }
+    }
+
+    let r_probe = reader.ring.clone();
+    let probe_file_a = Arc::new(SlowProbe {
+        id: "remote-a".into(),
+        inner: file_a.clone(),
+        started: read_started.clone(),
+        release: release_read.clone(),
+    });
+    let probe_a = tokio::spawn(async move { r_probe.sealed_with_secret_key(probe_file_a).await.unwrap() });
+    read_started.notified().await;
+
+    // Activity on unrelated remote-b MUST NOT suppress remote-a's said_missing.
+    reader.ring.release("remote-b");
+    release_read.notify_one();
+    assert!(probe_a.await.unwrap());
+    assert!(reader.ring.secret_key_missing().borrow().contains("remote-a"));
+
+    // A stale handle opened after release must not clear missing status for the same id.
+    let sk = writer.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let owner = Device::new("pw");
+    *owner.secrets.secret_key.lock().unwrap() = Some(sk);
+    let old_handle = owner.ring.of(Arc::new(KeyFileOf(file_b.clone(), "remote-b".into())), true).await.unwrap();
+    owner.ring.release("remote-b");
+    // Probe remote-b without SK to mark it missing under the new state.
+    *owner.secrets.secret_key.lock().unwrap() = None;
+    assert!(owner.ring.sealed_with_secret_key(Arc::new(KeyFileOf(file_b.clone(), "remote-b".into()))).await.unwrap());
+    assert!(owner.ring.secret_key_missing().borrow().contains("remote-b"));
+    // Restore SK and reopen the detached old handle: it is no longer registered,
+    // so it must not clear the ring's missing status.
+    *owner.secrets.secret_key.lock().unwrap() = writer.secrets.secret_key.lock().unwrap().clone();
+    old_handle.check(true, true).await.unwrap();
+    assert!(owner.ring.secret_key_missing().borrow().contains("remote-b"));
+}
+
+#[tokio::test]
+async fn rotate_checkpoints_pending_accepted_join_before_rekey_and_aborts_on_failure() {
+    struct ToggleFailPutHost {
+        inner: Arc<MemHost>,
+        fail_put: AtomicBool,
+    }
+    impl Host for ToggleFailPutHost {
+        async fn device(&self) -> Result<u64> {
+            self.inner.device().await
+        }
+        async fn stamp(&self) -> Result<()> {
+            self.inner.stamp().await
+        }
+        async fn all(&self) -> Result<Vec<Stamped>> {
+            self.inner.all().await
+        }
+        async fn pending(&self, after: Option<Hlc>) -> Result<Vec<Stamped>> {
+            self.inner.pending(after).await
+        }
+        async fn read(&self, ids: Vec<(String, String)>) -> Result<Vec<Read>> {
+            self.inner.read(ids).await
+        }
+        async fn apply(&self, ops: Vec<Op>) -> Result<Vec<Op>> {
+            self.inner.apply(ops).await
+        }
+        async fn not_carried(&self) -> Result<HashSet<String>> {
+            self.inner.not_carried().await
+        }
+        async fn after_read(&self, nc: HashSet<String>) -> Result<()> {
+            self.inner.after_read(nc).await
+        }
+        async fn state(&self, keys: Vec<String>) -> Result<Vec<Option<String>>> {
+            self.inner.state(keys).await
+        }
+        async fn state_prefixed(&self, prefix: String) -> Result<Vec<(String, String)>> {
+            self.inner.state_prefixed(prefix).await
+        }
+        async fn set_state(&self, values: Vec<(String, Option<String>)>) -> Result<()> {
+            if self.fail_put.load(Ordering::SeqCst) {
+                return Err(Error::Host("sqlite busy".into()));
+            }
+            self.inner.set_state(values).await
+        }
+        async fn clear_state(&self, prefix: String, keep: Vec<String>) -> Result<()> {
+            self.inner.clear_state(prefix, keep).await
+        }
+        async fn pass(&self, engine: String, ops: Vec<Op>) -> Result<()> {
+            self.inner.pass(engine, ops).await
+        }
+        async fn passed(&self, engine: String) -> Result<Vec<Op>> {
+            self.inner.passed(engine).await
+        }
+        async fn forget_passed(&self, engine: String) -> Result<()> {
+            self.inner.forget_passed(engine).await
+        }
+        fn warn(&self, message: String) {
+            self.inner.warn(message);
+        }
+    }
+
+    let log = MemLog::new();
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+
+    let host = Arc::new(ToggleFailPutHost { inner: d.host.clone(), fail_put: AtomicBool::new(true) });
+    let sync = LogSync::new(host.clone(), log.clone(), key.clone());
+
+    // First join append is accepted remotely (seq 1), but checkpoint write fails.
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
+    assert!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].is_none());
+
+    // Calling rotate while checkpoint still fails MUST NOT run rekey or send rotation append.
+    let rekey_called = Arc::new(AtomicBool::new(false));
+    let rk = rekey_called.clone();
+    assert!(matches!(
+        sync.rotate(async move {
+            rk.store(true, Ordering::SeqCst);
+            Ok(())
+        })
+        .await,
+        Err(Error::Host(_))
+    ));
+    assert!(!rekey_called.load(Ordering::SeqCst), "rekey must not run if checkpointing accepted join fails");
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
+
+    // Once storage recovers, rotate checkpoints the accepted join first without resending it,
+    // then proceeds with rekey, rotation append, and snapshot.
+    host.fail_put.store(false, Ordering::SeqCst);
+    let key_c = key.clone();
+    sync.rotate(async move { key_c.rotate().await }).await.unwrap();
+    assert_eq!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].as_deref(), Some("log-1"));
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2, "only the rotation append should be sent after checkpointing");
+    assert!(log.lock().snapshot.is_some());
 }

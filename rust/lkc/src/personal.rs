@@ -152,18 +152,20 @@ impl PersonalVersions {
         Ok(out)
     }
 
-    /// An entry of a v1 build's `files`, which also named log blobs.
+    /// An entry of a v1 build's `files` or `signed_files`, which did not
+    /// separate write-once log blobs from ordinary mutable files.
     // TODO(migration): remove once v1 personal versions JSON is no longer present.
     fn take_legacy_file(&mut self, key: String, version: i64) {
-        match key.split_once('/') {
-            Some((app, name)) if name.starts_with(LEGACY_BLOB_PREFIX) => {
-                self.signed_blobs.insert(app.to_string());
-            }
-            _ => {
-                let entry = self.files.entry(key).or_insert(0);
-                *entry = (*entry).max(version);
-            }
+        if !self.files.contains_key(&key)
+            && let Some((app, name)) = key.split_once('/')
+            && name.starts_with(LEGACY_BLOB_PREFIX)
+            && matches!(classify_legacy_op_file(name, version), LegacyOpKind::Blob)
+        {
+            self.signed_blobs.insert(app.to_string());
+            return;
         }
+        let entry = self.files.entry(key).or_insert(0);
+        *entry = (*entry).max(version);
     }
 
     pub fn to_json(&self) -> String {
@@ -256,6 +258,36 @@ enum Refresh {
     Unchanged,
     /// Read too recently, or could not be.
     NotRead,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LegacyOpKind {
+    Blob,
+    Mutable,
+}
+
+/// Classifies a v1 `op-*` entry where v1 did not distinguish write-once log
+/// blobs from ordinary mutable files.
+///
+/// Write-once log blobs are written once (`version <= 1`) and named
+/// `op-<hex>.age` (keyed blake3 digest) or `op-<hex>-<hex>.age` (device/HLC
+/// hex). Entries with `version > 1` or a non-hex stem (e.g. `op-notes.age`)
+/// are classified as ordinary mutable files so their version watermarks are
+/// preserved.
+// TODO(migration): remove once v1 personal versions JSON is no longer present.
+fn classify_legacy_op_file(name: &str, version: i64) -> LegacyOpKind {
+    if version > 1 {
+        return LegacyOpKind::Mutable;
+    }
+    let Some(stem) = name.strip_prefix(LEGACY_BLOB_PREFIX).and_then(|s| s.strip_suffix(".age")) else {
+        return LegacyOpKind::Mutable;
+    };
+    let is_hex = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_hexdigit());
+    let is_blob_stem = match stem.split_once('-') {
+        Some((a, b)) => is_hex(a) && is_hex(b),
+        None => is_hex(stem),
+    };
+    if is_blob_stem { LegacyOpKind::Blob } else { LegacyOpKind::Mutable }
 }
 
 fn file_key(app: &str, name: &str) -> String {
@@ -840,6 +872,30 @@ mod tests {
         let json = v.to_json();
         assert!(!json.contains("op-") && !json.contains("taken"), "{json}");
         assert_eq!(PersonalVersions::from_json(&json).unwrap(), v);
+    }
+
+    #[test]
+    fn v1_migration_preserves_mutable_op_prefixed_watermarks_and_migrates_blobs() {
+        let json = r#"{
+            "v": 1,
+            "files": {
+                "serverbox/op-notes.age": 1,
+                "serverbox/op-deadbeef.age": 3,
+                "serverbox/op-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.age": 1,
+                "gptbox/op-0123456789abcdef-fedcba9876543210.age": 1
+            },
+            "signed_files": ["serverbox/op-deadbeef.age"]
+        }"#;
+        let v = PersonalVersions::from_json(json).unwrap();
+        assert_eq!(v.file_version("serverbox", "op-notes.age"), 1);
+        assert_eq!(v.file_version("serverbox", "op-deadbeef.age"), 3);
+        assert_eq!(v.file_version("serverbox", "op-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.age"), 0);
+        assert!(v.blob_requires_signature("serverbox"));
+        assert!(v.blob_requires_signature("gptbox"));
+        // Round-tripping v2 preserves all mutable op-* entries.
+        let reloaded = PersonalVersions::from_json(&v.to_json()).unwrap();
+        assert_eq!(reloaded.file_version("serverbox", "op-notes.age"), 1);
+        assert_eq!(reloaded.file_version("serverbox", "op-deadbeef.age"), 3);
     }
 
     #[tokio::test]

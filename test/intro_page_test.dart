@@ -478,6 +478,63 @@ void main() {
     expect(doneCalls, 1);
   });
 
+  testWidgets('large horizontal pointer-scroll delta cannot skip intermediate gated or hook pages', (tester) async {
+    final gate = false.vn;
+    addTearDown(gate.dispose);
+    var hookCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: const [
+              Center(child: Text('page-0')),
+              Center(child: Text('page-1')),
+              Center(child: Text('page-2')),
+              Center(child: Text('page-3')),
+            ],
+            canProceed: (page) => page == 1 ? gate : null,
+            onBeforeNext: (page) => page == 2
+                ? () async {
+                    hookCalls++;
+                    return false;
+                  }
+                : null,
+            onDone: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Future<void> scrollHorizontal(double dx) async {
+      final center = tester.getCenter(find.byType(PageView));
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(center));
+      await tester.sendEventToBinding(pointer.scroll(Offset(dx, 0)));
+      await tester.pumpAndSettle();
+    }
+
+    // Huge forward delta from unlocked page-0 must stop at gated page-1, never skipping to page-2/3.
+    await scrollHorizontal(2400);
+    expect(find.text('page-1'), findsOneWidget);
+
+    // Unlock page-1, go back to page-0, and send huge forward delta: must stop at hook-guarded page-2.
+    gate.value = true;
+    await scrollHorizontal(-800);
+    expect(find.text('page-0'), findsOneWidget);
+
+    await scrollHorizontal(2400);
+    expect(find.text('page-2'), findsOneWidget);
+    expect(hookCalls, 0);
+
+    // Attempting to scroll past hook-guarded page-2 runs the hook instead of skipping to page-3.
+    await scrollHorizontal(800);
+    expect(hookCalls, 1);
+    expect(find.text('page-2'), findsOneWidget);
+  });
+
   testWidgets('onBeforeNext completion is discarded if user scrolled back while awaiting', (tester) async {
     final pending = Completer<bool>();
     var doneCalls = 0;

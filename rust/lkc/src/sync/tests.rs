@@ -906,26 +906,92 @@ async fn download_404_leaves_existing_destination_and_unrelated_part_file_untouc
 
 #[tokio::test]
 async fn concurrent_delete_after_put_does_not_leave_put_etag_cached() {
-    let (_fake, sync) = homebase(|r| match r.method.as_str() {
-        "PUT" => written("e-put"),
-        "DELETE" => Response::status(204),
+    let put_arrived = Arc::new(tokio::sync::Notify::new());
+    let delete_arrived = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    let release_slot = Arc::new(StdMutex::new(Some(release_rx)));
+
+    let arrived_c = put_arrived.clone();
+    let del_c = delete_arrived.clone();
+    let rx_c = release_slot.clone();
+    let (_fake, sync) = homebase(move |r| match r.method.as_str() {
+        "PUT" => {
+            arrived_c.notify_one();
+            let mut resp = written("e-put");
+            if let Some(rx) = rx_c.lock().unwrap().take() {
+                resp = resp.hold(rx);
+            }
+            resp
+        }
+        "DELETE" => {
+            del_c.store(true, std::sync::atomic::Ordering::SeqCst);
+            Response::status(204)
+        }
         _ => Response::status(404),
     })
     .await;
 
-    // Acquire the per-name lock to simulate PUT holding it until response + ETag
-    // commit complete while DELETE waits for ordering.
     let s1 = sync.clone();
     let s2 = sync.clone();
     let put = tokio::spawn(async move { s1.upload_signed(NAME, b"x".to_vec(), Condition::Absent, None).await.unwrap() });
-    let del = tokio::spawn(async move {
-        tokio::task::yield_now().await;
-        s2.delete(NAME, None).await.unwrap()
-    });
+    put_arrived.notified().await;
+
+    let del = tokio::spawn(async move { s2.delete(NAME, None).await.unwrap() });
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    assert!(!delete_arrived.load(std::sync::atomic::Ordering::SeqCst), "DELETE must wait until PUT response and ETag commit complete");
+
+    release_tx.send(()).unwrap();
     assert_eq!(put.await.unwrap(), "e-put");
     assert!(del.await.unwrap());
-    // Whichever order the two tasks acquired the per-name lock, once we run a
-    // DELETE after a PUT completes, the ETag cache never retains the PUT's ETag.
-    assert!(sync.delete(NAME, None).await.unwrap());
-    assert!(sync.written.lock().unwrap().get(NAME).is_none());
+    assert!(delete_arrived.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(sync.written.lock().unwrap().get(NAME).is_none(), "DELETE completing after PUT must leave no PUT ETag marker");
+}
+
+#[tokio::test]
+async fn upload_recovery_key_separates_blob_and_file_modes_and_invalidates_both_on_change() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = puts.clone();
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", _) => {
+            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            match n {
+                0 => written("e-blob"),
+                1 => Response::status(412),
+                _ => written("e-new"),
+            }
+        }
+        ("DELETE", _) => Response::status(204),
+        _ => Response::status(404),
+    })
+    .await;
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth));
+
+    // 1. Blob upload commits remotely, local save fails -> caches Blob recovery entry.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e-blob".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. Retrying in the SAME mode (blob) flushes without resending PUT.
+    let err = sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e-blob".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 3. Mutable file upload with identical (name, Condition::Absent, body) MUST NOT reuse
+    //    the blob recovery entry; it issues PUT #2 (hitting 412).
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.upload_bytes("op-notes.age", b"same".to_vec(), Condition::Absent).await.unwrap_err().kind, Kind::Changed);
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // 4. Deleting the file invalidates recovery entries across both modes so a
+    //    subsequent blob upload issues PUT #3.
+    assert!(sync.delete("op-notes.age", None).await.unwrap());
+    assert_eq!(sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap(), "e-new");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
 }

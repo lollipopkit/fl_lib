@@ -282,28 +282,53 @@ final class _IntroPageState extends State<IntroPage> {
     return Directionality.of(context) == TextDirection.rtl ? -raw : raw;
   }
 
+  /// First page at or after [fromPage] whose gate is closed or that has an
+  /// `onBeforeNext` hook, or `null` when none blocks forward pointer scrolling.
+  int? _firstForwardBarrier(int fromPage) {
+    for (var i = fromPage; i < _pageCount; i++) {
+      final allowed = _args.canProceed?.call(i)?.value ?? true;
+      final hasCommitHook = _args.onBeforeNext?.call(i) != null;
+      if (!allowed || hasCommitHook) return i;
+    }
+    return null;
+  }
+
   /// Pointer-scroll bypasses [ScrollPhysics.applyBoundaryConditions] via
-  /// `forcePixels`, so intercept forward horizontal scroll signals on gated or
-  /// hook-guarded pages and route hook pages through [_onTapNext].
+  /// `forcePixels`, so intercept forward horizontal scroll signals whenever
+  /// they would cross a gated or hook-guarded page (either the current page or
+  /// an intermediate page). Clamp crossing deltas onto the barrier page, and
+  /// route attempts to advance past a hook-guarded current page through
+  /// [_onTapNext] to match Next / Done behavior.
   void _onPointerSignal(BuildContext navContext, BuildContext pageCtx, PointerSignalEvent event) {
     if (event is! PointerScrollEvent || !_pageController.hasClients) return;
-    final page = _currentPage.value;
-    final allowed = _args.canProceed?.call(page)?.value ?? true;
-    final hasCommitHook = _args.onBeforeNext?.call(page) != null;
-    if (allowed && !hasCommitHook && !_advancing) return;
     final delta = _horizontalScrollDelta(pageCtx, event);
     if (delta <= 0) return;
     final pos = _pageController.position;
-    final limit = page * pos.viewportDimension;
+    final viewport = pos.viewportDimension;
+    if (viewport <= 0) return;
+    final page = _currentPage.value;
+    final barrier = _advancing ? page : _firstForwardBarrier(page);
+    if (barrier == null) return;
+    final limit = barrier * viewport;
     if (pos.pixels + delta <= limit) return;
     GestureBinding.instance.pointerSignalResolver.register(event, (_) {
-      if (!mounted) return;
+      if (!mounted || !_pageController.hasClients) return;
+      final curPos = _pageController.position;
+      final curViewport = curPos.viewportDimension;
+      if (curViewport <= 0) return;
       final curPage = _currentPage.value;
       final curAllowed = _args.canProceed?.call(curPage)?.value ?? true;
       final curHasHook = _args.onBeforeNext?.call(curPage) != null;
-      if (!curAllowed || _advancing) return;
+      if (_advancing || !curAllowed) return;
       if (curHasHook) {
         unawaited(_onTapNext(navContext));
+        return;
+      }
+      final curBarrier = _firstForwardBarrier(curPage);
+      if (curBarrier == null) return;
+      final clampedDelta = curBarrier * curViewport - curPos.pixels;
+      if (clampedDelta > 0) {
+        curPos.pointerScroll(clampedDelta);
       }
     });
   }

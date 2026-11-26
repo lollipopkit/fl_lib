@@ -304,8 +304,12 @@ void main() {
     await writeStarted.future;
 
     // Concurrently attempt to import conflicting secret key B while write is in flight.
+    // Attach expectLater immediately so an early rejection is captured cleanly.
     final keyB = SyncKeyring.generateSecretKey();
-    final importing = SyncKeyring.storeSecretKey(keyB);
+    final importAssertion = expectLater(
+      SyncKeyring.storeSecretKey(keyB),
+      throwsA(anything),
+    );
 
     // Allow the remote write with staged key A to commit and promote.
     releaseWrite.complete();
@@ -315,9 +319,30 @@ void main() {
     expect(committedA, isNot(keyB));
 
     // Conflicting import B must be rejected rather than overwriting committed key A.
-    await expectLater(importing, throwsA(anything));
+    await importAssertion;
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), committedA);
     expect(await handle.open(sealed: await handle.seal(plain: Uint8List.fromList([7, 8]))), [7, 8]);
+  });
+
+  test('storeSecretKey validates and normalizes input consistently across both paths', () async {
+    final canonical = SyncKeyring.generateSecretKey();
+    final alternateSpelling = '  ${canonical.toLowerCase().replaceAll('-', ' ')}  ';
+
+    // Invalid secret key is rejected before modifying secure storage.
+    await expectLater(SyncKeyring.storeSecretKey('not-a-valid-key'), throwsArgumentError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+
+    // Ready path stores canonical spelling.
+    await SyncKeyring.storeSecretKey(alternateSpelling);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);
+
+    // Non-ready path also validates and stores canonical spelling.
+    SyncKeyring.resetForTest();
+    FlutterSecureStorage.setMockInitialValues({});
+    await expectLater(SyncKeyring.storeSecretKey('bad-key'), throwsArgumentError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+    await SyncKeyring.storeSecretKey(alternateSpelling);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);
   });
 }
 
