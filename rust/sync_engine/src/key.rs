@@ -139,6 +139,36 @@ fn two_fa_key(id: &str) -> String {
     format!("{TWO_FA_PREFIX}{id}")
 }
 
+/// Prefix for the device-local pre-CAS write-intent record stored inside
+/// `pending` (`intent:<remote_id>`). Written before a remote key-file CAS write
+/// and cleared only after `epochs` and `pending` reflect the outcome, so a
+/// failure in `set_epoch_2fa`/`set_pending` or a crash after commit can still
+/// distinguish a committed write from an uncommitted attempt or lost CAS.
+const WRITE_INTENT_PREFIX: &str = "intent:";
+
+fn write_intent_key(id: &str) -> String {
+    format!("{WRITE_INTENT_PREFIX}{id}")
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct WriteIntent {
+    epoch: i64,
+    pwd: String,
+}
+
+impl WriteIntent {
+    fn encode(&self) -> String {
+        serde_json::json!({ "epoch": self.epoch, "pwd": self.pwd }).to_string()
+    }
+
+    fn decode(raw: &str) -> Option<Self> {
+        let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+        let epoch = v["epoch"].as_i64()?;
+        let pwd = v["pwd"].as_str()?.to_string();
+        (!pwd.is_empty()).then_some(Self { epoch, pwd })
+    }
+}
+
 /// Process-salted BLAKE3 digest of `(pwd, sk)` so plaintext credentials are
 /// never retained in memory across checks.
 fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
@@ -164,6 +194,12 @@ fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
     *h.finalize().as_bytes()
 }
 
+#[derive(Clone)]
+struct PendingKeyWrite {
+    body: Vec<u8>,
+    if_version: Option<String>,
+}
+
 #[derive(Default)]
 struct State {
     /// The newest first: what is sealed now, then what was before.
@@ -178,6 +214,19 @@ struct State {
     /// with it, none is put in its place when the remote file is gone.
     refused: Option<([u8; 32], bool)>,
     checked_at: Option<Instant>,
+    /// A committed remote key-file PUT whose local signing watermark save
+    /// failed: retried with the exact same bytes and precondition so the
+    /// transport flushes local state without resending PUT.
+    pending_write: Option<PendingKeyWrite>,
+}
+
+#[derive(Default)]
+struct PendingState {
+    /// Previous passwords announced via [`KeyRing::password_changed`] per
+    /// remote that have not yet been superseded by a newer password opening or
+    /// committing the remote, preventing reconciliation from dropping an
+    /// outstanding notification sent before the stored password updates.
+    notified: HashMap<String, Vec<String>>,
 }
 
 pub struct SyncKey {
@@ -197,8 +246,9 @@ struct RingInner {
     secret_key_missing: watch::Sender<BTreeSet<String>>,
     /// Serializes read-modify-write updates to the shared `epochs` metadata map.
     epochs_lock: Mutex<()>,
-    /// Serializes read-modify-write updates to the shared `pending` map.
-    pending_lock: Mutex<()>,
+    /// Serializes read-modify-write updates to the shared `pending` map and
+    /// coordinates outstanding `password_changed` notifications.
+    pending_lock: Mutex<PendingState>,
     /// Serializes secret-key generation/staging/persistence across all remotes
     /// sharing this [`KeyRing`].
     secret_key_init: Mutex<()>,
@@ -264,40 +314,91 @@ impl RingInner {
         self.secrets.set_epochs(all).await
     }
 
-    async fn set_pending(&self, id: &str, pwd: Option<String>) -> Result<()> {
-        let _guard = self.pending_lock.lock().await;
+    async fn clear_all_pending(&self, id: &str) -> Result<()> {
+        let mut st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
-        if all.get(id) == pwd.as_ref() {
+        let removed_pwd = all.remove(id).is_some();
+        let removed_intent = all.remove(&write_intent_key(id)).is_some();
+        if removed_pwd || removed_intent {
+            self.secrets.set_pending(all).await?;
+        }
+        st.notified.remove(id);
+        Ok(())
+    }
+
+    async fn stage_write_intent(&self, id: &str, epoch: i64, pwd: &str) -> Result<()> {
+        let _st = self.pending_lock.lock().await;
+        let mut all = self.secrets.pending().await?;
+        let key = write_intent_key(id);
+        let encoded = WriteIntent { epoch, pwd: pwd.to_string() }.encode();
+        if all.get(&key) == Some(&encoded) {
             return Ok(());
         }
-        match pwd {
-            Some(p) => all.insert(id.to_string(), p),
-            None => all.remove(id),
-        };
+        all.insert(key, encoded);
         self.secrets.set_pending(all).await
+    }
+
+    async fn clear_write_intent(&self, id: &str) -> Result<()> {
+        let _st = self.pending_lock.lock().await;
+        let mut all = self.secrets.pending().await?;
+        if all.remove(&write_intent_key(id)).is_some() {
+            self.secrets.set_pending(all).await?;
+        }
+        Ok(())
+    }
+
+    async fn reconcile_pending_locked(&self, st: &mut PendingState, id: &str, settled_pwd: &str, preserve_same_pending: bool) -> Result<()> {
+        let mut all = self.secrets.pending().await?;
+        let current = self.secrets.password().await?;
+        let notified = st.notified.get(id).is_some_and(|v| v.iter().any(|p| p == settled_pwd));
+        let next = match current.as_deref().filter(|p| !p.is_empty()) {
+            Some(cur) if cur != settled_pwd => Some(settled_pwd.to_string()),
+            _ if notified || (preserve_same_pending && all.get(id).map(String::as_str) == Some(settled_pwd)) => {
+                Some(settled_pwd.to_string())
+            }
+            _ => None,
+        };
+        let removed_intent = all.remove(&write_intent_key(id)).is_some();
+        let pwd_changed = all.get(id) != next.as_ref();
+        if removed_intent || pwd_changed {
+            match &next {
+                Some(p) => all.insert(id.to_string(), p.clone()),
+                None => all.remove(id),
+            };
+            self.secrets.set_pending(all).await?;
+        }
+        match next {
+            Some(_) => {
+                if let Some(list) = st.notified.get_mut(id) {
+                    list.retain(|p| p == settled_pwd);
+                    if list.is_empty() {
+                        st.notified.remove(id);
+                    }
+                }
+            }
+            None => {
+                st.notified.remove(id);
+            }
+        }
+        Ok(())
     }
 
     /// Records that [id]'s remote key file committed at [epoch] sealed under
     /// `(committed_pwd, sk)`, persisting the 2FA epoch and reconciling
-    /// `pending[id]` without losing a concurrent `password_changed`.
+    /// `pending[id]` + clearing the pre-CAS write intent only once both are
+    /// durable, without losing a concurrent `password_changed`.
     async fn record_committed_write(&self, id: &str, epoch: i64, committed_pwd: &str) -> Result<()> {
         self.set_epoch_2fa(id, epoch).await?;
-        let _guard = self.pending_lock.lock().await;
-        let mut all = self.secrets.pending().await?;
-        let current = self.secrets.password().await?;
-        let next = match current.as_deref().filter(|p| !p.is_empty()) {
-            Some(cur) if cur != committed_pwd => Some(committed_pwd.to_string()),
-            _ if all.get(id).map(String::as_str) == Some(committed_pwd) => Some(committed_pwd.to_string()),
-            _ => None,
-        };
-        if all.get(id) == next.as_ref() {
-            return Ok(());
-        }
-        match next {
-            Some(p) => all.insert(id.to_string(), p),
-            None => all.remove(id),
-        };
-        self.secrets.set_pending(all).await
+        let mut st = self.pending_lock.lock().await;
+        self.reconcile_pending_locked(&mut st, id, committed_pwd, true).await
+    }
+
+    /// Clears the pre-CAS write intent and `pending[id]` after [id] opened
+    /// cleanly under [opened_pwd], unless a `password_changed` notification for
+    /// [opened_pwd] or a newer stored password is already outstanding.
+    async fn clear_pending_if_settled(&self, id: &str, opened_pwd: &str) -> Result<()> {
+        let mut st = self.pending_lock.lock().await;
+        self.reconcile_pending_locked(&mut st, id, opened_pwd, false).await
     }
 }
 
@@ -316,7 +417,7 @@ impl KeyRing {
             mismatch: watch::Sender::new(BTreeSet::new()),
             secret_key_missing: watch::Sender::new(BTreeSet::new()),
             epochs_lock: Mutex::new(()),
-            pending_lock: Mutex::new(()),
+            pending_lock: Mutex::new(PendingState::default()),
             secret_key_init: Mutex::new(()),
         }))
     }
@@ -383,7 +484,7 @@ impl KeyRing {
     pub async fn forget(&self, id: &str) -> Result<()> {
         self.release(id);
         self.0.clear_epoch(id).await?;
-        self.0.set_pending(id, None).await
+        self.0.clear_all_pending(id).await
     }
 
     /// Before the backup password here changes from [previous]: the files of
@@ -393,13 +494,20 @@ impl KeyRing {
     /// is sealed with.
     pub async fn password_changed(&self, previous: Option<String>) -> Result<()> {
         let Some(previous) = previous.filter(|p| !p.is_empty()) else { return Ok(()) };
-        let _guard = self.0.pending_lock.lock().await;
+        let mut st = self.0.pending_lock.lock().await;
         let mut pending = self.0.secrets.pending().await?;
         let ids: Vec<String> = self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect();
-        for id in ids {
-            pending.entry(id).or_insert_with(|| previous.clone());
+        for id in &ids {
+            pending.entry(id.clone()).or_insert_with(|| previous.clone());
         }
-        self.0.secrets.set_pending(pending).await
+        self.0.secrets.set_pending(pending).await?;
+        for id in ids {
+            let list = st.notified.entry(id).or_default();
+            if !list.iter().any(|p| p == &previous) {
+                list.push(previous.clone());
+            }
+        }
+        Ok(())
     }
 
     /// [sealed] opened with a key of a sync on here that the password opens,
@@ -486,7 +594,16 @@ impl SyncKey {
             self.lock().checked_at = None;
         }
         let _checking = self.checking.lock().await;
-        if self.lock().checked_at.is_some_and(|at| at.elapsed() < RECHECK_AFTER) {
+        self.check_locked(force, create).await
+    }
+
+    async fn check_locked(&self, force: bool, create: bool) -> Result<()> {
+        if force {
+            self.lock().checked_at = None;
+        }
+        if self.lock().checked_at.is_some_and(|at| at.elapsed() < RECHECK_AFTER)
+            && self.lock().pending_write.is_none()
+        {
             let id = self.id();
             if self.ring.secret_key_missing.borrow().contains(&id) {
                 return Err(Error::SecretKeyMissing);
@@ -502,6 +619,9 @@ impl SyncKey {
             let kept = self.ring.secrets.kept(self.id()).await?;
             self.use_identities(lines(kept.as_deref(), false), false).await?;
         }
+        // Flush any committed remote key-file PUT whose local signing watermark
+        // save previously failed, without resending the PUT.
+        self.flush_pending_write().await?;
         // Once more when the password changed meanwhile: what was opened with
         // the one before is to be sealed with it.
         let mut pwd = self.ring.password().await?;
@@ -515,16 +635,50 @@ impl SyncKey {
                 }
                 return Err(e);
             }
+            // Reconcile pending immediately for the password that just opened
+            // the remote so a concurrent password change before the next loop
+            // iteration never sees a stale older pending entry.
+            self.ring.clear_pending_if_settled(&self.id(), &pwd).await?;
             let now = self.ring.password().await?;
             if *now == *pwd {
                 break;
             }
             pwd = now;
         }
-        // Opened with the password here as it is now: nothing waits any more.
-        self.ring.set_pending(&self.id(), None).await?;
         self.lock().checked_at = Some(Instant::now());
         Ok(())
+    }
+
+    async fn flush_pending_write(&self) -> Result<()> {
+        let Some(pw) = self.lock().pending_write.clone() else {
+            return Ok(());
+        };
+        match self.file().write(pw.body, pw.if_version).await {
+            Ok(_) => {
+                self.lock().pending_write = None;
+                Ok(())
+            }
+            Err(Error::KeyFilePersistFailed { detail, .. }) => Err(Error::Host(detail)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Performs a conditional key-file write, separating a committed remote PUT
+    /// whose local signing watermark save failed (`Ok(Some((version, Some(detail))))`)
+    /// from a CAS miss (`Ok(None)` -> HTTP 412) and uncommitted transport errors.
+    async fn commit_key_file(&self, body: Vec<u8>, if_version: Option<String>) -> Result<Option<(String, Option<String>)>> {
+        match self.file().write(body.clone(), if_version.clone()).await {
+            Ok(Some(version)) => Ok(Some((version, None))),
+            Ok(None) => Ok(None),
+            Err(Error::KeyFilePersistFailed { version, detail }) => {
+                let mut s = self.lock();
+                s.pending_write = Some(PendingKeyWrite { body, if_version });
+                s.opened = None;
+                s.checked_at = None;
+                Ok(Some((version, Some(detail))))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Serializes candidate secret-key acquisition, durable staging, remote
@@ -537,7 +691,7 @@ impl SyncKey {
         epoch: i64,
         pwd: &str,
         if_version: Option<String>,
-    ) -> Result<Option<(String, SecretKey)>> {
+    ) -> Result<Option<(String, SecretKey, Option<String>)>> {
         let _init = self.ring.secret_key_init.lock().await;
         let (sk, generated) = match self.ring.secret_key().await? {
             Some(existing) => (existing, false),
@@ -553,19 +707,23 @@ impl SyncKey {
                 }
             },
         };
-        let Some(version) = self.file().write(self.sealed(identities, epoch, pwd, &sk)?, if_version).await? else {
+        let id = self.id();
+        let body = self.sealed(identities, epoch, pwd, &sk)?;
+        self.ring.stage_write_intent(&id, epoch, pwd).await?;
+        let Some((version, persist_err)) = self.commit_key_file(body, if_version).await? else {
+            let _ = self.ring.clear_write_intent(&id).await;
             return Ok(None);
         };
         // The remote file is now committed under `(pwd, sk)` at `epoch`:
-        // persist the epoch and reconcile `pending` BEFORE `set_secret_key` or
-        // `set_kept`, so a later or concurrent `password_changed` matches `pwd`
-        // instead of keeping a stale entry.
-        self.ring.record_committed_write(&self.id(), epoch, pwd).await?;
+        // persist the epoch, reconcile `pending`, and clear the write intent
+        // BEFORE `set_secret_key` or `set_kept`, so a later or concurrent
+        // `password_changed` matches `pwd` instead of keeping a stale entry.
+        self.ring.record_committed_write(&id, epoch, pwd).await?;
         if generated {
             self.ring.secrets.set_secret_key(sk.format().to_string()).await?;
             let _ = self.ring.secrets.set_pending_secret_key(None).await;
         }
-        Ok(Some((version, sk)))
+        Ok(Some((version, sk, persist_err)))
     }
 
     async fn open(&self, pwd: &str, create: bool) -> Result<()> {
@@ -593,8 +751,11 @@ impl SyncKey {
                 }
                 let identities = if held.is_empty() { vec![generate()] } else { held };
                 let epoch = epoch.unwrap_or(0);
-                let Some((version, sk)) = self.write_with_secret_key(&identities, epoch, pwd, None).await? else { continue };
+                let Some((version, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, None).await? else { continue };
                 self.use_identities(identities, true).await?;
+                if let Some(detail) = persist_err {
+                    return Err(Error::Host(detail));
+                }
                 return self.opened_at(epoch, version, pwd, &sk).await;
             };
             if sk.is_some() && self.lock().opened.as_ref().is_some_and(|(v, t)| v == &version && *t == tag) {
@@ -647,12 +808,81 @@ impl SyncKey {
             {
                 let identities = self.merged(old_identities);
                 let epoch = old_epoch + 1;
-                let Some((written, sk)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
+                let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
                 self.use_identities(identities, true).await?;
+                if let Some(detail) = persist_err {
+                    return Err(Error::Host(detail));
+                }
                 return self.opened_at(epoch, written, pwd, &sk).await;
             }
             self.lock().opened = None;
-            if let Some(previous) = self.ring.secrets.pending().await?.get(&id).cloned()
+            let pending_map = self.ring.secrets.pending().await?;
+            // First check any durable pre-CAS write intent: if our previous
+            // remote write already committed at `intent.epoch` under
+            // `intent.pwd` (e.g. `set_epoch_2fa` or `set_pending` failed
+            // afterward) and the password changed again since, recover from
+            // that committed state instead of treating it as a mismatch.
+            if let Some(intent) = pending_map.get(&write_intent_key(&id)).and_then(|raw| WriteIntent::decode(raw))
+                && intent.pwd != pwd
+            {
+                if sk.is_none()
+                    && let Some(ref staged) = staged
+                    && let Some((old_epoch, old_identities)) = read(&body, &staged.combine_passphrase(&intent.pwd))?
+                    && old_epoch == intent.epoch
+                    && verified.is_none_or(|v| old_epoch >= v)
+                {
+                    // Persist the confirmed previous commit FIRST before staging
+                    // the next write intent, so a CAS miss or network error on
+                    // the new write cannot lose `(old_epoch, intent.pwd)`.
+                    self.ring.record_committed_write(&id, old_epoch, &intent.pwd).await?;
+                    let identities = self.merged(old_identities);
+                    let epoch = old_epoch + 1;
+                    let (written, persist_err) = {
+                        let _init = self.ring.secret_key_init.lock().await;
+                        if let Some(existing) = self.ring.secret_key().await?
+                            && existing.format().as_str() != staged.format().as_str()
+                        {
+                            continue;
+                        }
+                        let sealed = self.sealed(&identities, epoch, pwd, staged)?;
+                        self.ring.stage_write_intent(&id, epoch, pwd).await?;
+                        let Some((written, persist_err)) = self.commit_key_file(sealed, Some(version)).await? else {
+                            let _ = self.ring.clear_write_intent(&id).await;
+                            continue;
+                        };
+                        self.ring.record_committed_write(&id, epoch, pwd).await?;
+                        if self.ring.secret_key().await?.is_none() {
+                            self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
+                        }
+                        let _ = self.ring.secrets.set_pending_secret_key(None).await;
+                        (written, persist_err)
+                    };
+                    self.use_identities(identities, true).await?;
+                    if let Some(detail) = persist_err {
+                        return Err(Error::Host(detail));
+                    }
+                    return self.opened_at(epoch, written, pwd, staged).await;
+                }
+                if let Some(ref k) = sk
+                    && let Some((old_epoch, old_identities)) = read(&body, &k.combine_passphrase(&intent.pwd))?
+                    && old_epoch == intent.epoch
+                    && verified.is_none_or(|v| old_epoch >= v)
+                {
+                    // Persist the confirmed previous commit FIRST before staging
+                    // the next write intent, so a CAS miss or network error on
+                    // the new write cannot lose `(old_epoch, intent.pwd)`.
+                    self.ring.record_committed_write(&id, old_epoch, &intent.pwd).await?;
+                    let identities = self.merged(old_identities);
+                    let epoch = old_epoch + 1;
+                    let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
+                    self.use_identities(identities, true).await?;
+                    if let Some(detail) = persist_err {
+                        return Err(Error::Host(detail));
+                    }
+                    return self.opened_at(epoch, written, pwd, &sk).await;
+                }
+            }
+            if let Some(previous) = pending_map.get(&id).cloned()
                 && previous != pwd
             {
                 // Recover a staged key sealed under the previous password (even
@@ -664,14 +894,17 @@ impl SyncKey {
                 {
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
-                    let written = {
+                    let (written, persist_err) = {
                         let _init = self.ring.secret_key_init.lock().await;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
                             continue;
                         }
-                        let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd, staged)?, Some(version)).await? else {
+                        let sealed = self.sealed(&identities, epoch, pwd, staged)?;
+                        self.ring.stage_write_intent(&id, epoch, pwd).await?;
+                        let Some((written, persist_err)) = self.commit_key_file(sealed, Some(version)).await? else {
+                            let _ = self.ring.clear_write_intent(&id).await;
                             continue;
                         };
                         // The remote file is now committed under `(pwd, staged)`
@@ -684,9 +917,12 @@ impl SyncKey {
                             self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
                         }
                         let _ = self.ring.secrets.set_pending_secret_key(None).await;
-                        written
+                        (written, persist_err)
                     };
                     self.use_identities(identities, true).await?;
+                    if let Some(detail) = persist_err {
+                        return Err(Error::Host(detail));
+                    }
                     return self.opened_at(epoch, written, pwd, staged).await;
                 }
                 let old = match &sk {
@@ -706,15 +942,20 @@ impl SyncKey {
                 {
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
-                    let Some((written, sk)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
+                    let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
                     self.use_identities(identities, true).await?;
+                    if let Some(detail) = persist_err {
+                        return Err(Error::Host(detail));
+                    }
                     return self.opened_at(epoch, written, pwd, &sk).await;
                 }
                 // Keep `pending` when `sk` is missing so importing the secret
                 // key later can still finish sealing the password change.
-                if sk.is_some() {
-                    self.ring.set_pending(&id, None).await?;
-                }
+            }
+            if sk.is_some()
+                && (pending_map.contains_key(&id) || pending_map.contains_key(&write_intent_key(&id)))
+            {
+                self.ring.clear_all_pending(&id).await?;
             }
             if sk.is_none() && self.ring.secret_key().await?.is_some() {
                 // Another remote or caller stored an active secret key while we
@@ -745,8 +986,12 @@ impl SyncKey {
                 let mut order = vec![remote[0].clone(), current];
                 order.extend(remote.iter().skip(1).cloned());
                 let identities = self.merged(order);
-                let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd, sk)?, Some(version)).await? else { return Ok(false) };
+                let Some((written, persist_err)) = self.commit_key_file(self.sealed(&identities, epoch, pwd, sk)?, Some(version)).await? else { return Ok(false) };
                 self.use_identities(identities, true).await?;
+                if let Some(detail) = persist_err {
+                    self.ring.record_committed_write(&self.id(), epoch, pwd).await?;
+                    return Err(Error::Host(detail));
+                }
                 self.opened_at(epoch, written, pwd, sk).await?;
             }
             _ => {
@@ -777,7 +1022,8 @@ impl SyncKey {
     /// meets what it seals finds it there ([refresh]). Fails, changing nothing
     /// here, when another device changed the file meanwhile.
     pub async fn rotate(&self) -> Result<()> {
-        self.check(true, true).await?;
+        let _checking = self.checking.lock().await;
+        self.check_locked(true, true).await?;
         let pwd = self.ring.password().await?;
         let sk = self.ring.secret_key().await?.ok_or(Error::SecretKeyMissing)?;
         let (identities, epoch, opened) = {
@@ -787,10 +1033,18 @@ impl SyncKey {
             identities.truncate(HISTORY + 1);
             (identities, s.epoch, s.opened.as_ref().map(|(v, _)| v.clone()))
         };
-        let Some(version) = self.file().write(self.sealed(&identities, epoch, &pwd, &sk)?, opened).await? else {
+        let Some((version, persist_err)) = self.commit_key_file(self.sealed(&identities, epoch, &pwd, &sk)?, opened).await? else {
             return Err(Error::Host("identity.age changed meanwhile".into()));
         };
+        {
+            let mut s = self.lock();
+            s.opened = None;
+            s.checked_at = None;
+        }
         self.use_identities(identities, true).await?;
+        if let Some(detail) = persist_err {
+            return Err(Error::Host(detail));
+        }
         self.opened_at(epoch, version, &pwd, &sk).await
     }
 

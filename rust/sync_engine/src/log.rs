@@ -108,6 +108,7 @@ struct Batch {
 
 #[derive(Clone)]
 struct PendingSnapshot {
+    log: Option<String>,
     seq: i64,
     body: Vec<u8>,
     named: HashSet<String>,
@@ -152,9 +153,29 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     /// when the log cannot be read on (a batch of a newer build).
     pub async fn sync(&self) -> Result<()> {
         let run = self.core.run().await?;
-        self.flush_pending_snapshot().await?;
+        let flushed = self.flush_pending_snapshot().await?;
         let read = self.pull_in(&run).await;
-        self.push(&run).await?;
+        let defer_sweep = if let Some(pending) = flushed {
+            if read.is_ok() {
+                if self.core.get(LOG).await? == pending.log && self.core.get_int(CURSOR).await? <= pending.seq {
+                    self.core.sweep_blobs_as_of(pending.named, pending.created_at).await;
+                    false
+                } else {
+                    // Batches followed `pending.seq` or the log was recreated:
+                    // defer blob sweep until a fresh snapshot covers them.
+                    true
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        let wrote_snapshot = self.push(&run).await?;
+        if defer_sweep && !wrote_snapshot {
+            self.pull_in(&run).await?;
+            self.write_snapshot(&run).await?;
+        }
         read
     }
 
@@ -241,7 +262,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         values.into_iter().map(|(k, v)| (format!("{PREFIX}{k}"), v)).collect()
     }
 
-    async fn push(&self, run: &Run<'_>) -> Result<()> {
+    async fn push(&self, run: &Run<'_>) -> Result<bool> {
         let core = &self.core;
         let mut compact = false;
         // Before what is pending is read: it moves what was sent.
@@ -315,11 +336,12 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         if joining && complete {
             core.put(vec![(JOINED, core.get(LOG).await?), (JOIN_LOG, None), (JOIN_SENT, None)]).await?;
         }
+        let mut wrote_snapshot = false;
         if compact {
             self.pull_in(run).await?;
-            self.write_snapshot(run).await?;
+            wrote_snapshot = self.write_snapshot(run).await?;
         }
-        Ok(())
+        Ok(wrote_snapshot)
     }
 
     /// Sends [batch]; whether a snapshot is due. A full log is compacted
@@ -381,17 +403,14 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         }
     }
 
-    async fn flush_pending_snapshot(&self) -> Result<()> {
+    async fn flush_pending_snapshot(&self) -> Result<Option<PendingSnapshot>> {
         let Some(pending) = self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
-            return Ok(());
+            return Ok(None);
         };
-        match self.transport.put_snapshot(pending.seq, pending.body).await {
+        match self.transport.put_snapshot(pending.seq, pending.body.clone()).await {
             Ok(written) => {
                 *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                if written && self.core.get_int(CURSOR).await? <= pending.seq {
-                    self.core.sweep_blobs_as_of(pending.named, pending.created_at).await;
-                }
-                Ok(())
+                Ok(written.then_some(pending))
             }
             Err(Error::SnapshotPersistFailed { detail, .. }) => Err(Error::Host(detail)),
             Err(e) => Err(e),
@@ -405,6 +424,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         if cursor == 0 {
             return Ok(false);
         }
+        let log = core.get(LOG).await?;
         let created_at = now_ms();
         let Some(ops) = core.snapshot_ops(run).await? else {
             core.host.warn("Sync snapshot left: a record could not be read".into());
@@ -419,7 +439,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             }
             Ok(true) => {}
             Err(Error::SnapshotPersistFailed { seq, detail }) => {
-                *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingSnapshot { seq, body, named, created_at });
+                *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingSnapshot { log, seq, body, named, created_at });
                 return Err(Error::Host(detail));
             }
             Err(e) => return Err(e),

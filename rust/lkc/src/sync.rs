@@ -375,6 +375,11 @@ struct PendingCommits {
     /// auth cannot insert or reuse recovery entries after `set_personal`.
     generation: u64,
     files: HashMap<(String, Condition, [u8; 32]), (String, i64)>,
+    /// Per-file monotonic mutation counter advanced on every committed upload
+    /// or delete (204/404) so an `upload_bytes` whose local watermark save
+    /// fails never inserts a recovery entry after a later DELETE or PUT
+    /// superseded that file.
+    file_mutations: HashMap<String, u64>,
     batches: HashMap<(String, [u8; 32]), Appended>,
     snapshots: HashMap<(i64, [u8; 32]), String>,
 }
@@ -442,6 +447,7 @@ impl<S: Store> SyncClient<S> {
                 let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                 pending.generation = slot.generation;
                 pending.files.clear();
+                pending.file_mutations.clear();
                 pending.batches.clear();
                 pending.snapshots.clear();
                 drop(pending);
@@ -601,23 +607,18 @@ impl<S: Store> SyncClient<S> {
         loop {
             let sig = auth.sign_file(&self.app, name, version, &body).await;
             match self.upload_signed_bytes(name, body.clone(), condition.clone(), Some(&sig), auth_gen).await {
-                Ok(etag) => {
-                    {
-                        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-                        if slot.generation == auth_gen {
-                            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                            if guard.generation == auth_gen {
-                                guard.files.retain(|(file_name, _, _), _| file_name != name);
-                            }
-                        }
-                    }
+                Ok((etag, mutation_seq)) => {
                     if let Err(e) = auth.record_file_version(&self.app, name, version).await {
                         if e.kind == Kind::Invalid {
-                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-                            if slot.generation == auth_gen {
-                                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                                if guard.generation == auth_gen {
-                                    guard.files.insert(commit_key, (etag.clone(), version));
+                            if let Some(seq) = mutation_seq {
+                                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                                if slot.generation == auth_gen {
+                                    let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                    if guard.generation == auth_gen
+                                        && guard.file_mutations.get(name).copied() == Some(seq)
+                                    {
+                                        guard.files.insert(commit_key, (etag.clone(), version));
+                                    }
                                 }
                             }
                             return Err(e.with_committed(Committed::File { etag, version }));
@@ -646,10 +647,10 @@ impl<S: Store> SyncClient<S> {
     /// [upload_bytes], signed by its writer ([sig]): a team's every write is.
     pub async fn upload_signed(&self, name: &str, body: Vec<u8>, condition: Condition, sig: Option<&WriteSig>) -> Result<String, Error> {
         let start_gen = self.personal_generation();
-        self.upload_signed_bytes(name, bytes::Bytes::from(body), condition, sig, start_gen).await
+        self.upload_signed_bytes(name, bytes::Bytes::from(body), condition, sig, start_gen).await.map(|(etag, _)| etag)
     }
 
-    async fn upload_signed_bytes(&self, name: &str, bytes: bytes::Bytes, condition: Condition, sig: Option<&WriteSig>, expected_gen: u64) -> Result<String, Error> {
+    async fn upload_signed_bytes(&self, name: &str, bytes: bytes::Bytes, condition: Condition, sig: Option<&WriteSig>, expected_gen: u64) -> Result<(String, Option<u64>), Error> {
         let path = self.file_path(name)?;
         let size = bytes.len() as u64;
         if size > MAX_BYTES {
@@ -673,13 +674,26 @@ impl<S: Store> SyncClient<S> {
             self.store_upload(&begun.url, bytes).await?;
             self.complete(&path, &begun.id).await?
         };
-        {
+        let mutation_seq = {
             let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
             if slot.generation == expected_gen {
+                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                let seq = if guard.generation == expected_gen {
+                    guard.files.retain(|(file_name, _, _), _| file_name != name);
+                    let entry = guard.file_mutations.entry(name.to_string()).or_insert(0);
+                    *entry = entry.wrapping_add(1);
+                    Some(*entry)
+                } else {
+                    None
+                };
+                drop(guard);
                 self.written.lock().unwrap_or_else(|e| e.into_inner()).insert(name.to_string(), etag.clone());
+                seq
+            } else {
+                None
             }
-        }
-        Ok(etag)
+        };
+        Ok((etag, mutation_seq))
     }
 
     /// [bytes] to an upload's presigned [url]: the store's own address, so no
@@ -750,6 +764,8 @@ impl<S: Store> SyncClient<S> {
                     let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                     if pending.generation == start_gen {
                         pending.files.retain(|(file_name, _, _), _| file_name != name);
+                        let entry = pending.file_mutations.entry(name.to_string()).or_insert(0);
+                        *entry = entry.wrapping_add(1);
                     }
                     drop(pending);
                     self.written.lock().unwrap_or_else(|e| e.into_inner()).remove(name);

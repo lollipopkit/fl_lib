@@ -1685,3 +1685,607 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
 
     server.abort();
 }
+
+#[tokio::test]
+async fn password_changed_notification_before_password_update_during_key_write() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw1");
+    let ka = d.key(&file).await.unwrap();
+    let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+
+    // During write("pw2"), caller notifies `password_changed(Some("pw2"))` BEFORE
+    // updating `secrets.password` from "pw2" to "pw3" (the documented order).
+    struct NotifyBeforeUpdateKeyFile {
+        inner: Arc<MemKeyFile>,
+        ring: KeyRing,
+        fired: AtomicBool,
+        next: AtomicU64,
+    }
+    impl KeyFile for NotifyBeforeUpdateKeyFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                let next = {
+                    let mut f = self.inner.file.lock().unwrap();
+                    if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
+                        return Ok(None);
+                    }
+                    let next = format!("vn{}", self.next.fetch_add(1, Ordering::SeqCst) + 1);
+                    *f = Some((body, next.clone()));
+                    next
+                };
+                if !self.fired.swap(true, Ordering::SeqCst) {
+                    // Notice: `secrets.password` is STILL "pw2" here!
+                    self.ring.password_changed(Some("pw2".into())).await?;
+                }
+                Ok(Some(next))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    // Start pw1 -> pw2 reseal; mid-write `password_changed("pw2")` fires while
+    // `secrets.password` is still "pw2".
+    d.ring.password_changed(Some("pw1".into())).await.unwrap();
+    *d.secrets.password.lock().unwrap() = Some("pw2".into());
+    let raced = Arc::new(NotifyBeforeUpdateKeyFile {
+        inner: file.clone(),
+        ring: d.ring.clone(),
+        fired: AtomicBool::new(false),
+        next: AtomicU64::new(0),
+    });
+    let kb = d.ring.of(raced, true).await.unwrap();
+    kb.check(true, true).await.unwrap();
+    // "pw2" MUST still be retained in `pending` because its notification is outstanding!
+    assert_eq!(d.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("pw2"));
+
+    // Now the caller finishes updating stored password to "pw3" and rechecks.
+    *d.secrets.password.lock().unwrap() = Some("pw3".into());
+    kb.check(true, true).await.unwrap();
+    assert!(d.secrets.pending.lock().unwrap().is_empty());
+    let raw = file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw, &sk.combine_passphrase("pw3")).unwrap().is_some());
+    assert_eq!(kb.open(&ka.seal(b"notify-before-update").unwrap()).unwrap(), b"notify-before-update");
+}
+
+#[tokio::test]
+async fn write_intent_recovers_committed_reseal_when_set_epochs_fails_and_ignores_lost_cas() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw1");
+    let ka = d.key(&file).await.unwrap();
+    let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+
+    // 1. Start pw1 -> pw2 reseal while `set_epochs` fails: remote commits "pw2"
+    //    at epoch 1, then `set_epoch_2fa` fails -> write intent MUST stay durable.
+    d.ring.password_changed(Some("pw1".into())).await.unwrap();
+    *d.secrets.password.lock().unwrap() = Some("pw2".into());
+    d.secrets.fail_set_epochs.store(true, Ordering::SeqCst);
+    assert!(matches!(ka.check(true, true).await, Err(Error::Host(_))));
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&0));
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:account"));
+
+    // 2. Second password change pw2 -> pw3 while epochs still at 0 and pending still "pw1",
+    //    then prefs recover. Inject a transient network failure on the first write
+    //    attempt during WriteIntent recovery: the confirmed `(epoch=1, "pw2")` MUST
+    //    already be persisted so retrying still succeeds without PasswordMismatch.
+    struct FailOnceKeyFile {
+        inner: Arc<MemKeyFile>,
+        fail_next: AtomicBool,
+        next: AtomicU64,
+    }
+    impl KeyFile for FailOnceKeyFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                if self.fail_next.swap(false, Ordering::SeqCst) {
+                    return Err(Error::Remote("transient drop before server".into()));
+                }
+                let mut f = self.inner.file.lock().unwrap();
+                if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
+                    return Ok(None);
+                }
+                let next = format!("vw{}", self.next.fetch_add(1, Ordering::SeqCst) + 1);
+                *f = Some((body, next.clone()));
+                Ok(Some(next))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    d.ring.password_changed(Some("pw2".into())).await.unwrap();
+    *d.secrets.password.lock().unwrap() = Some("pw3".into());
+    d.secrets.fail_set_epochs.store(false, Ordering::SeqCst);
+    let flaky = Arc::new(FailOnceKeyFile {
+        inner: file.clone(),
+        fail_next: AtomicBool::new(true),
+        next: AtomicU64::new(0),
+    });
+    assert!(matches!(d.ring.of(flaky.clone(), true).await, Err(Error::Remote(_))));
+    // Confirmed `(epoch=1, "pw2")` was already persisted before the failed new write.
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&1));
+    assert_eq!(d.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("pw2"));
+
+    d.ring.of(flaky, true).await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&2));
+    assert!(d.secrets.pending.lock().unwrap().is_empty());
+    let raw = file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw, &sk.combine_passphrase("pw3")).unwrap().is_some());
+
+    // 3. Real lost CAS (`Ok(None)`) MUST clear the write intent and NOT treat the lost
+    //    attempt as a committed reseal (another device's write winning the CAS triggers mismatch).
+    let other = Device::new("pw3");
+    let k_other = other.key(&file).await.unwrap();
+    struct LostCasKeyFile {
+        inner: Arc<MemKeyFile>,
+        other_secrets: Arc<MemSecrets>,
+        other_ring: KeyRing,
+        other_key: Arc<crate::key::SyncKey>,
+        raced: AtomicBool,
+    }
+    impl KeyFile for LostCasKeyFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, _body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                if !self.raced.swap(true, Ordering::SeqCst) {
+                    // Right as `d` attempts its CAS write (after staging `intent:account`),
+                    // `other` wins the race by resealing `file` to "other-pw" at epoch 3.
+                    self.other_ring.password_changed(Some("pw3".into())).await?;
+                    *self.other_secrets.password.lock().unwrap() = Some("other-pw".into());
+                    self.other_key.check(true, true).await?;
+                }
+                Ok(None)
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    let lost_cas = Arc::new(LostCasKeyFile {
+        inner: file.clone(),
+        other_secrets: other.secrets.clone(),
+        other_ring: other.ring.clone(),
+        other_key: k_other,
+        raced: AtomicBool::new(false),
+    });
+    // Attach `lost_cas` to the existing key slot, then force a check for pw3 -> pw4.
+    let ka = d.ring.of(lost_cas.clone(), true).await.unwrap();
+    d.ring.password_changed(Some("pw3".into())).await.unwrap();
+    *d.secrets.password.lock().unwrap() = Some("pw4".into());
+    assert!(matches!(ka.check(true, true).await, Err(Error::PasswordMismatch(_))));
+    assert!(lost_cas.raced.load(Ordering::SeqCst), "must have entered KeyFile::write and lost CAS");
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&2), "lost CAS must not advance epoch");
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:account"));
+    assert!(ka.open(&ka.seal(b"still-valid").unwrap()).unwrap() == b"still-valid");
+}
+
+#[tokio::test]
+async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    struct MemSessionStore;
+    impl fl_lkc::Store for MemSessionStore {
+        async fn save(&self, _: Option<fl_lkc::Stored>) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct SnapshotTestKeeper {
+        saved: Mutex<String>,
+        fail_snapshot: AtomicBool,
+    }
+    impl fl_lkc::personal::VersionKeeper for SnapshotTestKeeper {
+        fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
+            let has_snap = serde_json::from_str::<Value>(&json)
+                .ok()
+                .and_then(|v| v["snapshots"]["serverbox"].as_i64())
+                .is_some();
+            if self.fail_snapshot.load(Ordering::SeqCst) && has_snap {
+                return Box::pin(async { Err("snapshot watermark save failed".into()) });
+            }
+            *self.saved.lock().unwrap() = json;
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let account_key = fl_lkc::team::identity::AccountKey::generate("u1");
+    let pub_key = account_key.signing_public();
+    let recipient = account_key.recipient();
+    let auth_for_sign = Arc::new(fl_lkc::personal::PersonalAuth::new(
+        account_key.clone(),
+        fl_lkc::personal::PersonalVersions::default(),
+        Arc::new(SnapshotTestKeeper { saved: Mutex::new(String::new()), fail_snapshot: AtomicBool::new(false) }),
+    ));
+
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+
+    // Prepare a remote batch seq 2 from another device referencing a >64 KiB
+    // blob (named with Keyed naming so Device A's fresh snapshot at seq 2 keeps
+    // referencing the exact same blob name) that was NOT in seq-1's snapshot.
+    let mut b_clock = fl_sync::Clock::new(2);
+    let b_hlc = b_clock.tick(now_ms() as u64);
+    let live_blob_name = format!("op-{}.age", key.name_of(b_hlc.to_string().as_bytes()));
+    let b_val = json!({ "big": "z".repeat(70 << 10) });
+    let b_op = Op { c: "servers".into(), id: "from_b".into(), h: b_hlc, d: Some(json!({ "$blob": live_blob_name })) };
+    let b_body = key.seal(&crate::engine::encode(&[b_op], serde_json::Map::new()).unwrap()).unwrap();
+    let b_blob_plain = {
+        use std::io::Write;
+        let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(serde_json::to_vec(&b_val).unwrap().as_slice()).unwrap();
+        enc.finish().unwrap()
+    };
+    let b_blob_sealed = key.seal(&b_blob_plain).unwrap();
+    let b_idem = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let b_sig = auth_for_sign.sign_batch("serverbox", b_idem, &b_body).await;
+    let b_digest = blake3::hash(&b_body).to_hex().to_string();
+    let b_body_b64 = {
+        const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for c in b_body.chunks(3) {
+            let n = ((c[0] as u32) << 16) | ((*c.get(1).unwrap_or(&0) as u32) << 8) | (*c.get(2).unwrap_or(&0) as u32);
+            out.push(T[((n >> 18) & 63) as usize] as char);
+            out.push(T[((n >> 12) & 63) as usize] as char);
+            out.push(if c.len() > 1 { T[((n >> 6) & 63) as usize] as char } else { '=' });
+            out.push(if c.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+        }
+        out
+    };
+
+    let snapshot_puts = Arc::new(AtomicU64::new(0));
+    let deleted_blobs = Arc::new(Mutex::new(Vec::<String>::new()));
+    let head = Arc::new(AtomicU64::new(0));
+    let serve_seq2 = Arc::new(AtomicBool::new(false));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let snap_puts_srv = snapshot_puts.clone();
+    let deleted_srv = deleted_blobs.clone();
+    let head_srv = head.clone();
+    let serve_seq2_srv = serve_seq2.clone();
+    let pub_key_srv = pub_key.clone();
+    let rec_srv = recipient.clone();
+    let b_sig_str = b_sig.signature.clone();
+    let live_blob_srv = live_blob_name.clone();
+    let live_blob_path = format!("/v2/sync/serverbox/{live_blob_name}");
+    let server = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 4096];
+            let header_end = loop {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(pos + 4);
+                }
+            };
+            let Some(header_end) = header_end else { continue };
+            let head_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
+            let first_line = head_str.lines().next().unwrap_or("");
+            let mut parts = first_line.split_whitespace();
+            let method = parts.next().unwrap_or("");
+            let full_path = parts.next().unwrap_or("");
+            let (path, query) = full_path.split_once('?').unwrap_or((full_path, ""));
+            let content_len: usize = head_str
+                .lines()
+                .find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case("content-length").then(|| v.trim().parse().ok()).flatten()
+                })
+                .unwrap_or(0);
+            while buf.len() < header_end + content_len {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+            }
+
+            let after: i64 = query.split('&').find_map(|kv| kv.strip_prefix("after=")?.parse().ok()).unwrap_or(0);
+            let (status, extra_headers, body_bytes): (&str, String, Vec<u8>) = match (method, path) {
+                ("GET", "/v2/keys") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": { "recipient": rec_srv, "signing_key": pub_key_srv, "next_seq": 2, "prev_signing_key": pub_key_srv } })
+                        .to_string()
+                        .into_bytes(),
+                ),
+                ("GET", "/v2/sync/serverbox/log") => {
+                    let batches = if serve_seq2_srv.load(Ordering::SeqCst) && after < 2 {
+                        vec![json!({
+                            "seq": 2,
+                            "body": b_body_b64,
+                            "digest": b_digest,
+                            "idempotency_key": b_idem,
+                            "signer": "u1",
+                            "signing_key": pub_key_srv,
+                            "signature": b_sig_str,
+                        })]
+                    } else {
+                        vec![]
+                    };
+                    let cur_head = if serve_seq2_srv.load(Ordering::SeqCst) { 2 } else { head_srv.load(Ordering::SeqCst) };
+                    (
+                        "200 OK",
+                        "Content-Type: application/json\r\n".into(),
+                        json!({ "code": 0, "data": { "log": "6f1c", "batches": batches, "head": cur_head, "snapshot_seq": 0, "more": false } })
+                            .to_string()
+                            .into_bytes(),
+                    )
+                }
+                ("POST", "/v2/sync/serverbox/log") => {
+                    let seq = head_srv.fetch_add(1, Ordering::SeqCst) + 1;
+                    (
+                        "200 OK",
+                        "Content-Type: application/json\r\n".into(),
+                        json!({ "code": 0, "data": { "log": "6f1c", "seq": seq, "live": { "batches": seq, "bytes": 4 }, "compact": true } })
+                            .to_string()
+                            .into_bytes(),
+                    )
+                }
+                ("PUT", "/v2/sync/serverbox/snapshot") => {
+                    let n = snap_puts_srv.fetch_add(1, Ordering::SeqCst) + 1;
+                    ("204 No Content", format!("ETag: \"snap-e{n}\"\r\n"), Vec::new())
+                }
+                ("GET", "/v2/sync/serverbox") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": [
+                        { "name": live_blob_srv, "etag": "b-live", "size": b_blob_sealed.len(), "updated_at": "2020-01-01T00:00:00Z" },
+                        { "name": "op-truly-dead.age", "etag": "b-dead", "size": 10, "updated_at": "2020-01-01T00:00:00Z" }
+                    ] })
+                    .to_string()
+                    .into_bytes(),
+                ),
+                ("GET", p) if p == live_blob_path => {
+                    ("200 OK", "ETag: \"b-live\"\r\n".into(), b_blob_sealed.clone())
+                }
+                ("PUT", p) if p == live_blob_path => {
+                    ("412 Precondition Failed", String::new(), Vec::new())
+                }
+                ("DELETE", p) if p.starts_with("/v2/sync/serverbox/") => {
+                    deleted_srv.lock().unwrap().push(p.trim_start_matches("/v2/sync/serverbox/").to_string());
+                    ("204 No Content", String::new(), Vec::new())
+                }
+                _ => ("404 Not Found", String::new(), Vec::new()),
+            };
+            let head_out = format!(
+                "HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                body_bytes.len()
+            );
+            let _ = stream.write_all(head_out.as_bytes()).await;
+            let _ = stream.write_all(&body_bytes).await;
+        }
+    });
+
+    let base = format!("http://{addr}");
+    let client = Arc::new(fl_lkc::Client::with(&format!("{base}/auth/v1/"), "app", &base).unwrap());
+    let stored = fl_lkc::Stored { access: "tok".into(), refresh: Some("r".into()), expires_at: now_ms() + 3_600_000, refreshing: false };
+    let session = Arc::new(fl_lkc::Session::restore(client, MemSessionStore, Some(stored)).await);
+    let sync_client = Arc::new(fl_lkc::sync::SyncClient::new(session, "serverbox"));
+    let keeper = Arc::new(SnapshotTestKeeper { saved: Mutex::new(String::new()), fail_snapshot: AtomicBool::new(true) });
+    let auth = Arc::new(fl_lkc::personal::PersonalAuth::new(account_key, fl_lkc::personal::PersonalVersions::default(), keeper.clone()));
+    sync_client.set_personal(Some(auth));
+
+    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+    let transport = Arc::new(crate::lkc::LkcLog(sync_client));
+    let log_sync = LogSync::new(d.host.clone(), transport, key);
+
+    // 1. Snapshot at seq 1 commits remotely, local save fails -> deferred.
+    assert!(matches!(log_sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(snapshot_puts.load(Ordering::SeqCst), 1);
+
+    // 2. Meanwhile batch seq 2 arrives referencing `op-reused-live.age` (even with old timestamp).
+    serve_seq2.store(true, Ordering::SeqCst);
+    keeper.fail_snapshot.store(false, Ordering::SeqCst);
+
+    // 3. Recovery sync: flushes seq 1 without resending seq-1 snapshot, reads seq 2,
+    //    defers stale sweep, writes fresh snapshot at seq 2 (PUT #2), and sweeps ONLY
+    //    `op-truly-dead.age` (NEVER deleting `op-reused-live.age`!).
+    log_sync.sync().await.unwrap();
+    assert_eq!(snapshot_puts.load(Ordering::SeqCst), 2);
+    assert_eq!(d.host.value("servers", "from_b"), Some(b_val));
+    let deleted = deleted_blobs.lock().unwrap().clone();
+    assert_eq!(deleted, vec!["op-truly-dead.age".to_string()]);
+
+    server.abort();
+}
+
+#[tokio::test]
+async fn lkc_key_file_persist_failure_reconciles_and_retries_without_resending_put() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    struct MemSessionStore;
+    impl fl_lkc::Store for MemSessionStore {
+        async fn save(&self, _: Option<fl_lkc::Stored>) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct KeyFileTestKeeper {
+        saved: Mutex<String>,
+        fail: AtomicBool,
+    }
+    impl fl_lkc::personal::VersionKeeper for KeyFileTestKeeper {
+        fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
+            if self.fail.load(Ordering::SeqCst) {
+                return Box::pin(async { Err("key file watermark save failed".into()) });
+            }
+            *self.saved.lock().unwrap() = json;
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let account_key = fl_lkc::team::identity::AccountKey::generate("u1");
+    let pub_key = account_key.signing_public();
+    let recipient = account_key.recipient();
+    type StoredKeyFile = (Vec<u8>, String, String, String);
+    let stored_file: Arc<Mutex<Option<StoredKeyFile>>> = Arc::new(Mutex::new(None));
+    let puts = Arc::new(AtomicU64::new(0));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let file_srv = stored_file.clone();
+    let puts_srv = puts.clone();
+    let pub_srv = pub_key.clone();
+    let rec_srv = recipient.clone();
+    let server = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 4096];
+            let header_end = loop {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(pos + 4);
+                }
+            };
+            let Some(header_end) = header_end else { continue };
+            let head_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
+            let first_line = head_str.lines().next().unwrap_or("");
+            let mut parts = first_line.split_whitespace();
+            let method = parts.next().unwrap_or("");
+            let path = parts.next().unwrap_or("").split('?').next().unwrap_or("");
+            let hdr = |name: &str| {
+                head_str.lines().find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case(name).then(|| v.trim().to_string())
+                })
+            };
+            let content_len: usize = hdr("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+            while buf.len() < header_end + content_len {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+            }
+            let body = buf[header_end..header_end + content_len].to_vec();
+
+            let (status, extra_headers, resp_body): (&str, String, Vec<u8>) = match (method, path) {
+                ("GET", "/v2/keys") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": { "recipient": rec_srv, "signing_key": pub_srv, "next_seq": 2, "prev_signing_key": pub_srv } })
+                        .to_string()
+                        .into_bytes(),
+                ),
+                ("GET", "/v2/sync/serverbox/identity.age") => {
+                    let guard = file_srv.lock().unwrap();
+                    match guard.as_ref() {
+                        Some((bytes, etag, ver, sig)) => (
+                            "200 OK",
+                            format!(
+                                "ETag: \"{etag}\"\r\nX-Signer: u1\r\nX-Signing-Key: {pub_srv}\r\nX-Signature: {sig}\r\nX-Sync-Version: {ver}\r\n"
+                            ),
+                            bytes.clone(),
+                        ),
+                        None => ("404 Not Found", String::new(), Vec::new()),
+                    }
+                }
+                ("PUT", "/v2/sync/serverbox/identity.age") => {
+                    let n = puts_srv.fetch_add(1, Ordering::SeqCst) + 1;
+                    let mut guard = file_srv.lock().unwrap();
+                    let ok = if hdr("if-none-match").as_deref() == Some("*") {
+                        guard.is_none()
+                    } else if let Some(im) = hdr("if-match") {
+                        guard.as_ref().is_some_and(|(_, e, _, _)| format!("\"{e}\"") == im)
+                    } else {
+                        true
+                    };
+                    if !ok {
+                        ("412 Precondition Failed", String::new(), Vec::new())
+                    } else {
+                        let etag = format!("kf-e{n}");
+                        let ver = hdr("x-sync-version").unwrap_or_else(|| "1".into());
+                        let sig = hdr("x-signature").unwrap_or_default();
+                        *guard = Some((body, etag.clone(), ver, sig));
+                        ("204 No Content", format!("ETag: \"{etag}\"\r\n"), Vec::new())
+                    }
+                }
+                _ => ("404 Not Found", String::new(), Vec::new()),
+            };
+            let head_out = format!(
+                "HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                resp_body.len()
+            );
+            let _ = stream.write_all(head_out.as_bytes()).await;
+            let _ = stream.write_all(&resp_body).await;
+        }
+    });
+
+    let base = format!("http://{addr}");
+    let client = Arc::new(fl_lkc::Client::with(&format!("{base}/auth/v1/"), "app", &base).unwrap());
+    let stored = fl_lkc::Stored { access: "tok".into(), refresh: Some("r".into()), expires_at: now_ms() + 3_600_000, refreshing: false };
+    let session = Arc::new(fl_lkc::Session::restore(client, MemSessionStore, Some(stored)).await);
+    let sync_client = Arc::new(fl_lkc::sync::SyncClient::new(session, "serverbox"));
+    let keeper = Arc::new(KeyFileTestKeeper { saved: Mutex::new(String::new()), fail: AtomicBool::new(true) });
+    let auth = Arc::new(fl_lkc::personal::PersonalAuth::new(account_key, fl_lkc::personal::PersonalVersions::default(), keeper.clone()));
+    sync_client.set_personal(Some(auth));
+
+    let kf = Arc::new(crate::lkc::LkcKeyFile { client: sync_client, account: "u1".into() });
+    let d = Device::new("pw1");
+
+    // 1. Create identity.age: remote PUT commits, local signing watermark fails ->
+    //    surfaces Host error, reconciles local epoch=0 + 2fa marker immediately.
+    assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("u1"), Some(&0));
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("2fa:u1"), Some(&1));
+    assert!(keeper.saved.lock().unwrap().is_empty());
+
+    // 2. Retrying while keeper still fails MUST NOT resend PUT.
+    assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
+
+    // 3. Keeper recovers -> retry flushes local watermark WITHOUT resending PUT
+    //    and opens the key cleanly.
+    keeper.fail.store(false, Ordering::SeqCst);
+    let key = d.ring.of(kf.clone(), true).await.unwrap();
+    assert_eq!(puts.load(Ordering::SeqCst), 1, "committed key-file PUT must not be resent");
+    let saved: Value = serde_json::from_str(&keeper.saved.lock().unwrap()).unwrap();
+    assert_eq!(saved["files"]["serverbox/identity.age"], json!(1));
+    assert_eq!(key.open(&key.seal(b"kf-ok").unwrap()).unwrap(), b"kf-ok");
+
+    // 4. `rotate()` hitting `KeyFilePersistFailed` clears `opened`/`checked_at` so an
+    //    immediate non-forced `check(false, true)` flushes the watermark WITHOUT
+    //    being bypassed by the 60s cache and WITHOUT resending PUT.
+    keeper.fail.store(true, Ordering::SeqCst);
+    assert!(matches!(key.rotate().await, Err(Error::Host(_))));
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
+    assert!(matches!(key.check(false, true).await, Err(Error::Host(_))));
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
+    keeper.fail.store(false, Ordering::SeqCst);
+    key.check(false, true).await.unwrap();
+    assert_eq!(puts.load(Ordering::SeqCst), 2, "rotate retry must not resend PUT");
+    let saved2: Value = serde_json::from_str(&keeper.saved.lock().unwrap()).unwrap();
+    assert_eq!(saved2["files"]["serverbox/identity.age"], json!(2));
+
+    server.abort();
+}

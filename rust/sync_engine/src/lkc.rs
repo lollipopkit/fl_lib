@@ -116,7 +116,12 @@ impl<S: Store> KeyFile for LkcKeyFile<S> {
             match self.client.upload_bytes(KEY_FILE, body, condition).await {
                 Ok(v) => Ok(Some(v)),
                 Err(e) if e.kind == Kind::Changed => Ok(None),
-                Err(e) => Err(remote(e)),
+                Err(e) => {
+                    if let Some(fl_lkc::sync::Committed::File { etag, .. }) = e.committed {
+                        return Err(Error::KeyFilePersistFailed { version: etag, detail: e.detail });
+                    }
+                    Err(remote(e))
+                }
             }
         })
     }

@@ -639,12 +639,13 @@ async fn delete_invalidates_cached_pending_file_commit() {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", p) if p.ends_with(NAME) => {
             let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            written(match n {
-                0 => "e-first",
-                1 => "e-second",
-                2 => "e-third",
-                _ => "e-fourth",
-            })
+            match n {
+                0 => written("e-first"),
+                1 => written("e-second"),
+                2 => written("e-third"),
+                _ if r.header("if-match").is_some() => Response::status(412),
+                _ => written("e-fourth"),
+            }
         }
         ("DELETE", p) if p.ends_with(NAME) => {
             let d = del_seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -684,12 +685,112 @@ async fn delete_invalidates_cached_pending_file_commit() {
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
 
     // 5. Intervening delete answering 404 (already deleted remotely) MUST ALSO invalidate
-    //    the cached pending file result so a subsequent write issues a fresh PUT.
+    //    the cached pending file result so a subsequent conditional write sends PUT #4
+    //    and observes 412 Kind::Changed rather than returning cached "e-third".
     assert!(!sync.delete(NAME, None).await.unwrap());
     keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
-    assert_eq!(sync.upload_bytes(NAME, b"body-2".to_vec(), Condition::Match("e-second".into())).await.unwrap(), "e-fourth");
+    assert_eq!(
+        sync.upload_bytes(NAME, b"body-2".to_vec(), Condition::Match("e-second".into())).await.unwrap_err().kind,
+        Kind::Changed,
+    );
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 4);
     assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).iter().filter(|r| r.method == "PUT").count(), 4);
+}
+
+#[tokio::test]
+async fn upload_signed_replacement_invalidates_cached_pending_commit_only_on_success() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = puts.clone();
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", p) if p.ends_with(NAME) => {
+            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            match n {
+                0 => written("e1"),
+                1 => Response::status(412),
+                2 => written("e2-signed"),
+                _ => written("e3"),
+            }
+        }
+        _ => Response::status(404),
+    })
+    .await;
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth));
+
+    // 1. upload_bytes commits remotely ("e1"), local persistence fails -> caches recovery entry.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. Failed upload_signed (412) MUST retain the cached recovery entry.
+    assert_eq!(sync.upload_signed(NAME, b"other".to_vec(), Condition::Match("wrong".into()), None).await.unwrap_err().kind, Kind::Changed);
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // 3. Successful upload_signed replacement invalidates the cached entry so a later
+    //    upload_bytes sends a fresh PUT rather than returning stale "e1".
+    assert_eq!(sync.upload_signed(NAME, b"replaced".to_vec(), Condition::Match("e1".into()), None).await.unwrap(), "e2-signed");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e3");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 4);
+}
+
+#[tokio::test]
+async fn concurrent_delete_during_record_file_version_prevents_stale_pending_insert() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = puts.clone();
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", p) if p.ends_with(NAME) => {
+            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written(if n == 0 { "e1" } else { "e2" })
+        }
+        ("DELETE", p) if p.ends_with(NAME) => Response::status(204),
+        _ => Response::status(404),
+    })
+    .await;
+
+    // Keeper that runs a DELETE of NAME after PUT #1 committed and before
+    // returning a persistence error, simulating an overlapping DELETE.
+    struct DeletingKeeper {
+        sync: Arc<SyncClient<Kept>>,
+        fail: std::sync::atomic::AtomicBool,
+    }
+    impl crate::personal::VersionKeeper for DeletingKeeper {
+        fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            Box::pin(async move {
+                if self.fail.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    assert!(self.sync.delete(NAME, Some("e1")).await.unwrap());
+                    return Err("save failed after delete".into());
+                }
+                Ok(())
+            })
+        }
+    }
+
+    let keeper = Arc::new(DeletingKeeper { sync: sync.clone(), fail: std::sync::atomic::AtomicBool::new(true) });
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper));
+    sync.set_personal(Some(auth));
+
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert!(sync.pending_commits.lock().unwrap().files.is_empty(), "delete after PUT must block stale recovery insert");
+
+    // Next create MUST send PUT #2 rather than returning deleted "e1".
+    assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e2");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

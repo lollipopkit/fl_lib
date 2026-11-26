@@ -74,6 +74,10 @@ pub enum Error {
     /// so a retry flushes local persistence without resending it, then sweeps
     /// covered blobs.
     SnapshotPersistFailed { seq: i64, detail: String },
+    /// The remote key file already committed at [version], but local signing
+    /// watermark persistence failed ([detail]); the key engine reconciles the
+    /// committed write and retries watermark flush without resending the PUT.
+    KeyFilePersistFailed { version: String, detail: String },
 }
 
 impl std::fmt::Display for Error {
@@ -94,6 +98,7 @@ impl std::fmt::Display for Error {
             Error::Pending(what) => write!(f, "{what} is not here yet"),
             Error::AppendPersistFailed { detail, .. } => write!(f, "host: {detail}"),
             Error::SnapshotPersistFailed { detail, .. } => write!(f, "host: {detail}"),
+            Error::KeyFilePersistFailed { detail, .. } => write!(f, "host: {detail}"),
         }
     }
 }
