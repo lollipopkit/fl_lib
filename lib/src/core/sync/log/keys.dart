@@ -154,6 +154,10 @@ abstract final class SyncKeyring {
   /// permanent.
   static const _pendingProp = SecureProp('syncKeyPending');
 
+  /// Device-local staging slot for a candidate secret key generated before
+  /// committing a remote key file.
+  static const _pendingSecretKeyProp = SecureProp('syncSecretKeyPending');
+
   static Future<SyncReply> _secrets(String method, String args, Uint8List? _) {
     final a = args.isEmpty ? null : jsonDecode(args);
     return switch (method) {
@@ -170,6 +174,14 @@ abstract final class SyncKeyring {
         final key = a as String;
         await SecureStoreProps.syncSecretKey.write(key, limited: false);
         secretKeyGenerated.value = key;
+      }),
+      'secrets.pendingSecretKey' => syncReply(() async {
+        final key = await _pendingSecretKeyProp.read(limited: false);
+        return key == null || key.isEmpty ? null : key;
+      }),
+      'secrets.setPendingSecretKey' => syncReply(() async {
+        final key = a as String?;
+        await _pendingSecretKeyProp.write(key == null || key.isEmpty ? null : key, limited: false);
       }),
       'secrets.allowAutoGenerate' => syncReply(() async => allowAutoGenerateSecretKey?.call() ?? true),
       'secrets.kept' => syncReply(() => _kept(a as String).read(limited: false)),

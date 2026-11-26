@@ -157,7 +157,7 @@ mod tests {
     use super::*;
 
     fn lkc(kind: Kind) -> LkcError {
-        LkcError { kind, detail: String::new() }
+        LkcError { kind, detail: String::new(), committed: None }
     }
 
     #[test]

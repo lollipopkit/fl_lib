@@ -124,13 +124,17 @@ impl AccountKey {
     /// [sealed] opened with [passphrase]: [TeamError::WrongPassphrase] when
     /// it does not.
     pub fn open(sealed: &[u8], passphrase: &str) -> Result<Self, TeamError> {
-        Self::open_with(sealed, passphrase, None).map(|(key, _)| key)
+        Self::open_with(sealed, passphrase, None, true).map(|(key, _)| key)
     }
 
     /// Opens [sealed] with `(passphrase, secret_key)`. Returns `(key, upgraded)`
     /// where `upgraded == true` means a legacy passphrase-only file was opened
     /// while `secret_key` is present and should be re-sealed.
-    pub fn open_with(sealed: &[u8], passphrase: &str, secret_key: Option<&SecretKey>) -> Result<(Self, bool), TeamError> {
+    ///
+    /// When `allow_legacy` is `false` (the account has already upgraded to
+    /// two-factor secret-key sealing), passphrase-only files are rejected even
+    /// if `passphrase` alone would decrypt them.
+    pub fn open_with(sealed: &[u8], passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<(Self, bool), TeamError> {
         let (plain, legacy) = match secret_key {
             Some(sk) => {
                 let derived = sk.combine_passphrase(passphrase);
@@ -138,19 +142,25 @@ impl AccountKey {
                     Ok(p) => (p, false),
                     // TODO(migration): drop passphrase-only fallback once all
                     // existing `lkc/identity.age` files are re-sealed with SecretKey.
-                    Err(CryptoError::WrongKey) => match crypto::open_passphrase(sealed, passphrase, MAX_WORK_FACTOR) {
+                    Err(CryptoError::WrongKey) if allow_legacy => match crypto::open_passphrase(sealed, passphrase, MAX_WORK_FACTOR) {
                         Ok(p) => (p, true),
                         Err(CryptoError::WrongKey) => return Err(TeamError::WrongPassphrase),
                         Err(e) => return Err(TeamError::Crypto(e)),
                     },
+                    Err(CryptoError::WrongKey) => return Err(TeamError::WrongPassphrase),
                     Err(e) => return Err(TeamError::Crypto(e)),
                 }
             }
-            None => match crypto::open_passphrase(sealed, passphrase, MAX_WORK_FACTOR) {
-                Ok(p) => (p, false),
-                Err(CryptoError::WrongKey) => return Err(TeamError::WrongPassphrase),
-                Err(e) => return Err(TeamError::Crypto(e)),
-            },
+            None => {
+                if !allow_legacy {
+                    return Err(TeamError::WrongPassphrase);
+                }
+                match crypto::open_passphrase(sealed, passphrase, MAX_WORK_FACTOR) {
+                    Ok(p) => (p, false),
+                    Err(CryptoError::WrongKey) => return Err(TeamError::WrongPassphrase),
+                    Err(e) => return Err(TeamError::Crypto(e)),
+                }
+            }
         };
         let text = std::str::from_utf8(&plain).map_err(|_| TeamError::Crypto(CryptoError::Malformed("account key: not text".into())))?;
         Ok((Self::from_text(text)?, legacy))
@@ -217,38 +227,47 @@ impl<S: Store> AccountKeyFile<S> {
 
     /// The key and its version; `None` before any device made one.
     pub async fn fetch(&self, passphrase: &str) -> Result<Option<(AccountKey, String)>, TeamError> {
-        self.fetch_with(passphrase, None).await
+        self.fetch_with(passphrase, None, true).await
     }
 
     /// Fetches the account key with `(passphrase, secret_key)`, automatically
-    /// upgrading a legacy passphrase-only file when `secret_key` is provided.
-    pub async fn fetch_with(&self, passphrase: &str, secret_key: Option<&SecretKey>) -> Result<Option<(AccountKey, String)>, TeamError> {
-        let Some((sealed, etag, _)) = self.sync.download_bytes(FILE).await? else { return Ok(None) };
-        let (key, legacy) = AccountKey::open_with(&sealed, passphrase, secret_key)?;
-        if key.user_id != self.user_id {
-            return Err(TeamError::Untrusted("the account key is of another account".into()));
-        }
-        if legacy && let Some(sk) = secret_key {
-            // Best-effort upgrade to two-factor sealing; another device racing
-            // us simply leaves its newer version in place.
-            if let Ok(new_etag) = self.write_with(&key, passphrase, Some(sk), Condition::Match(etag.clone())).await {
-                return Ok(Some((key, new_etag)));
+    /// upgrading a legacy passphrase-only file when `secret_key` is provided
+    /// and `allow_legacy` is `true`. Once upgraded (`allow_legacy == false`),
+    /// passphrase-only files are rejected and never re-sealed.
+    pub async fn fetch_with(&self, passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<Option<(AccountKey, String)>, TeamError> {
+        for again in [true, false] {
+            let Some((sealed, etag, _)) = self.sync.download_bytes(FILE).await? else { return Ok(None) };
+            let (key, legacy) = AccountKey::open_with(&sealed, passphrase, secret_key, allow_legacy)?;
+            if key.user_id != self.user_id {
+                return Err(TeamError::Untrusted("the account key is of another account".into()));
             }
+            if legacy && let Some(sk) = secret_key {
+                match self.write_with(&key, passphrase, Some(sk), Condition::Match(etag)).await {
+                    Ok(new_etag) => return Ok(Some((key, new_etag))),
+                    // Another device raced us and updated the file; re-read once.
+                    Err(TeamError::Sync(Kind::Changed, _)) if again => continue,
+                    Err(e) => return Err(e),
+                }
+            }
+            return Ok(Some((key, etag)));
         }
-        Ok(Some((key, etag)))
+        Err(TeamError::Unreachable("the account key changed while upgrading".into()))
     }
 
     /// The account's key: the file's, else a new one put there (another
     /// device's taken if it was first).
     pub async fn load_or_create(&self, passphrase: &str) -> Result<AccountKey, TeamError> {
-        self.load_or_create_with(passphrase, None).await
+        self.load_or_create_with(passphrase, None, true).await
     }
 
     /// [`Self::load_or_create`] with optional two-factor [`SecretKey`].
-    pub async fn load_or_create_with(&self, passphrase: &str, secret_key: Option<&SecretKey>) -> Result<AccountKey, TeamError> {
+    pub async fn load_or_create_with(&self, passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<AccountKey, TeamError> {
+        if secret_key.is_none() && !allow_legacy {
+            return Err(TeamError::WrongPassphrase);
+        }
         let mut wait = std::time::Duration::from_millis(200);
         for _ in 0..RACES {
-            if let Some((key, _)) = self.fetch_with(passphrase, secret_key).await? {
+            if let Some((key, _)) = self.fetch_with(passphrase, secret_key, allow_legacy).await? {
                 return Ok(key);
             }
             let key = AccountKey::generate(&self.user_id);
@@ -279,11 +298,11 @@ impl<S: Store> AccountKeyFile<S> {
 
     /// The file sealed with [new], from [old]: the password changed.
     pub async fn change_passphrase(&self, old: &str, new: &str) -> Result<(), TeamError> {
-        self.change_passphrase_with(old, new, None).await
+        self.change_passphrase_with(old, new, None, true).await
     }
 
-    pub async fn change_passphrase_with(&self, old: &str, new: &str, secret_key: Option<&SecretKey>) -> Result<(), TeamError> {
-        let Some((key, etag)) = self.fetch_with(old, secret_key).await? else { return Err(TeamError::NotFound) };
+    pub async fn change_passphrase_with(&self, old: &str, new: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<(), TeamError> {
+        let Some((key, etag)) = self.fetch_with(old, secret_key, allow_legacy).await? else { return Err(TeamError::NotFound) };
         self.write_with(&key, new, secret_key, Condition::Match(etag)).await?;
         Ok(())
     }
@@ -391,19 +410,23 @@ mod tests {
 
         let sealed_2fa = k.seal_with("pw", Some(&sk)).unwrap();
         // Bare password alone cannot open a 2FA-sealed account key.
-        assert!(matches!(AccountKey::open_with(&sealed_2fa, "pw", None), Err(TeamError::WrongPassphrase)));
+        assert!(matches!(AccountKey::open_with(&sealed_2fa, "pw", None, true), Err(TeamError::WrongPassphrase)));
         // Wrong secret key cannot open it.
-        assert!(matches!(AccountKey::open_with(&sealed_2fa, "pw", Some(&wrong_sk)), Err(TeamError::WrongPassphrase)));
+        assert!(matches!(AccountKey::open_with(&sealed_2fa, "pw", Some(&wrong_sk), true), Err(TeamError::WrongPassphrase)));
         // Correct (password, secret_key) opens with upgraded=false.
-        let (opened, upgraded) = AccountKey::open_with(&sealed_2fa, "pw", Some(&sk)).unwrap();
+        let (opened, upgraded) = AccountKey::open_with(&sealed_2fa, "pw", Some(&sk), false).unwrap();
         assert!(!upgraded);
         assert_eq!(opened.signing_public(), k.signing_public());
 
-        // Legacy passphrase-only file opens with upgraded=true when secret_key is given.
+        // Legacy passphrase-only file opens with upgraded=true when allow_legacy=true.
         let legacy = k.seal_with("pw", None).unwrap();
-        let (opened_legacy, upgraded_legacy) = AccountKey::open_with(&legacy, "pw", Some(&sk)).unwrap();
+        let (opened_legacy, upgraded_legacy) = AccountKey::open_with(&legacy, "pw", Some(&sk), true).unwrap();
         assert!(upgraded_legacy);
         assert_eq!(opened_legacy.signing_public(), k.signing_public());
+
+        // Once upgraded (allow_legacy=false), passphrase-only files are rejected.
+        assert!(matches!(AccountKey::open_with(&legacy, "pw", Some(&sk), false), Err(TeamError::WrongPassphrase)));
+        assert!(matches!(AccountKey::open_with(&legacy, "pw", None, false), Err(TeamError::WrongPassphrase)));
     }
 
     #[test]

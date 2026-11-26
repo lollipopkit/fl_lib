@@ -17,8 +17,10 @@ final class LkcTeamAccount {
     return id;
   }
 
-  SecureProp get _keyProp =>
-      SecureProp('lkcAccountKey.$_account', storage: SecureStore.synced, legacy: SecureStore.storage);
+  SecureProp _keyPropFor(String uid) =>
+      SecureProp('lkcAccountKey.$uid', storage: SecureStore.synced, legacy: SecureStore.storage);
+
+  SecureProp get _keyProp => _keyPropFor(_account);
 
   Future<String?> _secretKey() async {
     final key = await SecureStoreProps.syncSecretKey.read(limited: false);
@@ -54,11 +56,20 @@ final class LkcTeamAccount {
   /// rewrap failed are in [LkcTeamKeys.rewrapTeams]' answer, run again later.
   Future<(LkcTeamKeys, List<LkcTeamFailure>)> unlock(String passphrase) async {
     final teams = await _serial(() async {
-      final key = await (await client.teams()).accountKey(
+      final uid = _account;
+      final secretKey = await _secretKey();
+      final upgraded = await LkcClient.isAccountKey2fa(uid);
+      if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
+      final t = await client.teams();
+      if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
+      final key = await t.accountKey(
         passphrase: passphrase,
-        secretKey: await _secretKey(),
+        secretKey: secretKey,
+        allowLegacy: !upgraded,
       );
-      await _keyProp.write(key.toText());
+      if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
+      if (secretKey != null) await LkcClient.markAccountKey2fa(uid);
+      await _keyPropFor(uid).write(key.toText());
       await client.updatePersonalAuthKey(key);
       return _opened(key);
     });
@@ -70,11 +81,20 @@ final class LkcTeamAccount {
   /// each team asked for a new key. One cut short is finished by [unlock].
   Future<(LkcTeamKeys, List<LkcTeamFailure>)> rotate(String passphrase) async {
     final teams = await _serial(() async {
-      final key = await (await client.teams()).rotateAccountKey(
+      final uid = _account;
+      final secretKey = await _secretKey();
+      final upgraded = await LkcClient.isAccountKey2fa(uid);
+      if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
+      final t = await client.teams();
+      if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
+      final key = await t.rotateAccountKey(
         passphrase: passphrase,
-        secretKey: await _secretKey(),
+        secretKey: secretKey,
+        allowLegacy: !upgraded,
       );
-      await _keyProp.write(key.toText());
+      if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
+      if (secretKey != null) await LkcClient.markAccountKey2fa(uid);
+      await _keyPropFor(uid).write(key.toText());
       await client.updatePersonalAuthKey(key);
       return _opened(key);
     });

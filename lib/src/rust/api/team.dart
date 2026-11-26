@@ -173,12 +173,14 @@ abstract class LkcTeams implements RustOpaqueInterface {
   Future<LkcAccountKey> accountKey({
     required String passphrase,
     String? secretKey,
+    required bool allowLegacy,
   });
 
   Future<void> changeKeyPassphrase({
     required String old,
     required String new_,
     String? secretKey,
+    required bool allowLegacy,
   });
 
   Future<String> create({required String name});
@@ -190,6 +192,7 @@ abstract class LkcTeams implements RustOpaqueInterface {
   Future<LkcAccountKey?> fetchAccountKey({
     required String passphrase,
     String? secretKey,
+    required bool allowLegacy,
   });
 
   /// Whether a device of the account made its key: asked for, not set.
@@ -219,6 +222,7 @@ abstract class LkcTeams implements RustOpaqueInterface {
   Future<LkcAccountKey> rotateAccountKey({
     required String passphrase,
     String? secretKey,
+    required bool allowLegacy,
   });
 }
 

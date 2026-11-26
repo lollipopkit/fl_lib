@@ -16,10 +16,10 @@
 //! `ETag`, and one without it is that refusal only when a body says so.
 
 use std::collections::{HashMap, VecDeque};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use base64::Engine;
@@ -30,6 +30,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex as AsyncMutex;
 
 use crate::personal::PersonalAuth;
 use crate::session::{Session, Store};
@@ -96,16 +97,35 @@ pub enum Kind {
     Untrusted,
 }
 
+/// Result of a remote write that succeeded before local watermark persistence
+/// failed, retained on [`Error::committed`] so callers can inspect the
+/// committed result (such as the new ETag) and retry local persistence without
+/// resending the write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Committed {
+    File { etag: String, version: i64 },
+    Batch(Appended),
+    Snapshot { etag: String, seq: i64 },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     pub kind: Kind,
     /// For logs; never a token.
     pub detail: String,
+    /// Present when a remote write already committed before local persistence
+    /// failed.
+    pub committed: Option<Committed>,
 }
 
 impl Error {
     pub(crate) fn new(kind: Kind, detail: impl Into<String>) -> Self {
-        Self { kind, detail: detail.into() }
+        Self { kind, detail: detail.into(), committed: None }
+    }
+
+    pub(crate) fn with_committed(mut self, committed: Committed) -> Self {
+        self.committed = Some(committed);
+        self
     }
 }
 
@@ -118,7 +138,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// What a write expects the file to be.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Condition {
     /// At this version.
     Match(String),
@@ -343,6 +363,13 @@ struct TeamSpace {
     epoch: AtomicI64,
 }
 
+#[derive(Default)]
+struct PendingCommits {
+    files: HashMap<(String, Condition, [u8; 32]), String>,
+    batches: HashMap<(String, [u8; 32]), Appended>,
+    snapshots: HashMap<(i64, [u8; 32]), String>,
+}
+
 /// One app's sync, on a signed-in [`Session`]: the person's own files, or a
 /// team's ([`SyncClient::for_team`]).
 pub struct SyncClient<S: Store> {
@@ -355,6 +382,13 @@ pub struct SyncClient<S: Store> {
     /// The version each name was last written at by this device, so its own
     /// writes heard back on [`SyncClient::events`] are not taken for another's.
     written: Mutex<HashMap<String, String>>,
+    /// Per-destination locks serializing final monotonic version verification
+    /// and atomic rename so an older download cannot overwrite a newer one.
+    dest_locks: Mutex<HashMap<PathBuf, Weak<AsyncMutex<()>>>>,
+    /// Committed remote writes whose local watermark save failed, keyed so a
+    /// retry flushes local persistence and returns the committed result without
+    /// resending the remote write.
+    pending_commits: Mutex<PendingCommits>,
 }
 
 /// An event stream's body as it arrives.
@@ -363,14 +397,37 @@ type Body = Pin<Box<dyn Stream<Item = reqwest::Result<bytes::Bytes>> + Send>>;
 impl<S: Store> SyncClient<S> {
     /// [app]: `serverbox`, `gptbox`, … (`[a-z0-9._-]`, not starting with `.`).
     pub fn new(session: Arc<Session<S>>, app: &str) -> Self {
-        Self { session, app: app.to_string(), team: None, personal: Mutex::new(None), clock: Clock::default(), written: Mutex::new(HashMap::new()) }
+        Self {
+            session,
+            app: app.to_string(),
+            team: None,
+            personal: Mutex::new(None),
+            clock: Clock::default(),
+            written: Mutex::new(HashMap::new()),
+            dest_locks: Mutex::new(HashMap::new()),
+            pending_commits: Mutex::new(PendingCommits::default()),
+        }
     }
 
     /// Attaches or clears personal-space signing and rollback protection.
     /// Ignored on team clients (which sign through [`crate::team::TeamSpace`]).
+    /// Changing or detaching auth clears cached per-account commit recovery
+    /// state and SSE own-write markers so another auth instance or account
+    /// never inherits them.
     pub fn set_personal(&self, auth: Option<Arc<PersonalAuth>>) {
         if self.team.is_none() {
-            *self.personal.lock().unwrap_or_else(|e| e.into_inner()) = auth;
+            let mut slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+            let same = match (&*slot, &auth) {
+                (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+                (None, None) => true,
+                _ => false,
+            };
+            *slot = auth;
+            drop(slot);
+            if !same {
+                *self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()) = PendingCommits::default();
+                self.written.lock().unwrap_or_else(|e| e.into_inner()).clear();
+            }
         }
     }
 
@@ -381,11 +438,31 @@ impl<S: Store> SyncClient<S> {
         self.personal.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
+    fn dest_lock(&self, to: &Path) -> Arc<AsyncMutex<()>> {
+        let mut map = self.dest_locks.lock().unwrap_or_else(|e| e.into_inner());
+        map.retain(|_, v| v.strong_count() > 0);
+        if let Some(lock) = map.get(to).and_then(Weak::upgrade) {
+            return lock;
+        }
+        let lock = Arc::new(AsyncMutex::new(()));
+        map.insert(to.to_path_buf(), Arc::downgrade(&lock));
+        lock
+    }
+
     /// [app]'s files of team [team] (its id), written under key [epoch].
     pub(crate) fn for_team(session: Arc<Session<S>>, team: &str, app: &str, epoch: i64) -> Self {
         // Canonical, so homebase's events name it alike however it was given.
         let team = Some(TeamSpace { id: canonical(team).unwrap_or_else(|_| team.to_string()), epoch: AtomicI64::new(epoch) });
-        Self { session, app: app.to_string(), team, personal: Mutex::new(None), clock: Clock::default(), written: Mutex::new(HashMap::new()) }
+        Self {
+            session,
+            app: app.to_string(),
+            team,
+            personal: Mutex::new(None),
+            clock: Clock::default(),
+            written: Mutex::new(HashMap::new()),
+            dest_locks: Mutex::new(HashMap::new()),
+            pending_commits: Mutex::new(PendingCommits::default()),
+        }
     }
 
     /// The key epoch a team's writes now name; after a rotation, or a
@@ -466,15 +543,30 @@ impl<S: Store> SyncClient<S> {
         let Some(auth) = self.personal_auth() else {
             return self.upload_signed(name, body, condition, None).await;
         };
+        let body = bytes::Bytes::from(body);
+        let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes());
+        let pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).files.get(&commit_key).cloned();
+        if let Some(etag) = pending {
+            auth.flush_pending_versions().await?;
+            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).files.remove(&commit_key);
+            return Ok(etag);
+        }
+        auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
         let mut version = auth.next_file_version(&self.app, name).await?;
         let mut republished = false;
         let mut version_retried = false;
         loop {
             let sig = auth.sign_file(&self.app, name, version, &body).await;
-            match self.upload_signed(name, body.clone(), condition.clone(), Some(&sig)).await {
+            match self.upload_signed_bytes(name, body.clone(), condition.clone(), Some(&sig)).await {
                 Ok(etag) => {
-                    auth.record_file_version(&self.app, name, version).await?;
+                    if let Err(e) = auth.record_file_version(&self.app, name, version).await {
+                        if e.kind == Kind::Invalid {
+                            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).files.insert(commit_key, etag.clone());
+                            return Err(e.with_committed(Committed::File { etag, version }));
+                        }
+                        return Err(e);
+                    }
                     return Ok(etag);
                 }
                 Err(e) if !version_retried && matches!(e.kind, Kind::Version(_)) => {
@@ -496,8 +588,11 @@ impl<S: Store> SyncClient<S> {
 
     /// [upload_bytes], signed by its writer ([sig]): a team's every write is.
     pub async fn upload_signed(&self, name: &str, body: Vec<u8>, condition: Condition, sig: Option<&WriteSig>) -> Result<String, Error> {
+        self.upload_signed_bytes(name, bytes::Bytes::from(body), condition, sig).await
+    }
+
+    async fn upload_signed_bytes(&self, name: &str, bytes: bytes::Bytes, condition: Condition, sig: Option<&WriteSig>) -> Result<String, Error> {
         let path = self.file_path(name)?;
-        let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
         if size > MAX_BYTES {
             return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
@@ -612,29 +707,47 @@ impl<S: Store> SyncClient<S> {
         let Some(auth) = self.personal_auth() else {
             return self.append_signed(key, body, None).await;
         };
+        let body = bytes::Bytes::from(body);
+        let commit_key = (key.to_string(), *blake3::hash(&body).as_bytes());
+        let pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).batches.get(&commit_key).cloned();
+        if let Some(appended) = pending {
+            auth.flush_pending_versions().await?;
+            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).batches.remove(&commit_key);
+            return Ok(appended);
+        }
+        auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
         let sig = auth.sign_batch(&self.app, key, &body).await;
-        let res = match self.append_signed(key, body.clone(), Some(&sig)).await {
+        let res = match self.append_signed_bytes(key, body.clone(), Some(&sig)).await {
             Err(e) if matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
                 auth.ensure_published(&self.session, true).await?;
                 let sig = auth.sign_batch(&self.app, key, &body).await;
-                self.append_signed(key, body, Some(&sig)).await?
+                self.append_signed_bytes(key, body, Some(&sig)).await?
             }
             other => other?,
         };
-        auth.record_log_signed(&self.app).await?;
+        if let Err(e) = auth.record_batch_written(&self.app, key, res.seq).await {
+            if e.kind == Kind::Invalid {
+                self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).batches.insert(commit_key, res.clone());
+                return Err(e.with_committed(Committed::Batch(res)));
+            }
+            return Err(e);
+        }
         Ok(res)
     }
 
     /// [append], signed by its writer ([sig], no version).
     pub async fn append_signed(&self, key: &str, body: Vec<u8>, sig: Option<&WriteSig>) -> Result<Appended, Error> {
+        self.append_signed_bytes(key, bytes::Bytes::from(body), sig).await
+    }
+
+    async fn append_signed_bytes(&self, key: &str, body: bytes::Bytes, sig: Option<&WriteSig>) -> Result<Appended, Error> {
         if !(16..=64).contains(&key.len()) || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
             return Err(Error::new(Kind::Invalid, "not an idempotency key"));
         }
         if body.len() > BATCH_MAX {
             return Err(Error::new(Kind::TooLarge, format!("{} bytes", body.len())));
         }
-        let body = bytes::Bytes::from(body);
         let path = format!("{}/log", self.app_path()?);
         let response = self
             .send(Method::POST, &path, |r| {
@@ -675,11 +788,10 @@ impl<S: Store> SyncClient<S> {
             if blake3::hash(&body).to_hex().as_str() != b.digest {
                 return Err(Error::new(Kind::Invalid, format!("batch {}: digest mismatch", b.seq)));
             }
-            let batch = Batch { seq: b.seq, body, epoch: b.epoch, idempotency_key: b.idempotency_key, signed: b.signed };
-            if let Some(auth) = &auth {
-                auth.verify_batch(&self.app, page.log.as_deref(), &batch).await?;
-            }
-            batches.push(batch);
+            batches.push(Batch { seq: b.seq, body, epoch: b.epoch, idempotency_key: b.idempotency_key, signed: b.signed });
+        }
+        if let Some(auth) = &auth {
+            auth.verify_batches(&self.app, page.log.as_deref(), &batches).await?;
         }
         Ok(LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more })
     }
@@ -695,24 +807,42 @@ impl<S: Store> SyncClient<S> {
         let Some(auth) = self.personal_auth() else {
             return self.put_snapshot_signed(seq, body, None).await;
         };
+        let body = bytes::Bytes::from(body);
+        let commit_key = (seq, *blake3::hash(&body).as_bytes());
+        let pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).snapshots.get(&commit_key).cloned();
+        if let Some(etag) = pending {
+            auth.flush_pending_versions().await?;
+            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).snapshots.remove(&commit_key);
+            return Ok(etag);
+        }
+        auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
         let sig = auth.sign_snapshot(&self.app, seq, &body).await;
-        let etag = match self.put_snapshot_signed(seq, body.clone(), Some(&sig)).await {
+        let etag = match self.put_snapshot_signed_bytes(seq, body.clone(), Some(&sig)).await {
             Err(e) if matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
                 auth.ensure_published(&self.session, true).await?;
                 let sig = auth.sign_snapshot(&self.app, seq, &body).await;
-                self.put_snapshot_signed(seq, body, Some(&sig)).await?
+                self.put_snapshot_signed_bytes(seq, body, Some(&sig)).await?
             }
             other => other?,
         };
-        auth.record_snapshot_written(&self.app, seq).await?;
+        if let Err(e) = auth.record_snapshot_written(&self.app, seq).await {
+            if e.kind == Kind::Invalid {
+                self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).snapshots.insert(commit_key, etag.clone());
+                return Err(e.with_committed(Committed::Snapshot { etag, seq }));
+            }
+            return Err(e);
+        }
         Ok(etag)
     }
 
     /// [put_snapshot_bytes], signed by its writer ([sig], no version).
     pub async fn put_snapshot_signed(&self, seq: i64, body: Vec<u8>, sig: Option<&WriteSig>) -> Result<String, Error> {
+        self.put_snapshot_signed_bytes(seq, bytes::Bytes::from(body), sig).await
+    }
+
+    async fn put_snapshot_signed_bytes(&self, seq: i64, bytes: bytes::Bytes, sig: Option<&WriteSig>) -> Result<String, Error> {
         let path = format!("{}/snapshot", self.app_path()?);
-        let bytes = bytes::Bytes::from(body);
         let size = bytes.len() as u64;
         if size <= DIRECT_MAX {
             let response = self
@@ -731,34 +861,26 @@ impl<S: Store> SyncClient<S> {
     /// The log's snapshot written to [to]; `None` before there is one.
     pub async fn download_snapshot(&self, to: &Path) -> Result<Option<Snapshot>, Error> {
         if let Some(auth) = self.personal_auth() {
-            let part = part_path(to);
+            let mut part = PartGuard::new(part_path(to));
             let mut found = None;
             let mut digest = [0u8; 32];
             let fetched = self
-                .fetch_with(&format!("{}/snapshot", self.app_path()?), Target::FileHashed(&part, &mut digest), None, |response| {
+                .fetch_with(&format!("{}/snapshot", self.app_path()?), Target::FileHashed(part.path(), &mut digest), None, |response| {
                     let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
                     found = header("sync-log").zip(header("sync-seq").and_then(|v| v.parse().ok())).map(|(log, seq)| Snapshot { log, seq, signed: Signed::of(response) });
                 })
-                .await;
-            let fetched = match fetched {
-                Ok(f) => f,
-                Err(e) => {
-                    let _ = tokio::fs::remove_file(&part).await;
-                    return Err(e);
-                }
-            };
+                .await?;
             return match fetched {
                 Fetched::Missing => Ok(None),
                 Fetched::Saved(_) => {
                     let Some(snap) = found else {
-                        let _ = tokio::fs::remove_file(&part).await;
                         return Err(Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq"));
                     };
-                    if let Err(e) = auth.verify_snapshot_digest(&self.app, &snap, &digest).await {
-                        let _ = tokio::fs::remove_file(&part).await;
-                        return Err(e);
-                    }
-                    tokio::fs::rename(&part, to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+                    let lock = self.dest_lock(to);
+                    let _guard = lock.lock().await;
+                    auth.verify_snapshot_digest(&self.app, &snap, &digest).await?;
+                    tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+                    part.disarm();
                     Ok(Some(snap))
                 }
                 Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a snapshot answered 304")),
@@ -901,23 +1023,16 @@ impl<S: Store> SyncClient<S> {
         let Some(auth) = self.personal_auth() else {
             return self.fetch_with(path, Target::File(to), known, |_| {}).await;
         };
-        let part = part_path(to);
+        let mut part = PartGuard::new(part_path(to));
         let mut signed = None;
         let mut digest = [0u8; 32];
-        let fetched = self.fetch_with(path, Target::FileHashed(&part, &mut digest), known, |r| signed = Signed::of(r)).await;
-        let fetched = match fetched {
-            Ok(f) => f,
-            Err(e) => {
-                let _ = tokio::fs::remove_file(&part).await;
-                return Err(e);
-            }
-        };
+        let fetched = self.fetch_with(path, Target::FileHashed(part.path(), &mut digest), known, |r| signed = Signed::of(r)).await?;
         if let Fetched::Saved(_) = &fetched {
-            if let Err(e) = auth.verify_file_digest(&self.app, name, &digest, signed.as_ref(), enforce_monotonic).await {
-                let _ = tokio::fs::remove_file(&part).await;
-                return Err(e);
-            }
-            tokio::fs::rename(&part, to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+            let lock = self.dest_lock(to);
+            let _guard = lock.lock().await;
+            auth.verify_file_digest(&self.app, name, &digest, signed.as_ref(), enforce_monotonic).await?;
+            tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+            part.disarm();
         }
         Ok(fetched)
     }
@@ -1177,12 +1292,40 @@ async fn read_limited(mut response: reqwest::Response, max: usize) -> Result<Vec
     Ok(body)
 }
 
+/// Removes a staged `.part` file on drop (error or cancellation) unless
+/// disarmed after its atomic rename succeeds.
+struct PartGuard(Option<PathBuf>);
+
+impl PartGuard {
+    fn new(path: PathBuf) -> Self {
+        Self(Some(path))
+    }
+
+    fn path(&self) -> &Path {
+        self.0.as_deref().expect("part guard armed")
+    }
+
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for PartGuard {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 /// [response]'s body into [to], through a file beside it renamed into place:
-/// a download cut short leaves the old file.
+/// a download cut short leaves the old file and removes the staged `.part`.
 async fn save(response: reqwest::Response, to: &Path) -> Result<(), Error> {
-    let part = part_path(to);
-    save_hashed(response, &part).await?;
-    tokio::fs::rename(&part, to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))
+    let mut part = PartGuard::new(part_path(to));
+    save_hashed(response, part.path()).await?;
+    tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+    part.disarm();
+    Ok(())
 }
 
 /// Streams [response]'s body into [part] and returns its blake3 digest.

@@ -397,3 +397,141 @@ async fn a_full_page_of_large_batches_is_read() {
     let LogRead::Page { batches, .. } = sync.read_log(0, None, None).await.unwrap() else { panic!() };
     assert_eq!(batches.len(), 5);
 }
+
+struct TestKeeper {
+    saved: StdMutex<String>,
+    fail: std::sync::atomic::AtomicBool,
+}
+
+impl TestKeeper {
+    fn new() -> Arc<Self> {
+        Arc::new(Self { saved: StdMutex::new(String::new()), fail: std::sync::atomic::AtomicBool::new(false) })
+    }
+}
+
+impl crate::personal::VersionKeeper for TestKeeper {
+    fn save(&self, json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+        if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+            return Box::pin(async { Err("disk full".into()) });
+        }
+        *self.saved.lock().unwrap() = json;
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[tokio::test]
+async fn committed_write_survives_keeper_failure_and_retries_without_resending() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", p) if p.ends_with(NAME) => written("e-committed"),
+        ("POST", "/v2/sync/serverbox/log") => Response::json(200, json!({ "code": 0, "data": { "log": "6f1c", "seq": 1, "live": { "batches": 1, "bytes": 4 }, "compact": false } })),
+        ("PUT", "/v2/sync/serverbox/snapshot") => written("s-committed"),
+        _ => Response::status(404),
+    })
+    .await;
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth));
+
+    // 1. File upload commits remotely, local persistence fails -> error retains ETag; retry does NOT resend PUT.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_bytes(NAME, b"file-body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, Some(Committed::File { etag: "e-committed".into(), version: 1 }));
+    assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).len(), 1);
+
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.upload_bytes(NAME, b"file-body".to_vec(), Condition::Absent).await.unwrap(), "e-committed");
+    assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).len(), 1);
+
+    // 2. Log append commits remotely, local persistence fails -> error retains Appended; retry does NOT resend POST.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.append(KEY, b"b1".to_vec()).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert!(matches!(err.committed, Some(Committed::Batch(Appended { seq: 1, .. }))));
+    assert_eq!(fake.requests("/v2/sync/serverbox/log").len(), 1);
+
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.append(KEY, b"b1".to_vec()).await.unwrap().seq, 1);
+    assert_eq!(fake.requests("/v2/sync/serverbox/log").len(), 1);
+
+    // 3. Snapshot write commits remotely, local persistence fails -> error retains ETag; retry does NOT resend PUT.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "s-committed".into(), seq: 1 }));
+    assert_eq!(fake.requests("/v2/sync/serverbox/snapshot").len(), 1);
+
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap(), "s-committed");
+    assert_eq!(fake.requests("/v2/sync/serverbox/snapshot").len(), 1);
+
+    // 4. Detaching/replacing personal auth clears pending_commits so a new auth instance cannot skip writes.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_bytes(NAME, b"file-body-2".to_vec(), Condition::Match("e-committed".into())).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    sync.set_personal(None);
+    assert!(sync.pending_commits.lock().unwrap().files.is_empty());
+}
+
+#[tokio::test]
+async fn failed_download_cleans_up_staged_part_file() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let (_fake, sync) = homebase(|_| {
+        // Return an invalid signature so verification fails after staging `.part`.
+        Response::status(200)
+            .header("ETag", "\"e1\"")
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", "AAAA")
+            .header("X-Signature", "AAAA")
+            .header("X-Sync-Version", "1")
+            .body("tampered-body")
+    })
+    .await;
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    sync.set_personal(Some(auth));
+
+    let dir = tempdir::Dir::new();
+    let to = dir.path().join("bak.age");
+    assert_eq!(sync.download(NAME, &to, None).await.unwrap_err().kind, Kind::Untrusted);
+    let leftover: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
+    assert!(leftover.is_empty(), "expected no leftover .part files");
+}
+
+#[tokio::test]
+async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let auth = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let sig1 = auth.sign_file("serverbox", NAME, 1, b"v1-body").await;
+    let sig2 = auth.sign_file("serverbox", NAME, 2, b"v2-body").await;
+    let pk = key.signing_public();
+    let req_n = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = req_n.clone();
+    let (_fake, sync) = homebase(move |_| {
+        let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (etag, ver, sig, body) = if n == 0 {
+            ("\"e2\"", "2", sig2.signature.as_str(), "v2-body")
+        } else {
+            ("\"e1\"", "1", sig1.signature.as_str(), "v1-body")
+        };
+        Response::status(200)
+            .header("ETag", etag)
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", &pk)
+            .header("X-Signature", sig)
+            .header("X-Sync-Version", ver)
+            .body(body)
+    })
+    .await;
+    sync.set_personal(Some(auth));
+
+    let dir = tempdir::Dir::new();
+    let to = dir.path().join("bak.age");
+    let (r1, r2) = tokio::join!(sync.download(NAME, &to, None), sync.download(NAME, &to, None));
+    assert!(r1.is_ok() || r2.is_ok());
+    // Whichever order ran, the installed file MUST end up as v2-body (never rolled back to v1-body).
+    assert_eq!(std::fs::read(&to).unwrap(), b"v2-body");
+}

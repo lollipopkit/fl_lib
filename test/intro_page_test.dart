@@ -275,4 +275,81 @@ void main() {
     await tester.pump();
     expect(doneCalls, 1);
   });
+
+  testWidgets('double-tapping Next mid-animation runs onBeforeNext only once', (tester) async {
+    var commitCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: const [
+              Center(child: Text('page-0')),
+              Center(child: Text('page-1')),
+              Center(child: Text('page-2')),
+            ],
+            onBeforeNext: (page) => page == 0
+                ? () async {
+                    commitCalls++;
+                    return true;
+                  }
+                : null,
+            onDone: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Tap Next, pump a short frame before the page animation finishes and page
+    // index changes, then tap Next a second time.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    expect(commitCalls, 1);
+    expect(find.text('page-1'), findsOneWidget);
+  });
+
+  testWidgets('Previous holds advance lock for its full animation', (tester) async {
+    late BuildContext page1Ctx;
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: [
+              const Center(child: Text('page-0')),
+              Builder(
+                builder: (ctx) {
+                  page1Ctx = ctx;
+                  return const Center(child: Text('page-1'));
+                },
+              ),
+              const Center(child: Text('page-2')),
+            ],
+            onDone: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Go to page 1.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+
+    // Tap Previous, then immediately tap Next and call bypass IntroPage.nextOf
+    // mid-animation; Previous must complete cleanly to page 0 without
+    // overlapping forward navigation.
+    await tester.tap(find.text('Previous'));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.byType(FilledButton));
+    IntroPage.nextOf(page1Ctx);
+    await tester.pumpAndSettle();
+
+    expect(find.text('page-0'), findsOneWidget);
+  });
 }

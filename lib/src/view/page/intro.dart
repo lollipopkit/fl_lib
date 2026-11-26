@@ -268,15 +268,28 @@ final class _IntroPageState extends State<IntroPage> {
         if (!ok || !mounted) return;
       }
       if (!context.mounted) return;
-      hasNext ? _toNext() : _args.onDone(context);
+      if (hasNext) {
+        await _toNext();
+      } else {
+        _args.onDone(context);
+      }
     } finally {
       _advancing = false;
     }
   }
 
-  void _advanceBypass() {
+  Future<void> _advanceBypass() async {
     if (_advancing || !mounted) return;
-    hasNext ? _toNext() : _args.onDone(context);
+    _advancing = true;
+    try {
+      if (hasNext) {
+        await _toNext();
+      } else {
+        _args.onDone(context);
+      }
+    } finally {
+      _advancing = false;
+    }
   }
 
   void _finishNow() {
@@ -331,15 +344,20 @@ final class _IntroPageState extends State<IntroPage> {
     );
   }
 
-  void _toPre() {
+  Future<void> _toPre() async {
     if (_advancing) return;
-    _pageController.previousPage(
-      duration: context.motion(_switchDuration),
-      curve: _switchCurve,
-    );
+    _advancing = true;
+    try {
+      await _pageController.previousPage(
+        duration: context.motion(_switchDuration),
+        curve: _switchCurve,
+      );
+    } finally {
+      _advancing = false;
+    }
   }
 
-  void _toNext() => _pageController.nextPage(
+  Future<void> _toNext() => _pageController.nextPage(
     duration: context.motion(_switchDuration),
     curve: _switchCurve,
   );

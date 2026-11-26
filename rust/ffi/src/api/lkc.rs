@@ -305,6 +305,18 @@ impl LkcPersonalAuth {
     pub async fn update_key(&self, key: &LkcAccountKey) -> Result<(), LkcSyncError> {
         Ok(self.0.update_key(key.inner().clone()).await?)
     }
+
+    /// Whether [app] already has any recorded signed file, log batch, or snapshot.
+    pub async fn is_app_signed(&self, app: String) -> bool {
+        self.0.is_app_signed(&app).await
+    }
+
+    /// Parses persisted [versions] JSON and reports whether [app] already has
+    /// any recorded signed file, log batch, or snapshot.
+    #[frb(sync)]
+    pub fn versions_has_signed_app(versions: String, app: String) -> Result<bool, LkcSyncError> {
+        Ok(PersonalVersions::from_json(&versions)?.is_app_signed(&app))
+    }
 }
 
 /// One app's files on homebase, on a session.

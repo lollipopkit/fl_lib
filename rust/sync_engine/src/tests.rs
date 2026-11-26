@@ -359,7 +359,11 @@ impl KeyFile for KeyFileOf {
 struct MemSecrets {
     password: Mutex<Option<String>>,
     secret_key: Mutex<Option<String>>,
+    pending_secret_key: Mutex<Option<String>>,
     allow_auto_gen: AtomicBool,
+    fail_set_secret_key: AtomicBool,
+    fail_set_epochs: AtomicBool,
+    epochs_delay_ms: AtomicU64,
     kept: Mutex<HashMap<String, String>>,
     epochs: Mutex<HashMap<String, i64>>,
     pending: Mutex<HashMap<String, String>>,
@@ -387,7 +391,21 @@ impl Secrets for MemSecrets {
 
     fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
+            if self.fail_set_secret_key.load(Ordering::SeqCst) {
+                return Err(Error::Host("keychain locked".into()));
+            }
             *self.secret_key.lock().unwrap() = Some(key);
+            Ok(())
+        })
+    }
+
+    fn pending_secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+        Box::pin(async { Ok(self.pending_secret_key.lock().unwrap().clone()) })
+    }
+
+    fn set_pending_secret_key(&self, key: Option<String>) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            *self.pending_secret_key.lock().unwrap() = key;
             Ok(())
         })
     }
@@ -408,11 +426,20 @@ impl Secrets for MemSecrets {
     }
 
     fn epochs(&self) -> BoxFuture<'_, Result<HashMap<String, i64>>> {
-        Box::pin(async { Ok(self.epochs.lock().unwrap().clone()) })
+        Box::pin(async {
+            let delay = self.epochs_delay_ms.load(Ordering::SeqCst);
+            if delay > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            }
+            Ok(self.epochs.lock().unwrap().clone())
+        })
     }
 
     fn set_epochs(&self, epochs: HashMap<String, i64>) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
+            if self.fail_set_epochs.load(Ordering::SeqCst) {
+                return Err(Error::Host("prefs full".into()));
+            }
             *self.epochs.lock().unwrap() = epochs;
             Ok(())
         })
@@ -1051,4 +1078,74 @@ async fn disabling_auto_generate_pauses_legacy_upgrade_without_flagging_2fa_miss
     b.ring.recheck().await;
     let kb = b.key(&legacy_file).await.unwrap();
     assert_eq!(kb.open(&ka.seal(b"ok").unwrap()).unwrap(), b"ok");
+}
+
+#[tokio::test]
+async fn opened_at_does_not_cache_when_epoch_persistence_fails() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    d.secrets.fail_set_epochs.store(true, Ordering::SeqCst);
+    assert!(matches!(d.key(&file).await, Err(Error::Host(_))));
+    assert!(d.secrets.epochs.lock().unwrap().is_empty());
+
+    // Once epoch persistence succeeds, retrying MUST persist the 2FA marker and epoch.
+    d.secrets.fail_set_epochs.store(false, Ordering::SeqCst);
+    let k = d.key(&file).await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&0));
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("2fa:account"), Some(&1));
+    assert_eq!(k.open(&k.seal(b"ok").unwrap()).unwrap(), b"ok");
+}
+
+#[tokio::test]
+async fn concurrent_epoch_updates_and_secret_key_init_across_remotes_are_serialized() {
+    let file_a = Arc::new(MemKeyFile::default());
+    let file_b = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+    d.secrets.epochs_delay_ms.store(25, Ordering::SeqCst);
+
+    let (ka, kb) = tokio::join!(
+        d.ring.of(Arc::new(KeyFileOf(file_a.clone(), "remote-a".into())), true),
+        d.ring.of(Arc::new(KeyFileOf(file_b.clone(), "remote-b".into())), true),
+    );
+    let (ka, kb) = (ka.unwrap(), kb.unwrap());
+    let stored = d.secrets.secret_key.lock().unwrap().clone().expect("secret key stored");
+    let sk = fl_lkc::secret_key::SecretKey::parse(&stored).unwrap();
+
+    // Both remotes must be openable with the ONE stored secret key.
+    let raw_a = file_a.file.lock().unwrap().clone().unwrap().0;
+    let raw_b = file_b.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw_a, &sk.combine_passphrase("pw")).unwrap().is_some());
+    assert!(crate::key::open_with_password(&raw_b, &sk.combine_passphrase("pw")).unwrap().is_some());
+
+    // Both remotes' epochs & 2fa markers must be preserved (no lost update).
+    let epochs = d.secrets.epochs.lock().unwrap();
+    assert_eq!(epochs.get("remote-a"), Some(&0));
+    assert_eq!(epochs.get("2fa:remote-a"), Some(&1));
+    assert_eq!(epochs.get("remote-b"), Some(&0));
+    assert_eq!(epochs.get("2fa:remote-b"), Some(&1));
+    assert_eq!(ka.open(&ka.seal(b"a").unwrap()).unwrap(), b"a");
+    assert_eq!(kb.open(&kb.seal(b"b").unwrap()).unwrap(), b"b");
+}
+
+#[tokio::test]
+async fn candidate_secret_key_is_recovered_after_set_secret_key_failure() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+    d.secrets.fail_set_secret_key.store(true, Ordering::SeqCst);
+
+    // Remote write commits, then `set_secret_key` fails: candidate key must stay staged.
+    assert!(matches!(d.key(&file).await, Err(Error::Host(_))));
+    assert!(file.file.lock().unwrap().is_some());
+    assert!(d.secrets.secret_key.lock().unwrap().is_none());
+    let staged = d.secrets.pending_secret_key.lock().unwrap().clone().expect("candidate staged");
+
+    // Once keychain recovers, retry opens the remote with the staged candidate,
+    // persists it to `secret_key`, and clears the staging slot.
+    d.secrets.fail_set_secret_key.store(false, Ordering::SeqCst);
+    let k = d.key(&file).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(staged.as_str()));
+    assert!(d.secrets.pending_secret_key.lock().unwrap().is_none());
+    assert_eq!(k.open(&k.seal(b"recovered").unwrap()).unwrap(), b"recovered");
 }

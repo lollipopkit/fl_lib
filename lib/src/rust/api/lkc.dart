@@ -14,6 +14,9 @@ import 'team.dart';
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcPersonalAuth>>
 abstract class LkcPersonalAuth implements RustOpaqueInterface {
+  /// Whether [app] already has any recorded signed file, log batch, or snapshot.
+  Future<bool> isAppSigned({required String app});
+
   /// Opens personal signing/rollback tracking for [key] starting from the
   /// persisted [versions] JSON.
   static LkcPersonalAuth open({
@@ -28,6 +31,16 @@ abstract class LkcPersonalAuth implements RustOpaqueInterface {
 
   /// Updates the account key (e.g. after rotation), preserving watermarks.
   Future<void> updateKey({required LkcAccountKey key});
+
+  /// Parses persisted [versions] JSON and reports whether [app] already has
+  /// any recorded signed file, log batch, or snapshot.
+  static bool versionsHasSignedApp({
+    required String versions,
+    required String app,
+  }) => RustLib.instance.api.crateApiLkcLkcPersonalAuthVersionsHasSignedApp(
+    versions: versions,
+    app: app,
+  );
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSession>>

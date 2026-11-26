@@ -183,4 +183,76 @@ void main() {
     await storage.versionTag('bak.age');
     expect(SyncClock.offsetMs, closeTo(60000, 2000));
   });
+
+  test('signed app refuses unsigned access when credentials are missing', () async {
+    SecureProp.legacyApart = false;
+    addTearDown(() => SecureProp.legacyApart = null);
+    FlutterSecureStorage.setMockInitialValues({
+      'lkcToken': jsonEncode({
+        'access': 'a1',
+        'refresh': 'r1',
+        'expires_at': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+      }),
+      'lkcPersonalVersions.u1': jsonEncode({
+        'v': 1,
+        'files': {'test/bak.age': 2},
+        'signed_apps': ['test'],
+      }),
+    });
+    SecureProp.resetRateLimits();
+    final signedClient = LkcClient(
+      oidc: LkcOidc(
+        clientId: 'test',
+        redirectUrl: 'test://auth/callback',
+        issuer: homebase.base.resolve('/auth/v1/'),
+      ),
+      baseUrl: homebase.base,
+      cache: LkcMemoryCache(),
+    );
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    signedClient.user.value = LkcUser(id: 'u1', name: 'u1', group: 'user', createdAt: now, updatedAt: now);
+    final signedStorage = LkcRemoteStorage(signedClient, 'test');
+
+    // Missing backup password -> SyncPasswordMissing instead of unsigned access.
+    await expectLater(
+      signedStorage.list(),
+      throwsA(isA<SyncPasswordMissing>()),
+    );
+
+    // With password present but secret key missing -> SyncSecretKeyMissing.
+    await SecureStoreProps.bakPwd.write('pw', limited: false);
+    await expectLater(
+      signedStorage.list(),
+      throwsA(isA<SyncSecretKeyMissing>()),
+    );
+  });
+
+  test('corrupt personal versions JSON maps to FormatException', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'lkcToken': jsonEncode({
+        'access': 'a1',
+        'refresh': 'r1',
+        'expires_at': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+      }),
+      'lkcPersonalVersions.u1': '{not-valid-json',
+    });
+    SecureProp.resetRateLimits();
+    final badClient = LkcClient(
+      oidc: LkcOidc(
+        clientId: 'test',
+        redirectUrl: 'test://auth/callback',
+        issuer: homebase.base.resolve('/auth/v1/'),
+      ),
+      baseUrl: homebase.base,
+      cache: LkcMemoryCache(),
+    );
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    badClient.user.value = LkcUser(id: 'u1', name: 'u1', group: 'user', createdAt: now, updatedAt: now);
+    final badStorage = LkcRemoteStorage(badClient, 'test');
+
+    await expectLater(
+      badStorage.list(),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }

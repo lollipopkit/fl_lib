@@ -315,32 +315,32 @@ impl LkcTeams {
 
     /// The account key opened with the LK Cloud key password (and optional
     /// client-side secret key); `None` before any device made one.
-    pub async fn fetch_account_key(&self, passphrase: String, secret_key: Option<String>) -> Result<Option<LkcAccountKey>, LkcTeamError> {
+    pub async fn fetch_account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<Option<LkcAccountKey>, LkcTeamError> {
         let sk = parse_secret_key(secret_key)?;
-        Ok(self.files.fetch_with(&passphrase, sk.as_ref()).await?.map(|(k, _)| LkcAccountKey(k)))
+        Ok(self.files.fetch_with(&passphrase, sk.as_ref(), allow_legacy).await?.map(|(k, _)| LkcAccountKey(k)))
     }
 
     /// The account key, made now if no device has, and published.
-    pub async fn account_key(&self, passphrase: String, secret_key: Option<String>) -> Result<LkcAccountKey, LkcTeamError> {
+    pub async fn account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<LkcAccountKey, LkcTeamError> {
         let sk = parse_secret_key(secret_key)?;
-        let key = self.files.load_or_create_with(&passphrase, sk.as_ref()).await?;
+        let key = self.files.load_or_create_with(&passphrase, sk.as_ref(), allow_legacy).await?;
         self.api().publish(&key).await?;
         Ok(LkcAccountKey(key))
     }
 
     /// New account keys in place of these, written and published: a device
     /// lost trust. Then open them and [LkcTeamKeys::rewrap_teams].
-    pub async fn rotate_account_key(&self, passphrase: String, secret_key: Option<String>) -> Result<LkcAccountKey, LkcTeamError> {
+    pub async fn rotate_account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<LkcAccountKey, LkcTeamError> {
         let sk = parse_secret_key(secret_key)?;
-        let (old, etag) = self.files.fetch_with(&passphrase, sk.as_ref()).await?.ok_or(TeamError::NotFound)?;
+        let (old, etag) = self.files.fetch_with(&passphrase, sk.as_ref(), allow_legacy).await?.ok_or(TeamError::NotFound)?;
         let next = self.files.rotate_with(&old, &etag, &passphrase, sk.as_ref()).await?;
         self.api().publish(&next).await?;
         Ok(LkcAccountKey(next))
     }
 
-    pub async fn change_key_passphrase(&self, old: String, new: String, secret_key: Option<String>) -> Result<(), LkcTeamError> {
+    pub async fn change_key_passphrase(&self, old: String, new: String, secret_key: Option<String>, allow_legacy: bool) -> Result<(), LkcTeamError> {
         let sk = parse_secret_key(secret_key)?;
-        Ok(self.files.change_passphrase_with(&old, &new, sk.as_ref()).await?)
+        Ok(self.files.change_passphrase_with(&old, &new, sk.as_ref(), allow_legacy).await?)
     }
 
     pub async fn list(&self) -> Result<Vec<LkcTeam>, LkcTeamError> {
