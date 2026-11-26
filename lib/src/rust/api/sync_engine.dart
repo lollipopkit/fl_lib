@@ -51,7 +51,17 @@ abstract class SyncKeyHandle implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>
 abstract class SyncKeys implements RustOpaqueInterface {
+  /// [candidate] as this device's secret key.
+  Future<void> commitSecretKey({required String candidate});
+
   Future<void> forget({required String id});
+
+  /// Whether [account]'s LK Cloud key file ([lkc]'s `identity.age`) is
+  /// sealed with a secret key, read only: one to import here.
+  Future<bool> lkcSealedWithSecretKey({
+    required LkcSync lkc,
+    required String account,
+  });
 
   /// The key files the password here does not open.
   List<String> mismatch();
@@ -95,6 +105,11 @@ abstract class SyncKeys implements RustOpaqueInterface {
   Future<void> recheck();
 
   void release({required String id});
+
+  /// The secret key LK Cloud's account key is first sealed with: the one
+  /// held, else one staged for it, made now when the app allows; null when
+  /// none may be made. [commit_secret_key] once the account key holds it.
+  Future<String?> secretKeyCandidate();
 
   /// The key files that cannot be opened because this device has no secret key.
   List<String> secretKeyMissing();

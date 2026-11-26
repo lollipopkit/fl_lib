@@ -21,6 +21,8 @@ use std::future::Future;
 pub use fl_sync::{Hlc, Op};
 use serde_json::Value;
 
+use crate::log::Appended;
+
 mod engine;
 pub mod key;
 pub mod lkc;
@@ -68,7 +70,7 @@ pub enum Error {
     /// The remote append already committed ([appended]), but local watermark
     /// persistence failed ([detail]); the engine advances its local checkpoint
     /// from [appended] so the mutation is not resent.
-    AppendPersistFailed { appended: crate::log::Appended, detail: String },
+    AppendPersistFailed { appended: Appended, detail: String },
     /// The remote snapshot already committed at [seq], but local watermark
     /// persistence failed ([detail]); the engine retains the committed snapshot
     /// so a retry flushes local persistence without resending it, then sweeps

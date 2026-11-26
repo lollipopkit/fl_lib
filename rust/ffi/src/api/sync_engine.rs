@@ -154,6 +154,29 @@ impl SyncKeys {
         self.0.secret_key_missing().borrow().iter().cloned().collect()
     }
 
+    /// The secret key LK Cloud's account key is first sealed with: the one
+    /// held, else one staged for it, made now when the app allows; null when
+    /// none may be made. [commit_secret_key] once the account key holds it.
+    pub async fn secret_key_candidate(&self) -> R<Option<String>> {
+        match self.0.secret_key_candidate().await {
+            Ok(key) => Ok(Some(key)),
+            Err(Error::SecretKeyMissing) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Whether [account]'s LK Cloud key file ([lkc]'s `identity.age`) is
+    /// sealed with a secret key, read only: one to import here.
+    pub async fn lkc_sealed_with_secret_key(&self, lkc: &LkcSync, account: String) -> R<bool> {
+        let file: Arc<dyn KeyFile> = Arc::new(LkcKeyFile { client: lkc.client(), account });
+        Ok(self.0.sealed_with_secret_key(file).await?)
+    }
+
+    /// [candidate] as this device's secret key.
+    pub async fn commit_secret_key(&self, candidate: String) -> R<()> {
+        Ok(self.0.commit_secret_key(&candidate).await?)
+    }
+
     #[frb(sync)]
     pub fn release(&self, id: String) {
         self.0.release(&id);

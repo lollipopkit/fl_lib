@@ -12,6 +12,7 @@ import 'package:fl_lib/src/rust/api/team.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
 import 'package:fl_lib/src/core/sync/log/errors.dart';
+import 'package:fl_lib/src/core/sync/log/keys.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
 import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -281,8 +282,8 @@ final class LkcClient {
   static Future<void> markAccountKey2fa(String uid) =>
       accountKey2faProp(uid).write('1', limited: false);
 
-  /// Monotonic personal version watermarks: device-local only, never synced
-  /// remotely or overwritten by server state.
+  /// What this device has seen signed (`PersonalVersions`): device-local
+  /// only, never synced remotely or overwritten by server state.
   static SecureProp _personalVersionsProp(String uid) => SecureProp('lkcPersonalVersions.$uid');
 
   /// Device-local pending old passphrase when a backup password change could
@@ -304,24 +305,42 @@ final class LkcClient {
     }
   }
 
-  /// Whether [app] already has any recorded signed file, log batch, or
-  /// snapshot on this device for the signed-in account.
-  Future<bool> isPersonalAppSigned(String app) async {
+  /// Whether an unsigned answer for [name] of [app] is refused on this device
+  /// for the signed-in account; with no [name], for the app's files in
+  /// general. While personal signing cannot be opened here, only what this
+  /// says is unrefused may be read or written unsigned.
+  Future<bool> personalRequiresSignature(String app, {String? name}) async {
     final uid = user.value?.id;
     if (uid == null) return false;
     if (_personalAuth case (final id, final auth) when id == uid) {
-      return auth.isAppSigned(app: app);
+      return auth.requiresSignature(app: app, name: name);
     }
     final raw = await _personalVersionsProp(uid).read(limited: false);
     if (raw == null || raw.trim().isEmpty) return false;
     await FlRust.ensureInitialized();
-    return LkcPersonalAuth.versionsHasSignedApp(versions: raw, app: app);
+    return LkcPersonalAuth.versionsRequireSignature(versions: raw, app: app, name: name);
   }
 
-  /// Attaches personal-space Ed25519 signing and rollback verification to
-  /// [app]'s [LkcSync] when credentials are available. Returns false when
-  /// neither a cached account key nor `(bakPwd, syncSecretKey)` is available
-  /// yet (e.g. before first-time secret-key generation).
+  /// Why personal signing cannot be opened here ([ensurePersonalAuth] said
+  /// false): what the person is to do about it.
+  Future<Exception> personalAuthUnavailable() async {
+    if (user.value == null) return const LkcException(code: LkcCode.perm, reason: 'signed_out');
+    final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+    if (pwd == null || pwd.isEmpty) return const SyncPasswordMissing();
+    final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+    if (secretKey == null || secretKey.isEmpty) return const SyncSecretKeyMissing();
+    return const LkcException(
+      code: LkcCode.perm,
+      reason: 'personal_auth_unavailable',
+      message: 'Personal sync signing unavailable',
+    );
+  }
+
+  /// Attaches personal-space Ed25519 signing and verification to [app]'s
+  /// [LkcSync] when credentials are available. Returns false when neither a
+  /// cached account key nor the backup password and a secret key (held, or
+  /// made now where the app allows) open one; [personalAuthUnavailable] says
+  /// why.
   Future<bool> ensurePersonalAuth(String app) async {
     final uid = user.value?.id;
     if (uid == null) return false;
@@ -350,7 +369,7 @@ final class LkcClient {
       job = pending.$2;
     } else {
       late final Future<bool> created;
-      created = _openPersonalAuth(uid).whenComplete(() {
+      created = _openPersonalAuth(uid, app).whenComplete(() {
         if (identical(_personalAuthPending?.$2, created)) {
           _personalAuthPending = null;
         }
@@ -376,7 +395,7 @@ final class LkcClient {
     return true;
   }
 
-  Future<bool> _openPersonalAuth(String uid) async {
+  Future<bool> _openPersonalAuth(String uid, String app) async {
     final gen = _personalAuthGen;
     bool stillValid() => gen == _personalAuthGen && user.value?.id == uid;
 
@@ -397,30 +416,14 @@ final class LkcClient {
     }
     if (key == null) {
       final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+      if (!stillValid()) return false;
+      if (pwd == null || pwd.isEmpty) return false;
       final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
       if (!stillValid()) return false;
-      if (pwd == null || pwd.isEmpty || secretKey == null || secretKey.isEmpty) {
-        return false;
-      }
-      final upgraded = await isAccountKey2fa(uid);
-      if (!stillValid()) return false;
-      try {
-        final t = await teams();
-        if (!stillValid()) return false;
-        key = await t.accountKey(
-          passphrase: pwd,
-          secretKey: secretKey,
-          allowLegacy: !upgraded,
-        );
-      } on LkcTeamError catch (e) {
-        throw _mapTeamError(e, uid);
-      } on StateError {
-        if (!stillValid()) return false;
-        rethrow;
-      }
-      if (!stillValid()) return false;
-      await markAccountKey2fa(uid);
-      if (!stillValid()) return false;
+      key = secretKey == null || secretKey.isEmpty
+          ? await SyncKeyring.withSecretKeyLock(() => _accountKeyWithNewSecretKey(uid, app, pwd, stillValid))
+          : await _accountKeyWith(uid, pwd, secretKey, stillValid);
+      if (key == null || !stillValid()) return false;
       await keyProp.write(key.toText(), limited: false);
     }
     // Verify the open was not invalidated while awaiting storage or network.
@@ -442,10 +445,100 @@ final class LkcClient {
           return false;
         }
       }),
+      fetchKey: () => _refetchAccountKey(uid, stillValid),
     );
     if (!stillValid()) return false;
     _personalAuth = (uid, auth);
     return true;
+  }
+
+  /// The account key opened (made if no device has) with [secretKey], kept
+  /// as two-factor once its file is.
+  Future<LkcAccountKey?> _accountKeyWith(String uid, String pwd, String secretKey, bool Function() stillValid) async {
+    final upgraded = await isAccountKey2fa(uid);
+    if (!stillValid()) return null;
+    final LkcOpenedAccountKey opened;
+    try {
+      final t = await teams();
+      if (!stillValid()) return null;
+      opened = await t.accountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: !upgraded);
+    } on LkcTeamError catch (e) {
+      throw _mapTeamError(e, uid);
+    } on StateError {
+      if (!stillValid()) return null;
+      rethrow;
+    }
+    if (!stillValid()) return null;
+    if (opened.twoFactor()) await markAccountKey2fa(uid);
+    return opened.key();
+  }
+
+  /// No secret key here (under [SyncKeyring.withSecretKeyLock]): the account
+  /// key is the first thing sealed with one, made now where the app allows
+  /// and kept once the account key holds it, so nothing is written unsigned
+  /// before. None is made where the account's files are already sealed with
+  /// one: that one is to be imported ([SyncKeyring.secretKeyMissing]).
+  Future<LkcAccountKey?> _accountKeyWithNewSecretKey(String uid, String app, String pwd, bool Function() stillValid) async {
+    final stored = await SecureStoreProps.syncSecretKey.read(limited: false);
+    if (!stillValid()) return null;
+    if (stored != null && stored.isNotEmpty) return _accountKeyWith(uid, pwd, stored, stillValid);
+    // An app that syncs no keys makes no secret key.
+    if (!SyncKeyring.ready) return null;
+    final s = await sync(app);
+    if (!stillValid() || await SyncKeyring.lkcSealedWithSecretKey(s, uid)) return null;
+    final t = await teams();
+    if (!stillValid()) return null;
+    try {
+      // Read only: there and opened by the password alone, or not there.
+      await t.fetchAccountKey(passphrase: pwd, allowLegacy: true);
+    } on LkcTeamError catch (e) {
+      if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
+      SyncKeyring.accountKeySealed();
+      return null;
+    }
+    if (!stillValid()) return null;
+    final candidate = await SyncKeyring.secretKeyCandidate();
+    if (candidate == null || !stillValid()) return null;
+    final LkcOpenedAccountKey opened;
+    try {
+      opened = await t.accountKey(passphrase: pwd, secretKey: candidate, allowLegacy: !await isAccountKey2fa(uid));
+    } on LkcTeamError catch (e) {
+      // Sealed with another device's meanwhile.
+      if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
+      SyncKeyring.accountKeySealed();
+      return null;
+    }
+    await SyncKeyring.commitSecretKey(candidate);
+    if (opened.twoFactor()) await markAccountKey2fa(uid);
+    return opened.key();
+  }
+
+  /// The account key file read again (another device may have rotated the
+  /// key) and kept here; null when it cannot be.
+  Future<String?> _refetchAccountKey(String uid, bool Function() stillValid) async {
+    try {
+      final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+      final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+      if (pwd == null || pwd.isEmpty || secretKey == null || secretKey.isEmpty) return null;
+      final upgraded = await isAccountKey2fa(uid);
+      if (!stillValid()) return null;
+      final t = await teams();
+      if (!stillValid()) return null;
+      final opened = await t.fetchAccountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: !upgraded);
+      if (opened == null || !stillValid()) return null;
+      final key = opened.key();
+      if (key.userId() != uid) return null;
+      if (opened.twoFactor()) await markAccountKey2fa(uid);
+      final text = key.toText();
+      // Kept only as the signer takes it: a rotation of the key held.
+      final held = await _accountKeyProp(uid).read(limited: false);
+      if (held != null && held.isNotEmpty && !key.follows(earlier: LkcAccountKey.fromText(text: held))) return null;
+      await _accountKeyProp(uid).write(text, limited: false);
+      return text;
+    } catch (e, s) {
+      Loggers.app.warning('Account key not read again', e, s);
+      return null;
+    }
   }
 
   static Exception _mapTeamError(LkcTeamError e, String uid) => switch (e.kind) {
@@ -457,7 +550,7 @@ final class LkcClient {
   };
 
   /// Updates the active personal-space signing key after an account key
-  /// rotation, preserving rollback watermarks.
+  /// rotation here.
   Future<void> updatePersonalAuthKey(LkcAccountKey key) async {
     if (_personalAuth case (final uid, final auth) when uid == key.userId()) {
       await auth.updateKey(key: key);
@@ -663,7 +756,7 @@ final class LkcClient {
           allowLegacy: !upgraded,
         );
         if (!signedIn || user.value?.id != uid) return;
-        if (fetched != null) {
+        if (fetched != null && fetched.twoFactor()) {
           await markAccountKey2fa(uid);
         }
         if (!signedIn || user.value?.id != uid) return;

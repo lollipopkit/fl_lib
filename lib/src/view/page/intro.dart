@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_lib/fl_lib.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,12 +19,13 @@ final class IntroPageArgs {
 
   /// Optional per-page gate for the Next / Done button and forward swiping.
   /// When non-null and its current value is `false`, Next / Done is disabled
-  /// and page swiping is locked until it becomes `true`.
+  /// and swiping forward is locked until it becomes `true`; swiping back
+  /// stays.
   final ValueListenable<bool>? Function(int page)? canProceed;
 
   /// Optional per-page commit hook invoked when advancing past [page] via
   /// Next / Done (not when a page calls [IntroPage.nextOf] to skip itself).
-  /// Pages with a non-null hook also lock gesture swiping so users cannot
+  /// Pages with a non-null hook also lock swiping forward so users cannot
   /// bypass the hook by swiping past the page. Return `false` to stay.
   final Future<bool> Function()? Function(int page)? onBeforeNext;
 
@@ -110,6 +113,10 @@ final class IntroPage extends StatefulWidget {
 final class _IntroPageState extends State<IntroPage> {
   final _pageController = PageController();
   final _currentPage = 0.vn;
+  late final _backOnly = _BackOnlyPhysics(page: () => _currentPage.value, movingOn: () => _movingOn);
+
+  /// Next or [IntroPage.nextOf] is turning the page: past what a swipe may.
+  var _movingOn = false;
 
   /// Read through, never cached. The caller rebuilds these args whenever the
   /// layout changes — a rotation, a resized window, a keyboard appearing — and
@@ -148,7 +155,7 @@ final class _IntroPageState extends State<IntroPage> {
             listenable: gate,
             builder: (allowed) => PageView.builder(
               controller: _pageController,
-              physics: allowed && !hasCommitHook ? null : const NeverScrollableScrollPhysics(),
+              physics: allowed && !hasCommitHook ? null : _backOnly,
               itemCount: _pageCount,
               onPageChanged: (index) => _currentPage.value = index,
               itemBuilder: (_, index) => _args.pages[index],
@@ -357,11 +364,42 @@ final class _IntroPageState extends State<IntroPage> {
     }
   }
 
-  Future<void> _toNext() => _pageController.nextPage(
-    duration: context.motion(_switchDuration),
-    curve: _switchCurve,
-  );
+  Future<void> _toNext() async {
+    _movingOn = true;
+    try {
+      await _pageController.nextPage(
+        duration: context.motion(_switchDuration),
+        curve: _switchCurve,
+      );
+    } finally {
+      _movingOn = false;
+    }
+  }
 
   bool get hasPre => _currentPage.value > 0;
   bool get hasNext => _currentPage.value < _pageCount - 1;
+}
+
+/// Swipes back from the current [page], never past it forward, by a drag or
+/// a fling alike; [movingOn] (Next, [IntroPage.nextOf]) goes past. One
+/// instance reads both live: a [Scrollable] keeps the physics it made its
+/// position with while their type stays.
+final class _BackOnlyPhysics extends ScrollPhysics {
+  const _BackOnlyPhysics({required this.page, required this.movingOn, super.parent});
+
+  final int Function() page;
+  final bool Function() movingOn;
+
+  @override
+  _BackOnlyPhysics applyTo(ScrollPhysics? ancestor) =>
+      _BackOnlyPhysics(page: page, movingOn: movingOn, parent: buildParent(ancestor));
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    final limit = page() * position.viewportDimension;
+    if (!movingOn() && value > limit && value > position.pixels) {
+      return value - math.max(position.pixels, limit);
+    }
+    return super.applyBoundaryConditions(position, value);
+  }
 }

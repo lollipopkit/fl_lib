@@ -13,7 +13,7 @@ use tokio::sync::watch;
 
 use crate::api::team::LkcAccountKey;
 use crate::frb_generated::{FLUTTER_RUST_BRIDGE_HANDLER, StreamSink};
-use crate::lkc_bridge::{DartStore, DartVersionKeeper};
+use crate::lkc_bridge::{DartKeySource, DartStore, DartVersionKeeper};
 
 /// Why a session request failed (`fl_lkc::Failure`).
 pub enum LkcFailure {
@@ -288,34 +288,37 @@ pub struct LkcSnapshot {
 pub struct LkcPersonalAuth(Arc<PersonalAuth>);
 
 impl LkcPersonalAuth {
-    /// Opens personal signing/rollback tracking for [key] starting from the
-    /// persisted [versions] JSON.
+    /// Opens personal signing for [key] starting from the persisted
+    /// [versions] JSON. [fetch_key] reads the account key file again (its
+    /// text, null when it cannot), when another device may have rotated it.
     #[frb(sync)]
     pub fn open(
         key: &LkcAccountKey,
         versions: String,
         save: impl Fn(String) -> DartFnFuture<bool> + Send + Sync + 'static,
+        fetch_key: impl Fn() -> DartFnFuture<Option<String>> + Send + Sync + 'static,
     ) -> Result<LkcPersonalAuth, LkcSyncError> {
         let parsed = PersonalVersions::from_json(&versions)?;
         let keeper = Arc::new(DartVersionKeeper { save: Arc::new(save) });
-        Ok(Self(Arc::new(PersonalAuth::new(key.inner().clone(), parsed, keeper))))
+        let source = Arc::new(DartKeySource { fetch: Arc::new(fetch_key) });
+        Ok(Self(Arc::new(PersonalAuth::new(key.inner().clone(), parsed, keeper).with_key_source(source))))
     }
 
-    /// Updates the account key (e.g. after rotation), preserving watermarks.
+    /// Updates the account key (e.g. after rotation here).
     pub async fn update_key(&self, key: &LkcAccountKey) -> Result<(), LkcSyncError> {
         Ok(self.0.update_key(key.inner().clone()).await?)
     }
 
-    /// Whether [app] already has any recorded signed file, log batch, or snapshot.
-    pub async fn is_app_signed(&self, app: String) -> bool {
-        self.0.is_app_signed(&app).await
+    /// Whether an unsigned answer for [name] of [app] is refused here; with
+    /// no [name], for the app's files in general.
+    pub async fn requires_signature(&self, app: String, name: Option<String>) -> bool {
+        self.0.requires_signature(&app, name.as_deref()).await
     }
 
-    /// Parses persisted [versions] JSON and reports whether [app] already has
-    /// any recorded signed file, log batch, or snapshot.
+    /// [requires_signature] as the persisted [versions] JSON says.
     #[frb(sync)]
-    pub fn versions_has_signed_app(versions: String, app: String) -> Result<bool, LkcSyncError> {
-        Ok(PersonalVersions::from_json(&versions)?.is_app_signed(&app))
+    pub fn versions_require_signature(versions: String, app: String, name: Option<String>) -> Result<bool, LkcSyncError> {
+        Ok(PersonalVersions::from_json(&versions)?.requires_signature(&app, name.as_deref()))
     }
 }
 

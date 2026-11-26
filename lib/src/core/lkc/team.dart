@@ -62,13 +62,14 @@ final class LkcTeamAccount {
       if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
       final t = await client.teams();
       if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
-      final key = await t.accountKey(
+      final opened = await t.accountKey(
         passphrase: passphrase,
         secretKey: secretKey,
         allowLegacy: !upgraded,
       );
       if (client.user.value?.id != uid) throw StateError('LK Cloud: account changed');
-      if (secretKey != null) await LkcClient.markAccountKey2fa(uid);
+      if (opened.twoFactor()) await LkcClient.markAccountKey2fa(uid);
+      final key = opened.key();
       await _keyPropFor(uid).write(key.toText());
       await client.updatePersonalAuthKey(key);
       return _opened(key);

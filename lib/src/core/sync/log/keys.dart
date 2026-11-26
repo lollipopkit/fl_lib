@@ -79,11 +79,15 @@ abstract final class SyncKeyring {
     }
   }
 
+  /// LK Cloud's account key is sealed with a secret key this device does not
+  /// hold; until [recheck].
+  static bool _accountKeySealed = false;
+
   static void _syncNotifiers() {
     final ring = _keys;
     final mismatchNow = ring == null ? const <String>{} : ring.mismatch().toSet();
     if (!setEquals(mismatchNow, passwordMismatch.value)) passwordMismatch.value = mismatchNow;
-    final missingNow = ring != null && ring.secretKeyMissing().isNotEmpty;
+    final missingNow = _accountKeySealed || (ring != null && ring.secretKeyMissing().isNotEmpty);
     if (missingNow != secretKeyMissing.value) secretKeyMissing.value = missingNow;
   }
 
@@ -95,6 +99,51 @@ abstract final class SyncKeyring {
   /// The key beside a folder's segments.
   static Future<SyncKeyHandle> ofFiles(SyncKeyFile file, {bool create = true}) =>
       _said(() => _ring.ofFiles(id: file.id, create: create, file: (method, args, bytes) => _file(file, method, args, bytes)));
+
+  /// One at a time: storing a secret key, and making one for LK Cloud's
+  /// account key until it is kept, so neither replaces the other halfway.
+  static Future<void> _secretKeyLock = Future.value();
+
+  static Future<T> withSecretKeyLock<T>(Future<T> Function() f) {
+    final run = _secretKeyLock.then((_) => f());
+    _secretKeyLock = run.then((_) {}, onError: (_) {});
+    return run;
+  }
+
+  /// [key] (normalized) as this device's secret key, entered or imported by
+  /// the person; [recheck] after.
+  static Future<void> storeSecretKey(String key) => withSecretKeyLock(() async {
+    await SecureStoreProps.syncSecretKey.write(key, limited: false);
+    await _pendingSecretKeyProp.write(null, limited: false);
+  });
+
+  /// Whether [account]'s key file on LK Cloud ([sync]'s `identity.age`) is
+  /// sealed with a secret key, read only: one to import here. Said through
+  /// [secretKeyMissing].
+  static Future<bool> lkcSealedWithSecretKey(LkcSync sync, String account) =>
+      _said(() => _ring.lkcSealedWithSecretKey(lkc: sync, account: account));
+
+  /// LK Cloud's account key is sealed with a secret key this device does not
+  /// hold: said through [secretKeyMissing] until [recheck].
+  static void accountKeySealed() {
+    _accountKeySealed = true;
+    _syncNotifiers();
+  }
+
+  /// The secret key LK Cloud's account key is first sealed with: the one
+  /// held, else one staged for it, made now where [allowAutoGenerateSecretKey]
+  /// lets; null when none may be made, also in an app that syncs no keys
+  /// ([init] not called). [commitSecretKey] once the account key holds it.
+  static Future<String?> secretKeyCandidate() async {
+    if (!ready) return null;
+    return _said(() => _ring.secretKeyCandidate());
+  }
+
+  /// Whether the app syncs keys here ([init] called).
+  static bool get ready => _keys != null || _label != null;
+
+  /// [candidate] ([secretKeyCandidate]) as this device's secret key.
+  static Future<void> commitSecretKey(String candidate) => _said(() => _ring.commitSecretKey(candidate: candidate));
 
   /// [id]'s remote is not synced here any more: read again next time.
   static void release(String id) {
@@ -112,8 +161,12 @@ abstract final class SyncKeyring {
   /// Before the backup password here changes from [previous].
   static Future<void> passwordChanged(String? previous) => _said(() => _ring.passwordChanged(previous: previous));
 
-  /// Every key in use checked again now: the password here changed.
-  static Future<void> recheck() => _said(() => _ring.recheck());
+  /// Every key in use checked again now: the password or the secret key here
+  /// changed.
+  static Future<void> recheck() {
+    _accountKeySealed = false;
+    return _said(() => _ring.recheck());
+  }
 
   /// [sealed] opened with a key of a sync on here.
   static Future<Uint8List> openAny(Uint8List sealed) => _said(() => _ring.openAny(sealed: sealed));
@@ -220,5 +273,7 @@ abstract final class SyncKeyring {
     secretKeyMissing.value = false;
     secretKeyGenerated.value = null;
     allowAutoGenerateSecretKey = null;
+    _accountKeySealed = false;
+    _secretKeyLock = Future.value();
   }
 }

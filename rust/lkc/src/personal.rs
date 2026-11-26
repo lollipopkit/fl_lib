@@ -1,12 +1,18 @@
 //! Signed personal LK Cloud sync: reuses the user's [`AccountKey`] Ed25519
-//! signing key and persists monotonic versions locally so a compromised
-//! homebase cannot forge writes, strip signatures, replay batches at other
-//! sequence numbers or roll back files/snapshots.
+//! signing key so a compromised homebase cannot forge writes, strip
+//! signatures or roll a file back to an older version.
+//!
+//! Log batches and snapshots need no replay or rollback watermark: every op
+//! in them carries its HLC inside the signed body and is applied only where
+//! it wins, so a batch or snapshot sent again (or an older one) changes
+//! nothing a newer op set. Homebase may make a log anew from seq 1 (a lapsed
+//! plan's sync removed); nothing here depends on its seqs going on.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -15,57 +21,83 @@ use tokio::sync::{Mutex as AsyncMutex, RwLock};
 
 use crate::session::{Session, Store};
 use crate::sync::{Batch, Error, Kind, Signed, Snapshot, WriteSig};
-use crate::team::TeamClient;
 use crate::team::crypto::{self, KEY_LEN};
 use crate::team::identity::AccountKey;
+use crate::team::{TeamClient, TeamError};
 
 const VERSIONS_FORMAT: u32 = 1;
+/// The sync key file, signed though not an app file.
+const KEY_FILE: &str = "identity.age";
+/// Log blobs (`op-…`): written once each under a name of their own.
+const BLOB_PREFIX: &str = "op-";
+/// How long after reading the account key file it is not read again for a
+/// signature this key does not know.
+const KEY_REFRESH_EVERY: Duration = Duration::from_secs(30);
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Persists [`PersonalVersions`] JSON locally before any accepted write or
-/// verified read advances the monotonic watermark.
+/// verified read advances what it records.
 pub trait VersionKeeper: Send + Sync + 'static {
     fn save(&self, json: String) -> BoxFuture<'_, Result<(), String>>;
 }
 
-/// Monotonic watermarks kept on-device for a single personal LK Cloud account.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// The account key as its file holds it now, read again when another device
+/// may have rotated it; `None` when it cannot be read.
+pub trait KeySource: Send + Sync + 'static {
+    fn fetch(&self) -> BoxFuture<'_, Option<AccountKey>>;
+}
+
+/// What this device has seen signed in one personal LK Cloud account, kept
+/// on-device: what an unsigned answer is refused for, and each file's
+/// highest version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PersonalVersions {
     v: u32,
-    /// Highest verified or written version per `"{app}/{name}"`.
+    /// Highest verified or written version per `"{app}/{name}"`, of app files
+    /// and the sync key file; 0 for one seen signed only in its history.
+    files: BTreeMap<String, i64>,
+    /// Apps an app file (not the sync key file, not a log blob) was seen or
+    /// written signed in: an unsigned answer for any of their files is
+    /// refused.
+    signed_apps: BTreeSet<String>,
+    /// Apps a log blob was seen or written signed in.
+    signed_blobs: BTreeSet<String>,
+    /// Lowest log seq a signed batch or snapshot was seen or written at, per
+    /// app: unsigned ones at or past it are refused, legacy ones before it
+    /// stay readable during migration, in that log only.
+    signed_log_from: BTreeMap<String, i64>,
+    /// The log [signed_log_from] counts in, per app: a log made anew after
+    /// signing began holds no unsigned batch.
+    signed_log_ids: BTreeMap<String, String>,
+    /// Apps a signed snapshot was seen or written in.
+    signed_snapshots: BTreeSet<String>,
+}
+
+/// [`PersonalVersions`] as stored, also as earlier builds wrote it.
+#[derive(Deserialize)]
+struct Stored {
+    v: u32,
     #[serde(default)]
     files: BTreeMap<String, i64>,
-    /// Files (`"{app}/{name}"`) that have ever been observed or written signed
-    /// (including explicit historical fetches whose version does not move the
-    /// current watermark).
-    #[serde(default)]
-    signed_files: BTreeSet<String>,
-    /// Apps for which any signed app file (outside log metadata/blobs) has
-    /// been observed or written; once present, unsigned responses for any file
-    /// in this app are rejected.
     #[serde(default)]
     signed_apps: BTreeSet<String>,
-    /// Legacy boolean marker from earlier builds; treated as
-    /// `signed_log_from = 1` when `signed_log_from` has no entry for the app.
     #[serde(default)]
-    signed_logs: BTreeSet<String>,
-    /// Lowest log sequence number at which a signed batch or snapshot was
-    /// observed or written for an app. Unsigned batches/snapshots at or above
-    /// this sequence are rejected while unconsumed legacy entries below it
-    /// remain readable during migration.
+    signed_blobs: BTreeSet<String>,
     #[serde(default)]
     signed_log_from: BTreeMap<String, i64>,
-    /// Highest verified or written snapshot seq per app (keyed by app rather
-    /// than unsigned `Sync-Log` header so a compromised server cannot bypass
-    /// rollback checks by fabricating a new log id).
+    #[serde(default)]
+    signed_snapshots: BTreeSet<String>,
+    #[serde(default)]
+    signed_log_ids: BTreeMap<String, String>,
+    // TODO(migration): remove the fields below once devices have saved their
+    // versions again (each save drops them).
+    #[serde(default)]
+    signed_files: BTreeSet<String>,
+    #[serde(default)]
+    signed_logs: BTreeSet<String>,
     #[serde(default)]
     snapshots: BTreeMap<String, i64>,
-    /// Persisted `app -> (idempotency_key -> seq)` bindings so a compromised
-    /// server cannot replay a signed batch at a different sequence number,
-    /// even across process restarts.
-    #[serde(default)]
-    taken: BTreeMap<String, BTreeMap<String, i64>>,
 }
 
 impl Default for PersonalVersions {
@@ -73,12 +105,11 @@ impl Default for PersonalVersions {
         Self {
             v: VERSIONS_FORMAT,
             files: BTreeMap::new(),
-            signed_files: BTreeSet::new(),
             signed_apps: BTreeSet::new(),
-            signed_logs: BTreeSet::new(),
+            signed_blobs: BTreeSet::new(),
             signed_log_from: BTreeMap::new(),
-            snapshots: BTreeMap::new(),
-            taken: BTreeMap::new(),
+            signed_log_ids: BTreeMap::new(),
+            signed_snapshots: BTreeSet::new(),
         }
     }
 }
@@ -88,11 +119,44 @@ impl PersonalVersions {
         if json.trim().is_empty() {
             return Ok(Self::default());
         }
-        let parsed: Self = serde_json::from_str(json).map_err(|e| Error::new(Kind::Invalid, format!("personal versions: {e}")))?;
-        if parsed.v != VERSIONS_FORMAT {
-            return Err(Error::new(Kind::Invalid, format!("personal versions: unsupported version {}", parsed.v)));
+        let stored: Stored = serde_json::from_str(json).map_err(|e| Error::new(Kind::Invalid, format!("personal versions: {e}")))?;
+        if stored.v != VERSIONS_FORMAT {
+            return Err(Error::new(Kind::Invalid, format!("personal versions: unsupported version {}", stored.v)));
         }
-        Ok(parsed)
+        let mut out = Self {
+            v: VERSIONS_FORMAT,
+            files: BTreeMap::new(),
+            signed_apps: stored.signed_apps,
+            signed_blobs: stored.signed_blobs,
+            signed_log_from: stored.signed_log_from,
+            signed_log_ids: stored.signed_log_ids,
+            signed_snapshots: stored.signed_snapshots,
+        };
+        for (key, version) in stored.files {
+            out.take_file(key, version);
+        }
+        for key in stored.signed_files {
+            out.take_file(key, 0);
+        }
+        for app in stored.signed_logs {
+            let from = out.signed_log_from.entry(app).or_insert(1);
+            *from = (*from).min(1);
+        }
+        out.signed_snapshots.extend(stored.snapshots.into_keys());
+        Ok(out)
+    }
+
+    /// An entry of an earlier build's `files`, which also named log blobs.
+    fn take_file(&mut self, key: String, version: i64) {
+        match key.split_once('/') {
+            Some((app, name)) if name.starts_with(BLOB_PREFIX) => {
+                self.signed_blobs.insert(app.to_string());
+            }
+            _ => {
+                let entry = self.files.entry(key).or_insert(0);
+                *entry = (*entry).max(version);
+            }
+        }
     }
 
     pub fn to_json(&self) -> String {
@@ -103,82 +167,81 @@ impl PersonalVersions {
         self.files.get(&file_key(app, name)).copied().unwrap_or(0)
     }
 
-    /// Whether any signed file, log batch, or snapshot has ever been recorded
-    /// for [app] on this device.
-    pub fn is_app_signed(&self, app: &str) -> bool {
-        if self.signed_apps.contains(app)
-            || self.signed_logs.contains(app)
-            || self.signed_log_from.contains_key(app)
-            || self.snapshots.contains_key(app)
-        {
-            return true;
-        }
-        let prefix = format!("{app}/");
-        self.files.keys().any(|k| k.starts_with(&prefix))
-            || self.signed_files.iter().any(|k| k.starts_with(&prefix))
+    /// Whether an unsigned answer for [name] of [app] is refused here; with
+    /// no [name], for the app's files in general.
+    pub fn requires_signature(&self, app: &str, name: Option<&str>) -> bool {
+        let Some(name) = name else {
+            return self.signed_apps.contains(app);
+        };
+        // Signing the sync key file or a log blob does not lock out the
+        // app's earlier unsigned backups, while a signed app file locks out
+        // every unsigned one.
+        self.signed_apps.contains(app)
+            || if name.starts_with(BLOB_PREFIX) { self.signed_blobs.contains(app) } else { self.files.contains_key(&file_key(app, name)) }
     }
 
-    fn mark_file_signed(&mut self, app: &str, name: &str) {
-        self.signed_files.insert(file_key(app, name));
-        // Writing the sync key file (`identity.age`) or log blobs (`op-*`)
-        // during migration must not lock out pre-existing unsigned backups in
-        // the same app; regular app files activate the app-wide file marker.
-        if is_app_file(name) {
+    /// [name] of [app] seen or written signed, at [version] (0: only in its
+    /// history, which leaves the highest where it is).
+    fn saw_file(&mut self, app: &str, name: &str, version: i64) {
+        if name.starts_with(BLOB_PREFIX) {
+            self.signed_blobs.insert(app.to_string());
+            return;
+        }
+        // The sync key file signed during migration must not lock out the
+        // app's earlier unsigned backups; an app file does.
+        if name != KEY_FILE {
             self.signed_apps.insert(app.to_string());
         }
-    }
-
-    fn saw_file(&mut self, app: &str, name: &str, version: i64) {
-        self.mark_file_signed(app, name);
         let entry = self.files.entry(file_key(app, name)).or_insert(0);
         *entry = (*entry).max(version);
     }
 
-    fn file_requires_signature(&self, app: &str, name: &str) -> bool {
-        let key = file_key(app, name);
-        self.files.get(&key).copied().unwrap_or(0) > 0
-            || self.signed_files.contains(&key)
-            || self.signed_apps.contains(app)
-    }
-
     fn log_signed_from(&self, app: &str) -> Option<i64> {
-        let from = self.signed_log_from.get(app).copied();
-        if self.signed_logs.contains(app) {
-            return Some(from.map_or(1, |s| s.min(1)));
+        self.signed_log_from.get(app).copied()
+    }
+
+    /// A signed batch or snapshot at [seq] of [log] (`None`: the log the
+    /// last one was of).
+    fn mark_log_signed_at(&mut self, app: &str, log: Option<&str>, seq: i64) {
+        let entry = self.signed_log_from.entry(app.to_string()).or_insert(seq);
+        *entry = (*entry).min(seq);
+        let Some(log) = log else { return };
+        match self.signed_log_ids.get(app) {
+            Some(known) if known == log => {}
+            // Made anew since signing began: nothing in it is legacy.
+            Some(_) => {
+                self.signed_log_from.insert(app.to_string(), 1);
+                self.signed_log_ids.insert(app.to_string(), log.to_string());
+            }
+            None => {
+                self.signed_log_ids.insert(app.to_string(), log.to_string());
+            }
         }
-        from
     }
 
-    fn mark_log_signed_at(&mut self, app: &str, seq: i64) {
-        let initial = if self.signed_logs.contains(app) { seq.min(1) } else { seq };
-        let entry = self.signed_log_from.entry(app.to_string()).or_insert(initial);
-        *entry = (*entry).min(initial);
+    /// Whether an unsigned batch or snapshot at [seq] of [log] is refused.
+    fn log_requires_signature(&self, app: &str, log: Option<&str>, seq: i64) -> bool {
+        let Some(from) = self.log_signed_from(app) else { return false };
+        let other_log = matches!((self.signed_log_ids.get(app), log), (Some(known), Some(log)) if known != log);
+        seq >= from || other_log
     }
 
-    fn record_taken(&mut self, app: &str, idem: &str, seq: i64, what: &str) -> Result<(), Error> {
-        let app_taken = self.taken.entry(app.to_string()).or_default();
-        if let Some(&prev_seq) = app_taken.get(idem)
-            && prev_seq != seq
-        {
-            return Err(untrusted(format!("{what}: batch replayed at seq {seq} (was {prev_seq})")));
-        }
-        app_taken.insert(idem.to_string(), seq);
-        Ok(())
+    fn saw_snapshot(&mut self, app: &str, log: Option<&str>, seq: i64) {
+        self.mark_log_signed_at(app, log, seq);
+        self.signed_snapshots.insert(app.to_string());
     }
 
-    fn snapshot_seq(&self, app: &str) -> i64 {
-        self.snapshots.get(app).copied().unwrap_or(0)
-    }
-
-    fn saw_snapshot(&mut self, app: &str, seq: i64) {
-        self.mark_log_signed_at(app, seq);
-        let entry = self.snapshots.entry(app.to_string()).or_insert(0);
-        *entry = (*entry).max(seq);
+    fn snapshot_requires_signature(&self, app: &str, log: &str, seq: i64) -> bool {
+        self.signed_snapshots.contains(app) || self.log_requires_signature(app, Some(log), seq)
     }
 }
 
-fn is_app_file(name: &str) -> bool {
-    name != "identity.age" && !name.starts_with("op-")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Refresh {
+    Rotated,
+    Unchanged,
+    /// Read too recently, or could not be.
+    NotRead,
 }
 
 fn file_key(app: &str, name: &str) -> String {
@@ -191,6 +254,10 @@ fn digest(body: &[u8]) -> [u8; KEY_LEN] {
 
 fn untrusted(what: impl Into<String>) -> Error {
     Error::new(Kind::Untrusted, what)
+}
+
+fn not_saved(e: String) -> Error {
+    Error::new(Kind::Invalid, format!("personal versions not saved: {e}"))
 }
 
 struct VersionState {
@@ -207,6 +274,9 @@ pub struct PersonalAuth {
     versions: AsyncMutex<VersionState>,
     keeper: Arc<dyn VersionKeeper>,
     published: AsyncMutex<bool>,
+    source: Option<Arc<dyn KeySource>>,
+    /// When [source] was last read; one read at a time.
+    refreshed: AsyncMutex<Option<Instant>>,
 }
 
 impl PersonalAuth {
@@ -216,11 +286,21 @@ impl PersonalAuth {
             versions: AsyncMutex::new(VersionState { data: versions, dirty: false }),
             keeper,
             published: AsyncMutex::new(false),
+            source: None,
+            refreshed: AsyncMutex::new(None),
         }
     }
 
+    /// Where the account key is read again from when a signature or
+    /// `/v2/keys` names a signing key this one does not know: another device
+    /// rotated it.
+    pub fn with_key_source(mut self, source: Arc<dyn KeySource>) -> Self {
+        self.source = Some(source);
+        self
+    }
+
     /// Replaces the open account key (for example after another device rotated
-    /// it), keeping the accumulated monotonic version watermarks.
+    /// it), keeping what the versions record.
     ///
     /// Lock order matches [`Self::ensure_published`]: `published` before `key`.
     pub async fn update_key(&self, key: AccountKey) -> Result<(), Error> {
@@ -234,43 +314,75 @@ impl PersonalAuth {
         Ok(())
     }
 
+    /// The account key read again from [`KeySource`], at most once per
+    /// [`KEY_REFRESH_EVERY`]. Only a rotation of the key held is taken: an
+    /// older key served again is not.
+    async fn refresh_key(&self) -> Refresh {
+        let Some(source) = &self.source else { return Refresh::Unchanged };
+        let mut refreshed = self.refreshed.lock().await;
+        if refreshed.is_some_and(|at| at.elapsed() < KEY_REFRESH_EVERY) {
+            return Refresh::NotRead;
+        }
+        *refreshed = Some(Instant::now());
+        let Some(fresh) = source.fetch().await else { return Refresh::NotRead };
+        let mut published = self.published.lock().await;
+        let mut current = self.key.write().await;
+        let held = current.signing_public();
+        if fresh.user_id() != current.user_id() || fresh.signing_public() == held || !fresh.signing_history().any(|k| k == held) {
+            return Refresh::Unchanged;
+        }
+        *current = fresh;
+        *published = false;
+        Refresh::Rotated
+    }
+
     pub async fn user_id(&self) -> String {
         self.key.read().await.user_id().to_string()
     }
 
-    pub async fn is_app_signed(&self, app: &str) -> bool {
-        self.versions.lock().await.data.is_app_signed(app)
+    /// See [`PersonalVersions::requires_signature`].
+    pub async fn requires_signature(&self, app: &str, name: Option<&str>) -> bool {
+        self.versions.lock().await.data.requires_signature(app, name)
     }
 
-    /// Retries persisting any committed write watermarks whose previous
+    /// Retries persisting any committed write whose previous
     /// [`VersionKeeper::save`] failed, without re-sending remote writes.
     pub async fn flush_pending_versions(&self) -> Result<(), Error> {
         let mut held = self.versions.lock().await;
-        if !held.dirty {
-            return Ok(());
+        Self::flush(&self.keeper, &mut held).await
+    }
+
+    async fn flush(keeper: &Arc<dyn VersionKeeper>, held: &mut VersionState) -> Result<(), Error> {
+        if held.dirty {
+            keeper.save(held.data.to_json()).await.map_err(not_saved)?;
+            held.dirty = false;
         }
-        self.keeper
-            .save(held.data.to_json())
-            .await
-            .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
-        held.dirty = false;
         Ok(())
     }
 
     /// Ensures the current signing public key is published on `/v2/keys` so
     /// homebase accepts `X-Signature` headers. Never performs an unchained
-    /// reset when `/v2/keys` already holds a different signing key.
+    /// reset when `/v2/keys` already holds a different signing key: the
+    /// account key is read again first, as another device may have rotated
+    /// it.
     pub async fn ensure_published<S: Store>(&self, session: &Arc<Session<S>>, force: bool) -> Result<(), Error> {
+        match self.publish(session, force).await {
+            Err(e) if e.kind == Kind::Untrusted && self.refresh_key().await == Refresh::Rotated => self.publish(session, true).await,
+            other => other,
+        }
+    }
+
+    async fn publish<S: Store>(&self, session: &Arc<Session<S>>, force: bool) -> Result<(), Error> {
         let mut done = self.published.lock().await;
         if *done && !force {
             return Ok(());
         }
         let key = self.key.read().await.clone();
         TeamClient::new(session.clone()).publish_no_reset(&key).await.map_err(|e| match e {
-            crate::team::TeamError::SignedOut => Error::new(Kind::SignedOut, e.to_string()),
-            crate::team::TeamError::Unreachable(d) => Error::new(Kind::Unreachable, d),
-            crate::team::TeamError::Refused(r) => Error::new(Kind::Refused(r), "publish signing key refused"),
-            crate::team::TeamError::Untrusted(d) => Error::new(Kind::Untrusted, d),
+            TeamError::SignedOut => Error::new(Kind::SignedOut, e.to_string()),
+            TeamError::Unreachable(d) => Error::new(Kind::Unreachable, d),
+            TeamError::Refused(r) => Error::new(Kind::Refused(r), "publish signing key refused"),
+            TeamError::Untrusted(d) => Error::new(Kind::Untrusted, d),
             other => Error::new(Kind::Invalid, format!("publish signing key: {other}")),
         })?;
         *done = true;
@@ -306,30 +418,16 @@ impl PersonalAuth {
     }
 
     pub async fn record_file_version(&self, app: &str, name: &str, version: i64) -> Result<(), Error> {
-        self.record_committed(|v| {
-            v.saw_file(app, name, version);
-            Ok(())
-        })
-        .await
+        self.record_committed(|v| v.saw_file(app, name, version)).await
     }
 
-    /// Records a committed signed batch append at [seq] under [idempotency_key].
-    pub async fn record_batch_written(&self, app: &str, idempotency_key: &str, seq: i64) -> Result<(), Error> {
-        let what = format!("{app}/log batch {seq}");
-        self.record_committed(|v| {
-            v.record_taken(app, idempotency_key, seq, &what)?;
-            v.mark_log_signed_at(app, seq);
-            Ok(())
-        })
-        .await
+    /// Records a committed signed batch append at [seq] of [log].
+    pub async fn record_batch_written(&self, app: &str, log: &str, seq: i64) -> Result<(), Error> {
+        self.record_committed(|v| v.mark_log_signed_at(app, Some(log), seq)).await
     }
 
     pub async fn record_snapshot_written(&self, app: &str, seq: i64) -> Result<(), Error> {
-        self.record_committed(|v| {
-            v.saw_snapshot(app, seq);
-            Ok(())
-        })
-        .await
+        self.record_committed(|v| v.saw_snapshot(app, None, seq)).await
     }
 
     /// Verifies a downloaded file's signature and monotonic version.
@@ -337,7 +435,7 @@ impl PersonalAuth {
     /// When `enforce_monotonic` is false (explicitly fetching an older version
     /// from history via `download_version`), the signature is still verified
     /// against this account's own key history and recorded as signed without
-    /// failing on an older version number or moving the current watermark.
+    /// failing on an older version number or moving the current highest.
     pub async fn verify_file(&self, app: &str, name: &str, body: &[u8], signed: Option<&Signed>, enforce_monotonic: bool) -> Result<(), Error> {
         self.verify_file_digest(app, name, &digest(body), signed, enforce_monotonic).await
     }
@@ -345,23 +443,16 @@ impl PersonalAuth {
     /// Streaming variant of [`Self::verify_file`] taking a precomputed blake3 digest.
     pub async fn verify_file_digest(&self, app: &str, name: &str, body_digest: &[u8; KEY_LEN], signed: Option<&Signed>, enforce_monotonic: bool) -> Result<(), Error> {
         let Some(s) = signed else {
-            // Checked under the versions lock to avoid TOCTOU races with
-            // concurrent signed writes/reads.
+            // Checked under the versions lock against concurrent signed
+            // writes and reads.
             // TODO(migration): reject unsigned personal files unconditionally
             // once pre-signing uploads are no longer present.
             let mut held = self.versions.lock().await;
-            let seen = held.data.file_version(app, name);
-            if held.data.file_requires_signature(app, name) {
+            if held.data.requires_signature(app, Some(name)) {
+                let seen = held.data.file_version(app, name);
                 return Err(untrusted(format!("{app}/{name}: server stripped signature (expected version >= {seen})")));
             }
-            if held.dirty {
-                self.keeper
-                    .save(held.data.to_json())
-                    .await
-                    .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
-                held.dirty = false;
-            }
-            return Ok(());
+            return Self::flush(&self.keeper, &mut held).await;
         };
         let version = s.version.ok_or_else(|| untrusted(format!("{app}/{name}: signed file missing version")))?;
         if version <= 0 {
@@ -370,94 +461,52 @@ impl PersonalAuth {
         let owner = self.verify_own_key(s, &format!("{app}/{name}")).await?;
         let msg = crypto::sync_file_message(&owner, app, name, 0, version, body_digest);
         verify_sig(s, &msg, &format!("{app}/{name}"))?;
-        if enforce_monotonic {
-            self.persist_checked(|v| {
-                let seen = v.file_version(app, name);
-                if version < seen {
-                    return Err(untrusted(format!("{app}/{name}: version rollback ({version} < {seen})")));
-                }
-                v.saw_file(app, name, version);
-                Ok(())
-            })
-            .await?;
-        } else {
-            self.persist_checked(|v| {
-                v.mark_file_signed(app, name);
-                Ok(())
-            })
-            .await?;
-        }
-        Ok(())
+        self.persist_checked(|v| {
+            if !enforce_monotonic {
+                v.saw_file(app, name, 0);
+                return Ok(());
+            }
+            // Log blobs are written once each: no version of theirs goes back.
+            let seen = v.file_version(app, name);
+            if version < seen {
+                return Err(untrusted(format!("{app}/{name}: version rollback ({version} < {seen})")));
+            }
+            v.saw_file(app, name, version);
+            Ok(())
+        })
+        .await
     }
 
-    /// Verifies a log batch's signature and checks that its idempotency key is
-    /// not replayed at a different sequence number.
-    pub async fn verify_batch(&self, app: &str, log: Option<&str>, batch: &Batch) -> Result<(), Error> {
-        self.verify_batches(app, log, std::slice::from_ref(batch)).await
-    }
-
-    /// Verifies a page of log batches and persists all new replay bindings and
-    /// log signing markers in a single atomic [`VersionKeeper::save`] call.
-    pub async fn verify_batches(&self, app: &str, _log: Option<&str>, batches: &[Batch]) -> Result<(), Error> {
-        let mut signed_items: Vec<(String, i64, String)> = Vec::new();
-        let mut unsigned_seqs: Vec<i64> = Vec::new();
+    /// Verifies a page of log batches and persists the log's signing marker
+    /// in a single [`VersionKeeper::save`] call.
+    pub async fn verify_batches(&self, app: &str, log: Option<&str>, batches: &[Batch]) -> Result<(), Error> {
+        let mut first_signed: Option<i64> = None;
+        let mut unsigned: Vec<i64> = Vec::new();
         for batch in batches {
             let what = format!("{app}/log batch {}", batch.seq);
             let Some(s) = batch.signed.as_ref() else {
-                unsigned_seqs.push(batch.seq);
+                unsigned.push(batch.seq);
                 continue;
             };
             let idem = batch.idempotency_key.as_deref().ok_or_else(|| untrusted(format!("{what}: missing idempotency key")))?;
             let owner = self.verify_own_key(s, &what).await?;
             let msg = crypto::sync_batch_message(&owner, app, 0, &digest(&batch.body), idem);
             verify_sig(s, &msg, &what)?;
-            signed_items.push((idem.to_string(), batch.seq, what));
-        }
-        if signed_items.is_empty() {
-            let mut held = self.versions.lock().await;
-            if !unsigned_seqs.is_empty()
-                && let Some(from) = held.data.log_signed_from(app)
-            {
-                for seq in unsigned_seqs {
-                    if seq >= from {
-                        return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
-                    }
-                }
-            }
-            if held.dirty {
-                self.keeper
-                    .save(held.data.to_json())
-                    .await
-                    .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
-                held.dirty = false;
-            }
-            return Ok(());
+            first_signed = Some(first_signed.map_or(batch.seq, |f| f.min(batch.seq)));
         }
         self.persist_checked(|v| {
-            for (idem, seq, what) in &signed_items {
-                v.record_taken(app, idem, *seq, what)?;
-                v.mark_log_signed_at(app, *seq);
+            if let Some(seq) = first_signed {
+                v.mark_log_signed_at(app, log, seq);
             }
-            if let Some(from) = v.log_signed_from(app) {
-                for &seq in &unsigned_seqs {
-                    if seq >= from {
-                        return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
-                    }
-                }
+            if let Some(seq) = unsigned.iter().find(|&&seq| v.log_requires_signature(app, log, seq)) {
+                return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
             }
             Ok(())
         })
         .await
     }
 
-    /// Verifies a log snapshot's signature and checks that `seq` does not roll
-    /// back for the app.
-    ///
-    /// Note on homebase's contract: `sync_snapshot_message` signs
-    /// `(owner, app, epoch, seq, digest)` and does not authenticate `Sync-Log`,
-    /// nor does homebase define a verifiable log-reset record. The snapshot
-    /// watermark therefore stays strictly monotonic per app and never resets
-    /// on an unsigned `Sync-Log` change.
+    /// Verifies a log snapshot's signature.
     pub async fn verify_snapshot(&self, app: &str, snapshot: &Snapshot, body: &[u8]) -> Result<(), Error> {
         self.verify_snapshot_digest(app, snapshot, &digest(body)).await
     }
@@ -469,56 +518,54 @@ impl PersonalAuth {
             // TODO(migration): reject unsigned personal snapshots
             // unconditionally once pre-signing snapshots are replaced.
             let mut held = self.versions.lock().await;
-            if held.data.snapshot_seq(app) > 0
-                || held.data.log_signed_from(app).is_some_and(|from| snapshot.seq >= from)
-            {
+            if held.data.snapshot_requires_signature(app, &snapshot.log, snapshot.seq) {
                 return Err(untrusted(format!("{what}: server stripped signature")));
             }
-            if held.dirty {
-                self.keeper
-                    .save(held.data.to_json())
-                    .await
-                    .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
-                held.dirty = false;
-            }
-            return Ok(());
+            return Self::flush(&self.keeper, &mut held).await;
         };
         let owner = self.verify_own_key(s, &what).await?;
         let msg = crypto::sync_snapshot_message(&owner, app, 0, snapshot.seq, body_digest);
         verify_sig(s, &msg, &what)?;
         self.persist_checked(|v| {
-            let seen_seq = v.snapshot_seq(app);
-            if snapshot.seq < seen_seq {
-                return Err(untrusted(format!("{what}: snapshot rollback ({} < {seen_seq})", snapshot.seq)));
-            }
-            v.saw_snapshot(app, snapshot.seq);
+            v.saw_snapshot(app, Some(&snapshot.log), snapshot.seq);
             Ok(())
         })
         .await
     }
 
+    /// The account's id when [s] is signed by a signing key it has had; the
+    /// account key is read again once for one it does not know.
     async fn verify_own_key(&self, s: &Signed, what: &str) -> Result<String, Error> {
+        if let Some(owner) = self.own_signer(s, what).await? {
+            return Ok(owner);
+        }
+        let refresh = self.refresh_key().await;
+        if let Some(owner) = self.own_signer(s, what).await? {
+            return Ok(owner);
+        }
+        Err(match refresh {
+            // Not read now: a rotation elsewhere may be what it is signed by.
+            Refresh::NotRead => Error::new(Kind::Unreachable, format!("{what}: signing key not known yet; the account key is read again later")),
+            Refresh::Rotated | Refresh::Unchanged => untrusted(format!("{what}: signing key not in account key history")),
+        })
+    }
+
+    async fn own_signer(&self, s: &Signed, what: &str) -> Result<Option<String>, Error> {
         let key = self.key.read().await;
         if s.signer != key.user_id() {
             return Err(untrusted(format!("{what}: signed by {}, not {}", s.signer, key.user_id())));
         }
-        if !key.signing_history().any(|k| k == s.signing_key) {
-            return Err(untrusted(format!("{what}: signing key not in account key history")));
-        }
-        Ok(key.user_id().to_string())
+        Ok(key.signing_history().any(|k| k == s.signing_key).then(|| key.user_id().to_string()))
     }
 
     /// Read-path persistence: only advances in-memory state once `keeper.save`
-    /// succeeds so an unpersisted read does not silently advance watermarks.
+    /// succeeds so an unpersisted read does not silently advance it.
     async fn persist_checked(&self, f: impl FnOnce(&mut PersonalVersions) -> Result<(), Error>) -> Result<(), Error> {
         let mut held = self.versions.lock().await;
         let mut next = held.data.clone();
         f(&mut next)?;
         if next != held.data || held.dirty {
-            self.keeper
-                .save(next.to_json())
-                .await
-                .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
+            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
             held.data = next;
             held.dirty = false;
         }
@@ -528,23 +575,15 @@ impl PersonalAuth {
     /// Write-path persistence: updates in-memory state immediately after the
     /// remote write has already committed, marking state dirty if `keeper.save`
     /// fails so persistence can be retried without resending the remote write.
-    async fn record_committed(&self, f: impl FnOnce(&mut PersonalVersions) -> Result<(), Error>) -> Result<(), Error> {
+    async fn record_committed(&self, f: impl FnOnce(&mut PersonalVersions)) -> Result<(), Error> {
         let mut held = self.versions.lock().await;
         let mut next = held.data.clone();
-        f(&mut next)?;
-        let changed = next != held.data;
-        if changed {
+        f(&mut next);
+        if next != held.data {
             held.data = next;
             held.dirty = true;
         }
-        if held.dirty {
-            self.keeper
-                .save(held.data.to_json())
-                .await
-                .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
-            held.dirty = false;
-        }
-        Ok(())
+        Self::flush(&self.keeper, &mut held).await
     }
 }
 
@@ -558,7 +597,7 @@ fn verify_sig(s: &Signed, msg: &[u8], what: &str) -> Result<(), Error> {
 mod tests {
     use super::*;
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     struct MemKeeper {
         saved: Mutex<String>,
@@ -581,10 +620,37 @@ mod tests {
         }
     }
 
+    struct MemSource {
+        key: Mutex<Option<AccountKey>>,
+        reads: AtomicUsize,
+    }
+
+    impl KeySource for MemSource {
+        fn fetch(&self) -> BoxFuture<'_, Option<AccountKey>> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            let key = self.key.lock().unwrap().clone();
+            Box::pin(async move { key })
+        }
+    }
+
     fn auth_for(key: AccountKey) -> (PersonalAuth, Arc<MemKeeper>) {
         let keeper = MemKeeper::new();
         let auth = PersonalAuth::new(key, PersonalVersions::from_json("").unwrap(), keeper.clone());
         (auth, keeper)
+    }
+
+    fn signed(key: &AccountKey, signature: String, version: Option<i64>) -> Signed {
+        Signed { signer: key.user_id().into(), signing_key: key.signing_public(), signature, version }
+    }
+
+    async fn signed_batch(auth: &PersonalAuth, key: &AccountKey, seq: i64, idem: &str, body: &[u8]) -> Batch {
+        let sig = auth.sign_batch("serverbox", idem, body).await;
+        Batch { seq, body: body.to_vec(), epoch: None, idempotency_key: Some(idem.into()), signed: Some(signed(key, sig.signature, None)) }
+    }
+
+    async fn signed_snapshot(auth: &PersonalAuth, key: &AccountKey, log: &str, seq: i64, body: &[u8]) -> Snapshot {
+        let sig = auth.sign_snapshot("serverbox", seq, body).await;
+        Snapshot { log: log.into(), seq, signed: Some(signed(key, sig.signature, None)) }
     }
 
     #[tokio::test]
@@ -593,8 +659,7 @@ mod tests {
         let (auth, keeper) = auth_for(key.clone());
 
         let body1 = b"age-cipher-1";
-        let sig1 = auth.sign_file("serverbox", "bak", 1, body1).await;
-        let signed1 = Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig1.signature, version: Some(1) };
+        let signed1 = signed(&key, auth.sign_file("serverbox", "bak", 1, body1).await.signature, Some(1));
         auth.verify_file("serverbox", "bak", body1, Some(&signed1), true).await.unwrap();
         assert_eq!(auth.next_file_version("serverbox", "bak").await.unwrap(), 2);
 
@@ -603,8 +668,7 @@ mod tests {
 
         // Advance to version 2, then server attempts rollback to version 1.
         let body2 = b"age-cipher-2";
-        let sig2 = auth.sign_file("serverbox", "bak", 2, body2).await;
-        let signed2 = Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig2.signature, version: Some(2) };
+        let signed2 = signed(&key, auth.sign_file("serverbox", "bak", 2, body2).await.signature, Some(2));
         auth.verify_file("serverbox", "bak", body2, Some(&signed2), true).await.unwrap();
         assert_eq!(auth.verify_file("serverbox", "bak", body1, Some(&signed1), true).await.unwrap_err().kind, Kind::Untrusted);
 
@@ -615,13 +679,13 @@ mod tests {
         assert_eq!(auth.verify_file("serverbox", "bak", body2, None, true).await.unwrap_err().kind, Kind::Untrusted);
         assert_eq!(auth.verify_file("serverbox", "blob-new.age", b"evil", None, true).await.unwrap_err().kind, Kind::Untrusted);
 
-        // Persisted JSON restores the watermark.
+        // Persisted JSON restores the highest version.
         let reloaded = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
         assert_eq!(reloaded.file_version("serverbox", "bak"), 2);
     }
 
     #[tokio::test]
-    async fn forged_key_and_batch_replay_are_rejected() {
+    async fn forged_key_and_stripped_batches_are_rejected() {
         let key = AccountKey::generate("u1");
         let attacker = AccountKey::generate("u1");
         let (auth, _) = auth_for(key.clone());
@@ -634,63 +698,76 @@ mod tests {
             body: body.to_vec(),
             epoch: None,
             idempotency_key: Some("idem-123456789012".into()),
-            signed: Some(Signed {
-                signer: "u1".into(),
-                signing_key: attacker.signing_public(),
-                signature: BASE64.encode(crypto::sign(attacker.signing(), &msg)),
-                version: None,
-            }),
+            signed: Some(signed(&attacker, BASE64.encode(crypto::sign(attacker.signing(), &msg)), None)),
         };
-        assert_eq!(auth.verify_batch("serverbox", Some("log1"), &forged).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(auth.verify_batches("serverbox", Some("log1"), &[forged]).await.unwrap_err().kind, Kind::Untrusted);
 
-        // Valid batch accepted, replayed at another seq (even with a forged log id) rejected.
-        let good_sig = auth.sign_batch("serverbox", "idem-123456789012", body).await;
-        let good = Batch {
-            seq: 1,
-            body: body.to_vec(),
-            epoch: None,
-            idempotency_key: Some("idem-123456789012".into()),
-            signed: Some(Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: good_sig.signature, version: None }),
-        };
-        auth.verify_batch("serverbox", Some("log1"), &good).await.unwrap();
-        let replayed = Batch { seq: 2, ..good.clone() };
-        assert_eq!(auth.verify_batch("serverbox", Some("fake-log-2"), &replayed).await.unwrap_err().kind, Kind::Untrusted);
+        let good = signed_batch(&auth, &key, 1, "idem-123456789012", body).await;
+        auth.verify_batches("serverbox", Some("log1"), std::slice::from_ref(&good)).await.unwrap();
 
-        // Stripped signature on later batch rejected.
+        // Stripped signature on a later batch rejected.
         let unsigned = Batch { seq: 3, signed: None, ..good };
-        assert_eq!(auth.verify_batch("serverbox", Some("log1"), &unsigned).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(auth.verify_batches("serverbox", Some("log1"), &[unsigned]).await.unwrap_err().kind, Kind::Untrusted);
     }
 
     #[tokio::test]
-    async fn snapshot_rollback_and_fake_log_id_are_rejected() {
+    async fn log_made_anew_reads_on() {
         let key = AccountKey::generate("u1");
-        let (auth, _) = auth_for(key.clone());
+        let (auth, keeper) = auth_for(key.clone());
 
-        let body5 = b"snap-5";
-        let sig5 = auth.sign_snapshot("serverbox", 5, body5).await;
-        let snap5 = Snapshot {
-            log: "log-1".into(),
-            seq: 5,
-            signed: Some(Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig5.signature, version: None }),
-        };
-        auth.verify_snapshot("serverbox", &snap5, body5).await.unwrap();
+        let batch = signed_batch(&auth, &key, 500, "idem-123456789012", b"op").await;
+        auth.verify_batches("serverbox", Some("log-1"), std::slice::from_ref(&batch)).await.unwrap();
+        auth.verify_snapshot("serverbox", &signed_snapshot(&auth, &key, "log-1", 500, b"snap-500").await, b"snap-500").await.unwrap();
 
-        let body10 = b"snap-10";
-        let sig10 = auth.sign_snapshot("serverbox", 10, body10).await;
-        let snap10 = Snapshot {
-            log: "log-1".into(),
-            seq: 10,
-            signed: Some(Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig10.signature, version: None }),
-        };
-        auth.verify_snapshot("serverbox", &snap10, body10).await.unwrap();
+        // Homebase made the log anew: seqs start at 1 again, a batch sent
+        // again under its key lands at another seq, after a restart too.
+        let restarted = PersonalAuth::new(key.clone(), PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap(), MemKeeper::new());
+        restarted.verify_snapshot("serverbox", &signed_snapshot(&auth, &key, "log-2", 20, b"snap-20").await, b"snap-20").await.unwrap();
+        restarted.verify_batches("serverbox", Some("log-2"), &[Batch { seq: 21, ..batch }]).await.unwrap();
 
-        // Rollback to seq 5 fails even if server fabricates a new unsigned Sync-Log header.
-        let forged_log = Snapshot { log: "log-2-forged".into(), ..snap5.clone() };
-        assert_eq!(auth.verify_snapshot("serverbox", &forged_log, body5).await.unwrap_err().kind, Kind::Untrusted);
+        // Stripping a snapshot's signature stays refused at any seq, and the
+        // new log holds no legacy batch below the old log's first signed one.
+        let stripped = Snapshot { log: "log-2".into(), seq: 1, signed: None };
+        assert_eq!(restarted.verify_snapshot("serverbox", &stripped, b"evil").await.unwrap_err().kind, Kind::Untrusted);
+        let unsigned = Batch { seq: 3, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
+        assert_eq!(restarted.verify_batches("serverbox", Some("log-2"), &[unsigned]).await.unwrap_err().kind, Kind::Untrusted);
+    }
 
-        // Stripping signature on snapshot fails.
-        let stripped = Snapshot { log: "log-1".into(), seq: 11, signed: None };
-        assert_eq!(auth.verify_snapshot("serverbox", &stripped, b"evil").await.unwrap_err().kind, Kind::Untrusted);
+    #[tokio::test]
+    async fn versions_stay_small() {
+        let key = AccountKey::generate("u1");
+        let (auth, keeper) = auth_for(key.clone());
+        for i in 0..50 {
+            let name = format!("op-{i:04}.age");
+            let s = signed(&key, auth.sign_file("serverbox", &name, 1, b"blob").await.signature, Some(1));
+            auth.verify_file("serverbox", &name, b"blob", Some(&s), true).await.unwrap();
+            auth.record_file_version("serverbox", &format!("op-w{i:04}.age"), 1).await.unwrap();
+            let batch = signed_batch(&auth, &key, i + 1, &format!("idem-{i:012}"), b"op").await;
+            auth.verify_batches("serverbox", Some("log1"), &[batch]).await.unwrap();
+            auth.record_batch_written("serverbox", "log1", i + 100).await.unwrap();
+        }
+        let saved = keeper.saved.lock().unwrap().clone();
+        assert!(saved.len() < 200, "{saved}");
+        // An unsigned log blob is still refused.
+        assert_eq!(auth.verify_file("serverbox", "op-evil.age", b"evil", None, true).await.unwrap_err().kind, Kind::Untrusted);
+    }
+
+    #[test]
+    fn earlier_versions_are_read() {
+        let json = r#"{"v":1,"files":{"serverbox/bak":3,"serverbox/op-1.age":1},"signed_files":["serverbox/identity.age","gptbox/op-2.age"],
+            "signed_apps":["serverbox"],"signed_logs":["serverbox"],"signed_log_from":{"gptbox":7},"snapshots":{"gptbox":9},
+            "taken":{"serverbox":{"idem-123456789012":4}}}"#;
+        let v = PersonalVersions::from_json(json).unwrap();
+        assert_eq!(v.file_version("serverbox", "bak"), 3);
+        assert!(v.requires_signature("serverbox", Some("identity.age")));
+        assert!(v.requires_signature("serverbox", Some("op-9.age")));
+        assert!(v.requires_signature("gptbox", Some("op-9.age")));
+        assert!(!v.requires_signature("gptbox", Some("bak")));
+        assert_eq!(v.log_signed_from("serverbox"), Some(1));
+        assert!(v.snapshot_requires_signature("gptbox", "log1", 1));
+        let json = v.to_json();
+        assert!(!json.contains("op-") && !json.contains("taken"), "{json}");
+        assert_eq!(PersonalVersions::from_json(&json).unwrap(), v);
     }
 
     #[tokio::test]
@@ -701,12 +778,11 @@ mod tests {
 
         assert_eq!(auth.update_key(other).await.unwrap_err().kind, Kind::Untrusted);
 
-        // When keeper fails to persist, watermark must not advance in memory.
+        // When keeper fails to persist, the version must not advance in memory.
         keeper.fail.store(true, Ordering::SeqCst);
         let body = b"cipher";
-        let sig = auth.sign_file("serverbox", "bak", 1, body).await;
-        let signed = Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig.signature, version: Some(1) };
-        assert_eq!(auth.verify_file("serverbox", "bak", body, Some(&signed), true).await.unwrap_err().kind, Kind::Invalid);
+        let s = signed(&key, auth.sign_file("serverbox", "bak", 1, body).await.signature, Some(1));
+        assert_eq!(auth.verify_file("serverbox", "bak", body, Some(&s), true).await.unwrap_err().kind, Kind::Invalid);
         assert_eq!(auth.next_file_version("serverbox", "bak").await.unwrap(), 1);
     }
 
@@ -717,13 +793,50 @@ mod tests {
         let (auth, _) = auth_for(rotated);
         let body = b"older-cipher";
         let msg = crypto::sync_file_message("u1", "serverbox", "bak", 0, 1, &digest(body));
-        let signed = Signed {
-            signer: "u1".into(),
-            signing_key: old.signing_public(),
-            signature: BASE64.encode(crypto::sign(old.signing(), &msg)),
-            version: Some(1),
-        };
-        auth.verify_file("serverbox", "bak", body, Some(&signed), true).await.unwrap();
+        let s = signed(&old, BASE64.encode(crypto::sign(old.signing(), &msg)), Some(1));
+        auth.verify_file("serverbox", "bak", body, Some(&s), true).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn key_rotated_elsewhere_is_read_again() {
+        let old = AccountKey::generate("u1");
+        let rotated = old.rotated();
+        let source = Arc::new(MemSource { key: Mutex::new(Some(rotated.clone())), reads: AtomicUsize::new(0) });
+        let auth = PersonalAuth::new(old.clone(), PersonalVersions::default(), MemKeeper::new()).with_key_source(source.clone());
+
+        // Another device signed with the rotated key: read once, then known.
+        let (writer, _) = auth_for(rotated.clone());
+        let body = b"newer-cipher";
+        let s = signed(&rotated, writer.sign_file("serverbox", "bak", 1, body).await.signature, Some(1));
+        auth.verify_file("serverbox", "bak", body, Some(&s), true).await.unwrap();
+        assert_eq!(source.reads.load(Ordering::SeqCst), 1);
+        assert_eq!(auth.sign_file("serverbox", "bak", 2, body).await.signature, writer.sign_file("serverbox", "bak", 2, body).await.signature);
+
+        // A key nobody of the account has: the file is read at most once per
+        // interval, and meanwhile the write waits instead of being refused.
+        let stranger = AccountKey::generate("u1");
+        let (forger, _) = auth_for(stranger.clone());
+        let f = signed(&stranger, forger.sign_file("serverbox", "bak", 3, body).await.signature, Some(3));
+        for _ in 0..3 {
+            assert_eq!(auth.verify_file("serverbox", "bak", body, Some(&f), true).await.unwrap_err().kind, Kind::Unreachable);
+        }
+        assert_eq!(source.reads.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn an_older_account_key_is_not_taken_back() {
+        let old = AccountKey::generate("u1");
+        let rotated = old.rotated();
+        let source = Arc::new(MemSource { key: Mutex::new(Some(old)), reads: AtomicUsize::new(0) });
+        let auth = PersonalAuth::new(rotated.clone(), PersonalVersions::default(), MemKeeper::new()).with_key_source(source.clone());
+
+        let stranger = AccountKey::generate("u1");
+        let (forger, _) = auth_for(stranger.clone());
+        let f = signed(&stranger, forger.sign_file("serverbox", "bak", 1, b"x").await.signature, Some(1));
+        assert_eq!(auth.verify_file("serverbox", "bak", b"x", Some(&f), true).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(source.reads.load(Ordering::SeqCst), 1);
+        let (holder, _) = auth_for(rotated);
+        assert_eq!(auth.sign_file("serverbox", "bak", 1, b"x").await.signature, holder.sign_file("serverbox", "bak", 1, b"x").await.signature);
     }
 
     #[test]
@@ -734,18 +847,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn historical_file_marks_app_signed_without_advancing_watermark() {
+    async fn historical_file_marks_app_signed_without_advancing() {
         let key = AccountKey::generate("u1");
         let (auth, keeper) = auth_for(key.clone());
 
         let body = b"historical-v3";
-        let sig = auth.sign_file("serverbox", "bak", 3, body).await;
-        let signed = Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig.signature, version: Some(3) };
-        auth.verify_file("serverbox", "bak", body, Some(&signed), false).await.unwrap();
+        let s = signed(&key, auth.sign_file("serverbox", "bak", 3, body).await.signature, Some(3));
+        auth.verify_file("serverbox", "bak", body, Some(&s), false).await.unwrap();
 
-        // Watermark was NOT advanced by historical fetch.
         assert_eq!(auth.next_file_version("serverbox", "bak").await.unwrap(), 1);
-        assert!(auth.is_app_signed("serverbox").await);
+        assert!(auth.requires_signature("serverbox", None).await);
 
         // Subsequent unsigned response for the app is rejected (even after restart).
         let reloaded = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
@@ -755,61 +866,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn taken_bindings_persist_across_restart_and_allow_same_seq_reread() {
-        let key = AccountKey::generate("u1");
-        let (auth, keeper) = auth_for(key.clone());
-        let body = b"batch-1";
-        let sig = auth.sign_batch("serverbox", "idem-123456789012", body).await;
-        let batch = Batch {
-            seq: 5,
-            body: body.to_vec(),
-            epoch: None,
-            idempotency_key: Some("idem-123456789012".into()),
-            signed: Some(Signed { signer: "u1".into(), signing_key: key.signing_public(), signature: sig.signature, version: None }),
-        };
-        auth.verify_batch("serverbox", Some("log1"), &batch).await.unwrap();
-
-        // Reload PersonalAuth from persisted keeper JSON.
-        let reloaded = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
-        let restarted = PersonalAuth::new(key, reloaded, MemKeeper::new());
-
-        // Reading again at the originally recorded sequence succeeds.
-        restarted.verify_batch("serverbox", Some("log1"), &batch).await.unwrap();
-        // Replaying at a different sequence after restart is rejected.
-        let replayed = Batch { seq: 6, ..batch };
-        assert_eq!(restarted.verify_batch("serverbox", Some("log1"), &replayed).await.unwrap_err().kind, Kind::Untrusted);
-    }
-
-    #[tokio::test]
     async fn first_signed_log_write_preserves_legacy_backups_and_earlier_batches() {
         let key = AccountKey::generate("u1");
         let (auth, _) = auth_for(key.clone());
 
         // First signed log batch lands at seq 10.
-        auth.record_batch_written("serverbox", "idem-123456789012", 10).await.unwrap();
+        auth.record_batch_written("serverbox", "log1", 10).await.unwrap();
         // Pre-existing unsigned backup file remains readable until files migrate.
         auth.verify_file("serverbox", "srvbox_bak_v4.age", b"legacy-backup", None, true).await.unwrap();
         // Unconsumed legacy unsigned batch from before seq 10 remains readable.
         let legacy_batch = Batch { seq: 9, body: b"legacy-op".to_vec(), epoch: None, idempotency_key: None, signed: None };
-        auth.verify_batch("serverbox", Some("log1"), &legacy_batch).await.unwrap();
+        auth.verify_batches("serverbox", Some("log1"), &[legacy_batch]).await.unwrap();
         // Unsigned batch at or past seq 10 is rejected.
-        let stripped = Batch { seq: 10, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
-        assert_eq!(auth.verify_batch("serverbox", Some("log1"), &stripped).await.unwrap_err().kind, Kind::Untrusted);
-        let stripped_after = Batch { seq: 11, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
-        assert_eq!(auth.verify_batch("serverbox", Some("log1"), &stripped_after).await.unwrap_err().kind, Kind::Untrusted);
+        for seq in [10, 11] {
+            let stripped = Batch { seq, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
+            assert_eq!(auth.verify_batches("serverbox", Some("log1"), &[stripped]).await.unwrap_err().kind, Kind::Untrusted);
+        }
 
-        // Signing `identity.age` (sync key file) also does not break legacy backup file,
-        // while rejecting unsigned stripping on `identity.age` itself.
+        // Signing the sync key file and log blobs keeps the legacy backup
+        // readable, here and for what asks whether it needs a signature,
+        // while their own stripping is refused.
         auth.record_file_version("serverbox", "identity.age", 1).await.unwrap();
+        auth.record_file_version("serverbox", "op-abc.age", 1).await.unwrap();
+        assert!(!auth.requires_signature("serverbox", Some("srvbox_bak_v4.age")).await);
+        assert!(!auth.requires_signature("serverbox", None).await);
         auth.verify_file("serverbox", "srvbox_bak_v4.age", b"legacy-backup", None, true).await.unwrap();
         assert_eq!(auth.verify_file("serverbox", "identity.age", b"stripped", None, true).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(auth.verify_file("serverbox", "op-def.age", b"stripped", None, true).await.unwrap_err().kind, Kind::Untrusted);
 
-        // Upgrading from legacy `signed_logs` marker must keep threshold at 1 even after
-        // observing a higher signed seq.
+        // Upgrading from the legacy `signed_logs` marker keeps the threshold
+        // at 1 even after observing a higher signed seq.
         let legacy_versions = PersonalVersions::from_json(r#"{"v":1,"signed_logs":["serverbox"]}"#).unwrap();
         let legacy_auth = PersonalAuth::new(key, legacy_versions, MemKeeper::new());
-        legacy_auth.record_batch_written("serverbox", "idem-0000000000000050", 50).await.unwrap();
+        legacy_auth.record_batch_written("serverbox", "log1", 50).await.unwrap();
         let low_unsigned = Batch { seq: 2, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
-        assert_eq!(legacy_auth.verify_batch("serverbox", Some("log1"), &low_unsigned).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(legacy_auth.verify_batches("serverbox", Some("log1"), &[low_unsigned]).await.unwrap_err().kind, Kind::Untrusted);
     }
 }

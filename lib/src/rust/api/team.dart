@@ -9,12 +9,16 @@ import 'lkc.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `api`, `inner`, `parse_secret_key`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `fmt`, `fmt`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `fmt`, `fmt`, `from`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcAccountKey>>
 abstract class LkcAccountKey implements RustOpaqueInterface {
   /// What this account's members compare ([LkcMember::fingerprint]).
   String fingerprint();
+
+  /// Whether this is [earlier] or a rotation of it: its signing history
+  /// holds [earlier]'s signing key.
+  bool follows({required LkcAccountKey earlier});
 
   static LkcAccountKey fromText({required String text}) =>
       RustLib.instance.api.crateApiTeamLkcAccountKeyFromText(text: text);
@@ -22,6 +26,14 @@ abstract class LkcAccountKey implements RustOpaqueInterface {
   String toText();
 
   String userId();
+}
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcOpenedAccountKey>>
+abstract class LkcOpenedAccountKey implements RustOpaqueInterface {
+  LkcAccountKey key();
+
+  /// Sealed with the secret key too, not the passphrase alone.
+  bool twoFactor();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeamKeys>>
@@ -170,7 +182,7 @@ abstract class LkcTeamSpace implements RustOpaqueInterface {
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeams>>
 abstract class LkcTeams implements RustOpaqueInterface {
   /// The account key, made now if no device has, and published.
-  Future<LkcAccountKey> accountKey({
+  Future<LkcOpenedAccountKey> accountKey({
     required String passphrase,
     String? secretKey,
     required bool allowLegacy,
@@ -189,7 +201,7 @@ abstract class LkcTeams implements RustOpaqueInterface {
 
   /// The account key opened with the LK Cloud key password (and optional
   /// client-side secret key); `None` before any device made one.
-  Future<LkcAccountKey?> fetchAccountKey({
+  Future<LkcOpenedAccountKey?> fetchAccountKey({
     required String passphrase,
     String? secretKey,
     required bool allowLegacy,

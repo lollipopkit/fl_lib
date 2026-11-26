@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use fl_lkc::Store;
-use fl_lkc::sync::{Condition, Error as LkcError, Kind, LogRead, SyncClient};
+use fl_lkc::sync::{Committed, Condition, Error as LkcError, Kind, LogRead, SyncClient};
 
 use crate::key::{BoxFuture, KeyFile, Versioned};
 use crate::log::{Appended, LogTransport, Page, SnapshotBody};
@@ -57,7 +57,7 @@ impl<S: Store> LogTransport for LkcLog<S> {
         match self.0.append(&key, body).await {
             Ok(a) => Ok(Appended { log: a.log, seq: a.seq, compact: a.compact }),
             Err(e) => {
-                if let Some(fl_lkc::sync::Committed::Batch(a)) = e.committed {
+                if let Some(Committed::Batch(a)) = e.committed {
                     return Err(Error::AppendPersistFailed {
                         appended: Appended { log: a.log, seq: a.seq, compact: a.compact },
                         detail: e.detail,
@@ -80,7 +80,7 @@ impl<S: Store> LogTransport for LkcLog<S> {
             Ok(_) => Ok(true),
             Err(LkcError { kind: Kind::Refused(reason), .. }) if reason == "sync_snapshot_stale" => Ok(false),
             Err(e) => {
-                if let Some(fl_lkc::sync::Committed::Snapshot { seq, .. }) = e.committed {
+                if let Some(Committed::Snapshot { seq, .. }) = e.committed {
                     return Err(Error::SnapshotPersistFailed { seq, detail: e.detail });
                 }
                 Err(remote(e))
@@ -117,7 +117,7 @@ impl<S: Store> KeyFile for LkcKeyFile<S> {
                 Ok(v) => Ok(Some(v)),
                 Err(e) if e.kind == Kind::Changed => Ok(None),
                 Err(e) => {
-                    if let Some(fl_lkc::sync::Committed::File { etag, .. }) = e.committed {
+                    if let Some(Committed::File { etag, .. }) = e.committed {
                         return Err(Error::KeyFilePersistFailed { version: etag, detail: e.detail });
                     }
                     Err(remote(e))

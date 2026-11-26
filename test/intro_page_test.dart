@@ -170,6 +170,57 @@ void main() {
     expect(doneCalled, isTrue);
   });
 
+  testWidgets('a locked page swipes back, not forward', (tester) async {
+    final gate = false.vn;
+    addTearDown(gate.dispose);
+    Future<void> swipe(double dx) async {
+      await tester.drag(find.byType(PageView), Offset(dx, 0));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: const [
+              Center(child: Text('page-0')),
+              Center(child: Text('page-1')),
+              Center(child: Text('page-2')),
+            ],
+            canProceed: (page) => page == 1 ? gate : null,
+            onBeforeNext: (page) => page == 2 ? () async => true : null,
+            onDone: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await swipe(-600);
+    expect(find.text('page-1'), findsOneWidget);
+    await swipe(-600);
+    expect(find.text('page-1'), findsOneWidget);
+    await tester.fling(find.byType(PageView), const Offset(-200, 0), 3000);
+    await tester.pumpAndSettle();
+    expect(find.text('page-1'), findsOneWidget);
+    await swipe(600);
+    expect(find.text('page-0'), findsOneWidget);
+
+    // A page with a commit hook swipes back too.
+    gate.value = true;
+    await swipe(-600);
+    await swipe(-600);
+    expect(find.text('page-2'), findsOneWidget);
+    await swipe(-600);
+    expect(find.text('page-2'), findsOneWidget);
+    await tester.fling(find.byType(PageView), const Offset(-200, 0), 3000);
+    await tester.pumpAndSettle();
+    expect(find.text('page-2'), findsOneWidget);
+    await swipe(600);
+    expect(find.text('page-1'), findsOneWidget);
+  });
+
   testWidgets('onBeforeNext locks swiping, gates advance, and blocks concurrent nav', (tester) async {
     final gate = true.vn;
     addTearDown(gate.dispose);

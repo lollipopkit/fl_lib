@@ -33,25 +33,10 @@ final class LkcRemoteStorage
     try {
       if (client.user.value != null) {
         final authed = await client.ensurePersonalAuth(app);
-        if (!authed) {
-          if (client.user.value == null) {
-            throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
-          }
-          if (await client.isPersonalAppSigned(app)) {
-            final pwd = await SecureStoreProps.bakPwd.read(limited: false);
-            if (pwd == null || pwd.isEmpty) {
-              throw const SyncPasswordMissing();
-            }
-            final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
-            if (secretKey == null || secretKey.isEmpty) {
-              throw const SyncSecretKeyMissing();
-            }
-            throw const LkcException(
-              code: LkcCode.perm,
-              reason: 'personal_auth_unavailable',
-              message: 'Personal sync signing unavailable',
-            );
-          }
+        if (!authed &&
+            (client.user.value == null ||
+                await client.personalRequiresSignature(app, name: relativePath.isEmpty ? null : relativePath))) {
+          throw await client.personalAuthUnavailable();
         }
       }
       return await f(sync);

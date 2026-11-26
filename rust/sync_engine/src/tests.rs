@@ -2,7 +2,7 @@
 //! syncing with each other through them.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use fl_sync::{Clock, Hlc, Op};
@@ -336,6 +336,7 @@ static VERSIONS: AtomicU64 = AtomicU64::new(1);
 #[derive(Default)]
 struct MemKeyFile {
     file: Mutex<Option<(Vec<u8>, String)>>,
+    reads: AtomicUsize,
     /// A store that does not order writes: one may only not have arrived.
     unordered: bool,
 }
@@ -348,6 +349,7 @@ impl KeyFile for KeyFileOf {
     }
 
     fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+        self.0.reads.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(self.0.file.lock().unwrap().clone()) })
     }
 
@@ -501,6 +503,11 @@ impl Device {
 }
 
 // The log.
+
+/// Whether saved personal versions record a signed snapshot of `serverbox`.
+fn snapshot_signed(versions: &Value) -> bool {
+    versions["signed_snapshots"].as_array().is_some_and(|apps| apps.iter().any(|a| a == "serverbox"))
+}
 
 #[tokio::test]
 async fn devices_converge_on_the_log() {
@@ -1072,6 +1079,10 @@ async fn disabling_auto_generate_pauses_legacy_upgrade_without_flagging_2fa_miss
     assert_eq!(legacy_file.file.lock().unwrap().as_ref().unwrap().0, legacy_bytes);
     assert!(a.secrets.secret_key.lock().unwrap().is_none());
     assert!(a.ring.secret_key_missing().borrow().is_empty());
+    // Checks meanwhile wait for one instead of reading the file again.
+    let reads = legacy_file.reads.load(Ordering::SeqCst);
+    assert!(matches!(a.key(&legacy_file).await, Err(Error::SecretKeyMissing)));
+    assert_eq!(legacy_file.reads.load(Ordering::SeqCst), reads);
 
     // Once user explicitly stores a key, Device A upgrades the legacy remote cleanly.
     let chosen = fl_lkc::secret_key::SecretKey::generate().format().to_string();
@@ -1540,10 +1551,7 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
     }
     impl fl_lkc::personal::VersionKeeper for SnapshotTestKeeper {
         fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
-            let has_snap = serde_json::from_str::<Value>(&json)
-                .ok()
-                .and_then(|v| v["snapshots"]["serverbox"].as_i64())
-                .is_some();
+            let has_snap = serde_json::from_str::<Value>(&json).ok().is_some_and(|v| snapshot_signed(&v));
             if self.fail_snapshot.load(Ordering::SeqCst) && has_snap {
                 return Box::pin(async { Err("snapshot watermark save failed".into()) });
             }
@@ -1665,7 +1673,7 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
     assert_eq!(snapshot_puts.load(Ordering::SeqCst), 1);
     assert!(deleted_blobs.lock().unwrap().is_empty());
     let before_retry: Value = serde_json::from_str(&keeper.saved.lock().unwrap()).unwrap();
-    assert!(before_retry["snapshots"]["serverbox"].is_null());
+    assert!(!snapshot_signed(&before_retry));
 
     // 2. While keeper STILL fails, retrying sync MUST preserve `Error::Host`
     //    (not misclassify as `Error::Remote`) and MUST NOT resend PUT /snapshot.
@@ -1680,7 +1688,7 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
     assert_eq!(snapshot_puts.load(Ordering::SeqCst), 1, "committed snapshot must not be resent");
     let saved_json = keeper.saved.lock().unwrap().clone();
     let parsed: Value = serde_json::from_str(&saved_json).unwrap();
-    assert_eq!(parsed["snapshots"]["serverbox"], json!(1));
+    assert!(snapshot_signed(&parsed));
     assert_eq!(*deleted_blobs.lock().unwrap(), vec!["op-old-dead.age".to_string()]);
 
     server.abort();
@@ -1895,10 +1903,7 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
     }
     impl fl_lkc::personal::VersionKeeper for SnapshotTestKeeper {
         fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
-            let has_snap = serde_json::from_str::<Value>(&json)
-                .ok()
-                .and_then(|v| v["snapshots"]["serverbox"].as_i64())
-                .is_some();
+            let has_snap = serde_json::from_str::<Value>(&json).ok().is_some_and(|v| snapshot_signed(&v));
             if self.fail_snapshot.load(Ordering::SeqCst) && has_snap {
                 return Box::pin(async { Err("snapshot watermark save failed".into()) });
             }
@@ -2288,4 +2293,25 @@ async fn lkc_key_file_persist_failure_reconciles_and_retries_without_resending_p
     assert_eq!(saved2["files"]["serverbox/identity.age"], json!(2));
 
     server.abort();
+}
+
+#[tokio::test]
+async fn a_key_file_sealed_with_a_secret_key_is_told_without_writing() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    let none = Device::new("pw");
+    *none.secrets.secret_key.lock().unwrap() = None;
+    let probe = || Arc::new(KeyFileOf(file.clone(), "account".into())) as Arc<dyn KeyFile>;
+    assert!(!none.ring.sealed_with_secret_key(probe()).await.unwrap());
+
+    a.key(&file).await.unwrap();
+    let before = file.file.lock().unwrap().clone();
+    assert!(none.ring.sealed_with_secret_key(probe()).await.unwrap());
+    assert!(none.ring.secret_key_missing().borrow().contains("account"));
+    assert_eq!(*file.file.lock().unwrap(), before);
+    assert!(none.secrets.secret_key.lock().unwrap().is_none());
+
+    // Asked again once a key is stored.
+    none.ring.recheck().await;
+    assert!(none.ring.secret_key_missing().borrow().is_empty());
 }

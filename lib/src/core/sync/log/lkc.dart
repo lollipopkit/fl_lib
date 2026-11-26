@@ -184,22 +184,13 @@ final class LkcLogSync {
     _account = uid;
     final sync = await client.sync(app);
     _ensureAccount(uid);
-    final authed = await client.ensurePersonalAuth(app);
+    // Signing first: the key file is never written unsigned.
+    if (!await client.ensurePersonalAuth(app)) {
+      _ensureAccount(uid);
+      throw await client.personalAuthUnavailable();
+    }
     _ensureAccount(uid);
     final k = await SyncKeyring.ofLkc(sync, uid, create: create);
-    _ensureAccount(uid, releaseOnMismatch: true);
-    if (!authed) {
-      // A fresh or legacy device just generated its client-side secret key.
-      final ready = await client.ensurePersonalAuth(app);
-      _ensureAccount(uid, releaseOnMismatch: true);
-      if (!ready) {
-        throw const LkcException(
-          code: LkcCode.perm,
-          reason: 'personal_auth_unavailable',
-          message: 'Personal sync signing unavailable',
-        );
-      }
-    }
     _ensureAccount(uid, releaseOnMismatch: true);
     return k;
   }

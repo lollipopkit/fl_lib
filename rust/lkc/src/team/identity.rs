@@ -209,6 +209,16 @@ impl AccountKey {
     }
 }
 
+/// The account key as its file holds it.
+pub struct Opened {
+    pub key: AccountKey,
+    /// The file's version.
+    pub etag: String,
+    /// Whether the file is sealed with the secret key too, not the
+    /// passphrase alone.
+    pub two_factor: bool,
+}
+
 /// Reads and writes the account key's file, of account [user_id].
 pub struct AccountKeyFile<S: Store> {
     sync: SyncClient<S>,
@@ -226,53 +236,60 @@ impl<S: Store> AccountKeyFile<S> {
     }
 
     /// The key and its version; `None` before any device made one.
-    pub async fn fetch(&self, passphrase: &str) -> Result<Option<(AccountKey, String)>, TeamError> {
+    pub async fn fetch(&self, passphrase: &str) -> Result<Option<Opened>, TeamError> {
         self.fetch_with(passphrase, None, true).await
     }
 
-    /// Fetches the account key with `(passphrase, secret_key)`, automatically
-    /// upgrading a legacy passphrase-only file when `secret_key` is provided
-    /// and `allow_legacy` is `true`. Once upgraded (`allow_legacy == false`),
-    /// passphrase-only files are rejected and never re-sealed.
-    pub async fn fetch_with(&self, passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<Option<(AccountKey, String)>, TeamError> {
-        for again in [true, false] {
+    /// Fetches the account key with `(passphrase, secret_key)`, re-sealing a
+    /// legacy passphrase-only file with `secret_key` when `allow_legacy` lets
+    /// it open. A re-seal that fails for any reason but a race still answers
+    /// the key ([`Opened::two_factor`] false), re-sealed on a later fetch.
+    /// Once upgraded (`allow_legacy == false`), passphrase-only files are
+    /// rejected and never re-sealed.
+    pub async fn fetch_with(&self, passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<Option<Opened>, TeamError> {
+        let mut raced = false;
+        loop {
             let Some((sealed, etag, _)) = self.sync.download_bytes(FILE).await? else { return Ok(None) };
             let (key, legacy) = AccountKey::open_with(&sealed, passphrase, secret_key, allow_legacy)?;
             if key.user_id != self.user_id {
                 return Err(TeamError::Untrusted("the account key is of another account".into()));
             }
+            let two_factor = secret_key.is_some() && !legacy;
             if legacy && let Some(sk) = secret_key {
-                match self.write_with(&key, passphrase, Some(sk), Condition::Match(etag)).await {
-                    Ok(new_etag) => return Ok(Some((key, new_etag))),
-                    // Another device raced us and updated the file; re-read once.
-                    Err(TeamError::Sync(Kind::Changed, _)) if again => continue,
-                    Err(e) => return Err(e),
+                match self.write_with(&key, passphrase, Some(sk), Condition::Match(etag.clone())).await {
+                    Ok(new_etag) => return Ok(Some(Opened { key, etag: new_etag, two_factor: true })),
+                    // Another device wrote it meanwhile: read once more.
+                    Err(TeamError::Sync(Kind::Changed, _)) if !raced => {
+                        raced = true;
+                        continue;
+                    }
+                    Err(TeamError::Sync(Kind::Changed, _)) => return Err(TeamError::Unreachable("the account key changed while upgrading".into())),
+                    Err(_) => return Ok(Some(Opened { key, etag, two_factor: false })),
                 }
             }
-            return Ok(Some((key, etag)));
+            return Ok(Some(Opened { key, etag, two_factor }));
         }
-        Err(TeamError::Unreachable("the account key changed while upgrading".into()))
     }
 
     /// The account's key: the file's, else a new one put there (another
     /// device's taken if it was first).
     pub async fn load_or_create(&self, passphrase: &str) -> Result<AccountKey, TeamError> {
-        self.load_or_create_with(passphrase, None, true).await
+        self.load_or_create_with(passphrase, None, true).await.map(|o| o.key)
     }
 
     /// [`Self::load_or_create`] with optional two-factor [`SecretKey`].
-    pub async fn load_or_create_with(&self, passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<AccountKey, TeamError> {
+    pub async fn load_or_create_with(&self, passphrase: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<Opened, TeamError> {
         if secret_key.is_none() && !allow_legacy {
             return Err(TeamError::WrongPassphrase);
         }
         let mut wait = std::time::Duration::from_millis(200);
         for _ in 0..RACES {
-            if let Some((key, _)) = self.fetch_with(passphrase, secret_key, allow_legacy).await? {
-                return Ok(key);
+            if let Some(opened) = self.fetch_with(passphrase, secret_key, allow_legacy).await? {
+                return Ok(opened);
             }
             let key = AccountKey::generate(&self.user_id);
             match self.write_with(&key, passphrase, secret_key, Condition::Absent).await {
-                Ok(_) => return Ok(key),
+                Ok(etag) => return Ok(Opened { key, etag, two_factor: secret_key.is_some() }),
                 // Another device's is there, though not yet shown: read again.
                 Err(TeamError::Sync(Kind::Changed, _)) => {
                     tokio::time::sleep(wait).await;
@@ -302,7 +319,7 @@ impl<S: Store> AccountKeyFile<S> {
     }
 
     pub async fn change_passphrase_with(&self, old: &str, new: &str, secret_key: Option<&SecretKey>, allow_legacy: bool) -> Result<(), TeamError> {
-        let Some((key, etag)) = self.fetch_with(old, secret_key, allow_legacy).await? else { return Err(TeamError::NotFound) };
+        let Some(Opened { key, etag, .. }) = self.fetch_with(old, secret_key, allow_legacy).await? else { return Err(TeamError::NotFound) };
         self.write_with(&key, new, secret_key, Condition::Match(etag)).await?;
         Ok(())
     }
@@ -440,5 +457,37 @@ mod tests {
             r = r.rotated();
         }
         assert_eq!(r.identities.len(), HISTORY + 1);
+    }
+
+    #[tokio::test]
+    async fn legacy_key_opens_when_its_upgrade_is_not_written() {
+        use crate::Client;
+        use crate::fake::{Fake, Response};
+        use crate::session::{Session, Stored};
+
+        #[derive(Clone)]
+        struct Kept;
+        impl Store for Kept {
+            async fn save(&self, _: Option<Stored>) -> Result<(), String> {
+                Ok(())
+            }
+        }
+
+        let key = AccountKey::generate("u1");
+        let legacy = key.seal_with("pw", None).unwrap();
+        let fake = Fake::start(move |r| match r.method.as_str() {
+            "GET" => Response::status(200).header("ETag", "\"e1\"").body(legacy.clone()),
+            _ => Response::dropped(),
+        })
+        .await;
+        let client = Arc::new(Client::with(&fake.issuer(), "app", &fake.base).unwrap());
+        let stored = Stored { access: "tok".into(), refresh: Some("r".into()), expires_at: crate::now_ms() + 3_600_000, refreshing: false };
+        let session = Arc::new(Session::restore(client, Kept, Some(stored)).await);
+        let files = AccountKeyFile::new(session, "u1");
+
+        let opened = files.fetch_with("pw", Some(&SecretKey::generate()), true).await.unwrap().unwrap();
+        assert_eq!(opened.key.signing_public(), key.signing_public());
+        assert!(!opened.two_factor);
+        assert_eq!(opened.etag, "e1");
     }
 }

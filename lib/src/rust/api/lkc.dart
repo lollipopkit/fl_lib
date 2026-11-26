@@ -14,32 +14,37 @@ import 'team.dart';
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcPersonalAuth>>
 abstract class LkcPersonalAuth implements RustOpaqueInterface {
-  /// Whether [app] already has any recorded signed file, log batch, or snapshot.
-  Future<bool> isAppSigned({required String app});
-
-  /// Opens personal signing/rollback tracking for [key] starting from the
-  /// persisted [versions] JSON.
+  /// Opens personal signing for [key] starting from the persisted
+  /// [versions] JSON. [fetch_key] reads the account key file again (its
+  /// text, null when it cannot), when another device may have rotated it.
   static LkcPersonalAuth open({
     required LkcAccountKey key,
     required String versions,
     required FutureOr<bool> Function(String) save,
+    required FutureOr<String?> Function() fetchKey,
   }) => RustLib.instance.api.crateApiLkcLkcPersonalAuthOpen(
     key: key,
     versions: versions,
     save: save,
+    fetchKey: fetchKey,
   );
 
-  /// Updates the account key (e.g. after rotation), preserving watermarks.
+  /// Whether an unsigned answer for [name] of [app] is refused here; with
+  /// no [name], for the app's files in general.
+  Future<bool> requiresSignature({required String app, String? name});
+
+  /// Updates the account key (e.g. after rotation here).
   Future<void> updateKey({required LkcAccountKey key});
 
-  /// Parses persisted [versions] JSON and reports whether [app] already has
-  /// any recorded signed file, log batch, or snapshot.
-  static bool versionsHasSignedApp({
+  /// [requires_signature] as the persisted [versions] JSON says.
+  static bool versionsRequireSignature({
     required String versions,
     required String app,
-  }) => RustLib.instance.api.crateApiLkcLkcPersonalAuthVersionsHasSignedApp(
+    String? name,
+  }) => RustLib.instance.api.crateApiLkcLkcPersonalAuthVersionsRequireSignature(
     versions: versions,
     app: app,
+    name: name,
   );
 }
 

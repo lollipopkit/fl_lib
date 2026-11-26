@@ -19,7 +19,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 use std::time::Duration;
 
 use base64::Engine;
@@ -396,9 +396,6 @@ pub struct SyncClient<S: Store> {
     /// The version each name was last written at by this device, so its own
     /// writes heard back on [`SyncClient::events`] are not taken for another's.
     written: Mutex<HashMap<String, String>>,
-    /// Per-destination locks serializing final monotonic version verification
-    /// and atomic rename so an older download cannot overwrite a newer one.
-    dest_locks: Mutex<HashMap<PathBuf, Weak<AsyncMutex<()>>>>,
     /// Committed remote writes whose local watermark save failed, keyed so a
     /// retry flushes local persistence and returns the committed result without
     /// resending the remote write.
@@ -418,7 +415,6 @@ impl<S: Store> SyncClient<S> {
             personal: Mutex::new(PersonalSlot::default()),
             clock: Clock::default(),
             written: Mutex::new(HashMap::new()),
-            dest_locks: Mutex::new(HashMap::new()),
             pending_commits: Mutex::new(PendingCommits::default()),
         }
     }
@@ -472,8 +468,13 @@ impl<S: Store> SyncClient<S> {
         self.personal_auth_with_gen().map(|(_, a)| a)
     }
 
+    /// [to]'s lock, one per destination in the process (whichever client
+    /// downloads there): its `.part` staging, verification and rename go
+    /// under it, so a download neither overwrites another's staged bytes nor
+    /// puts an older version over a newer one.
     fn dest_lock(&self, to: &Path) -> Arc<AsyncMutex<()>> {
-        let mut map = self.dest_locks.lock().unwrap_or_else(|e| e.into_inner());
+        static DEST_LOCKS: LazyLock<Mutex<HashMap<PathBuf, Weak<AsyncMutex<()>>>>> = LazyLock::new(Default::default);
+        let mut map = DEST_LOCKS.lock().unwrap_or_else(|e| e.into_inner());
         map.retain(|_, v| v.strong_count() > 0);
         if let Some(lock) = map.get(to).and_then(Weak::upgrade) {
             return lock;
@@ -494,7 +495,6 @@ impl<S: Store> SyncClient<S> {
             personal: Mutex::new(PersonalSlot::default()),
             clock: Clock::default(),
             written: Mutex::new(HashMap::new()),
-            dest_locks: Mutex::new(HashMap::new()),
             pending_commits: Mutex::new(PendingCommits::default()),
         }
     }
@@ -827,7 +827,7 @@ impl<S: Store> SyncClient<S> {
             }
             other => other?,
         };
-        if let Err(e) = auth.record_batch_written(&self.app, key, res.seq).await {
+        if let Err(e) = auth.record_batch_written(&self.app, &res.log, res.seq).await {
             if e.kind == Kind::Invalid {
                 let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                 if guard.generation == auth_gen {
@@ -985,6 +985,8 @@ impl<S: Store> SyncClient<S> {
     /// The log's snapshot written to [to]; `None` before there is one.
     pub async fn download_snapshot(&self, to: &Path) -> Result<Option<Snapshot>, Error> {
         if let Some(auth) = self.personal_auth() {
+            let lock = self.dest_lock(to);
+            let _guard = lock.lock().await;
             let mut part = PartGuard::new(part_path(to));
             let mut found = None;
             let mut digest = [0u8; 32];
@@ -1000,8 +1002,6 @@ impl<S: Store> SyncClient<S> {
                     let Some(snap) = found else {
                         return Err(Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq"));
                     };
-                    let lock = self.dest_lock(to);
-                    let _guard = lock.lock().await;
                     auth.verify_snapshot_digest(&self.app, &snap, &digest).await?;
                     tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
                     part.disarm();
@@ -1147,13 +1147,13 @@ impl<S: Store> SyncClient<S> {
         let Some(auth) = self.personal_auth() else {
             return self.fetch_with(path, Target::File(to), known, |_| {}).await;
         };
+        let lock = self.dest_lock(to);
+        let _guard = lock.lock().await;
         let mut part = PartGuard::new(part_path(to));
         let mut signed = None;
         let mut digest = [0u8; 32];
         let fetched = self.fetch_with(path, Target::FileHashed(part.path(), &mut digest), known, |r| signed = Signed::of(r)).await?;
         if let Fetched::Saved(_) = &fetched {
-            let lock = self.dest_lock(to);
-            let _guard = lock.lock().await;
             auth.verify_file_digest(&self.app, name, &digest, signed.as_ref(), enforce_monotonic).await?;
             tokio::fs::rename(part.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
             part.disarm();
@@ -1207,7 +1207,11 @@ impl<S: Store> SyncClient<S> {
             response
         };
         match into {
-            Target::File(to) => save(body, to).await?,
+            Target::File(to) => {
+                let lock = self.dest_lock(to);
+                let _guard = lock.lock().await;
+                save(body, to).await?
+            }
             Target::FileHashed(part, digest) => *digest = save_hashed(body, part).await?,
             Target::Memory(buffer) => *buffer = read_limited(body, MAX_READ as usize).await?,
         }
@@ -1392,13 +1396,13 @@ enum Target<'a> {
     Memory(&'a mut Vec<u8>),
 }
 
-fn part_path(to: &Path) -> std::path::PathBuf {
-    static PART_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let seq = PART_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let pid = std::process::id();
+/// Where a download to [to] is staged, under its destination's lock: one
+/// name per destination, so what a download cut short left is written over
+/// by the next.
+fn part_path(to: &Path) -> PathBuf {
     let mut name = to.as_os_str().to_os_string();
-    name.push(format!(".{pid}.{seq}.part"));
-    std::path::PathBuf::from(name)
+    name.push(".part");
+    PathBuf::from(name)
 }
 
 async fn read_file(from: &Path) -> Result<Vec<u8>, Error> {

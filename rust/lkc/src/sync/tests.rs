@@ -622,7 +622,7 @@ async fn idle_read_log_flushes_dirty_watermark_after_append_persist_failure() {
     assert!(matches!(page, LogRead::Page { ref batches, .. } if batches.is_empty()));
     let saved = keeper.saved.lock().unwrap().clone();
     assert!(!saved.is_empty(), "empty read_log must flush dirty PersonalVersions");
-    assert!(saved.contains(KEY), "saved versions must persist taken binding for {KEY}");
+    assert!(saved.contains(r#""signed_log_from":{"serverbox":1}"#), "saved versions must mark the log signed: {saved}");
     assert_eq!(fake.requests("/v2/sync/serverbox/log").iter().filter(|r| r.method == "POST").count(), 1);
 }
 
