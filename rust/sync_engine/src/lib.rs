@@ -56,6 +56,10 @@ pub enum Error {
     KeyNotHere(String),
     /// No backup password here: nothing is sealed or opened without one.
     PasswordMissing,
+    /// Remote key file exists, but this device has no secret key to open it.
+    SecretKeyMissing,
+    /// Server response failed Ed25519 signature or rollback verification.
+    Untrusted(String),
     /// Signed out, or in as someone the run was not for.
     SignedOut,
     /// What an op names is not there yet (a blob a folder has not brought):
@@ -75,6 +79,8 @@ impl std::fmt::Display for Error {
             Error::PasswordMismatch(id) => write!(f, "the backup password does not open the sync key of {id}"),
             Error::KeyNotHere(id) => write!(f, "the sync key of {id} is not here yet"),
             Error::PasswordMissing => f.write_str("no backup password"),
+            Error::SecretKeyMissing => f.write_str("no secret key"),
+            Error::Untrusted(e) => write!(f, "untrusted: {e}"),
             Error::SignedOut => f.write_str("signed out"),
             Error::Pending(what) => write!(f, "{what} is not here yet"),
         }

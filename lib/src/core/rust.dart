@@ -8,8 +8,14 @@ abstract final class FlRust {
   static Future<void>? _init;
 
   /// Loads the library; [library] is for tests, which load the one cargo built.
-  static Future<void> ensureInitialized({ExternalLibrary? library}) =>
-      _init ??= RustLib.init(externalLibrary: library);
+  /// Clears the cached future on failure so later callers can retry.
+  static Future<void> ensureInitialized({ExternalLibrary? library}) {
+    final future = _init ??= RustLib.init(externalLibrary: library).catchError((Object e, StackTrace s) {
+      _init = null;
+      Error.throwWithStackTrace(e, s);
+    });
+    return future;
+  }
 
   static bool get ready => RustLib.instance.initialized;
 }

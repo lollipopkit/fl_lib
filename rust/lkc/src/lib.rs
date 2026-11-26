@@ -11,7 +11,9 @@
 
 mod error;
 mod session;
+pub mod personal;
 pub mod push;
+pub mod secret_key;
 pub mod sync;
 pub mod team;
 

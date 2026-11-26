@@ -95,7 +95,7 @@ export 'src/core/lkc/model.dart';
 export 'src/core/lkc/reason.dart';
 export 'src/core/lkc/team.dart';
 export 'src/rust/api/lkc.dart'
-    show LkcSync, LkcSyncEvent, LkcSyncFile, LkcSyncVersion, LkcFetched, LkcSyncError, LkcSyncErrorKind, LkcAppended, LkcBatch, LkcLogRead, LkcSnapshot;
+    show LkcPersonalAuth, LkcSync, LkcSyncEvent, LkcSyncFile, LkcSyncVersion, LkcFetched, LkcSyncError, LkcSyncErrorKind, LkcAppended, LkcBatch, LkcLogRead, LkcSnapshot;
 export 'src/rust/api/sync.dart';
 export 'src/rust/api/team.dart';
 

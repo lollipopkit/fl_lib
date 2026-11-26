@@ -17,7 +17,13 @@ final class LkcTeamAccount {
     return id;
   }
 
-  SecureProp get _keyProp => SecureProp('lkcAccountKey.$_account', storage: SecureStore.synced);
+  SecureProp get _keyProp =>
+      SecureProp('lkcAccountKey.$_account', storage: SecureStore.synced, legacy: SecureStore.storage);
+
+  Future<String?> _secretKey() async {
+    final key = await SecureStoreProps.syncSecretKey.read(limited: false);
+    return key == null || key.isEmpty ? null : key;
+  }
 
   /// The open keys, and whose.
   (String, LkcTeamKeys)? _open;
@@ -48,8 +54,12 @@ final class LkcTeamAccount {
   /// rewrap failed are in [LkcTeamKeys.rewrapTeams]' answer, run again later.
   Future<(LkcTeamKeys, List<LkcTeamFailure>)> unlock(String passphrase) async {
     final teams = await _serial(() async {
-      final key = await (await client.teams()).accountKey(passphrase: passphrase);
+      final key = await (await client.teams()).accountKey(
+        passphrase: passphrase,
+        secretKey: await _secretKey(),
+      );
       await _keyProp.write(key.toText());
+      await client.updatePersonalAuthKey(key);
       return _opened(key);
     });
     return (teams, await teams.rewrapTeams());
@@ -60,8 +70,12 @@ final class LkcTeamAccount {
   /// each team asked for a new key. One cut short is finished by [unlock].
   Future<(LkcTeamKeys, List<LkcTeamFailure>)> rotate(String passphrase) async {
     final teams = await _serial(() async {
-      final key = await (await client.teams()).rotateAccountKey(passphrase: passphrase);
+      final key = await (await client.teams()).rotateAccountKey(
+        passphrase: passphrase,
+        secretKey: await _secretKey(),
+      );
       await _keyProp.write(key.toText());
+      await client.updatePersonalAuthKey(key);
       return _opened(key);
     });
     return (teams, await teams.rewrapTeams());

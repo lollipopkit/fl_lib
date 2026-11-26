@@ -358,6 +358,8 @@ impl KeyFile for KeyFileOf {
 #[derive(Default)]
 struct MemSecrets {
     password: Mutex<Option<String>>,
+    secret_key: Mutex<Option<String>>,
+    allow_auto_gen: AtomicBool,
     kept: Mutex<HashMap<String, String>>,
     epochs: Mutex<HashMap<String, i64>>,
     pending: Mutex<HashMap<String, String>>,
@@ -365,8 +367,11 @@ struct MemSecrets {
 
 impl MemSecrets {
     fn with(password: &str) -> Arc<Self> {
-        let s = Arc::new(Self::default());
+        static SHARED_KEY: std::sync::LazyLock<String> =
+            std::sync::LazyLock::new(|| fl_lkc::secret_key::SecretKey::generate().format().to_string());
+        let s = Arc::new(Self { allow_auto_gen: AtomicBool::new(true), ..Default::default() });
         *s.password.lock().unwrap() = Some(password.into());
+        *s.secret_key.lock().unwrap() = Some(SHARED_KEY.clone());
         s
     }
 }
@@ -374,6 +379,21 @@ impl MemSecrets {
 impl Secrets for MemSecrets {
     fn password(&self) -> BoxFuture<'_, Result<Option<String>>> {
         Box::pin(async { Ok(self.password.lock().unwrap().clone()) })
+    }
+
+    fn secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+        Box::pin(async { Ok(self.secret_key.lock().unwrap().clone()) })
+    }
+
+    fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            *self.secret_key.lock().unwrap() = Some(key);
+            Ok(())
+        })
+    }
+
+    fn allow_auto_generate_secret_key(&self) -> BoxFuture<'_, Result<bool>> {
+        Box::pin(async { Ok(self.allow_auto_gen.load(Ordering::SeqCst)) })
     }
 
     fn kept(&self, id: String) -> BoxFuture<'_, Result<Option<String>>> {
@@ -779,8 +799,11 @@ async fn the_key_opens_on_another_device_with_the_password() {
     assert_eq!(kb.open(&ka.seal(b"hi").unwrap()).unwrap(), b"hi");
     let (sealed, _) = file.file.lock().unwrap().clone().unwrap();
     assert!(String::from_utf8_lossy(&sealed).starts_with("-----BEGIN AGE ENCRYPTED FILE-----"));
-    let plain = crate::key::open_with_password(&sealed, "pw").unwrap().unwrap();
-    assert!(String::from_utf8(plain).unwrap().starts_with("# Test sync key, epoch 0\nAGE-SECRET-KEY-1"));
+    // Bare password alone must not open the two-factor sealed key file.
+    assert!(crate::key::open_with_password(&sealed, "pw").unwrap().is_none());
+    let sk = fl_lkc::secret_key::SecretKey::parse(a.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+    let plain = crate::key::open_with_password(&sealed, &sk.combine_passphrase("pw")).unwrap().unwrap();
+    assert!(String::from_utf8(plain.to_vec()).unwrap().starts_with("# Test sync key, epoch 0\nAGE-SECRET-KEY-1"));
 }
 
 #[tokio::test]
@@ -802,7 +825,9 @@ async fn a_changed_password_seals_the_file_again() {
     *a.secrets.password.lock().unwrap() = Some("new".into());
     ka.check(true, true).await.unwrap();
     let (sealed, _) = file.file.lock().unwrap().clone().unwrap();
-    let plain = String::from_utf8(crate::key::open_with_password(&sealed, "new").unwrap().unwrap()).unwrap();
+    assert!(crate::key::open_with_password(&sealed, "new").unwrap().is_none());
+    let sk = fl_lkc::secret_key::SecretKey::parse(a.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+    let plain = String::from_utf8(crate::key::open_with_password(&sealed, &sk.combine_passphrase("new")).unwrap().unwrap().to_vec()).unwrap();
     assert!(plain.starts_with("# Test sync key, epoch 1\n"));
     // b, still on the old one, is told; with the new one it opens the same key.
     let kb = b.ring.of(Arc::new(KeyFileOf(file.clone(), "account".into())), true).await.unwrap();
@@ -871,4 +896,159 @@ fn a_dart_batch_reads() {
     assert_eq!(ops[0].d, Some(json!("dark")));
     assert_eq!(ops[1].d, None);
     assert_eq!(ops[1].h.device, 42);
+}
+
+#[tokio::test]
+async fn secret_key_protects_key_file_and_migrates_legacy() {
+    let file = Arc::new(MemKeyFile::default());
+    // Device A starts without a secret key: one is generated and saved.
+    let a = Device::new("weak123");
+    *a.secrets.secret_key.lock().unwrap() = None;
+    let ka = a.key(&file).await.unwrap();
+    let generated = a.secrets.secret_key.lock().unwrap().clone().expect("secret key generated");
+    assert!(generated.starts_with("S1-"));
+    // The uploaded identity.age cannot be opened with the bare password alone.
+    let raw = file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw, "weak123").unwrap().is_none());
+
+    // Device B has the password but no secret key: gets SecretKeyMissing.
+    let b = Device::new("weak123");
+    *b.secrets.secret_key.lock().unwrap() = None;
+    assert!(matches!(b.key(&file).await, Err(Error::SecretKeyMissing)));
+
+    // Device B imports the wrong secret key: gets PasswordMismatch.
+    *b.secrets.secret_key.lock().unwrap() = Some(fl_lkc::secret_key::SecretKey::generate().format().to_string());
+    b.ring.recheck().await;
+    assert!(matches!(b.key(&file).await, Err(Error::PasswordMismatch(_))));
+
+    // Device B imports Device A's secret key: opens the key and decrypts A's data.
+    *b.secrets.secret_key.lock().unwrap() = Some(generated);
+    b.ring.recheck().await;
+    let kb = b.key(&file).await.unwrap();
+    let sealed = ka.seal(b"ssh private key").unwrap();
+    assert_eq!(kb.open(&sealed).unwrap(), b"ssh private key");
+
+    // Legacy single-factor identity.age is opened and transparently upgraded.
+    let legacy_file = Arc::new(MemKeyFile::default());
+    let old_id = age::x25519::Identity::generate();
+    let old_text = {
+        use age::secrecy::ExposeSecret;
+        format!("# Test sync key, epoch 0\n{}", old_id.to_string().expose_secret())
+    };
+    *legacy_file.file.lock().unwrap() = Some((crate::key::seal_with_password(old_text.as_bytes(), "legacy-pw").unwrap(), "v1".into()));
+
+    let c = Device::new("legacy-pw");
+    *c.secrets.secret_key.lock().unwrap() = None;
+    let kc = c.key(&legacy_file).await.unwrap();
+    assert!(c.secrets.secret_key.lock().unwrap().is_some());
+    // The remote key file is now re-sealed under two-factor (bare password fails).
+    let upgraded = legacy_file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&upgraded, "legacy-pw").unwrap().is_none());
+    let cipher = kc.seal(b"after upgrade").unwrap();
+    assert_eq!(kc.open(&cipher).unwrap(), b"after upgrade");
+}
+
+#[tokio::test]
+async fn secret_key_missing_stays_distinct_across_cache_and_recheck_and_blocks_bare_takeover() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("weak123");
+    let ka = a.key(&file).await.unwrap();
+    let sk_a = a.secrets.secret_key.lock().unwrap().clone().unwrap();
+
+    // Device B has no secret key: first check AND cached second check both
+    // report SecretKeyMissing (never PasswordMismatch), and recheck keeps it.
+    let b = Device::new("weak123");
+    *b.secrets.secret_key.lock().unwrap() = None;
+    assert!(matches!(b.key(&file).await, Err(Error::SecretKeyMissing)));
+    assert!(b.ring.mismatch().borrow().is_empty());
+    assert!(b.ring.secret_key_missing().borrow().contains("account"));
+    // Second check within 60s cache window must STILL be SecretKeyMissing.
+    assert!(matches!(b.key(&file).await, Err(Error::SecretKeyMissing)));
+    b.ring.recheck().await;
+    assert!(b.ring.mismatch().borrow().is_empty());
+    assert!(b.ring.secret_key_missing().borrow().contains("account"));
+
+    // Attacker guesses weak123 and injects a bare-password identity.age
+    // containing an attacker X25519 key onto a remote that Device A already
+    // opened with 2FA: Device A must refuse the bare-password downgrade!
+    let attacker_id = age::x25519::Identity::generate();
+    let attacker_text = {
+        use age::secrecy::ExposeSecret;
+        format!("# Test sync key, epoch 99\n{}", attacker_id.to_string().expose_secret())
+    };
+    *file.file.lock().unwrap() = Some((crate::key::seal_with_password(attacker_text.as_bytes(), "weak123").unwrap(), "v-evil".into()));
+    assert!(matches!(ka.check(true, true).await, Err(Error::PasswordMismatch(_))));
+    // Remote file must NOT be re-sealed with attacker's key.
+    let still = file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&still, &fl_lkc::secret_key::SecretKey::parse(&sk_a).unwrap().combine_passphrase("weak123")).unwrap().is_none());
+
+    // Pending password is preserved while secret key is missing, and completes
+    // once the secret key is supplied.
+    let file2 = Arc::new(MemKeyFile::default());
+    let c = Device::new("old-pw");
+    let _kc = c.key(&file2).await.unwrap();
+    let sk_c = c.secrets.secret_key.lock().unwrap().clone().unwrap();
+    c.ring.password_changed(Some("old-pw".into())).await.unwrap();
+    *c.secrets.password.lock().unwrap() = Some("new-pw".into());
+    *c.secrets.secret_key.lock().unwrap() = None;
+    c.ring.recheck().await;
+    assert_eq!(c.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("old-pw"));
+    *c.secrets.secret_key.lock().unwrap() = Some(sk_c);
+    c.ring.recheck().await;
+    assert!(c.secrets.pending.lock().unwrap().is_empty());
+    assert!(c.ring.mismatch().borrow().is_empty());
+    assert!(c.ring.secret_key_missing().borrow().is_empty());
+}
+
+#[tokio::test]
+async fn disabling_auto_generate_pauses_legacy_upgrade_without_flagging_2fa_missing() {
+    // 1. Empty remote with auto-generate disabled: no file created, no key generated.
+    let empty_file = Arc::new(MemKeyFile::default());
+    let d1 = Device::new("pw");
+    *d1.secrets.secret_key.lock().unwrap() = None;
+    d1.secrets.allow_auto_gen.store(false, Ordering::SeqCst);
+    assert!(matches!(d1.key(&empty_file).await, Err(Error::SecretKeyMissing)));
+    assert!(empty_file.file.lock().unwrap().is_none());
+    assert!(d1.secrets.secret_key.lock().unwrap().is_none());
+    assert!(d1.ring.secret_key_missing().borrow().is_empty());
+
+    // 2. Legacy 1FA remote with auto-generate disabled: remote stays untouched,
+    // secret_key_missing stays empty (not yet 2FA).
+    let legacy_file = Arc::new(MemKeyFile::default());
+    let old_id = age::x25519::Identity::generate();
+    let old_text = {
+        use age::secrecy::ExposeSecret;
+        format!("# Test sync key, epoch 0\n{}", old_id.to_string().expose_secret())
+    };
+    let legacy_bytes = crate::key::seal_with_password(old_text.as_bytes(), "legacy-pw").unwrap();
+    *legacy_file.file.lock().unwrap() = Some((legacy_bytes.clone(), "v1".into()));
+
+    let a = Device::new("legacy-pw");
+    *a.secrets.secret_key.lock().unwrap() = None;
+    a.secrets.allow_auto_gen.store(false, Ordering::SeqCst);
+    assert!(matches!(a.key(&legacy_file).await, Err(Error::SecretKeyMissing)));
+    assert_eq!(legacy_file.file.lock().unwrap().as_ref().unwrap().0, legacy_bytes);
+    assert!(a.secrets.secret_key.lock().unwrap().is_none());
+    assert!(a.ring.secret_key_missing().borrow().is_empty());
+
+    // Once user explicitly stores a key, Device A upgrades the legacy remote cleanly.
+    let chosen = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    *a.secrets.secret_key.lock().unwrap() = Some(chosen.clone());
+    let ka = a.key(&legacy_file).await.unwrap();
+    let upgraded = legacy_file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&upgraded, "legacy-pw").unwrap().is_none());
+
+    // 3. Device B with auto-generate disabled probes the already-2FA remote:
+    // MUST mark secret_key_missing so UI switches to import-only.
+    let b = Device::new("legacy-pw");
+    *b.secrets.secret_key.lock().unwrap() = None;
+    b.secrets.allow_auto_gen.store(false, Ordering::SeqCst);
+    assert!(matches!(b.key(&legacy_file).await, Err(Error::SecretKeyMissing)));
+    assert!(b.ring.secret_key_missing().borrow().contains("account"));
+
+    // Importing Device A's key unlocks immediately.
+    *b.secrets.secret_key.lock().unwrap() = Some(chosen);
+    b.ring.recheck().await;
+    let kb = b.key(&legacy_file).await.unwrap();
+    assert_eq!(kb.open(&ka.seal(b"ok").unwrap()).unwrap(), b"ok");
 }

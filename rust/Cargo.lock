@@ -755,6 +755,7 @@ name = "fl_sync_engine"
 version = "0.1.0"
 dependencies = [
  "age",
+ "blake3",
  "fl_lkc",
  "fl_sync",
  "flate2",
@@ -763,6 +764,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

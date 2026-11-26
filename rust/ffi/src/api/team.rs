@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture, frb};
 use futures_util::stream::select;
 use fl_lkc::Session;
+use fl_lkc::secret_key::SecretKey;
 use fl_lkc::sync::{Condition, Kind};
 use fl_lkc::team::identity::{AccountKey, AccountKeyFile};
 use fl_lkc::team::{self, InviteTerms, Reencrypted, TeamClient, TeamError, TeamLog, TeamSpace, Teams, Trust};
@@ -179,6 +180,11 @@ impl LkcAccountKey {
     pub fn fingerprint(&self) -> String {
         team::crypto::fingerprint(self.0.user_id(), &self.0.recipient(), &self.0.signing_raw())
     }
+
+    #[frb(ignore)]
+    pub(crate) fn inner(&self) -> &AccountKey {
+        &self.0
+    }
 }
 
 pub struct LkcTeam {
@@ -307,30 +313,34 @@ impl LkcTeams {
         Ok(self.files.exists().await?)
     }
 
-    /// The account key opened with the LK Cloud key password; `None` before
-    /// any device made one.
-    pub async fn fetch_account_key(&self, passphrase: String) -> Result<Option<LkcAccountKey>, LkcTeamError> {
-        Ok(self.files.fetch(&passphrase).await?.map(|(k, _)| LkcAccountKey(k)))
+    /// The account key opened with the LK Cloud key password (and optional
+    /// client-side secret key); `None` before any device made one.
+    pub async fn fetch_account_key(&self, passphrase: String, secret_key: Option<String>) -> Result<Option<LkcAccountKey>, LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        Ok(self.files.fetch_with(&passphrase, sk.as_ref()).await?.map(|(k, _)| LkcAccountKey(k)))
     }
 
     /// The account key, made now if no device has, and published.
-    pub async fn account_key(&self, passphrase: String) -> Result<LkcAccountKey, LkcTeamError> {
-        let key = self.files.load_or_create(&passphrase).await?;
+    pub async fn account_key(&self, passphrase: String, secret_key: Option<String>) -> Result<LkcAccountKey, LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        let key = self.files.load_or_create_with(&passphrase, sk.as_ref()).await?;
         self.api().publish(&key).await?;
         Ok(LkcAccountKey(key))
     }
 
     /// New account keys in place of these, written and published: a device
     /// lost trust. Then open them and [LkcTeamKeys::rewrap_teams].
-    pub async fn rotate_account_key(&self, passphrase: String) -> Result<LkcAccountKey, LkcTeamError> {
-        let (old, etag) = self.files.fetch(&passphrase).await?.ok_or(TeamError::NotFound)?;
-        let next = self.files.rotate(&old, &etag, &passphrase).await?;
+    pub async fn rotate_account_key(&self, passphrase: String, secret_key: Option<String>) -> Result<LkcAccountKey, LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        let (old, etag) = self.files.fetch_with(&passphrase, sk.as_ref()).await?.ok_or(TeamError::NotFound)?;
+        let next = self.files.rotate_with(&old, &etag, &passphrase, sk.as_ref()).await?;
         self.api().publish(&next).await?;
         Ok(LkcAccountKey(next))
     }
 
-    pub async fn change_key_passphrase(&self, old: String, new: String) -> Result<(), LkcTeamError> {
-        Ok(self.files.change_passphrase(&old, &new).await?)
+    pub async fn change_key_passphrase(&self, old: String, new: String, secret_key: Option<String>) -> Result<(), LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        Ok(self.files.change_passphrase_with(&old, &new, sk.as_ref()).await?)
     }
 
     pub async fn list(&self) -> Result<Vec<LkcTeam>, LkcTeamError> {
@@ -629,5 +639,12 @@ impl LkcTeamSpace {
 impl Drop for LkcTeamSpace {
     fn drop(&mut self) {
         self.stop_listening();
+    }
+}
+
+fn parse_secret_key(raw: Option<String>) -> Result<Option<SecretKey>, LkcTeamError> {
+    match raw.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) => Ok(Some(SecretKey::parse(s).map_err(TeamError::from)?)),
+        None => Ok(None),
     }
 }

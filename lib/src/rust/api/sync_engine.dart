@@ -12,6 +12,25 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Log`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`, `from`
 
+/// Generates a fresh 128-bit client-side secret key (`S1-XXXXX-…`).
+String generateSecretKey() =>
+    RustLib.instance.api.crateApiSyncEngineGenerateSecretKey();
+
+/// Validates and canonicalizes a user-entered or scanned secret key; returns
+/// `None` when the format or checksum is invalid.
+String? normalizeSecretKey({required String input}) =>
+    RustLib.instance.api.crateApiSyncEngineNormalizeSecretKey(input: input);
+
+/// Derives the combined `age scrypt` passphrase from `(password, secret_key)`.
+/// Returns `None` when [secret_key] is malformed or fails checksum.
+String? deriveSyncPassphrase({
+  required String password,
+  required String secretKey,
+}) => RustLib.instance.api.crateApiSyncEngineDeriveSyncPassphrase(
+  password: password,
+  secretKey: secretKey,
+);
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeyHandle>>
 abstract class SyncKeyHandle implements RustOpaqueInterface {
   /// Opened with the password here again, now with [force].
@@ -76,6 +95,9 @@ abstract class SyncKeys implements RustOpaqueInterface {
   Future<void> recheck();
 
   void release({required String id});
+
+  /// The key files that cannot be opened because this device has no secret key.
+  List<String> secretKeyMissing();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncLogEngine>>
@@ -207,6 +229,12 @@ enum SyncEngineErrorKind {
   /// No key file there yet beside what was synced with one.
   keyNotHere,
   passwordMissing,
+
+  /// Remote key file exists, but this device has no client-side secret key.
+  secretKeyMissing,
+
+  /// Server response failed Ed25519 signature or rollback verification.
+  untrusted,
   signedOut,
 }
 

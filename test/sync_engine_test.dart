@@ -130,11 +130,15 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await PrefStore.shared.init();
     FlutterSecureStorage.setMockInitialValues({'bakPwd': 'pw'});
+    SecureProp.legacyApart = false;
     SyncKeyring.resetForTest();
     SyncKeyring.init(label: 'Test sync key');
   });
 
-  tearDown(SqliteDb.close);
+  tearDown(() async {
+    SecureProp.legacyApart = null;
+    await SqliteDb.close();
+  });
 
   test('what one device edits, another reads from the folder', () async {
     final folder = _Folder();
@@ -179,12 +183,34 @@ void main() {
     final store = await _freshDevice();
     store.set('theme', 'dark');
     await syncCall((await _engine(folder)).run);
+    final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+    expect(secretKey, isNotNull);
+    expect(SyncKeyring.normalizeSecretKey(secretKey!), secretKey);
+
+    // Without the client-side secret key, the second device gets SyncSecretKeyMissing.
     await _freshDevice();
     SyncKeyring.resetForTest();
     SyncKeyring.init(label: 'Test sync key');
-    FlutterSecureStorage.setMockInitialValues({'bakPwd': 'other'});
+    FlutterSecureStorage.setMockInitialValues({'bakPwd': 'pw'});
+    await expectLater(_engine(folder), throwsA(isA<SyncSecretKeyMissing>()));
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // With the secret key but another password, it gets SyncPasswordMismatch.
+    await _freshDevice();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+    FlutterSecureStorage.setMockInitialValues({'bakPwd': 'other', 'syncSecretKey': secretKey});
     await expectLater(_engine(folder), throwsA(isA<SyncPasswordMismatch>()));
     expect(SyncKeyring.passwordMismatch.value, {'folder'});
+  });
+
+  test('secret key generation and normalization validate checksums', () {
+    final key = SyncKeyring.generateSecretKey();
+    expect(key, startsWith('S1-'));
+    expect(key.length, 38);
+    expect(SyncKeyring.normalizeSecretKey('  ${key.toLowerCase().replaceAll('-', ' ')}  '), key);
+    final bad = '${key.substring(0, key.length - 1)}${key.endsWith('0') ? '1' : '0'}';
+    expect(SyncKeyring.normalizeSecretKey(bad), isNull);
   });
 
   test('a log Dart keeps carries the edits, and its snapshot covers them', () async {

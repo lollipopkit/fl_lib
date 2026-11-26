@@ -21,6 +21,7 @@ fn remote(e: LkcError) -> Error {
         // can do anything about it.
         Kind::TooLarge => Error::Refused("sync_file_too_large".into()),
         Kind::SignedOut => Error::SignedOut,
+        Kind::Untrusted => Error::Untrusted(e.detail),
         _ => Error::Remote(e.to_string()),
     }
 }

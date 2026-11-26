@@ -1,4 +1,5 @@
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 typedef IntroPageBuilder = Widget Function(BuildContext ctx, double padTop);
@@ -14,10 +15,23 @@ final class IntroPageArgs {
   /// the window edges. Pass whatever the pages use.
   final double maxWidth;
 
+  /// Optional per-page gate for the Next / Done button and forward swiping.
+  /// When non-null and its current value is `false`, Next / Done is disabled
+  /// and page swiping is locked until it becomes `true`.
+  final ValueListenable<bool>? Function(int page)? canProceed;
+
+  /// Optional per-page commit hook invoked when advancing past [page] via
+  /// Next / Done (not when a page calls [IntroPage.nextOf] to skip itself).
+  /// Pages with a non-null hook also lock gesture swiping so users cannot
+  /// bypass the hook by swiping past the page. Return `false` to stay.
+  final Future<bool> Function()? Function(int page)? onBeforeNext;
+
   const IntroPageArgs({
     required this.pages,
     required this.onDone,
     this.maxWidth = UIs.pageColumnWidth,
+    this.canProceed,
+    this.onBeforeNext,
   });
 }
 
@@ -28,6 +42,19 @@ final class IntroPage extends StatefulWidget {
     super.key,
     required this.args,
   });
+
+  /// Advances the enclosing [IntroPage] to the next step (or finishes if on the
+  /// last step), bypassing [IntroPageArgs.canProceed] (for explicit skip actions).
+  static void nextOf(BuildContext context) {
+    final state = context.findAncestorStateOfType<_IntroPageState>();
+    state?._advanceBypass();
+  }
+
+  /// Finishes the enclosing [IntroPage] immediately via [IntroPageArgs.onDone].
+  static void finishOf(BuildContext context) {
+    final state = context.findAncestorStateOfType<_IntroPageState>();
+    state?._finishNow();
+  }
 
   @override
   State<IntroPage> createState() => _IntroPageState();
@@ -97,6 +124,7 @@ final class _IntroPageState extends State<IntroPage> {
   static const _switchCurve = Curves.easeOutCubic;
   static const _barHeight = 61.6;
   static const _progressHeight = 3.0;
+  static final _alwaysAllowed = ValueNotifier<bool>(true);
 
   @override
   void dispose() {
@@ -108,11 +136,25 @@ final class _IntroPageState extends State<IntroPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageView.builder(
-        controller: _pageController,
-        itemCount: _pageCount,
-        onPageChanged: (index) => _currentPage.value = index,
-        itemBuilder: (_, index) => _args.pages[index],
+      body: ListenBuilder(
+        listenable: _currentPage,
+        builder: () {
+          // Keep the exact same widget tree depth across gated and ungated
+          // pages so PageView is never unmounted on page change.
+          final page = _currentPage.value;
+          final gate = _args.canProceed?.call(page) ?? _alwaysAllowed;
+          final hasCommitHook = _args.onBeforeNext?.call(page) != null;
+          return ValBuilder(
+            listenable: gate,
+            builder: (allowed) => PageView.builder(
+              controller: _pageController,
+              physics: allowed && !hasCommitHook ? null : const NeverScrollableScrollPhysics(),
+              itemCount: _pageCount,
+              onPageChanged: (index) => _currentPage.value = index,
+              itemBuilder: (_, index) => _args.pages[index],
+            ),
+          );
+        },
       ),
       bottomNavigationBar: _buildBar(context),
     );
@@ -186,9 +228,18 @@ final class _IntroPageState extends State<IntroPage> {
   }
 
   Widget _buildNext(BuildContext context) {
+    final gate = _args.canProceed?.call(_currentPage.value);
+    if (gate == null) return _nextButton(context, enabled: true);
+    return ValBuilder(
+      listenable: gate,
+      builder: (allowed) => _nextButton(context, enabled: allowed),
+    );
+  }
+
+  Widget _nextButton(BuildContext context, {required bool enabled}) {
     final libL10n = context.libL10n;
     return FilledButton(
-      onPressed: hasNext ? _toNext : () => _args.onDone(context),
+      onPressed: enabled ? () => _onTapNext(context) : null,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -203,6 +254,34 @@ final class _IntroPageState extends State<IntroPage> {
         ],
       ),
     );
+  }
+
+  var _advancing = false;
+
+  Future<void> _onTapNext(BuildContext context) async {
+    if (_advancing) return;
+    _advancing = true;
+    try {
+      final before = _args.onBeforeNext?.call(_currentPage.value);
+      if (before != null) {
+        final ok = await before();
+        if (!ok || !mounted) return;
+      }
+      if (!context.mounted) return;
+      hasNext ? _toNext() : _args.onDone(context);
+    } finally {
+      _advancing = false;
+    }
+  }
+
+  void _advanceBypass() {
+    if (_advancing || !mounted) return;
+    hasNext ? _toNext() : _args.onDone(context);
+  }
+
+  void _finishNow() {
+    if (_advancing || !mounted) return;
+    _args.onDone(context);
   }
 
   Widget _buildCounter(BuildContext context) {
@@ -252,10 +331,13 @@ final class _IntroPageState extends State<IntroPage> {
     );
   }
 
-  void _toPre() => _pageController.previousPage(
-    duration: context.motion(_switchDuration),
-    curve: _switchCurve,
-  );
+  void _toPre() {
+    if (_advancing) return;
+    _pageController.previousPage(
+      duration: context.motion(_switchDuration),
+      curve: _switchCurve,
+    );
+  }
 
   void _toNext() => _pageController.nextPage(
     duration: context.motion(_switchDuration),

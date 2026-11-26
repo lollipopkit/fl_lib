@@ -19,11 +19,13 @@ use std::future::Future;
 use std::io::{Read as _, Write as _};
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use age::secrecy::SecretString;
+use fl_lkc::secret_key::SecretKey;
 use tokio::sync::{Mutex, watch};
+use zeroize::Zeroizing;
 
 use crate::{Error, Result, Seal};
 
@@ -55,6 +57,21 @@ pub trait KeyFile: Send + Sync + 'static {
 pub trait Secrets: Send + Sync + 'static {
     /// The backup password, `None` (or empty) when there is none.
     fn password(&self) -> BoxFuture<'_, Result<Option<String>>>;
+
+    /// The client-only 128-bit secret key (`S1-…`), `None` when not yet
+    /// generated or imported. Never leaves the device / synced keychain.
+    fn secret_key(&self) -> BoxFuture<'_, Result<Option<String>>>;
+
+    /// Persists a generated secret key in the synced keychain.
+    fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>>;
+
+    /// Whether sync may silently generate a brand-new secret key when none is
+    /// stored yet. Apps that require explicit user confirmation before key
+    /// creation return `false`; sync then pauses with [Error::SecretKeyMissing]
+    /// without mutating a legacy remote or marking the remote as already 2FA.
+    fn allow_auto_generate_secret_key(&self) -> BoxFuture<'_, Result<bool>> {
+        Box::pin(async { Ok(true) })
+    }
 
     /// The keys of [id], one per line, the newest first: kept beside the
     /// backup password, synced by the platform's keychain where it does.
@@ -96,6 +113,37 @@ pub fn sealed_to_key(data: &[u8]) -> bool {
     data.starts_with(KEY_SEALED)
 }
 
+const TWO_FA_PREFIX: &str = "2fa:";
+
+fn two_fa_key(id: &str) -> String {
+    format!("{TWO_FA_PREFIX}{id}")
+}
+
+/// Process-salted BLAKE3 digest of `(pwd, sk)` so plaintext credentials are
+/// never retained in memory across checks.
+fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
+    static SALT: OnceLock<[u8; 32]> = OnceLock::new();
+    let salt = SALT.get_or_init(|| {
+        let mut b = [0u8; 32];
+        getrandom::fill(&mut b).expect("the OS random source");
+        b
+    });
+    let mut h = blake3::Hasher::new_keyed(salt);
+    h.update(&(pwd.len() as u32).to_be_bytes());
+    h.update(pwd.as_bytes());
+    match sk {
+        Some(k) => {
+            h.update(&[1]);
+            let fmt = k.format();
+            h.update(fmt.as_bytes());
+        }
+        None => {
+            h.update(&[0]);
+        }
+    }
+    *h.finalize().as_bytes()
+}
+
 #[derive(Default)]
 struct State {
     /// The newest first: what is sealed now, then what was before.
@@ -103,12 +151,12 @@ struct State {
     parsed: Vec<age::x25519::Identity>,
     recipient: Option<age::x25519::Recipient>,
     epoch: i64,
-    /// The file's version and the password that opened it here: a check that
-    /// finds both unchanged derives no key.
-    opened: Option<(String, String)>,
-    /// The password the file refused last: with it, none is put in its place
-    /// when it is gone.
-    refused: Option<String>,
+    /// The file's version and credential tag that opened it here: a check
+    /// that finds both unchanged derives no key.
+    opened: Option<(String, [u8; 32])>,
+    /// The credential tag (and whether secret key was absent) refused last:
+    /// with it, none is put in its place when the remote file is gone.
+    refused: Option<([u8; 32], bool)>,
     checked_at: Option<Instant>,
 }
 
@@ -126,29 +174,57 @@ struct RingInner {
     label: String,
     keys: StdMutex<HashMap<String, Arc<SyncKey>>>,
     mismatch: watch::Sender<BTreeSet<String>>,
+    secret_key_missing: watch::Sender<BTreeSet<String>>,
 }
 
 impl RingInner {
-    fn said(&self, id: &str, mismatch: bool) {
-        self.mismatch.send_if_modified(|now| if mismatch { now.insert(id.to_string()) } else { now.remove(id) });
+    fn said_mismatch(&self, id: &str) {
+        self.secret_key_missing.send_if_modified(|now| now.remove(id));
+        self.mismatch.send_if_modified(|now| now.insert(id.to_string()));
     }
 
-    async fn password(&self) -> Result<String> {
+    fn said_missing(&self, id: &str) {
+        self.mismatch.send_if_modified(|now| now.remove(id));
+        self.secret_key_missing.send_if_modified(|now| now.insert(id.to_string()));
+    }
+
+    fn said_ok(&self, id: &str) {
+        self.mismatch.send_if_modified(|now| now.remove(id));
+        self.secret_key_missing.send_if_modified(|now| now.remove(id));
+    }
+
+    async fn password(&self) -> Result<Zeroizing<String>> {
         match self.secrets.password().await? {
-            Some(p) if !p.is_empty() => Ok(p),
+            Some(p) if !p.is_empty() => Ok(Zeroizing::new(p)),
             _ => Err(Error::PasswordMissing),
         }
     }
 
-    async fn set_epoch(&self, id: &str, epoch: Option<i64>) -> Result<()> {
+    async fn secret_key(&self) -> Result<Option<SecretKey>> {
+        match self.secrets.secret_key().await? {
+            Some(s) if !s.trim().is_empty() => Ok(Some(SecretKey::parse(&s).map_err(|e| Error::Unreadable(e.to_string()))?)),
+            _ => Ok(None),
+        }
+    }
+
+    async fn set_epoch_2fa(&self, id: &str, epoch: i64) -> Result<()> {
         let mut all = self.secrets.epochs().await?;
-        if all.get(id).copied() == epoch {
+        let marker = two_fa_key(id);
+        if all.get(id).copied() == Some(epoch) && all.get(&marker).copied() == Some(1) {
             return Ok(());
         }
-        match epoch {
-            Some(e) => all.insert(id.to_string(), e),
-            None => all.remove(id),
-        };
+        all.insert(id.to_string(), epoch);
+        all.insert(marker, 1);
+        self.secrets.set_epochs(all).await
+    }
+
+    async fn clear_epoch(&self, id: &str) -> Result<()> {
+        let mut all = self.secrets.epochs().await?;
+        let removed_epoch = all.remove(id).is_some();
+        let removed_marker = all.remove(&two_fa_key(id)).is_some();
+        if !removed_epoch && !removed_marker {
+            return Ok(());
+        }
         self.secrets.set_epochs(all).await
     }
 
@@ -173,13 +249,25 @@ pub struct KeyRing(Arc<RingInner>);
 impl KeyRing {
     /// [label] begins the key file's comment line (`ServerBox sync key`).
     pub fn new(secrets: Arc<dyn Secrets>, label: impl Into<String>) -> Self {
-        Self(Arc::new(RingInner { secrets, label: label.into(), keys: StdMutex::new(HashMap::new()), mismatch: watch::Sender::new(BTreeSet::new()) }))
+        Self(Arc::new(RingInner {
+            secrets,
+            label: label.into(),
+            keys: StdMutex::new(HashMap::new()),
+            mismatch: watch::Sender::new(BTreeSet::new()),
+            secret_key_missing: watch::Sender::new(BTreeSet::new()),
+        }))
     }
 
     /// The key files the backup password here does not open. Nothing syncs to
     /// their remotes meanwhile.
     pub fn mismatch(&self) -> watch::Receiver<BTreeSet<String>> {
         self.0.mismatch.subscribe()
+    }
+
+    /// The key files that cannot be opened because this device has no
+    /// client-side secret key.
+    pub fn secret_key_missing(&self) -> watch::Receiver<BTreeSet<String>> {
+        self.0.secret_key_missing.subscribe()
     }
 
     fn keys(&self) -> Vec<Arc<SyncKey>> {
@@ -224,14 +312,14 @@ impl KeyRing {
     /// again next time, and nothing is said of it meanwhile.
     pub fn release(&self, id: &str) {
         self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
-        self.0.said(id, false);
+        self.0.said_ok(id);
     }
 
     /// [id]'s remote is gone from this device (signed out, another server): as
     /// [release], and what this device knew of its file goes too.
     pub async fn forget(&self, id: &str) -> Result<()> {
         self.release(id);
-        self.0.set_epoch(id, None).await?;
+        self.0.clear_epoch(id).await?;
         self.0.set_pending(id, None).await
     }
 
@@ -279,7 +367,8 @@ impl KeyRing {
     /// now: a synced backup the person picked to restore. Not one of a remote
     /// the password here is refused by.
     pub async fn open_kept(&self, sealed: &[u8]) -> Result<Vec<u8>> {
-        let refused = self.0.mismatch.borrow().clone();
+        let mut refused = self.0.mismatch.borrow().clone();
+        refused.extend(self.0.secret_key_missing.borrow().iter().cloned());
         let mut identities: Vec<String> = Vec::new();
         for (id, k) in self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             if !refused.contains(id) {
@@ -287,7 +376,7 @@ impl KeyRing {
             }
         }
         for id in self.0.secrets.epochs().await?.into_keys() {
-            if !refused.contains(&id) {
+            if !id.starts_with(TWO_FA_PREFIX) && !refused.contains(&id) {
                 identities.extend(lines(self.0.secrets.kept(id).await?.as_deref(), false));
             }
         }
@@ -334,10 +423,16 @@ impl SyncKey {
         }
         let _checking = self.checking.lock().await;
         if self.lock().checked_at.is_some_and(|at| at.elapsed() < RECHECK_AFTER) {
-            if self.ring.mismatch.borrow().contains(&self.id()) {
-                return Err(Error::PasswordMismatch(self.id()));
+            let id = self.id();
+            if self.ring.secret_key_missing.borrow().contains(&id) {
+                return Err(Error::SecretKeyMissing);
             }
-            return Ok(());
+            if self.ring.mismatch.borrow().contains(&id) {
+                return Err(Error::PasswordMismatch(id));
+            }
+            if self.lock().opened.is_some() {
+                return Ok(());
+            }
         }
         if self.lock().identities.is_empty() {
             let kept = self.ring.secrets.kept(self.id()).await?;
@@ -348,13 +443,16 @@ impl SyncKey {
         let mut pwd = self.ring.password().await?;
         loop {
             if let Err(e) = self.open(&pwd, create).await {
-                if matches!(e, Error::PasswordMismatch(_)) {
+                if matches!(e, Error::PasswordMismatch(_))
+                    || (matches!(e, Error::SecretKeyMissing)
+                        && self.ring.secret_key_missing.borrow().contains(&self.id()))
+                {
                     self.lock().checked_at = Some(Instant::now());
                 }
                 return Err(e);
             }
             let now = self.ring.password().await?;
-            if now == pwd {
+            if *now == *pwd {
                 break;
             }
             pwd = now;
@@ -368,13 +466,18 @@ impl SyncKey {
     async fn open(&self, pwd: &str, create: bool) -> Result<()> {
         let id = self.id();
         loop {
+            let sk = self.ring.secret_key().await?;
+            let tag = cred_tag(pwd, sk.as_ref());
             let Some((body, version)) = self.file().read().await? else {
-                // None to open: put there, unless the password here was refused
+                // None to open: put there, unless this `(pwd, sk)` was refused
                 // there, so nothing it seals replaces what another device sealed.
-                if self.lock().refused.as_deref() == Some(pwd) {
-                    return Err(Error::PasswordMismatch(id));
+                if let Some((refused_tag, was_missing)) = self.lock().refused
+                    && refused_tag == tag
+                {
+                    return Err(if was_missing { Error::SecretKeyMissing } else { Error::PasswordMismatch(id) });
                 }
-                let epoch = self.ring.secrets.epochs().await?.get(&id).copied();
+                let epochs = self.ring.secrets.epochs().await?;
+                let epoch = epochs.get(&id).copied();
                 let held = self.lock().identities.clone();
                 let knew = epoch.is_some() && !held.is_empty();
                 // A device that opened it before puts back the keys it holds;
@@ -383,43 +486,119 @@ impl SyncKey {
                 if !create || (!knew && !self.file().can_create().await?) {
                     return Err(Error::KeyNotHere(id));
                 }
+                // Generate a candidate secret key in memory and only persist it
+                // after the conditional write succeeds, preventing a losing CAS
+                // racer from overwriting another device's key in synced keychain.
+                let (sk, generated) = match sk {
+                    Some(k) => (k, false),
+                    None => {
+                        if !self.ring.secrets.allow_auto_generate_secret_key().await? {
+                            return Err(Error::SecretKeyMissing);
+                        }
+                        (SecretKey::generate(), true)
+                    }
+                };
                 let identities = if held.is_empty() { vec![generate()] } else { held };
                 let epoch = epoch.unwrap_or(0);
-                let Some(version) = self.file().write(self.sealed(&identities, epoch, pwd)?, None).await? else { continue };
+                let Some(version) = self.file().write(self.sealed(&identities, epoch, pwd, &sk)?, None).await? else { continue };
+                if generated {
+                    self.ring.secrets.set_secret_key(sk.format().to_string()).await?;
+                }
                 self.use_identities(identities, true).await?;
-                return self.opened_at(epoch, version, pwd).await;
+                return self.opened_at(epoch, version, pwd, &sk).await;
             };
-            if self.lock().opened.as_ref().is_some_and(|(v, p)| *v == version && p == pwd) {
-                self.ring.said(&id, false);
+            if sk.is_some() && self.lock().opened.as_ref().is_some_and(|(v, t)| v == &version && *t == tag) {
+                self.ring.said_ok(&id);
                 return Ok(());
             }
-            if let Some((epoch, identities)) = read(&body, pwd)? {
-                if self.take(epoch, identities, version, pwd).await? {
-                    return Ok(());
+            if let Some(ref sk) = sk {
+                let derived = sk.combine_passphrase(pwd);
+                if let Some((epoch, identities)) = read(&body, &derived)? {
+                    if self.take(epoch, identities, version, pwd, sk).await? {
+                        return Ok(());
+                    }
+                    continue;
                 }
-                continue;
+            }
+            let epochs = self.ring.secrets.epochs().await?;
+            let upgraded_2fa = epochs.contains_key(&two_fa_key(&id));
+            let verified = epochs.get(&id).copied();
+            // TODO(migration): drop passphrase-only fallback once existing
+            // single-factor `identity.age` files have upgraded to SecretKey.
+            // Never allow bare-password fallback once this remote has already
+            // used 2FA, preventing a weak-password key takeover or replay.
+            if !upgraded_2fa
+                && let Some((old_epoch, old_identities)) = read(&body, pwd)?
+                && verified.is_none_or(|v| old_epoch >= v)
+            {
+                let (sk, generated) = match sk {
+                    Some(k) => (k, false),
+                    None => {
+                        if !self.ring.secrets.allow_auto_generate_secret_key().await? {
+                            return Err(Error::SecretKeyMissing);
+                        }
+                        (SecretKey::generate(), true)
+                    }
+                };
+                let identities = self.merged(old_identities);
+                let epoch = old_epoch + 1;
+                let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd, &sk)?, Some(version)).await? else { continue };
+                if generated {
+                    self.ring.secrets.set_secret_key(sk.format().to_string()).await?;
+                }
+                self.use_identities(identities, true).await?;
+                return self.opened_at(epoch, written, pwd, &sk).await;
             }
             self.lock().opened = None;
             if let Some(previous) = self.ring.secrets.pending().await?.get(&id).cloned()
                 && previous != pwd
             {
-                let old = read(&body, &previous)?;
-                let verified = self.ring.secrets.epochs().await?.get(&id).copied();
+                let old = match &sk {
+                    Some(k) => match read(&body, &k.combine_passphrase(&previous))? {
+                        Some(found) => Some(found),
+                        // TODO(migration): fallback for legacy passphrase-only key files.
+                        None if !upgraded_2fa => read(&body, &previous)?,
+                        None => None,
+                    },
+                    None if !upgraded_2fa => read(&body, &previous)?,
+                    None => None,
+                };
                 // Not if another device sealed it since this one last opened
                 // it: that one's password is the remote's now.
                 if let Some((old_epoch, old_identities)) = old
                     && verified.is_none_or(|v| v == old_epoch)
                 {
+                    let (sk, generated) = match sk {
+                        Some(k) => (k, false),
+                        None => {
+                            if !self.ring.secrets.allow_auto_generate_secret_key().await? {
+                                return Err(Error::SecretKeyMissing);
+                            }
+                            (SecretKey::generate(), true)
+                        }
+                    };
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
-                    let Some(version) = self.file().write(self.sealed(&identities, epoch, pwd)?, Some(version)).await? else { continue };
+                    let Some(version) = self.file().write(self.sealed(&identities, epoch, pwd, &sk)?, Some(version)).await? else { continue };
+                    if generated {
+                        self.ring.secrets.set_secret_key(sk.format().to_string()).await?;
+                    }
                     self.use_identities(identities, true).await?;
-                    return self.opened_at(epoch, version, pwd).await;
+                    return self.opened_at(epoch, version, pwd, &sk).await;
                 }
-                self.ring.set_pending(&id, None).await?;
+                // Keep `pending` when `sk` is missing so importing the secret
+                // key later can still finish sealing the password change.
+                if sk.is_some() {
+                    self.ring.set_pending(&id, None).await?;
+                }
             }
-            self.lock().refused = Some(pwd.to_string());
-            self.ring.said(&id, true);
+            let missing_sk = sk.is_none();
+            self.lock().refused = Some((tag, missing_sk));
+            if missing_sk {
+                self.ring.said_missing(&id);
+                return Err(Error::SecretKeyMissing);
+            }
+            self.ring.said_mismatch(&id);
             return Err(Error::PasswordMismatch(id));
         }
     }
@@ -429,7 +608,7 @@ impl SyncKey {
     /// same time, on a store that does not order writes) is written again
     /// with it, so the other devices read what it sealed; false when the file
     /// changed meanwhile.
-    async fn take(&self, epoch: i64, remote: Vec<String>, version: String, pwd: &str) -> Result<bool> {
+    async fn take(&self, epoch: i64, remote: Vec<String>, version: String, pwd: &str, sk: &SecretKey) -> Result<bool> {
         let current = self.lock().identities.first().cloned();
         match current {
             Some(current) if !remote.contains(&current) => {
@@ -437,27 +616,28 @@ impl SyncKey {
                 let mut order = vec![remote[0].clone(), current];
                 order.extend(remote.iter().skip(1).cloned());
                 let identities = self.merged(order);
-                let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd)?, Some(version)).await? else { return Ok(false) };
+                let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd, sk)?, Some(version)).await? else { return Ok(false) };
                 self.use_identities(identities, true).await?;
-                self.opened_at(epoch, written, pwd).await?;
+                self.opened_at(epoch, written, pwd, sk).await?;
             }
             _ => {
                 self.use_identities(self.merged(remote), true).await?;
-                self.opened_at(epoch, version, pwd).await?;
+                self.opened_at(epoch, version, pwd, sk).await?;
             }
         }
         Ok(true)
     }
 
-    async fn opened_at(&self, epoch: i64, version: String, pwd: &str) -> Result<()> {
+    async fn opened_at(&self, epoch: i64, version: String, pwd: &str, sk: &SecretKey) -> Result<()> {
+        let tag = cred_tag(pwd, Some(sk));
         {
             let mut s = self.lock();
             s.epoch = epoch;
-            s.opened = Some((version, pwd.to_string()));
+            s.opened = Some((version, tag));
             s.refused = None;
         }
-        self.ring.set_epoch(&self.id(), Some(epoch)).await?;
-        self.ring.said(&self.id(), false);
+        self.ring.set_epoch_2fa(&self.id(), epoch).await?;
+        self.ring.said_ok(&self.id());
         Ok(())
     }
 
@@ -467,6 +647,7 @@ impl SyncKey {
     pub async fn rotate(&self) -> Result<()> {
         self.check(true, true).await?;
         let pwd = self.ring.password().await?;
+        let sk = self.ring.secret_key().await?.ok_or(Error::SecretKeyMissing)?;
         let (identities, epoch, opened) = {
             let s = self.lock();
             let mut identities = vec![generate()];
@@ -474,11 +655,11 @@ impl SyncKey {
             identities.truncate(HISTORY + 1);
             (identities, s.epoch, s.opened.as_ref().map(|(v, _)| v.clone()))
         };
-        let Some(version) = self.file().write(self.sealed(&identities, epoch, &pwd)?, opened).await? else {
+        let Some(version) = self.file().write(self.sealed(&identities, epoch, &pwd, &sk)?, opened).await? else {
             return Err(Error::Host("identity.age changed meanwhile".into()));
         };
         self.use_identities(identities, true).await?;
-        self.opened_at(epoch, version, &pwd).await
+        self.opened_at(epoch, version, &pwd, &sk).await
     }
 
     /// [other] first, then those kept here, at most [HISTORY] besides the
@@ -510,13 +691,14 @@ impl SyncKey {
         Ok(())
     }
 
-    fn sealed(&self, identities: &[String], epoch: i64, pwd: &str) -> Result<Vec<u8>> {
-        let mut text = format!("# {}, epoch {epoch}", self.ring.label);
+    fn sealed(&self, identities: &[String], epoch: i64, pwd: &str, sk: &SecretKey) -> Result<Vec<u8>> {
+        let mut text = Zeroizing::new(format!("# {}, epoch {epoch}", self.ring.label));
         for i in identities {
             text.push('\n');
             text.push_str(i);
         }
-        seal_with_password(text.as_bytes(), pwd)
+        let derived = sk.combine_passphrase(pwd);
+        seal_with_password(text.as_bytes(), &derived)
     }
 
     /// [Seal::open], once more after looking for a newer key when none kept
@@ -583,7 +765,7 @@ fn lines(text: Option<&str>, comments: bool) -> Vec<String> {
 /// when [pwd] does not open it. A file with no epoch line is epoch 0.
 fn read(sealed: &[u8], pwd: &str) -> Result<Option<(i64, Vec<String>)>> {
     let Some(plain) = open_with_password(sealed, pwd)? else { return Ok(None) };
-    let text = String::from_utf8(plain).map_err(|_| Error::Unreadable("identity.age is not text".into()))?;
+    let text = Zeroizing::new(String::from_utf8((*plain).clone()).map_err(|_| Error::Unreadable("identity.age is not text".into()))?);
     let all = lines(Some(&text), true);
     let epoch = all.first().filter(|l| l.starts_with('#')).and_then(|l| epoch_of(l)).unwrap_or(0);
     let identities: Vec<String> = all.into_iter().filter(|l| !l.starts_with('#')).collect();
@@ -621,7 +803,7 @@ pub fn seal_with_password(plain: &[u8], pwd: &str) -> Result<Vec<u8>> {
 
 /// [sealed] (armored or binary) opened with [pwd]; `None` when [pwd] does not
 /// open it.
-pub fn open_with_password(sealed: &[u8], pwd: &str) -> Result<Option<Vec<u8>>> {
+pub fn open_with_password(sealed: &[u8], pwd: &str) -> Result<Option<Zeroizing<Vec<u8>>>> {
     let start = sealed.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(sealed.len());
     let decryptor = age::Decryptor::new(age::armor::ArmoredReader::new(&sealed[start..])).map_err(|e| Error::Unreadable(format!("{e:?}")))?;
     let mut identity = age::scrypt::Identity::new(SecretString::from(pwd.to_string()));
@@ -631,7 +813,7 @@ pub fn open_with_password(sealed: &[u8], pwd: &str) -> Result<Option<Vec<u8>>> {
         Err(age::DecryptError::DecryptionFailed | age::DecryptError::NoMatchingKeys) => return Ok(None),
         Err(e) => return Err(Error::Unreadable(format!("{e:?}"))),
     };
-    let mut out = Vec::new();
+    let mut out = Zeroizing::new(Vec::new());
     r.read_to_end(&mut out).map_err(|e| Error::Unreadable(e.to_string()))?;
     Ok(Some(out))
 }

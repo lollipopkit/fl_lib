@@ -11,6 +11,7 @@ import 'package:fl_lib/src/rust/api/lkc.dart';
 import 'package:fl_lib/src/rust/api/team.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
+import 'package:fl_lib/src/core/sync/log/errors.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
 import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -240,13 +241,219 @@ final class LkcClient {
   /// that listens must be the one that writes, or every upload comes back as
   /// another device's.
   Future<LkcSync> sync(String app) => _syncs[app] ??= _ensureSession()
-      .then((session) => LkcSync(session: session, app: app))
+      .then((session) {
+        final s = LkcSync(session: session, app: app);
+        if (_personalAuth case (final uid, final auth) when uid == user.value?.id) {
+          s.setPersonalAuth(auth: auth);
+        }
+        _resolvedSyncs[app] = s;
+        return s;
+      })
       .catchError((Object e, StackTrace s) {
         _syncs.remove(app);
+        _resolvedSyncs.remove(app);
         Error.throwWithStackTrace(e, s);
       });
 
   final _syncs = <String, Future<LkcSync>>{};
+  final _resolvedSyncs = <String, LkcSync>{};
+
+  /// Personal-space Ed25519 signing and rollback protection for the signed-in
+  /// account.
+  (String, LkcPersonalAuth)? _personalAuth;
+  (String, Future<bool>)? _personalAuthPending;
+
+  static SecureProp _accountKeyProp(String uid) =>
+      SecureProp('lkcAccountKey.$uid', storage: SecureStore.synced, legacy: SecureStore.storage);
+
+  /// Monotonic personal version watermarks: device-local only, never synced
+  /// remotely or overwritten by server state.
+  static SecureProp _personalVersionsProp(String uid) => SecureProp('lkcPersonalVersions.$uid');
+
+  /// Device-local pending old passphrase when a backup password change could
+  /// not yet re-seal `lkc/identity.age` (e.g. offline).
+  static SecureProp _pendingAccountKeyPwdProp(String uid) => SecureProp('lkcAccountKeyPendingPwd.$uid');
+
+  /// Detaches personal-space signing auth (and optionally clears the cached
+  /// account key, e.g. after replacing the client-side secret key).
+  Future<void> resetPersonalAuth({bool clearCachedKey = false}) async {
+    final uid = user.value?.id ?? _personalAuth?.$1;
+    _personalAuth = null;
+    _personalAuthPending = null;
+    for (final s in _resolvedSyncs.values) {
+      s.clearPersonalAuth();
+    }
+    if (clearCachedKey && uid != null) {
+      await _accountKeyProp(uid).write(null, limited: false);
+    }
+  }
+
+  /// Attaches personal-space Ed25519 signing and rollback verification to
+  /// [app]'s [LkcSync] when credentials are available. Returns false when
+  /// neither a cached account key nor `(bakPwd, syncSecretKey)` is available
+  /// yet (e.g. before first-time secret-key generation).
+  Future<bool> ensurePersonalAuth(String app) async {
+    final uid = user.value?.id;
+    if (uid == null) return false;
+    if (_personalAuth case (final id, final auth)) {
+      if (id == uid) {
+        final s = await sync(app);
+        if (user.value?.id == uid && identical(_personalAuth?.$2, auth)) {
+          s.setPersonalAuth(auth: auth);
+          return true;
+        }
+        return false;
+      }
+      // Signed-in account changed without passing through `_clear`.
+      _personalAuth = null;
+      _personalAuthPending = null;
+      for (final s in _resolvedSyncs.values) {
+        s.clearPersonalAuth();
+      }
+    }
+    final pending = _personalAuthPending;
+    final Future<bool> job;
+    if (pending != null && pending.$1 == uid) {
+      job = pending.$2;
+    } else {
+      late final Future<bool> created;
+      created = _openPersonalAuth(uid).whenComplete(() {
+        if (identical(_personalAuthPending?.$2, created)) {
+          _personalAuthPending = null;
+        }
+      });
+      _personalAuthPending = (uid, created);
+      job = created;
+    }
+    final ready = await job;
+    if (!ready || user.value?.id != uid) return false;
+    final current = _personalAuth;
+    if (current == null || current.$1 != uid) return false;
+    final auth = current.$2;
+    final s = await sync(app);
+    // Re-check after awaiting `sync(app)` in case sign-out/switch occurred.
+    if (user.value?.id != uid || !identical(_personalAuth?.$2, auth)) {
+      return false;
+    }
+    s.setPersonalAuth(auth: auth);
+    for (final existing in _resolvedSyncs.values) {
+      existing.setPersonalAuth(auth: auth);
+    }
+    return true;
+  }
+
+  Future<bool> _openPersonalAuth(String uid) async {
+    final keyProp = _accountKeyProp(uid);
+    // Flush any deferred passphrase change on `lkc/identity.age` when online.
+    await _flushPendingAccountKeyPassphrase(uid);
+    LkcAccountKey? key;
+    final cached = await keyProp.read(limited: false);
+    if (cached != null && cached.isNotEmpty) {
+      try {
+        final parsed = LkcAccountKey.fromText(text: cached);
+        if (parsed.userId() == uid) key = parsed;
+      } catch (e) {
+        Loggers.app.warning('Ignoring unreadable cached account key', e);
+      }
+    }
+    if (key == null) {
+      final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+      final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+      if (pwd == null || pwd.isEmpty || secretKey == null || secretKey.isEmpty) {
+        return false;
+      }
+      try {
+        key = await (await teams()).accountKey(passphrase: pwd, secretKey: secretKey);
+      } on LkcTeamError catch (e) {
+        throw _mapTeamError(e, uid);
+      }
+      if (user.value?.id != uid) return false;
+      await keyProp.write(key.toText(), limited: false);
+    }
+    // Verify the signed-in user did not change while fetching.
+    if (user.value?.id != uid) return false;
+    final versionsProp = _personalVersionsProp(uid);
+    final auth = LkcPersonalAuth.open(
+      key: key,
+      versions: await versionsProp.read(limited: false) ?? '',
+      save: (json) async {
+        try {
+          await versionsProp.write(json, limited: false);
+          return true;
+        } catch (e) {
+          Loggers.app.warning('Personal sync versions not saved', e);
+          return false;
+        }
+      },
+    );
+    _personalAuth = (uid, auth);
+    return true;
+  }
+
+  static Exception _mapTeamError(LkcTeamError e, String uid) => switch (e.kind) {
+    LkcTeamErrorKind.wrongPassphrase => SyncPasswordMismatch(uid),
+    LkcTeamErrorKind.untrusted => SyncUntrusted(e.detail),
+    LkcTeamErrorKind.signedOut => const LkcException(code: LkcCode.perm),
+    LkcTeamErrorKind.refused => LkcException(code: LkcCode.perm, reason: e.detail, message: e.detail),
+    _ => LkcException(message: e.detail),
+  };
+
+  /// Updates the active personal-space signing key after an account key
+  /// rotation, preserving rollback watermarks.
+  Future<void> updatePersonalAuthKey(LkcAccountKey key) async {
+    if (_personalAuth case (final uid, final auth) when uid == key.userId()) {
+      await auth.updateKey(key: key);
+    }
+  }
+
+  /// Re-seals `lkc/identity.age` after the backup password changes. Persists
+  /// [old] locally so an offline failure is retried automatically on the next
+  /// sync without desynchronizing `lkc/identity.age` from `identity.age`.
+  Future<void> changePersonalAuthPassphrase({
+    required String old,
+    required String newPassphrase,
+  }) async {
+    final uid = user.value?.id;
+    if (!signedIn || uid == null || old.isEmpty || newPassphrase.isEmpty || old == newPassphrase) return;
+    final pendingProp = _pendingAccountKeyPwdProp(uid);
+    // Keep the earliest un-migrated password if a previous offline change is still waiting.
+    final existing = await pendingProp.read(limited: false);
+    if (existing == null || existing.isEmpty) {
+      await pendingProp.write(old, limited: false);
+    }
+    await _flushPendingAccountKeyPassphrase(uid, targetPassphrase: newPassphrase);
+  }
+
+  Future<void> _flushPendingAccountKeyPassphrase(String uid, {String? targetPassphrase}) async {
+    final pendingProp = _pendingAccountKeyPwdProp(uid);
+    final oldPwd = await pendingProp.read(limited: false);
+    if (oldPwd == null || oldPwd.isEmpty) return;
+    final newPwd = targetPassphrase ?? await SecureStoreProps.bakPwd.read(limited: false);
+    final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+    if (newPwd == null || newPwd.isEmpty || secretKey == null || secretKey.isEmpty) return;
+    if (oldPwd == newPwd) {
+      await pendingProp.write(null, limited: false);
+      return;
+    }
+    try {
+      final t = await teams();
+      if (!await t.hasAccountKey()) {
+        await pendingProp.write(null, limited: false);
+        return;
+      }
+      await t.changeKeyPassphrase(old: oldPwd, new_: newPwd, secretKey: secretKey);
+      await pendingProp.write(null, limited: false);
+    } on LkcTeamError catch (e) {
+      if (e.kind == LkcTeamErrorKind.wrongPassphrase) {
+        // Already re-sealed elsewhere or password no longer matches: drop stale pending.
+        await pendingProp.write(null, limited: false);
+      } else {
+        Loggers.app.warning('Deferred LK Cloud account key passphrase change failed', e);
+      }
+    } catch (e, s) {
+      Loggers.app.warning('Deferred LK Cloud account key passphrase change failed', e, s);
+    }
+  }
 
   /// The signed-in account's teams and its key ([LkcTeams]), on this
   /// session; see [LkcTeamAccount].
@@ -380,8 +587,13 @@ final class LkcClient {
   }
 
   void _clear() {
-    // Of the account signed in: another's teams are not this one's.
+    // Of the account signed in: another's teams and signing auth are not this one's.
     _teams = null;
+    _personalAuth = null;
+    _personalAuthPending = null;
+    for (final s in _resolvedSyncs.values) {
+      s.clearPersonalAuth();
+    }
     _refreshedAt = null;
     usage.value = null;
     user.value = null;

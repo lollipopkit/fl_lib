@@ -42,6 +42,10 @@ pub enum SyncEngineErrorKind {
     /// No key file there yet beside what was synced with one.
     KeyNotHere,
     PasswordMissing,
+    /// Remote key file exists, but this device has no client-side secret key.
+    SecretKeyMissing,
+    /// Server response failed Ed25519 signature or rollback verification.
+    Untrusted,
     SignedOut,
 }
 
@@ -66,11 +70,34 @@ impl From<Error> for SyncEngineError {
             Error::PasswordMismatch(id) => (K::PasswordMismatch, id),
             Error::KeyNotHere(id) => (K::KeyNotHere, id),
             Error::PasswordMissing => (K::PasswordMissing, String::new()),
+            Error::SecretKeyMissing => (K::SecretKeyMissing, String::new()),
+            Error::Untrusted(d) => (K::Untrusted, d),
             Error::SignedOut => (K::SignedOut, String::new()),
             Error::Pending(what) => (K::Remote, format!("{what} is not here yet")),
         };
         Self { kind, detail }
     }
+}
+
+/// Generates a fresh 128-bit client-side secret key (`S1-XXXXX-…`).
+#[frb(sync)]
+pub fn generate_secret_key() -> String {
+    fl_lkc::secret_key::SecretKey::generate().format().to_string()
+}
+
+/// Validates and canonicalizes a user-entered or scanned secret key; returns
+/// `None` when the format or checksum is invalid.
+#[frb(sync)]
+pub fn normalize_secret_key(input: String) -> Option<String> {
+    fl_lkc::secret_key::SecretKey::parse(&input).ok().map(|k| k.format().to_string())
+}
+
+/// Derives the combined `age scrypt` passphrase from `(password, secret_key)`.
+/// Returns `None` when [secret_key] is malformed or fails checksum.
+#[frb(sync)]
+pub fn derive_sync_passphrase(password: String, secret_key: String) -> Option<String> {
+    let key = fl_lkc::secret_key::SecretKey::parse(&secret_key).ok()?;
+    Some((*key.combine_passphrase(&password)).clone())
 }
 
 type R<T> = Result<T, SyncEngineError>;
@@ -116,6 +143,12 @@ impl SyncKeys {
     #[frb(sync)]
     pub fn mismatch(&self) -> Vec<String> {
         self.0.mismatch().borrow().iter().cloned().collect()
+    }
+
+    /// The key files that cannot be opened because this device has no secret key.
+    #[frb(sync)]
+    pub fn secret_key_missing(&self) -> Vec<String> {
+        self.0.secret_key_missing().borrow().iter().cloned().collect()
     }
 
     #[frb(sync)]

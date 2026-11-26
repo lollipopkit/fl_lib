@@ -31,6 +31,24 @@ final class SyncPasswordMissing implements Exception {
   String toString() => 'No backup password';
 }
 
+/// The remote sync key exists, but this device has no client-side secret key.
+final class SyncSecretKeyMissing implements Exception {
+  const SyncSecretKeyMissing();
+
+  @override
+  String toString() => 'No sync secret key';
+}
+
+/// A remote payload or server reply failed authentication or rollback checks.
+final class SyncUntrusted implements Exception {
+  const SyncUntrusted(this.detail);
+
+  final String detail;
+
+  @override
+  String toString() => 'Untrusted sync data: $detail';
+}
+
 /// A batch written by a newer build, in a format this one does not read: the
 /// log is not read past it until this build is updated.
 final class SyncLogTooNew implements Exception {
@@ -70,6 +88,8 @@ Object syncException(SyncEngineError e) => switch (e.kind) {
   SyncEngineErrorKind.passwordMismatch => SyncPasswordMismatch(e.detail),
   SyncEngineErrorKind.keyNotHere => SyncKeyNotHere(e.detail),
   SyncEngineErrorKind.passwordMissing => const SyncPasswordMissing(),
+  SyncEngineErrorKind.secretKeyMissing => const SyncSecretKeyMissing(),
+  SyncEngineErrorKind.untrusted => SyncUntrusted(e.detail),
   SyncEngineErrorKind.tooNew => SyncLogTooNew(e.detail),
   SyncEngineErrorKind.refused => SyncRefused(e.detail),
   _ => SyncError(e.kind, e.detail),

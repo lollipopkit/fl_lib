@@ -30,6 +30,9 @@ final class LkcRemoteStorage
     Future<T> Function(LkcSync sync) f,
   ) async {
     final sync = _sync ??= await client.sync(app);
+    if (client.user.value != null) {
+      await client.ensurePersonalAuth(app);
+    }
     try {
       return await f(sync);
     } on LkcSyncError catch (e) {
@@ -139,6 +142,7 @@ extension LkcSyncErrorX on LkcSyncError {
     ),
     // Not homebase's answer as this build knows it: a defect to report.
     LkcSyncErrorKind.invalid => FormatException(detail),
+    LkcSyncErrorKind.untrusted => SyncUntrusted(detail),
     _ => LkcException(message: detail),
   };
 }

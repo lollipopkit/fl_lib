@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
 import 'package:material_ui/material_ui.dart';
@@ -125,4 +127,152 @@ void main() {
       expect(find.text('Done'), findsOneWidget);
     });
   }
+
+  testWidgets('canProceed gates Next button and IntroPage.nextOf skips', (tester) async {
+    final gate = false.vn;
+    addTearDown(gate.dispose);
+    var doneCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: [
+              Builder(
+                builder: (ctx) => Center(
+                  child: TextButton(
+                    onPressed: () => IntroPage.nextOf(ctx),
+                    child: const Text('skip'),
+                  ),
+                ),
+              ),
+              const Center(child: Text('page2')),
+            ],
+            canProceed: (page) => page == 0 ? gate : null,
+            onDone: (_) => doneCalled = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Next is disabled while gate is false.
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
+
+    // Explicit skip advances to page 2 even while gate is false.
+    await tester.tap(find.text('skip'));
+    await tester.pumpAndSettle();
+    expect(find.text('page2'), findsOneWidget);
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(doneCalled, isTrue);
+  });
+
+  testWidgets('onBeforeNext locks swiping, gates advance, and blocks concurrent nav', (tester) async {
+    final gate = true.vn;
+    addTearDown(gate.dispose);
+    const allowCommit = false;
+    Completer<bool>? pendingCommit;
+    var commitCalls = 0;
+    var doneCalls = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: [
+              Builder(
+                builder: (ctx) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('commit-page'),
+                      TextButton(
+                        onPressed: () => IntroPage.nextOf(ctx),
+                        child: const Text('skip'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Center(child: Text('page2')),
+            ],
+            canProceed: (page) => page == 0 ? gate : null,
+            onBeforeNext: (page) => page == 0
+                ? () async {
+                    commitCalls++;
+                    final pending = pendingCommit;
+                    if (pending != null) return pending.future;
+                    return allowCommit;
+                  }
+                : null,
+            onDone: (_) => doneCalls++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Even with canProceed == true, swiping cannot bypass onBeforeNext.
+    await tester.drag(find.byType(PageView), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('commit-page'), findsOneWidget);
+    expect(commitCalls, 0);
+
+    // Returning false stays on the page.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('commit-page'), findsOneWidget);
+    expect(commitCalls, 1);
+
+    // While an async onBeforeNext is in flight, repeated Next or Skip taps are ignored.
+    pendingCommit = Completer<bool>();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton));
+    await tester.tap(find.text('skip'));
+    await tester.pump();
+    expect(commitCalls, 2);
+    expect(find.text('commit-page'), findsOneWidget);
+
+    pendingCommit.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.text('page2'), findsOneWidget);
+
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(doneCalls, 1);
+  });
+
+  testWidgets('IntroPage.finishOf finishes immediately', (tester) async {
+    var doneCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [LibLocalizations.delegate],
+        home: IntroPage(
+          args: IntroPageArgs(
+            pages: [
+              Builder(
+                builder: (ctx) => Center(
+                  child: TextButton(
+                    onPressed: () => IntroPage.finishOf(ctx),
+                    child: const Text('finish-now'),
+                  ),
+                ),
+              ),
+              const Center(child: Text('page2')),
+            ],
+            onDone: (_) => doneCalls++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('finish-now'));
+    await tester.pump();
+    expect(doneCalls, 1);
+  });
 }

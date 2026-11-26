@@ -7,6 +7,7 @@ import 'package:fl_lib/src/core/sync/log/errors.dart';
 import 'package:fl_lib/src/core/sync/log/host.dart';
 import 'package:fl_lib/src/rust/api/lkc.dart';
 import 'package:fl_lib/src/rust/api/sync_engine.dart';
+import 'package:fl_lib/src/rust/api/sync_engine.dart' as rust_sync;
 import 'package:flutter/foundation.dart';
 
 /// Where a remote's sync key is kept beside what it seals: `identity.age`.
@@ -36,6 +37,30 @@ abstract final class SyncKeyring {
   /// their remotes meanwhile.
   static final passwordMismatch = ValueNotifier<Set<String>>(const {});
 
+  /// Whether a remote key file could not be opened because this device has no
+  /// client-side secret key yet.
+  static final secretKeyMissing = ValueNotifier<bool>(false);
+
+  /// Set when this device auto-generates a new client-side secret key so the
+  /// UI can prompt the user once to back it up.
+  static final secretKeyGenerated = ValueNotifier<String?>(null);
+
+  /// Optional policy gate controlling whether background sync may auto-generate
+  /// a new secret key when none is stored yet. Defaults to allowed when null.
+  static bool Function()? allowAutoGenerateSecretKey;
+
+  /// Generates a fresh 128-bit client-side secret key (`S1-XXXXX-…`).
+  static String generateSecretKey() => rust_sync.generateSecretKey();
+
+  /// Validates and canonicalizes a user-entered or scanned secret key; null if
+  /// the format or checksum is invalid.
+  static String? normalizeSecretKey(String input) => rust_sync.normalizeSecretKey(input: input);
+
+  /// Derives the combined `age scrypt` passphrase from [password] and
+  /// [secretKey]; null if [secretKey] is invalid.
+  static String? derivePassphrase(String password, String secretKey) =>
+      rust_sync.deriveSyncPassphrase(password: password, secretKey: secretKey);
+
   static String? _label;
 
   /// [label] begins the key file's comment line (`ServerBox sync key`). Once,
@@ -50,9 +75,16 @@ abstract final class SyncKeyring {
     try {
       return await syncCall(run);
     } finally {
-      final now = _ring.mismatch().toSet();
-      if (!setEquals(now, passwordMismatch.value)) passwordMismatch.value = now;
+      _syncNotifiers();
     }
+  }
+
+  static void _syncNotifiers() {
+    final ring = _keys;
+    final mismatchNow = ring == null ? const <String>{} : ring.mismatch().toSet();
+    if (!setEquals(mismatchNow, passwordMismatch.value)) passwordMismatch.value = mismatchNow;
+    final missingNow = ring != null && ring.secretKeyMissing().isNotEmpty;
+    if (missingNow != secretKeyMissing.value) secretKeyMissing.value = missingNow;
   }
 
   /// The key of [account] on LK Cloud. Without [create] (a restore, nothing
@@ -68,7 +100,10 @@ abstract final class SyncKeyring {
   static void release(String id) {
     // None opened yet: nothing to release.
     _keys?.release(id: id);
-    passwordMismatch.value = {...passwordMismatch.value}..remove(id);
+    _syncNotifiers();
+    if (_keys == null) {
+      passwordMismatch.value = {...passwordMismatch.value}..remove(id);
+    }
   }
 
   /// [id]'s remote is gone from this device: what it knew of its file goes.
@@ -127,6 +162,16 @@ abstract final class SyncKeyring {
         final pwd = await SecureStoreProps.bakPwd.read(limited: false);
         return pwd == null || pwd.isEmpty ? null : pwd;
       }),
+      'secrets.secretKey' => syncReply(() async {
+        final key = await SecureStoreProps.syncSecretKey.read(limited: false);
+        return key == null || key.isEmpty ? null : key;
+      }),
+      'secrets.setSecretKey' => syncReply(() async {
+        final key = a as String;
+        await SecureStoreProps.syncSecretKey.write(key, limited: false);
+        secretKeyGenerated.value = key;
+      }),
+      'secrets.allowAutoGenerate' => syncReply(() async => allowAutoGenerateSecretKey?.call() ?? true),
       'secrets.kept' => syncReply(() => _kept(a as String).read(limited: false)),
       'secrets.setKept' => syncReply(() => _kept((a as Map)['id'] as String).write(a['identities'] as String, limited: false)),
       'secrets.epochs' => syncReply(() => _decoded(_epochsProp.get())),
@@ -160,5 +205,8 @@ abstract final class SyncKeyring {
     _keys = null;
     _label = null;
     passwordMismatch.value = const {};
+    secretKeyMissing.value = false;
+    secretKeyGenerated.value = null;
+    allowAutoGenerateSecretKey = null;
   }
 }

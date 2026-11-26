@@ -212,6 +212,18 @@ impl Secrets for DartSecrets {
         Box::pin(async { self.0.call("secrets.password", ()).await })
     }
 
+    fn secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+        Box::pin(async { self.0.call("secrets.secretKey", ()).await })
+    }
+
+    fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move { self.0.call::<Value>("secrets.setSecretKey", key).await.map(|_| ()) })
+    }
+
+    fn allow_auto_generate_secret_key(&self) -> BoxFuture<'_, Result<bool>> {
+        Box::pin(async { self.0.call("secrets.allowAutoGenerate", ()).await })
+    }
+
     fn kept(&self, id: String) -> BoxFuture<'_, Result<Option<String>>> {
         Box::pin(async move { self.0.call("secrets.kept", id).await })
     }

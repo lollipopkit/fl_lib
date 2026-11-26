@@ -8,7 +8,7 @@ import 'lkc.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `api`
+// These functions are ignored because they are not marked as `pub`: `api`, `inner`, `parse_secret_key`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `fmt`, `fmt`, `from`, `from`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcAccountKey>>
@@ -170,17 +170,27 @@ abstract class LkcTeamSpace implements RustOpaqueInterface {
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcTeams>>
 abstract class LkcTeams implements RustOpaqueInterface {
   /// The account key, made now if no device has, and published.
-  Future<LkcAccountKey> accountKey({required String passphrase});
+  Future<LkcAccountKey> accountKey({
+    required String passphrase,
+    String? secretKey,
+  });
 
-  Future<void> changeKeyPassphrase({required String old, required String new_});
+  Future<void> changeKeyPassphrase({
+    required String old,
+    required String new_,
+    String? secretKey,
+  });
 
   Future<String> create({required String name});
 
   Future<void> delete({required String id});
 
-  /// The account key opened with the LK Cloud key password; `None` before
-  /// any device made one.
-  Future<LkcAccountKey?> fetchAccountKey({required String passphrase});
+  /// The account key opened with the LK Cloud key password (and optional
+  /// client-side secret key); `None` before any device made one.
+  Future<LkcAccountKey?> fetchAccountKey({
+    required String passphrase,
+    String? secretKey,
+  });
 
   /// Whether a device of the account made its key: asked for, not set.
   Future<bool> hasAccountKey();
@@ -206,7 +216,10 @@ abstract class LkcTeams implements RustOpaqueInterface {
 
   /// New account keys in place of these, written and published: a device
   /// lost trust. Then open them and [LkcTeamKeys::rewrap_teams].
-  Future<LkcAccountKey> rotateAccountKey({required String passphrase});
+  Future<LkcAccountKey> rotateAccountKey({
+    required String passphrase,
+    String? secretKey,
+  });
 }
 
 class LkcInviteLink {

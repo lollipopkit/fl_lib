@@ -129,7 +129,7 @@ final class LkcLogSync {
       // there by then. Only this one: another may have taken its place meanwhile.
       if (identical(_opening, opening)) _opening = null;
       lastFailure.value = e;
-      if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing) {
+      if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
         Loggers.app.warning('LK Cloud log sync: opening', e, s);
       }
       return;
@@ -166,7 +166,14 @@ final class LkcLogSync {
     final user = client.user.value;
     if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
     _account = user.id;
-    return SyncKeyring.ofLkc(await client.sync(app), user.id, create: create);
+    final sync = await client.sync(app);
+    final authed = await client.ensurePersonalAuth(app);
+    final k = await SyncKeyring.ofLkc(sync, user.id, create: create);
+    if (!authed) {
+      // A fresh or legacy device just generated its client-side secret key.
+      await client.ensurePersonalAuth(app);
+    }
+    return k;
   }
 
   /// Replaces the account's sync key (a device that held it is gone): what
