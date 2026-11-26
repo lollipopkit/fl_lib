@@ -69,6 +69,11 @@ pub enum Error {
     /// persistence failed ([detail]); the engine advances its local checkpoint
     /// from [appended] so the mutation is not resent.
     AppendPersistFailed { appended: crate::log::Appended, detail: String },
+    /// The remote snapshot already committed at [seq], but local watermark
+    /// persistence failed ([detail]); the engine retains the committed snapshot
+    /// so a retry flushes local persistence without resending it, then sweeps
+    /// covered blobs.
+    SnapshotPersistFailed { seq: i64, detail: String },
 }
 
 impl std::fmt::Display for Error {
@@ -88,6 +93,7 @@ impl std::fmt::Display for Error {
             Error::SignedOut => f.write_str("signed out"),
             Error::Pending(what) => write!(f, "{what} is not here yet"),
             Error::AppendPersistFailed { detail, .. } => write!(f, "host: {detail}"),
+            Error::SnapshotPersistFailed { detail, .. } => write!(f, "host: {detail}"),
         }
     }
 }

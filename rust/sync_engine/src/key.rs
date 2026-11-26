@@ -276,6 +276,29 @@ impl RingInner {
         };
         self.secrets.set_pending(all).await
     }
+
+    /// Records that [id]'s remote key file committed at [epoch] sealed under
+    /// `(committed_pwd, sk)`, persisting the 2FA epoch and reconciling
+    /// `pending[id]` without losing a concurrent `password_changed`.
+    async fn record_committed_write(&self, id: &str, epoch: i64, committed_pwd: &str) -> Result<()> {
+        self.set_epoch_2fa(id, epoch).await?;
+        let _guard = self.pending_lock.lock().await;
+        let mut all = self.secrets.pending().await?;
+        let current = self.secrets.password().await?;
+        let next = match current.as_deref().filter(|p| !p.is_empty()) {
+            Some(cur) if cur != committed_pwd => Some(committed_pwd.to_string()),
+            _ if all.get(id).map(String::as_str) == Some(committed_pwd) => Some(committed_pwd.to_string()),
+            _ => None,
+        };
+        if all.get(id) == next.as_ref() {
+            return Ok(());
+        }
+        match next {
+            Some(p) => all.insert(id.to_string(), p),
+            None => all.remove(id),
+        };
+        self.secrets.set_pending(all).await
+    }
 }
 
 /// Every [SyncKey] of this process, one per key file, and what the backup
@@ -533,6 +556,11 @@ impl SyncKey {
         let Some(version) = self.file().write(self.sealed(identities, epoch, pwd, &sk)?, if_version).await? else {
             return Ok(None);
         };
+        // The remote file is now committed under `(pwd, sk)` at `epoch`:
+        // persist the epoch and reconcile `pending` BEFORE `set_secret_key` or
+        // `set_kept`, so a later or concurrent `password_changed` matches `pwd`
+        // instead of keeping a stale entry.
+        self.ring.record_committed_write(&self.id(), epoch, pwd).await?;
         if generated {
             self.ring.secrets.set_secret_key(sk.format().to_string()).await?;
             let _ = self.ring.secrets.set_pending_secret_key(None).await;
@@ -646,6 +674,12 @@ impl SyncKey {
                         let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd, staged)?, Some(version)).await? else {
                             continue;
                         };
+                        // The remote file is now committed under `(pwd, staged)`
+                        // at `epoch`: persist the epoch and reconcile `pending`
+                        // BEFORE `set_secret_key` so a later or concurrent
+                        // `password_changed` matches `pwd` instead of keeping
+                        // stale `previous`.
+                        self.ring.record_committed_write(&id, epoch, pwd).await?;
                         if self.ring.secret_key().await?.is_none() {
                             self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
                         }

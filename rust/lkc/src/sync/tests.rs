@@ -625,3 +625,124 @@ async fn idle_read_log_flushes_dirty_watermark_after_append_persist_failure() {
     assert!(saved.contains(KEY), "saved versions must persist taken binding for {KEY}");
     assert_eq!(fake.requests("/v2/sync/serverbox/log").iter().filter(|r| r.method == "POST").count(), 1);
 }
+
+#[tokio::test]
+async fn delete_invalidates_cached_pending_file_commit() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let deletes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = puts.clone();
+    let del_seen = deletes.clone();
+    let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", p) if p.ends_with(NAME) => {
+            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written(match n {
+                0 => "e-first",
+                1 => "e-second",
+                2 => "e-third",
+                _ => "e-fourth",
+            })
+        }
+        ("DELETE", p) if p.ends_with(NAME) => {
+            let d = del_seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Response::status(if d == 0 { 204 } else { 404 })
+        }
+        _ => Response::status(404),
+    })
+    .await;
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth));
+
+    // 1. Upload commits remotely, local persistence fails -> cached pending commit.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e-first".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. Retrying with no intervening delete still fails local flush WITHOUT resending PUT
+    //    and preserves `err.committed`.
+    let err = sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, Some(Committed::File { etag: "e-first".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 3. Intervening delete succeeds (204) -> invalidates the cached pending file result,
+    //    so once keeper recovers a subsequent create MUST issue a fresh PUT.
+    assert!(sync.delete(NAME, Some("e-first")).await.unwrap());
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap(), "e-second");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // 4. Another upload commits remotely then fails local save -> cached pending commit ("e-third").
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_bytes(NAME, b"body-2".to_vec(), Condition::Match("e-second".into())).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e-third".into(), version: 3 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
+
+    // 5. Intervening delete answering 404 (already deleted remotely) MUST ALSO invalidate
+    //    the cached pending file result so a subsequent write issues a fresh PUT.
+    assert!(!sync.delete(NAME, None).await.unwrap());
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.upload_bytes(NAME, b"body-2".to_vec(), Condition::Match("e-second".into())).await.unwrap(), "e-fourth");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).iter().filter(|r| r.method == "PUT").count(), 4);
+}
+
+#[tokio::test]
+async fn stale_upload_does_not_insert_written_marker_after_set_personal() {
+    let key1 = crate::team::identity::AccountKey::generate("u1");
+    let pub1 = key1.signing_public();
+    let rec1 = key1.recipient();
+    let key2 = crate::team::identity::AccountKey::generate("u2");
+    let pub2 = key2.signing_public();
+    let rec2 = key2.recipient();
+    let auth2 = Arc::new(PersonalAuth::new(key2, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let sync_slot: Arc<std::sync::OnceLock<Arc<SyncClient<Kept>>>> = Arc::new(std::sync::OnceLock::new());
+    let next_auth = Arc::new(StdMutex::new(Some(auth2)));
+    let put_n = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let slot_c = sync_slot.clone();
+    let next_c = next_auth.clone();
+    let put_c = put_n.clone();
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => {
+            if put_c.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                Response::json(200, json!({ "data": { "recipient": rec1, "signing_key": pub1, "next_seq": 2, "prev_signing_key": pub1 } }))
+            } else {
+                Response::json(200, json!({ "data": { "recipient": rec2, "signing_key": pub2, "next_seq": 2, "prev_signing_key": pub2 } }))
+            }
+        }
+        ("PUT", p) if p.ends_with(NAME) => {
+            let n = put_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if n == 0 {
+                // Switch auth while PUT #1 is in flight before upload_signed_bytes records `written`.
+                if let (Some(s), Some(a2)) = (slot_c.get(), next_c.lock().unwrap().take()) {
+                    s.set_personal(Some(a2));
+                }
+                written("e-stale")
+            } else {
+                written("e-fresh")
+            }
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    let _ = sync_slot.set(sync.clone());
+    let auth1 = Arc::new(PersonalAuth::new(key1, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    sync.set_personal(Some(auth1));
+
+    assert_eq!(sync.upload_bytes(NAME, b"v1".to_vec(), Condition::Absent).await.unwrap(), "e-stale");
+
+    // Stale PUT #1 MUST NOT pollute auth2's `written` map, so SSE event for "e-stale" is NOT suppressed.
+    let stale_ev = json!({ "event": "sync", "app": "serverbox", "name": NAME, "etag": "e-stale" });
+    assert_eq!(sync.heard(&stale_ev), Some(Event::Changed { name: NAME.into(), etag: Some("e-stale".into()) }));
+
+    // Same-generation upload under auth2 DOES record `written`, so `heard` suppresses its own SSE event.
+    assert_eq!(sync.upload_bytes(NAME, b"v2".to_vec(), Condition::Absent).await.unwrap(), "e-fresh");
+    let fresh_ev = json!({ "event": "sync", "app": "serverbox", "name": NAME, "etag": "e-fresh" });
+    assert_eq!(sync.heard(&fresh_ev), None);
+}

@@ -185,8 +185,16 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     /// lost to a later one of its record, which a device reading the batch
     /// reads after it, so the op is passed over ([resolve]). Best effort.
     pub async fn sweep_blobs(&self, named: HashSet<String>) {
+        self.sweep_blobs_as_of(named, now_ms()).await;
+    }
+
+    /// Removes blobs not in [named] whose timestamp is older than
+    /// `as_of_ms - BLOB_GRACE_MS`. Anchoring `as_of_ms` to when a snapshot's
+    /// [named] set was captured prevents a delayed sweep from deleting blobs
+    /// uploaded by other devices after that snapshot.
+    pub async fn sweep_blobs_as_of(&self, named: HashSet<String>, as_of_ms: i64) {
         let swept = async {
-            let before = now_ms() - BLOB_GRACE_MS;
+            let before = as_of_ms.saturating_sub(BLOB_GRACE_MS);
             for blob in self.blobs.blobs(self.sweep_prefix().await?).await? {
                 if named.contains(&blob.name) || blob.at.is_none_or(|at| at > before) {
                     continue;

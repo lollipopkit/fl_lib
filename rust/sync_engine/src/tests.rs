@@ -1280,20 +1280,28 @@ async fn staged_secret_key_recovers_pending_password_change_even_when_upgraded_2
     *d.secrets.password.lock().unwrap() = Some("new-pw".into());
     d.ring.password_changed(Some("old-pw".into())).await.unwrap();
 
-    // While set_secret_key still fails, reseal writes under ("new-pw", staged) but
-    // MUST retain staged + pending so a later retry recovers without generating a new key.
+    // While set_secret_key still fails, reseal writes under ("new-pw", staged),
+    // clears stale "old-pw" from pending, updates epoch, and retains staged.
     assert!(matches!(d.key(&file).await, Err(Error::Host(_))));
     assert_eq!(d.secrets.pending_secret_key.lock().unwrap().as_deref(), Some(staged.as_str()));
-    assert_eq!(d.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("old-pw"));
+    assert!(d.secrets.pending.lock().unwrap().get("account").is_none());
 
-    // Once keychain recovers, retry completes using the same staged key (no new key generated).
+    // A second password change ("new-pw" -> "third-pw") while set_secret_key
+    // previously failed MUST record "new-pw" (matching the committed file),
+    // never retaining stale "old-pw".
+    *d.secrets.password.lock().unwrap() = Some("third-pw".into());
+    d.ring.password_changed(Some("new-pw".into())).await.unwrap();
+    assert_eq!(d.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("new-pw"));
+
+    // Once keychain recovers, retry opens with ("new-pw", staged), reseals to
+    // ("third-pw", staged) using the same staged key (no new key generated).
     d.secrets.fail_set_secret_key.store(false, Ordering::SeqCst);
     let k = d.key(&file).await.unwrap();
     assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(staged.as_str()));
     assert!(d.secrets.pending_secret_key.lock().unwrap().is_none());
     assert!(d.secrets.pending.lock().unwrap().is_empty());
     let raw = file.file.lock().unwrap().clone().unwrap().0;
-    assert!(crate::key::open_with_password(&raw, &staged_sk.combine_passphrase("new-pw")).unwrap().is_some());
+    assert!(crate::key::open_with_password(&raw, &staged_sk.combine_passphrase("third-pw")).unwrap().is_some());
     assert_eq!(k.open(&k.seal(b"resealed").unwrap()).unwrap(), b"resealed");
 }
 
@@ -1303,37 +1311,377 @@ async fn log_append_persist_failure_advances_checkpoint_without_resending() {
     let file = Arc::new(MemKeyFile::default());
     let d = Device::new("pw");
     let key = d.key(&file).await.unwrap();
-    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+
+    // Create 20 records with ~40 KiB incompressible hex payloads each (< 64 KiB
+    // INLINE_MAX, ~400 KiB compressed > 250 KiB BATCH_MAX) so first join splits
+    // into 2 batches.
+    for i in 0..20u32 {
+        let mut payload = String::with_capacity(40_000);
+        let mut h = blake3::Hasher::new();
+        h.update(&i.to_le_bytes());
+        let mut reader = h.finalize_xof();
+        let mut buf = [0u8; 20_000];
+        reader.fill(&mut buf);
+        for b in buf {
+            payload.push_str(&format!("{b:02x}"));
+        }
+        d.host.edit("servers", &format!("s{i}"), Some(json!({ "blob": payload })));
+    }
 
     let sync = LogSync::new(d.host.clone(), log.clone(), key.clone());
     log.fail_persist_append.store(true, Ordering::SeqCst);
-    // Remote append commits seq 1, local watermark save fails -> surfaces Host error.
+    // First-join batch 1 commits remotely (seq 1), local watermark save fails -> Host error.
     let err = sync.sync().await.unwrap_err();
     assert!(matches!(err, Error::Host(_)));
     assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
     assert_eq!(log.lock().batches.len(), 1);
+    assert!(d.host.state(vec!["log.join_sent".into()]).await.unwrap()[0].is_some(), "non-final first-join batch must record join_sent");
 
-    // Next sync MUST NOT resend the committed batch (checkpoint + JOINED already advanced).
+    // Next sync MUST NOT resend committed batch 1; it appends only uncommitted batch 2.
     sync.sync().await.unwrap();
-    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
-    assert_eq!(log.lock().batches.len(), 1);
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(log.lock().batches.len(), 2);
+
+    // Subsequent idle sync sends nothing (join complete).
+    sync.sync().await.unwrap();
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(log.lock().batches.len(), 2);
 
     // Steady-state append with local watermark save failure also advances checkpoint without resending.
-    d.host.edit("servers", "s2", Some(json!({ "name": "box2" })));
+    d.host.edit("servers", "steady", Some(json!({ "name": "box2" })));
     log.fail_persist_append.store(true, Ordering::SeqCst);
     assert!(matches!(sync.sync().await, Err(Error::Host(_))));
-    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
-    assert_eq!(log.lock().batches.len(), 2);
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 3);
+    assert_eq!(log.lock().batches.len(), 3);
 
     sync.sync().await.unwrap();
-    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
-    assert_eq!(log.lock().batches.len(), 2);
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 3);
+    assert_eq!(log.lock().batches.len(), 3);
 
-    // A second device sees both committed records cleanly.
+    // A second device sees all 21 committed records cleanly.
     let d2 = Device::new("pw");
     let k2 = d2.key(&file).await.unwrap();
     let sync2 = LogSync::new(d2.host.clone(), log.clone(), k2);
     sync2.sync().await.unwrap();
-    assert_eq!(d2.host.value("servers", "s1"), Some(json!({ "name": "box1" })));
-    assert_eq!(d2.host.value("servers", "s2"), Some(json!({ "name": "box2" })));
+    assert_eq!(d2.host.values(), d.host.values());
+}
+
+#[tokio::test]
+async fn same_hlc_first_join_batches_do_not_drop_records_on_partial_failure() {
+    let log = MemLog::new();
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+
+    // Seed 20 adopted/legacy records sharing the exact same Hlc::ZERO so first
+    // join splits them across 2 batches with identical HLCs.
+    let zero = Hlc::ZERO;
+    for i in 0..20u32 {
+        let mut payload = String::with_capacity(40_000);
+        let mut h = blake3::Hasher::new();
+        h.update(&i.to_le_bytes());
+        let mut reader = h.finalize_xof();
+        let mut buf = [0u8; 20_000];
+        reader.fill(&mut buf);
+        for b in buf {
+            payload.push_str(&format!("{b:02x}"));
+        }
+        d.host.lock().records.insert(("servers".into(), format!("s{i:02}")), (zero, Some(json!({ "blob": payload }))));
+    }
+
+    let sync = LogSync::new(d.host.clone(), log.clone(), key);
+    log.fail_persist_append.store(true, Ordering::SeqCst);
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
+
+    // Next sync resumes strictly after `(h, c, id)` of batch 1's last record,
+    // sending all remaining Hlc::ZERO records in batch 2 without dropping any.
+    sync.sync().await.unwrap();
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(log.lock().batches.len(), 2);
+
+    let d2 = Device::new("pw");
+    let k2 = d2.key(&file).await.unwrap();
+    LogSync::new(d2.host.clone(), log.clone(), k2).sync().await.unwrap();
+    assert_eq!(d2.host.values().len(), 20);
+    assert_eq!(d2.host.values(), d.host.values());
+}
+
+#[tokio::test]
+async fn recreated_log_does_not_mark_joined_from_stale_unanswered_batch() {
+    let log = MemLog::new();
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+
+    for i in 0..20u32 {
+        let mut payload = String::with_capacity(40_000);
+        let mut h = blake3::Hasher::new();
+        h.update(&i.to_le_bytes());
+        let mut reader = h.finalize_xof();
+        let mut buf = [0u8; 20_000];
+        reader.fill(&mut buf);
+        for b in buf {
+            payload.push_str(&format!("{b:02x}"));
+        }
+        d.host.edit("servers", &format!("s{i:02}"), Some(json!({ "blob": payload })));
+    }
+
+    let sync = LogSync::new(d.host.clone(), log.clone(), key);
+    // Batch 1 commits on log-1; simulate batch 2 failing with a lost answer
+    // after batch 1 commits by first failing persist on batch 1, then losing
+    // the answer on batch 2.
+    log.fail_persist_append.store(true, Ordering::SeqCst);
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(log.lock().batches.len(), 1);
+
+    log.lose_answer.store(true, Ordering::SeqCst);
+    assert!(matches!(sync.sync().await, Err(Error::Remote(_))));
+
+    // Server recreates the log as "log-2" (empty).
+    {
+        let mut s = log.lock();
+        s.log = "log-2".into();
+        s.batches.clear();
+        s.dropped = 0;
+        s.snapshot = None;
+    }
+
+    // Next sync pulls Compacted(log-2), retries unanswered batch 2 on log-2,
+    // MUST NOT mark log-2 as JOINED from batch 2 alone, and sends all records
+    // (including batch 1's) onto log-2.
+    sync.sync().await.unwrap();
+    let d2 = Device::new("pw");
+    let k2 = d2.key(&file).await.unwrap();
+    LogSync::new(d2.host.clone(), log.clone(), k2).sync().await.unwrap();
+    assert_eq!(d2.host.values().len(), 20);
+    assert_eq!(d2.host.values(), d.host.values());
+}
+
+#[tokio::test]
+async fn concurrent_password_change_during_key_write_is_not_clobbered() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw1");
+    let ka = d.key(&file).await.unwrap();
+    let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+
+    // Wrap key file so during write("pw2"), a concurrent password change
+    // "pw2" -> "pw3" occurs before write returns.
+    struct RaceWriteKeyFile {
+        inner: Arc<MemKeyFile>,
+        secrets: Arc<MemSecrets>,
+        ring: KeyRing,
+        fired: AtomicBool,
+        next: AtomicU64,
+    }
+    impl KeyFile for RaceWriteKeyFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                let next = {
+                    let mut f = self.inner.file.lock().unwrap();
+                    if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
+                        return Ok(None);
+                    }
+                    let next = format!("vr{}", self.next.fetch_add(1, Ordering::SeqCst) + 1);
+                    *f = Some((body, next.clone()));
+                    next
+                };
+                if !self.fired.swap(true, Ordering::SeqCst) {
+                    *self.secrets.password.lock().unwrap() = Some("pw3".into());
+                    self.ring.password_changed(Some("pw2".into())).await?;
+                }
+                Ok(Some(next))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    // First password change: pw1 -> pw2, triggering concurrent pw2 -> pw3 mid-write.
+    *d.secrets.password.lock().unwrap() = Some("pw2".into());
+    d.ring.password_changed(Some("pw1".into())).await.unwrap();
+    let raced = Arc::new(RaceWriteKeyFile {
+        inner: file.clone(),
+        secrets: d.secrets.clone(),
+        ring: d.ring.clone(),
+        fired: AtomicBool::new(false),
+        next: AtomicU64::new(0),
+    });
+    let kb = d.ring.of(raced, true).await.unwrap();
+    kb.check(true, true).await.unwrap();
+
+    // Remote file MUST end up sealed under "pw3" without PasswordMismatch.
+    let raw = file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw, &sk.combine_passphrase("pw3")).unwrap().is_some());
+    assert_eq!(kb.open(&ka.seal(b"concurrent-ok").unwrap()).unwrap(), b"concurrent-ok");
+}
+
+#[tokio::test]
+async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    struct MemSessionStore;
+    impl fl_lkc::Store for MemSessionStore {
+        async fn save(&self, _: Option<fl_lkc::Stored>) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct SnapshotTestKeeper {
+        saved: Mutex<String>,
+        fail_snapshot: AtomicBool,
+    }
+    impl fl_lkc::personal::VersionKeeper for SnapshotTestKeeper {
+        fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
+            let has_snap = serde_json::from_str::<Value>(&json)
+                .ok()
+                .and_then(|v| v["snapshots"]["serverbox"].as_i64())
+                .is_some();
+            if self.fail_snapshot.load(Ordering::SeqCst) && has_snap {
+                return Box::pin(async { Err("snapshot watermark save failed".into()) });
+            }
+            *self.saved.lock().unwrap() = json;
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let account_key = fl_lkc::team::identity::AccountKey::generate("u1");
+    let pub_key = account_key.signing_public();
+    let recipient = account_key.recipient();
+    let snapshot_puts = Arc::new(AtomicU64::new(0));
+    let deleted_blobs = Arc::new(Mutex::new(Vec::<String>::new()));
+    let head = Arc::new(AtomicU64::new(0));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let snap_puts_srv = snapshot_puts.clone();
+    let deleted_srv = deleted_blobs.clone();
+    let head_srv = head.clone();
+    let server = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 4096];
+            let header_end = loop {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(pos + 4);
+                }
+            };
+            let Some(header_end) = header_end else { continue };
+            let head_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
+            let first_line = head_str.lines().next().unwrap_or("");
+            let mut parts = first_line.split_whitespace();
+            let method = parts.next().unwrap_or("");
+            let full_path = parts.next().unwrap_or("");
+            let path = full_path.split('?').next().unwrap_or(full_path);
+            let content_len: usize = head_str
+                .lines()
+                .find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case("content-length").then(|| v.trim().parse().ok()).flatten()
+                })
+                .unwrap_or(0);
+            while buf.len() < header_end + content_len {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+            }
+
+            let (status, extra_headers, body) = match (method, path) {
+                ("GET", "/v2/keys") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n",
+                    json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } }).to_string(),
+                ),
+                ("GET", "/v2/sync/serverbox/log") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n",
+                    json!({ "code": 0, "data": { "log": "6f1c", "batches": [], "head": head_srv.load(Ordering::SeqCst), "snapshot_seq": 0, "more": false } }).to_string(),
+                ),
+                ("POST", "/v2/sync/serverbox/log") => {
+                    let seq = head_srv.fetch_add(1, Ordering::SeqCst) + 1;
+                    (
+                        "200 OK",
+                        "Content-Type: application/json\r\n",
+                        json!({ "code": 0, "data": { "log": "6f1c", "seq": seq, "live": { "batches": seq, "bytes": 4 }, "compact": true } }).to_string(),
+                    )
+                }
+                ("PUT", "/v2/sync/serverbox/snapshot") => {
+                    snap_puts_srv.fetch_add(1, Ordering::SeqCst);
+                    ("204 No Content", "ETag: \"snap-e1\"\r\n", String::new())
+                }
+                ("GET", "/v2/sync/serverbox") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n",
+                    json!({ "data": [{ "name": "op-old-dead.age", "etag": "b1", "size": 10, "updated_at": "2020-01-01T00:00:00Z" }] }).to_string(),
+                ),
+                ("DELETE", p) if p.starts_with("/v2/sync/serverbox/") => {
+                    deleted_srv.lock().unwrap().push(p.trim_start_matches("/v2/sync/serverbox/").to_string());
+                    ("204 No Content", "", String::new())
+                }
+                _ => ("404 Not Found", "", String::new()),
+            };
+            let resp = format!(
+                "HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(resp.as_bytes()).await;
+        }
+    });
+
+    let base = format!("http://{addr}");
+    let client = Arc::new(fl_lkc::Client::with(&format!("{base}/auth/v1/"), "app", &base).unwrap());
+    let stored = fl_lkc::Stored { access: "tok".into(), refresh: Some("r".into()), expires_at: now_ms() + 3_600_000, refreshing: false };
+    let session = Arc::new(fl_lkc::Session::restore(client, MemSessionStore, Some(stored)).await);
+    let sync_client = Arc::new(fl_lkc::sync::SyncClient::new(session, "serverbox"));
+    let keeper = Arc::new(SnapshotTestKeeper { saved: Mutex::new(String::new()), fail_snapshot: AtomicBool::new(true) });
+    let auth = Arc::new(fl_lkc::personal::PersonalAuth::new(account_key, fl_lkc::personal::PersonalVersions::default(), keeper.clone()));
+    sync_client.set_personal(Some(auth));
+
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+
+    let transport = Arc::new(crate::lkc::LkcLog(sync_client));
+    let log_sync = LogSync::new(d.host.clone(), transport, key);
+
+    // 1. Append commits seq 1 (compact=true) -> snapshot PUT commits remotely,
+    //    then `record_snapshot_written` fails -> surfaces Host error, blobs NOT swept yet.
+    assert!(matches!(log_sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(snapshot_puts.load(Ordering::SeqCst), 1);
+    assert!(deleted_blobs.lock().unwrap().is_empty());
+    let before_retry: Value = serde_json::from_str(&keeper.saved.lock().unwrap()).unwrap();
+    assert!(before_retry["snapshots"]["serverbox"].is_null());
+
+    // 2. While keeper STILL fails, retrying sync MUST preserve `Error::Host`
+    //    (not misclassify as `Error::Remote`) and MUST NOT resend PUT /snapshot.
+    assert!(matches!(log_sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(snapshot_puts.load(Ordering::SeqCst), 1);
+    assert!(deleted_blobs.lock().unwrap().is_empty());
+
+    // 3. Keeper recovers -> next sync flushes `record_snapshot_written` WITHOUT
+    //    resending PUT /snapshot, records snapshot seq, and sweeps the obsolete blob.
+    keeper.fail_snapshot.store(false, Ordering::SeqCst);
+    log_sync.sync().await.unwrap();
+    assert_eq!(snapshot_puts.load(Ordering::SeqCst), 1, "committed snapshot must not be resent");
+    let saved_json = keeper.saved.lock().unwrap().clone();
+    let parsed: Value = serde_json::from_str(&saved_json).unwrap();
+    assert_eq!(parsed["snapshots"]["serverbox"], json!(1));
+    assert_eq!(*deleted_blobs.lock().unwrap(), vec!["op-old-dead.age".to_string()]);
+
+    server.abort();
 }

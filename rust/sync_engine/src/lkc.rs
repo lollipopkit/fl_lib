@@ -79,7 +79,12 @@ impl<S: Store> LogTransport for LkcLog<S> {
         match self.0.put_snapshot_bytes(seq, body).await {
             Ok(_) => Ok(true),
             Err(LkcError { kind: Kind::Refused(reason), .. }) if reason == "sync_snapshot_stale" => Ok(false),
-            Err(e) => Err(remote(e)),
+            Err(e) => {
+                if let Some(fl_lkc::sync::Committed::Snapshot { seq, .. }) = e.committed {
+                    return Err(Error::SnapshotPersistFailed { seq, detail: e.detail });
+                }
+                Err(remote(e))
+            }
         }
     }
 

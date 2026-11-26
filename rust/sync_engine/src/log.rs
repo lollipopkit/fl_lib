@@ -58,6 +58,8 @@ const LOG: &str = "log";
 const CURSOR: &str = "cursor";
 const SENT: &str = "sent";
 const JOINED: &str = "joined";
+const JOIN_LOG: &str = "join_log";
+const JOIN_SENT: &str = "join_sent";
 const ACCOUNT: &str = "account";
 /// Set by builds that dropped what they did not carry.
 /// TODO: remove once no install has the row.
@@ -67,11 +69,51 @@ const PARTIAL: &str = "partial";
 /// blob it names may have been swept meanwhile.
 const UNANSWERED_MAX_MS: i64 = 12 * 3600 * 1000;
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct JoinCursor {
+    h: Hlc,
+    c: String,
+    id: String,
+}
+
+impl JoinCursor {
+    fn encode(&self) -> String {
+        serde_json::json!([self.h.to_string(), self.c, self.id]).to_string()
+    }
+
+    fn decode(raw: &str) -> Option<Self> {
+        let arr = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+        let items = arr.as_array()?;
+        if items.len() != 3 {
+            return None;
+        }
+        let h: Hlc = items[0].as_str()?.parse().ok()?;
+        let c = items[1].as_str()?.to_string();
+        let id = items[2].as_str()?.to_string();
+        Some(Self { h, c, id })
+    }
+}
+
 #[derive(Clone)]
 struct Batch {
     key: String,
     body: Vec<u8>,
     last: Option<Hlc>,
+    join_last: Option<JoinCursor>,
+    /// The log id prior join batches were committed to; `None` only when this
+    /// batch begins a fresh join from the first record.
+    join_for_log: Option<String>,
+    mark_joined: bool,
+}
+
+#[derive(Clone)]
+struct PendingSnapshot {
+    seq: i64,
+    body: Vec<u8>,
+    named: HashSet<String>,
+    /// Wall-clock timestamp when [named] was captured so a delayed sweep never
+    /// deletes blobs uploaded by other devices after this snapshot.
+    created_at: i64,
 }
 
 pub struct LogSync<H, T, S> {
@@ -80,6 +122,10 @@ pub struct LogSync<H, T, S> {
     /// A batch sealed and not yet answered: sent again as it is, so the
     /// server takes it once; and when it was first sent.
     unanswered: Mutex<Option<(Batch, i64)>>,
+    /// A snapshot committed remotely whose local watermark save failed: retried
+    /// with the exact same bytes so transport flushes local state without
+    /// resending, then sweeps covered blobs.
+    pending_snapshot: Mutex<Option<PendingSnapshot>>,
 }
 
 fn hlc_text(h: Option<Hlc>) -> String {
@@ -88,7 +134,12 @@ fn hlc_text(h: Option<Hlc>) -> String {
 
 impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     pub fn new(host: Arc<H>, transport: Arc<T>, seal: Arc<S>) -> Self {
-        Self { core: Core::new(host, transport.clone(), seal, PREFIX, Naming::Keyed), transport, unanswered: Mutex::new(None) }
+        Self {
+            core: Core::new(host, transport.clone(), seal, PREFIX, Naming::Keyed),
+            transport,
+            unanswered: Mutex::new(None),
+            pending_snapshot: Mutex::new(None),
+        }
     }
 
     /// Whether the last read stopped at a newer build's batch: this device
@@ -101,6 +152,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     /// when the log cannot be read on (a batch of a newer build).
     pub async fn sync(&self) -> Result<()> {
         let run = self.core.run().await?;
+        self.flush_pending_snapshot().await?;
         let read = self.pull_in(&run).await;
         self.push(&run).await?;
         read
@@ -123,6 +175,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         Self::forget(&*self.core.host).await?;
         // Sealed under what was carried before: its records are read again.
         *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
         self.core.too_new.send_replace(false);
         Ok(())
     }
@@ -133,12 +186,13 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     /// old key until the server drops them.
     pub async fn rotate<F: Future<Output = Result<()>> + Send>(&self, rekey: F) -> Result<()> {
         let run = self.core.run().await?;
+        self.flush_pending_snapshot().await?;
         self.pull_in(&run).await?;
         rekey.await?;
         // A snapshot goes past the last one: a batch makes room for it.
         let body = self.core.seal.seal(&engine::encode(&[], Map::new())?)?;
         let last = self.core.get_hlc(SENT).await?;
-        self.append(&run, Batch { key: engine::new_key(), body, last }, false).await?;
+        self.append(&run, Batch { key: engine::new_key(), body, last, join_last: None, join_for_log: None, mark_joined: false }).await?;
         self.pull_in(&run).await?;
         if !self.write_snapshot(&run).await? {
             return Err(Error::Host("no snapshot written".into()));
@@ -189,10 +243,6 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
 
     async fn push(&self, run: &Run<'_>) -> Result<()> {
         let core = &self.core;
-        let log = core.get(LOG).await?;
-        // Joining a log (the first time, or one made anew): every record goes,
-        // whoever stamped it, so what this device holds reaches the others.
-        let joining = log.is_none() || core.get(JOINED).await? != log;
         let mut compact = false;
         // Before what is pending is read: it moves what was sent.
         let unanswered = {
@@ -205,11 +255,26 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             held.as_ref().map(|(b, _)| b.clone())
         };
         if let Some(batch) = unanswered {
-            compact |= self.append(run, batch, false).await?;
+            compact |= self.append(run, batch).await?;
         }
         core.host.stamp().await?;
+        let log = core.get(LOG).await?;
+        // Joining a log (the first time, or one made anew): every record goes,
+        // whoever stamped it, so what this device holds reaches the others.
+        let joining = log.is_none() || core.get(JOINED).await? != log;
+        let join_sent = if joining && log.is_some() && core.get(JOIN_LOG).await? == log {
+            core.get(JOIN_SENT).await?.and_then(|raw| JoinCursor::decode(&raw))
+        } else {
+            None
+        };
         let sent = core.get_hlc(SENT).await?;
-        let all = if joining { core.host.all().await? } else { core.host.pending(sent).await? };
+        let mut all = if joining { core.host.all().await? } else { core.host.pending(sent).await? };
+        if joining {
+            all.sort_by(|a, b| a.h.cmp(&b.h).then_with(|| a.c.cmp(&b.c)).then_with(|| a.id.cmp(&b.id)));
+            if let Some(after) = &join_sent {
+                all.retain(|r| (&r.h, &r.c, &r.id) > (&after.h, &after.c, &after.id));
+            }
+        }
         let carried: Vec<_> = all.iter().filter(|r| run.carries(&r.c)).cloned().collect();
         let (ops, complete) = core.ops_of(&carried).await?;
         // A record that could not be read stops the send just before it, so it
@@ -218,6 +283,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let stamped: Vec<_> = if complete { all } else { all.into_iter().filter(|r| stopped.is_some_and(|h| r.h <= h)).collect() };
         let mine = core.device().await?;
         let mut last = sent;
+        let mut join_last = join_sent.clone();
         let batches = core.batches(ops)?;
         let last_idx = batches.len().saturating_sub(1);
         for (idx, (chunk, body)) in batches.into_iter().enumerate() {
@@ -225,9 +291,21 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                 if op.h.device == mine && Some(op.h) > last {
                     last = Some(op.h);
                 }
+                if joining {
+                    let cur = JoinCursor { h: op.h, c: op.c.clone(), id: op.id.clone() };
+                    if join_last.as_ref().is_none_or(|prev| cur > *prev) {
+                        join_last = Some(cur);
+                    }
+                }
             }
             let mark_joined = joining && complete && idx == last_idx;
-            compact |= self.append(run, Batch { key: engine::new_key(), body, last }, mark_joined).await?;
+            let batch_join = if joining && !mark_joined { join_last.clone() } else { None };
+            let join_for_log = if joining && (join_sent.is_some() || idx > 0) {
+                core.get(LOG).await?
+            } else {
+                None
+            };
+            compact |= self.append(run, Batch { key: engine::new_key(), body, last, join_last: batch_join, join_for_log, mark_joined }).await?;
         }
         // Past what was left out too, so it is not looked at again.
         let newest = stamped.iter().map(|r| r.h).filter(|h| h.device == mine).fold(last, |a, h| if Some(h) > a { Some(h) } else { a });
@@ -235,7 +313,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             core.put(vec![(SENT, Some(hlc_text(newest)))]).await?;
         }
         if joining && complete {
-            core.put(vec![(JOINED, core.get(LOG).await?)]).await?;
+            core.put(vec![(JOINED, core.get(LOG).await?), (JOIN_LOG, None), (JOIN_SENT, None)]).await?;
         }
         if compact {
             self.pull_in(run).await?;
@@ -246,7 +324,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
 
     /// Sends [batch]; whether a snapshot is due. A full log is compacted
     /// first, then sent again.
-    async fn append(&self, run: &Run<'_>, batch: Batch, mark_joined: bool) -> Result<bool> {
+    async fn append(&self, run: &Run<'_>, batch: Batch) -> Result<bool> {
         let core = &self.core;
         let mut compacted = false;
         loop {
@@ -273,13 +351,22 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = None;
             let log = core.get(LOG).await?;
             let cursor = core.get_int(CURSOR).await?;
-            let log_id = log.clone().unwrap_or_else(|| appended.log.clone());
             let mut state = vec![(SENT, Some(hlc_text(batch.last)))];
             if log.is_none() {
-                state.push((LOG, Some(log_id.clone())));
+                state.push((LOG, Some(appended.log.clone())));
             }
-            if mark_joined {
-                state.push((JOINED, Some(log_id)));
+            // Only advance join progress when the batch landed on the same log
+            // its preceding join batches belonged to (never mark a recreated log
+            // joined from a stale unanswered batch).
+            if batch.join_for_log.as_deref().is_none_or(|exp| exp == appended.log) {
+                if batch.mark_joined {
+                    state.push((JOINED, Some(appended.log.clone())));
+                    state.push((JOIN_LOG, None));
+                    state.push((JOIN_SENT, None));
+                } else if let Some(j) = &batch.join_last {
+                    state.push((JOIN_LOG, Some(appended.log.clone())));
+                    state.push((JOIN_SENT, Some(j.encode())));
+                }
             }
             // Right after the cursor: nothing between to read, and this batch
             // is what is here already.
@@ -294,6 +381,23 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         }
     }
 
+    async fn flush_pending_snapshot(&self) -> Result<()> {
+        let Some(pending) = self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
+            return Ok(());
+        };
+        match self.transport.put_snapshot(pending.seq, pending.body).await {
+            Ok(written) => {
+                *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                if written && self.core.get_int(CURSOR).await? <= pending.seq {
+                    self.core.sweep_blobs_as_of(pending.named, pending.created_at).await;
+                }
+                Ok(())
+            }
+            Err(Error::SnapshotPersistFailed { detail, .. }) => Err(Error::Host(detail)),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Writes a snapshot at the cursor; whether one is there now.
     async fn write_snapshot(&self, run: &Run<'_>) -> Result<bool> {
         let core = &self.core;
@@ -301,24 +405,33 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         if cursor == 0 {
             return Ok(false);
         }
+        let created_at = now_ms();
         let Some(ops) = core.snapshot_ops(run).await? else {
             core.host.warn("Sync snapshot left: a record could not be read".into());
             return Ok(false);
         };
         let body = core.seal.seal(&engine::encode(&ops, Map::new())?)?;
-        if !self.transport.put_snapshot(cursor, body).await? {
-            core.host.warn(format!("Sync snapshot at {cursor}: another is there already"));
-            return Ok(true);
-        }
         let named: HashSet<String> = ops.iter().filter_map(|op| Core::<H, T, S>::blob_of(&op.d).map(str::to_string)).collect();
-        core.sweep_blobs(named).await;
+        match self.transport.put_snapshot(cursor, body.clone()).await {
+            Ok(false) => {
+                core.host.warn(format!("Sync snapshot at {cursor}: another is there already"));
+                return Ok(true);
+            }
+            Ok(true) => {}
+            Err(Error::SnapshotPersistFailed { seq, detail }) => {
+                *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingSnapshot { seq, body, named, created_at });
+                return Err(Error::Host(detail));
+            }
+            Err(e) => return Err(e),
+        }
+        core.sweep_blobs_as_of(named, created_at).await;
         Ok(true)
     }
 
     /// Forgets the log: the next sync reads it from its start and joins it
     /// again. For another account, or what is carried changing.
     pub async fn forget(host: &H) -> Result<()> {
-        host.set_state([LOG, CURSOR, SENT, JOINED, PARTIAL].iter().map(|k| (format!("{PREFIX}{k}"), None)).collect()).await?;
+        host.set_state([LOG, CURSOR, SENT, JOINED, JOIN_LOG, JOIN_SENT, PARTIAL].iter().map(|k| (format!("{PREFIX}{k}"), None)).collect()).await?;
         host.forget_passed(PREFIX.to_string()).await
     }
 
