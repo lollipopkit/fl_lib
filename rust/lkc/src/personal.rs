@@ -349,10 +349,17 @@ impl PersonalAuth {
             // concurrent signed writes/reads.
             // TODO(migration): reject unsigned personal files unconditionally
             // once pre-signing uploads are no longer present.
-            let held = self.versions.lock().await;
+            let mut held = self.versions.lock().await;
             let seen = held.data.file_version(app, name);
             if held.data.file_requires_signature(app, name) {
                 return Err(untrusted(format!("{app}/{name}: server stripped signature (expected version >= {seen})")));
+            }
+            if held.dirty {
+                self.keeper
+                    .save(held.data.to_json())
+                    .await
+                    .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
+                held.dirty = false;
             }
             return Ok(());
         };
@@ -407,15 +414,22 @@ impl PersonalAuth {
             signed_items.push((idem.to_string(), batch.seq, what));
         }
         if signed_items.is_empty() {
-            if !unsigned_seqs.is_empty() {
-                let held = self.versions.lock().await;
-                if let Some(from) = held.data.log_signed_from(app) {
-                    for seq in unsigned_seqs {
-                        if seq >= from {
-                            return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
-                        }
+            let mut held = self.versions.lock().await;
+            if !unsigned_seqs.is_empty()
+                && let Some(from) = held.data.log_signed_from(app)
+            {
+                for seq in unsigned_seqs {
+                    if seq >= from {
+                        return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
                     }
                 }
+            }
+            if held.dirty {
+                self.keeper
+                    .save(held.data.to_json())
+                    .await
+                    .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
+                held.dirty = false;
             }
             return Ok(());
         }
@@ -454,11 +468,18 @@ impl PersonalAuth {
         let Some(s) = snapshot.signed.as_ref() else {
             // TODO(migration): reject unsigned personal snapshots
             // unconditionally once pre-signing snapshots are replaced.
-            let held = self.versions.lock().await;
+            let mut held = self.versions.lock().await;
             if held.data.snapshot_seq(app) > 0
                 || held.data.log_signed_from(app).is_some_and(|from| snapshot.seq >= from)
             {
                 return Err(untrusted(format!("{what}: server stripped signature")));
+            }
+            if held.dirty {
+                self.keeper
+                    .save(held.data.to_json())
+                    .await
+                    .map_err(|e| Error::new(Kind::Invalid, format!("personal versions not saved: {e}")))?;
+                held.dirty = false;
             }
             return Ok(());
         };

@@ -535,3 +535,93 @@ async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
     // Whichever order ran, the installed file MUST end up as v2-body (never rolled back to v1-body).
     assert_eq!(std::fs::read(&to).unwrap(), b"v2-body");
 }
+
+#[tokio::test]
+async fn stale_auth_cannot_insert_or_reuse_pending_commit_after_set_personal() {
+    let key1 = crate::team::identity::AccountKey::generate("u1");
+    let pub1 = key1.signing_public();
+    let rec1 = key1.recipient();
+    let key2 = crate::team::identity::AccountKey::generate("u2");
+    let pub2 = key2.signing_public();
+    let rec2 = key2.recipient();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = calls.clone();
+    let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => {
+            if seen.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                Response::json(200, json!({ "data": { "recipient": rec1, "signing_key": pub1, "next_seq": 2, "prev_signing_key": pub1 } }))
+            } else {
+                Response::json(200, json!({ "data": { "recipient": rec2, "signing_key": pub2, "next_seq": 2, "prev_signing_key": pub2 } }))
+            }
+        }
+        ("PUT", p) if p.ends_with(NAME) => {
+            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written(if n == 0 { "e-auth1" } else { "e-auth2" })
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    // Switching auth while a keeper failure occurs on auth1 must not let auth1
+    // pollute auth2's pending_commits or let auth2 skip its remote PUT.
+    struct SwitchingKeeper {
+        sync: Arc<SyncClient<Kept>>,
+        next_auth: StdMutex<Option<Arc<PersonalAuth>>>,
+    }
+    impl crate::personal::VersionKeeper for SwitchingKeeper {
+        fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            if let Some(next) = self.next_auth.lock().unwrap().take() {
+                self.sync.set_personal(Some(next));
+            }
+            Box::pin(async { Err("stale auth save failed".into()) })
+        }
+    }
+
+    let keeper2 = TestKeeper::new();
+    let auth2 = Arc::new(PersonalAuth::new(key2, crate::personal::PersonalVersions::default(), keeper2));
+    let keeper1 = Arc::new(SwitchingKeeper { sync: sync.clone(), next_auth: StdMutex::new(Some(auth2)) });
+    let auth1 = Arc::new(PersonalAuth::new(key1, crate::personal::PersonalVersions::default(), keeper1));
+    sync.set_personal(Some(auth1));
+
+    // Upload under auth1 commits remotely; during save(), set_personal switches to auth2 and save fails.
+    let err = sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert!(sync.pending_commits.lock().unwrap().files.is_empty(), "stale auth1 must not insert into auth2's pending_commits");
+
+    // Subsequent upload of the exact same bytes under auth2 MUST actually send PUT to the server.
+    assert_eq!(sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap(), "e-auth2");
+    assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).len(), 2);
+}
+
+#[tokio::test]
+async fn idle_read_log_flushes_dirty_watermark_after_append_persist_failure() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("POST", "/v2/sync/serverbox/log") => Response::json(200, json!({ "code": 0, "data": { "log": "6f1c", "seq": 1, "live": { "batches": 1, "bytes": 4 }, "compact": false } })),
+        ("GET", "/v2/sync/serverbox/log") => Response::json(200, json!({ "code": 0, "data": { "log": "6f1c", "batches": [], "head": 1, "snapshot_seq": 0, "more": false } })),
+        _ => Response::status(404),
+    })
+    .await;
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth));
+
+    // Append commits seq 1 remotely, but local keeper fails -> watermark stays dirty in memory.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.append(KEY, b"b1".to_vec()).await.unwrap_err();
+    assert!(matches!(err.committed, Some(Committed::Batch(Appended { seq: 1, .. }))));
+    assert!(keeper.saved.lock().unwrap().is_empty());
+
+    // Keeper recovers. Subsequent idle sync only calls read_log(after=1) which
+    // returns an empty page; it MUST flush the dirty watermark to keeper without resending POST.
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    let page = sync.read_log(1, Some("6f1c"), None).await.unwrap();
+    assert!(matches!(page, LogRead::Page { ref batches, .. } if batches.is_empty()));
+    let saved = keeper.saved.lock().unwrap().clone();
+    assert!(!saved.is_empty(), "empty read_log must flush dirty PersonalVersions");
+    assert!(saved.contains(KEY), "saved versions must persist taken binding for {KEY}");
+    assert_eq!(fake.requests("/v2/sync/serverbox/log").iter().filter(|r| r.method == "POST").count(), 1);
+}

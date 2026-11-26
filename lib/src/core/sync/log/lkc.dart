@@ -150,12 +150,27 @@ final class LkcLogSync {
     }
   }
 
+  void _ensureAccount(String uid, {bool releaseOnMismatch = false}) {
+    if (client.user.value?.id != uid) {
+      if (releaseOnMismatch) SyncKeyring.release(uid);
+      throw const LkcException(
+        code: LkcCode.perm,
+        reason: 'account_changed',
+        message: 'Signed-in account changed while opening sync key',
+      );
+    }
+  }
+
   Future<SyncLogEngine> _open() async {
     final user = client.user.value;
     if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
+    final uid = user.id;
     final sync = await client.sync(app);
+    _ensureAccount(uid);
     final k = await key();
-    await syncCall(() => SyncLogEngine.bind(account: user.id, host: _host.call));
+    _ensureAccount(uid, releaseOnMismatch: true);
+    await syncCall(() => SyncLogEngine.bind(account: uid, host: _host.call));
+    _ensureAccount(uid, releaseOnMismatch: true);
     return SyncLogEngine(lkc: sync, key: k, host: _host.call);
   }
 
@@ -165,13 +180,18 @@ final class LkcLogSync {
   Future<SyncKeyHandle> key({bool create = true}) async {
     final user = client.user.value;
     if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
-    _account = user.id;
+    final uid = user.id;
+    _account = uid;
     final sync = await client.sync(app);
+    _ensureAccount(uid);
     final authed = await client.ensurePersonalAuth(app);
-    final k = await SyncKeyring.ofLkc(sync, user.id, create: create);
+    _ensureAccount(uid);
+    final k = await SyncKeyring.ofLkc(sync, uid, create: create);
+    _ensureAccount(uid, releaseOnMismatch: true);
     if (!authed) {
       // A fresh or legacy device just generated its client-side secret key.
       final ready = await client.ensurePersonalAuth(app);
+      _ensureAccount(uid, releaseOnMismatch: true);
       if (!ready) {
         throw const LkcException(
           code: LkcCode.perm,
@@ -180,6 +200,7 @@ final class LkcLogSync {
         );
       }
     }
+    _ensureAccount(uid, releaseOnMismatch: true);
     return k;
   }
 

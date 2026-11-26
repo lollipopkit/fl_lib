@@ -74,6 +74,7 @@ impl From<Error> for SyncEngineError {
             Error::Untrusted(d) => (K::Untrusted, d),
             Error::SignedOut => (K::SignedOut, String::new()),
             Error::Pending(what) => (K::Remote, format!("{what} is not here yet")),
+            Error::AppendPersistFailed { detail, .. } => (K::Host, detail),
         };
         Self { kind, detail }
     }

@@ -184,12 +184,21 @@ struct MemLog {
     s: Mutex<LogState>,
     /// Takes the next append but fails to answer it.
     lose_answer: AtomicBool,
+    /// Takes the next append and fails local watermark persistence while returning the committed result.
+    fail_persist_append: AtomicBool,
+    append_calls: AtomicU64,
     page: usize,
 }
 
 impl MemLog {
     fn new() -> Arc<Self> {
-        Arc::new(Self { s: Mutex::new(LogState { log: "log-1".into(), compact_after: 1000, ..Default::default() }), lose_answer: AtomicBool::new(false), page: 3 })
+        Arc::new(Self {
+            s: Mutex::new(LogState { log: "log-1".into(), compact_after: 1000, ..Default::default() }),
+            lose_answer: AtomicBool::new(false),
+            fail_persist_append: AtomicBool::new(false),
+            append_calls: AtomicU64::new(0),
+            page: 3,
+        })
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, LogState> {
@@ -231,6 +240,7 @@ impl BlobStore for MemLog {
 
 impl LogTransport for MemLog {
     async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
+        self.append_calls.fetch_add(1, Ordering::SeqCst);
         let mut s = self.lock();
         if let Some(&(seq, _, _)) = s.batches.iter().find(|(_, k, _)| *k == key) {
             return Ok(Appended { log: s.log.clone(), seq, compact: false });
@@ -245,6 +255,9 @@ impl LogTransport for MemLog {
         let compact = live + 1 >= s.compact_after;
         let answer = Appended { log: s.log.clone(), seq, compact };
         drop(s);
+        if self.fail_persist_append.swap(false, Ordering::SeqCst) {
+            return Err(Error::AppendPersistFailed { appended: answer, detail: "watermark save failed".into() });
+        }
         if self.lose_answer.swap(false, Ordering::SeqCst) {
             return Err(Error::Remote("no answer".into()));
         }
@@ -427,11 +440,13 @@ impl Secrets for MemSecrets {
 
     fn epochs(&self) -> BoxFuture<'_, Result<HashMap<String, i64>>> {
         Box::pin(async {
+            let snapshot = self.epochs.lock().unwrap().clone();
             let delay = self.epochs_delay_ms.load(Ordering::SeqCst);
             if delay > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
             }
-            Ok(self.epochs.lock().unwrap().clone())
+            tokio::task::yield_now().await;
+            Ok(snapshot)
         })
     }
 
@@ -1148,4 +1163,177 @@ async fn candidate_secret_key_is_recovered_after_set_secret_key_failure() {
     assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(staged.as_str()));
     assert!(d.secrets.pending_secret_key.lock().unwrap().is_none());
     assert_eq!(k.open(&k.seal(b"recovered").unwrap()).unwrap(), b"recovered");
+}
+
+#[tokio::test]
+async fn default_set_pending_secret_key_rejects_some_and_allows_none() {
+    struct BareSecrets;
+    impl Secrets for BareSecrets {
+        fn password(&self) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn set_secret_key(&self, _: String) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn kept(&self, _: String) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn set_kept(&self, _: String, _: String) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn epochs(&self) -> BoxFuture<'_, Result<HashMap<String, i64>>> {
+            Box::pin(async { Ok(HashMap::new()) })
+        }
+        fn set_epochs(&self, _: HashMap<String, i64>) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn pending(&self) -> BoxFuture<'_, Result<HashMap<String, String>>> {
+            Box::pin(async { Ok(HashMap::new()) })
+        }
+        fn set_pending(&self, _: HashMap<String, String>) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let s = BareSecrets;
+    assert!(s.set_pending_secret_key(None).await.is_ok());
+    assert!(matches!(s.set_pending_secret_key(Some("SK-123".into())).await, Err(Error::Host(_))));
+}
+
+#[tokio::test]
+async fn open_rechecks_active_secret_key_before_refusing_as_missing() {
+    // A remote already sealed with a secret key; `secret_key()` returns None on
+    // the first call and Some(sk) on the recheck before refusal.
+    let file = Arc::new(MemKeyFile::default());
+    let writer = Device::new("pw");
+    let kw = writer.key(&file).await.unwrap();
+    let sk = writer.secrets.secret_key.lock().unwrap().clone().unwrap();
+
+    struct LateKeySecrets {
+        inner: Arc<MemSecrets>,
+        sk: String,
+        reads: AtomicU64,
+    }
+    impl Secrets for LateKeySecrets {
+        fn password(&self) -> BoxFuture<'_, Result<Option<String>>> {
+            self.inner.password()
+        }
+        fn secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+            let n = self.reads.fetch_add(1, Ordering::SeqCst);
+            let sk = if n == 0 { None } else { Some(self.sk.clone()) };
+            Box::pin(async move { Ok(sk) })
+        }
+        fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+            self.inner.set_secret_key(key)
+        }
+        fn pending_secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+            self.inner.pending_secret_key()
+        }
+        fn set_pending_secret_key(&self, key: Option<String>) -> BoxFuture<'_, Result<()>> {
+            self.inner.set_pending_secret_key(key)
+        }
+        fn kept(&self, id: String) -> BoxFuture<'_, Result<Option<String>>> {
+            self.inner.kept(id)
+        }
+        fn set_kept(&self, id: String, identities: String) -> BoxFuture<'_, Result<()>> {
+            self.inner.set_kept(id, identities)
+        }
+        fn epochs(&self) -> BoxFuture<'_, Result<HashMap<String, i64>>> {
+            self.inner.epochs()
+        }
+        fn set_epochs(&self, epochs: HashMap<String, i64>) -> BoxFuture<'_, Result<()>> {
+            self.inner.set_epochs(epochs)
+        }
+        fn pending(&self) -> BoxFuture<'_, Result<HashMap<String, String>>> {
+            self.inner.pending()
+        }
+        fn set_pending(&self, pending: HashMap<String, String>) -> BoxFuture<'_, Result<()>> {
+            self.inner.set_pending(pending)
+        }
+    }
+
+    let inner = MemSecrets::with("pw");
+    *inner.secret_key.lock().unwrap() = None;
+    let ring = KeyRing::new(Arc::new(LateKeySecrets { inner, sk, reads: AtomicU64::new(0) }), "Test sync key");
+    let kr = ring.of(Arc::new(KeyFileOf(file.clone(), "account".into())), false).await.unwrap();
+    assert!(ring.secret_key_missing().borrow().is_empty());
+    assert_eq!(kr.open(&kw.seal(b"late-key").unwrap()).unwrap(), b"late-key");
+}
+
+#[tokio::test]
+async fn staged_secret_key_recovers_pending_password_change_even_when_upgraded_2fa() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("old-pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+    d.secrets.fail_set_secret_key.store(true, Ordering::SeqCst);
+
+    // Remote write commits under ("old-pw", staged), then set_secret_key fails.
+    assert!(matches!(d.key(&file).await, Err(Error::Host(_))));
+    let staged = d.secrets.pending_secret_key.lock().unwrap().clone().expect("candidate staged");
+    let staged_sk = fl_lkc::secret_key::SecretKey::parse(&staged).unwrap();
+
+    // Simulate upgraded_2fa already recorded + password changed from "old-pw" to "new-pw".
+    d.secrets.epochs.lock().unwrap().insert("2fa:account".into(), 1);
+    *d.secrets.password.lock().unwrap() = Some("new-pw".into());
+    d.ring.password_changed(Some("old-pw".into())).await.unwrap();
+
+    // While set_secret_key still fails, reseal writes under ("new-pw", staged) but
+    // MUST retain staged + pending so a later retry recovers without generating a new key.
+    assert!(matches!(d.key(&file).await, Err(Error::Host(_))));
+    assert_eq!(d.secrets.pending_secret_key.lock().unwrap().as_deref(), Some(staged.as_str()));
+    assert_eq!(d.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("old-pw"));
+
+    // Once keychain recovers, retry completes using the same staged key (no new key generated).
+    d.secrets.fail_set_secret_key.store(false, Ordering::SeqCst);
+    let k = d.key(&file).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(staged.as_str()));
+    assert!(d.secrets.pending_secret_key.lock().unwrap().is_none());
+    assert!(d.secrets.pending.lock().unwrap().is_empty());
+    let raw = file.file.lock().unwrap().clone().unwrap().0;
+    assert!(crate::key::open_with_password(&raw, &staged_sk.combine_passphrase("new-pw")).unwrap().is_some());
+    assert_eq!(k.open(&k.seal(b"resealed").unwrap()).unwrap(), b"resealed");
+}
+
+#[tokio::test]
+async fn log_append_persist_failure_advances_checkpoint_without_resending() {
+    let log = MemLog::new();
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let key = d.key(&file).await.unwrap();
+    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+
+    let sync = LogSync::new(d.host.clone(), log.clone(), key.clone());
+    log.fail_persist_append.store(true, Ordering::SeqCst);
+    // Remote append commits seq 1, local watermark save fails -> surfaces Host error.
+    let err = sync.sync().await.unwrap_err();
+    assert!(matches!(err, Error::Host(_)));
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(log.lock().batches.len(), 1);
+
+    // Next sync MUST NOT resend the committed batch (checkpoint + JOINED already advanced).
+    sync.sync().await.unwrap();
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(log.lock().batches.len(), 1);
+
+    // Steady-state append with local watermark save failure also advances checkpoint without resending.
+    d.host.edit("servers", "s2", Some(json!({ "name": "box2" })));
+    log.fail_persist_append.store(true, Ordering::SeqCst);
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(log.lock().batches.len(), 2);
+
+    sync.sync().await.unwrap();
+    assert_eq!(log.append_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(log.lock().batches.len(), 2);
+
+    // A second device sees both committed records cleanly.
+    let d2 = Device::new("pw");
+    let k2 = d2.key(&file).await.unwrap();
+    let sync2 = LogSync::new(d2.host.clone(), log.clone(), k2);
+    sync2.sync().await.unwrap();
+    assert_eq!(d2.host.value("servers", "s1"), Some(json!({ "name": "box1" })));
+    assert_eq!(d2.host.value("servers", "s2"), Some(json!({ "name": "box2" })));
 }

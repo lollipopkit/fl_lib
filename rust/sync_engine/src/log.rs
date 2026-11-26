@@ -138,7 +138,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         // A snapshot goes past the last one: a batch makes room for it.
         let body = self.core.seal.seal(&engine::encode(&[], Map::new())?)?;
         let last = self.core.get_hlc(SENT).await?;
-        self.append(&run, Batch { key: engine::new_key(), body, last }).await?;
+        self.append(&run, Batch { key: engine::new_key(), body, last }, false).await?;
         self.pull_in(&run).await?;
         if !self.write_snapshot(&run).await? {
             return Err(Error::Host("no snapshot written".into()));
@@ -205,7 +205,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             held.as_ref().map(|(b, _)| b.clone())
         };
         if let Some(batch) = unanswered {
-            compact |= self.append(run, batch).await?;
+            compact |= self.append(run, batch, false).await?;
         }
         core.host.stamp().await?;
         let sent = core.get_hlc(SENT).await?;
@@ -218,13 +218,16 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let stamped: Vec<_> = if complete { all } else { all.into_iter().filter(|r| stopped.is_some_and(|h| r.h <= h)).collect() };
         let mine = core.device().await?;
         let mut last = sent;
-        for (chunk, body) in core.batches(ops)? {
+        let batches = core.batches(ops)?;
+        let last_idx = batches.len().saturating_sub(1);
+        for (idx, (chunk, body)) in batches.into_iter().enumerate() {
             for op in &chunk {
                 if op.h.device == mine && Some(op.h) > last {
                     last = Some(op.h);
                 }
             }
-            compact |= self.append(run, Batch { key: engine::new_key(), body, last }).await?;
+            let mark_joined = joining && complete && idx == last_idx;
+            compact |= self.append(run, Batch { key: engine::new_key(), body, last }, mark_joined).await?;
         }
         // Past what was left out too, so it is not looked at again.
         let newest = stamped.iter().map(|r| r.h).filter(|h| h.device == mine).fold(last, |a, h| if Some(h) > a { Some(h) } else { a });
@@ -243,7 +246,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
 
     /// Sends [batch]; whether a snapshot is due. A full log is compacted
     /// first, then sent again.
-    async fn append(&self, run: &Run<'_>, batch: Batch) -> Result<bool> {
+    async fn append(&self, run: &Run<'_>, batch: Batch, mark_joined: bool) -> Result<bool> {
         let core = &self.core;
         let mut compacted = false;
         loop {
@@ -255,7 +258,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                 };
                 *held = Some((batch.clone(), at));
             }
-            let appended = match self.transport.append(batch.key.clone(), batch.body.clone()).await {
+            let (appended, persist_err) = match self.transport.append(batch.key.clone(), batch.body.clone()).await {
                 Err(Error::LogFull) if !compacted => {
                     self.pull_in(run).await?;
                     if !self.write_snapshot(run).await? {
@@ -264,14 +267,19 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                     compacted = true;
                     continue;
                 }
-                other => other?,
+                Err(Error::AppendPersistFailed { appended, detail }) => (appended, Some(detail)),
+                other => (other?, None),
             };
             *self.unanswered.lock().unwrap_or_else(|e| e.into_inner()) = None;
             let log = core.get(LOG).await?;
             let cursor = core.get_int(CURSOR).await?;
+            let log_id = log.clone().unwrap_or_else(|| appended.log.clone());
             let mut state = vec![(SENT, Some(hlc_text(batch.last)))];
             if log.is_none() {
-                state.push((LOG, Some(appended.log.clone())));
+                state.push((LOG, Some(log_id.clone())));
+            }
+            if mark_joined {
+                state.push((JOINED, Some(log_id)));
             }
             // Right after the cursor: nothing between to read, and this batch
             // is what is here already.
@@ -279,6 +287,9 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                 state.push((CURSOR, Some(appended.seq.to_string())));
             }
             core.put(state).await?;
+            if let Some(detail) = persist_err {
+                return Err(Error::Host(detail));
+            }
             return Ok(appended.compact);
         }
     }

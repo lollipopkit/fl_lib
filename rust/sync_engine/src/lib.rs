@@ -65,6 +65,10 @@ pub enum Error {
     /// What an op names is not there yet (a blob a folder has not brought):
     /// the read stops before it, to be tried again.
     Pending(String),
+    /// The remote append already committed ([appended]), but local watermark
+    /// persistence failed ([detail]); the engine advances its local checkpoint
+    /// from [appended] so the mutation is not resent.
+    AppendPersistFailed { appended: crate::log::Appended, detail: String },
 }
 
 impl std::fmt::Display for Error {
@@ -83,6 +87,7 @@ impl std::fmt::Display for Error {
             Error::Untrusted(e) => write!(f, "untrusted: {e}"),
             Error::SignedOut => f.write_str("signed out"),
             Error::Pending(what) => write!(f, "{what} is not here yet"),
+            Error::AppendPersistFailed { detail, .. } => write!(f, "host: {detail}"),
         }
     }
 }

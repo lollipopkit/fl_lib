@@ -72,9 +72,17 @@ pub trait Secrets: Send + Sync + 'static {
         Box::pin(async { Ok(None) })
     }
 
-    /// Stores or clears the staged candidate secret key.
-    fn set_pending_secret_key(&self, _key: Option<String>) -> BoxFuture<'_, Result<()>> {
-        Box::pin(async { Ok(()) })
+    /// Stores or clears the staged candidate secret key. Implementors must
+    /// override this for durable staging: the default rejects `Some(_)` so a
+    /// candidate key can never be silently discarded, while permitting `None`
+    /// for cleanup.
+    fn set_pending_secret_key(&self, key: Option<String>) -> BoxFuture<'_, Result<()>> {
+        match key {
+            None => Box::pin(async { Ok(()) }),
+            Some(_) => Box::pin(async {
+                Err(Error::Host("Secrets::set_pending_secret_key is not implemented".into()))
+            }),
+        }
     }
 
     /// Whether sync may silently generate a brand-new secret key when none is
@@ -565,6 +573,7 @@ impl SyncKey {
                 self.ring.said_ok(&id);
                 return Ok(());
             }
+            let staged = if sk.is_none() { self.ring.pending_secret_key().await? } else { None };
             if let Some(ref sk) = sk {
                 let derived = sk.combine_passphrase(pwd);
                 if let Some((epoch, identities)) = read(&body, &derived)? {
@@ -573,7 +582,7 @@ impl SyncKey {
                     }
                     continue;
                 }
-            } else if let Some(staged) = self.ring.pending_secret_key().await? {
+            } else if let Some(ref staged) = staged {
                 // Recover a candidate key whose remote write committed before
                 // `set_secret_key` failed or the process exited.
                 let derived = staged.combine_passphrase(pwd);
@@ -591,7 +600,7 @@ impl SyncKey {
                     if !use_staged {
                         continue;
                     }
-                    if self.take(epoch, identities, version, pwd, &staged).await? {
+                    if self.take(epoch, identities, version, pwd, staged).await? {
                         return Ok(());
                     }
                     continue;
@@ -618,6 +627,34 @@ impl SyncKey {
             if let Some(previous) = self.ring.secrets.pending().await?.get(&id).cloned()
                 && previous != pwd
             {
+                // Recover a staged key sealed under the previous password (even
+                // when `upgraded_2fa` is already set) without generating a new key.
+                if sk.is_none()
+                    && let Some(ref staged) = staged
+                    && let Some((old_epoch, old_identities)) = read(&body, &staged.combine_passphrase(&previous))?
+                    && verified.is_none_or(|v| v == old_epoch)
+                {
+                    let identities = self.merged(old_identities);
+                    let epoch = old_epoch + 1;
+                    let written = {
+                        let _init = self.ring.secret_key_init.lock().await;
+                        if let Some(existing) = self.ring.secret_key().await?
+                            && existing.format().as_str() != staged.format().as_str()
+                        {
+                            continue;
+                        }
+                        let Some(written) = self.file().write(self.sealed(&identities, epoch, pwd, staged)?, Some(version)).await? else {
+                            continue;
+                        };
+                        if self.ring.secret_key().await?.is_none() {
+                            self.ring.secrets.set_secret_key(staged.format().to_string()).await?;
+                        }
+                        let _ = self.ring.secrets.set_pending_secret_key(None).await;
+                        written
+                    };
+                    self.use_identities(identities, true).await?;
+                    return self.opened_at(epoch, written, pwd, staged).await;
+                }
                 let old = match &sk {
                     Some(k) => match read(&body, &k.combine_passphrase(&previous))? {
                         Some(found) => Some(found),
@@ -644,6 +681,11 @@ impl SyncKey {
                 if sk.is_some() {
                     self.ring.set_pending(&id, None).await?;
                 }
+            }
+            if sk.is_none() && self.ring.secret_key().await?.is_some() {
+                // Another remote or caller stored an active secret key while we
+                // checked; retry immediately so the body can be opened with it.
+                continue;
             }
             let missing_sk = sk.is_none();
             self.lock().refused = Some((tag, missing_sk));

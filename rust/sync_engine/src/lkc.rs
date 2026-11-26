@@ -54,8 +54,18 @@ impl<S: Store> BlobStore for LkcLog<S> {
 
 impl<S: Store> LogTransport for LkcLog<S> {
     async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
-        let a = self.0.append(&key, body).await.map_err(remote)?;
-        Ok(Appended { log: a.log, seq: a.seq, compact: a.compact })
+        match self.0.append(&key, body).await {
+            Ok(a) => Ok(Appended { log: a.log, seq: a.seq, compact: a.compact }),
+            Err(e) => {
+                if let Some(fl_lkc::sync::Committed::Batch(a)) = e.committed {
+                    return Err(Error::AppendPersistFailed {
+                        appended: Appended { log: a.log, seq: a.seq, compact: a.compact },
+                        detail: e.detail,
+                    });
+                }
+                Err(remote(e))
+            }
+        }
     }
 
     async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {

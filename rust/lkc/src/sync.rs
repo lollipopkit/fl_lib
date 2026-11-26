@@ -364,7 +364,16 @@ struct TeamSpace {
 }
 
 #[derive(Default)]
+struct PersonalSlot {
+    auth: Option<Arc<PersonalAuth>>,
+    generation: u64,
+}
+
+#[derive(Default)]
 struct PendingCommits {
+    /// Matches [`PersonalSlot::generation`] so stale in-flight writes from a previous
+    /// auth cannot insert or reuse recovery entries after `set_personal`.
+    generation: u64,
     files: HashMap<(String, Condition, [u8; 32]), String>,
     batches: HashMap<(String, [u8; 32]), Appended>,
     snapshots: HashMap<(i64, [u8; 32]), String>,
@@ -377,7 +386,7 @@ pub struct SyncClient<S: Store> {
     app: String,
     team: Option<TeamSpace>,
     /// Personal-space Ed25519 signer/verifier and monotonic version tracker.
-    personal: Mutex<Option<Arc<PersonalAuth>>>,
+    personal: Mutex<PersonalSlot>,
     clock: Clock,
     /// The version each name was last written at by this device, so its own
     /// writes heard back on [`SyncClient::events`] are not taken for another's.
@@ -401,7 +410,7 @@ impl<S: Store> SyncClient<S> {
             session,
             app: app.to_string(),
             team: None,
-            personal: Mutex::new(None),
+            personal: Mutex::new(PersonalSlot::default()),
             clock: Clock::default(),
             written: Mutex::new(HashMap::new()),
             dest_locks: Mutex::new(HashMap::new()),
@@ -411,31 +420,46 @@ impl<S: Store> SyncClient<S> {
 
     /// Attaches or clears personal-space signing and rollback protection.
     /// Ignored on team clients (which sign through [`crate::team::TeamSpace`]).
-    /// Changing or detaching auth clears cached per-account commit recovery
-    /// state and SSE own-write markers so another auth instance or account
-    /// never inherits them.
+    /// Changing or detaching auth advances the auth generation and clears
+    /// cached per-account commit recovery state and SSE own-write markers so
+    /// another auth instance or in-flight write from a previous auth never
+    /// inherits or pollutes them.
     pub fn set_personal(&self, auth: Option<Arc<PersonalAuth>>) {
         if self.team.is_none() {
             let mut slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-            let same = match (&*slot, &auth) {
+            let same = match (&slot.auth, &auth) {
                 (Some(a), Some(b)) => Arc::ptr_eq(a, b),
                 (None, None) => true,
                 _ => false,
             };
-            *slot = auth;
-            drop(slot);
             if !same {
-                *self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()) = PendingCommits::default();
+                // Keep `personal` locked while updating `pending_commits` and
+                // `written` (strict lock order: personal -> pending_commits ->
+                // written) so concurrent `set_personal` calls cannot rewind
+                // `pending.generation` or race with writes on the new auth.
+                slot.generation = slot.generation.wrapping_add(1);
+                slot.auth = auth;
+                let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                pending.generation = slot.generation;
+                pending.files.clear();
+                pending.batches.clear();
+                pending.snapshots.clear();
+                drop(pending);
                 self.written.lock().unwrap_or_else(|e| e.into_inner()).clear();
             }
         }
     }
 
-    fn personal_auth(&self) -> Option<Arc<PersonalAuth>> {
+    fn personal_auth_with_gen(&self) -> Option<(u64, Arc<PersonalAuth>)> {
         if self.team.is_some() {
             return None;
         }
-        self.personal.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+        slot.auth.as_ref().map(|a| (slot.generation, a.clone()))
+    }
+
+    fn personal_auth(&self) -> Option<Arc<PersonalAuth>> {
+        self.personal_auth_with_gen().map(|(_, a)| a)
     }
 
     fn dest_lock(&self, to: &Path) -> Arc<AsyncMutex<()>> {
@@ -457,7 +481,7 @@ impl<S: Store> SyncClient<S> {
             session,
             app: app.to_string(),
             team,
-            personal: Mutex::new(None),
+            personal: Mutex::new(PersonalSlot::default()),
             clock: Clock::default(),
             written: Mutex::new(HashMap::new()),
             dest_locks: Mutex::new(HashMap::new()),
@@ -540,15 +564,21 @@ impl<S: Store> SyncClient<S> {
     /// When personal signing is attached, signs the write and advances the
     /// monotonic file version automatically.
     pub async fn upload_bytes(&self, name: &str, body: Vec<u8>, condition: Condition) -> Result<String, Error> {
-        let Some(auth) = self.personal_auth() else {
+        let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
             return self.upload_signed(name, body, condition, None).await;
         };
         let body = bytes::Bytes::from(body);
         let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes());
-        let pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).files.get(&commit_key).cloned();
+        let pending = {
+            let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+            (guard.generation == auth_gen).then(|| guard.files.get(&commit_key).cloned()).flatten()
+        };
         if let Some(etag) = pending {
             auth.flush_pending_versions().await?;
-            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).files.remove(&commit_key);
+            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation == auth_gen {
+                guard.files.remove(&commit_key);
+            }
             return Ok(etag);
         }
         auth.flush_pending_versions().await?;
@@ -562,7 +592,10 @@ impl<S: Store> SyncClient<S> {
                 Ok(etag) => {
                     if let Err(e) = auth.record_file_version(&self.app, name, version).await {
                         if e.kind == Kind::Invalid {
-                            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).files.insert(commit_key, etag.clone());
+                            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                            if guard.generation == auth_gen {
+                                guard.files.insert(commit_key, etag.clone());
+                            }
                             return Err(e.with_committed(Committed::File { etag, version }));
                         }
                         return Err(e);
@@ -704,15 +737,21 @@ impl<S: Store> SyncClient<S> {
     /// Appends [body] (an age file, up to [`BATCH_MAX`]) to the log, once per
     /// [key] (16 to 64 of `[A-Za-z0-9_-]`): a retry is answered the seq given.
     pub async fn append(&self, key: &str, body: Vec<u8>) -> Result<Appended, Error> {
-        let Some(auth) = self.personal_auth() else {
+        let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
             return self.append_signed(key, body, None).await;
         };
         let body = bytes::Bytes::from(body);
         let commit_key = (key.to_string(), *blake3::hash(&body).as_bytes());
-        let pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).batches.get(&commit_key).cloned();
+        let pending = {
+            let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+            (guard.generation == auth_gen).then(|| guard.batches.get(&commit_key).cloned()).flatten()
+        };
         if let Some(appended) = pending {
             auth.flush_pending_versions().await?;
-            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).batches.remove(&commit_key);
+            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation == auth_gen {
+                guard.batches.remove(&commit_key);
+            }
             return Ok(appended);
         }
         auth.flush_pending_versions().await?;
@@ -728,7 +767,10 @@ impl<S: Store> SyncClient<S> {
         };
         if let Err(e) = auth.record_batch_written(&self.app, key, res.seq).await {
             if e.kind == Kind::Invalid {
-                self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).batches.insert(commit_key, res.clone());
+                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                if guard.generation == auth_gen {
+                    guard.batches.insert(commit_key, res.clone());
+                }
                 return Err(e.with_committed(Committed::Batch(res)));
             }
             return Err(e);
@@ -774,15 +816,18 @@ impl<S: Store> SyncClient<S> {
         if let Some(limit) = limit {
             query.push_str(&format!("&limit={limit}"));
         }
+        let auth = self.personal_auth();
         let response = self.send(Method::GET, &format!("{}/log?{query}", self.app_path()?), |r| r).await?;
         if response.status() == StatusCode::GONE {
+            if let Some(auth) = &auth {
+                auth.flush_pending_versions().await?;
+            }
             let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
             let snapshot_seq = header("sync-snapshot-seq").and_then(|v| v.parse().ok()).ok_or_else(|| Error::new(Kind::Invalid, "a 410 without Sync-Snapshot-Seq"))?;
             return Ok(LogRead::Compacted { log: header("sync-log"), snapshot_seq });
         }
         let page: WirePage = self.json_within(response, MAX_LOG_PAGE).await?;
         let mut batches = Vec::with_capacity(page.batches.len());
-        let auth = self.personal_auth();
         for b in page.batches {
             let body = BASE64.decode(&b.body).map_err(|e| Error::new(Kind::Invalid, format!("batch {}: {e}", b.seq)))?;
             if blake3::hash(&body).to_hex().as_str() != b.digest {
@@ -804,15 +849,21 @@ impl<S: Store> SyncClient<S> {
 
     /// [body] as the log's snapshot up to [seq].
     pub async fn put_snapshot_bytes(&self, seq: i64, body: Vec<u8>) -> Result<String, Error> {
-        let Some(auth) = self.personal_auth() else {
+        let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
             return self.put_snapshot_signed(seq, body, None).await;
         };
         let body = bytes::Bytes::from(body);
         let commit_key = (seq, *blake3::hash(&body).as_bytes());
-        let pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).snapshots.get(&commit_key).cloned();
+        let pending = {
+            let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+            (guard.generation == auth_gen).then(|| guard.snapshots.get(&commit_key).cloned()).flatten()
+        };
         if let Some(etag) = pending {
             auth.flush_pending_versions().await?;
-            self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).snapshots.remove(&commit_key);
+            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.generation == auth_gen {
+                guard.snapshots.remove(&commit_key);
+            }
             return Ok(etag);
         }
         auth.flush_pending_versions().await?;
@@ -828,7 +879,10 @@ impl<S: Store> SyncClient<S> {
         };
         if let Err(e) = auth.record_snapshot_written(&self.app, seq).await {
             if e.kind == Kind::Invalid {
-                self.pending_commits.lock().unwrap_or_else(|e| e.into_inner()).snapshots.insert(commit_key, etag.clone());
+                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                if guard.generation == auth_gen {
+                    guard.snapshots.insert(commit_key, etag.clone());
+                }
                 return Err(e.with_committed(Committed::Snapshot { etag, seq }));
             }
             return Err(e);
