@@ -32,7 +32,7 @@ use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex as AsyncMutex;
 
-use crate::personal::{LogObserver, PersonalAuth};
+use crate::personal::{LogObserver, PersonalAuth, RETAINED_MISMATCH, RetainedBinding};
 use crate::session::{Session, Store};
 use crate::team::{canonical, team_bytes};
 use crate::{Failure, now_ms, unreachable};
@@ -706,7 +706,7 @@ impl<S: Store> SyncClient<S> {
                         ReconciledSnapshot::Hit(_, resolved_log) => return Ok((true, Some(resolved_log))),
                         ReconciledSnapshot::Replaced(_) => continue,
                         ReconciledSnapshot::Gone => {
-                            self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq).await?;
+                            self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq, Settle::Entry(commit_key, entry_id)).await?;
                             return Ok((false, None));
                         }
                     }
@@ -733,7 +733,7 @@ impl<S: Store> SyncClient<S> {
                             DetachedReconcile::Recovered(resolved_log) => return Ok((true, Some(resolved_log))),
                             DetachedReconcile::Conflicted => return Ok((false, None)),
                             DetachedReconcile::Gone => {
-                                self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq).await?;
+                                self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq, Settle::Nothing).await?;
                                 return Ok((false, None));
                             }
                         },
@@ -745,16 +745,27 @@ impl<S: Store> SyncClient<S> {
     }
 
     /// Records a committed snapshot `/snapshot` no longer serves: on a known
-    /// [log] through [`Self::flush_committed_snapshot`], which records only the
+    /// [log] as [`Self::flush_committed_snapshot`] does, which records only the
     /// signed-snapshot marker once [log] is superseded; on an unknown one only
-    /// the marker, as [seq] belongs to no known log floor.
-    async fn flush_gone_snapshot(&self, expected_user: &str, auth: &PersonalAuth, auth_gen: u64, log: Option<&str>, seq: i64) -> Result<(), Error> {
+    /// the marker, as [seq] belongs to no known log floor. [settle] runs only
+    /// once that is persisted.
+    async fn flush_gone_snapshot(
+        &self,
+        expected_user: &str,
+        auth: &PersonalAuth,
+        auth_gen: u64,
+        log: Option<&str>,
+        seq: i64,
+        settle: Settle,
+    ) -> Result<(), Error> {
         match log {
-            Some(l) => self.flush_committed_snapshot(expected_user, Some(l), seq).await.map(drop),
+            Some(l) => self.record_committed_snapshot(expected_user, Some(l), seq, settle).await.map(drop),
             None => {
                 auth.record_snapshot_seen(&self.app).await?;
                 self.ensure_personal_gen(auth_gen)?;
-                self.prune_committed_snapshots(auth_gen, None, seq);
+                if !self.settle_committed_snapshots(auth_gen, settle) {
+                    return Err(Error::new(Kind::SignedOut, "personal signing auth changed during snapshot watermark flush"));
+                }
                 Ok(())
             }
         }
@@ -819,6 +830,12 @@ impl<S: Store> SyncClient<S> {
     /// without resending `PUT /snapshot`. Returns `false` if another log
     /// superseded [log], including one observed while its binding was saved.
     pub async fn flush_committed_snapshot(&self, expected_user: &str, log: Option<&str>, seq: i64) -> Result<bool, Error> {
+        self.record_committed_snapshot(expected_user, log, seq, Settle::Covered(log.map(str::to_string), seq)).await
+    }
+
+    /// [`Self::flush_committed_snapshot`], settling recovery entries by [settle]
+    /// once the watermark is persisted.
+    async fn record_committed_snapshot(&self, expected_user: &str, log: Option<&str>, seq: i64, settle: Settle) -> Result<bool, Error> {
         const MAX_AUTH_REBIND_RETRIES: usize = 4;
         if seq <= 0 {
             return Err(Error::new(Kind::Invalid, format!("invalid committed snapshot seq {seq}")));
@@ -838,33 +855,42 @@ impl<S: Store> SyncClient<S> {
                 Err(e) if e.kind == Kind::SignedOut && self.ensure_personal_gen(auth_gen).is_err() => continue,
                 Err(e) => return Err(e),
             };
-            if self.prune_committed_snapshots(auth_gen, log, seq) {
+            if self.settle_committed_snapshots(auth_gen, settle.clone()) {
                 return Ok(compatible);
             }
         }
         Err(Error::new(Kind::Invalid, "personal signing auth changed during snapshot watermark flush"))
     }
 
-    /// Drops pending snapshot commits at or below [seq] of [log] (of no
-    /// known log for `None`); false when the signing auth changed.
-    fn prune_committed_snapshots(&self, auth_gen: u64, log: Option<&str>, seq: i64) -> bool {
+    /// Drops the recovery entries [settle] names; false when the signing auth
+    /// changed.
+    fn settle_committed_snapshots(&self, auth_gen: u64, settle: Settle) -> bool {
         let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
         if slot.generation != auth_gen || slot.auth.is_none() {
             return false;
         }
         let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.generation == auth_gen {
-            guard.snapshots.retain(|(entry_seq, _), (_, binding, _)| {
+        if guard.generation != auth_gen {
+            return true;
+        }
+        match settle {
+            Settle::Nothing => {}
+            Settle::Entry(key, id) => {
+                if guard.snapshots.get(&key).is_some_and(|(cur_id, _, _)| *cur_id == id) {
+                    guard.snapshots.remove(&key);
+                }
+            }
+            Settle::Covered(log, seq) => guard.snapshots.retain(|(entry_seq, _), (_, binding, _)| {
                 if *entry_seq > seq {
                     return true;
                 }
-                match (log, binding) {
+                match (log.as_deref(), binding) {
                     (Some(l), SnapshotLogBinding::Confirmed(k) | SnapshotLogBinding::Assumed(k)) => k != l,
                     (Some(_), SnapshotLogBinding::Unknown) => true,
                     (None, SnapshotLogBinding::Confirmed(_) | SnapshotLogBinding::Assumed(_)) => true,
                     (None, SnapshotLogBinding::Unknown) => false,
                 }
-            });
+            }),
         }
         true
     }
@@ -1000,20 +1026,15 @@ impl<S: Store> SyncClient<S> {
         self.download_bytes_inner(name, DownloadVerify::BlobStrict).await
     }
 
-    /// Like [`Self::download_blob_bytes`] for a blob bound to a pre-signing
-    /// reference retained by a batch or snapshot: allows an unsigned response
-    /// only when [name] was never previously seen or written signed.
-    pub async fn download_retained_blob_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
-        self.download_bytes_inner(name, DownloadVerify::BlobRetained).await.0
+    /// Like [`Self::download_blob_bytes_checked`] for a blob bound to a
+    /// pre-signing reference retained by a batch or snapshot: allows an
+    /// unsigned response only when [name] was never previously seen or written
+    /// signed and its bytes hold [binding].
+    pub async fn download_retained_blob_bytes_checked(&self, name: &str, binding: RetainedBinding<'_>) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
+        self.download_bytes_inner(name, DownloadVerify::BlobRetained(binding)).await
     }
 
-    /// Like [`Self::download_retained_blob_bytes`], also returning whether
-    /// personal auth was attached and verified this download.
-    pub async fn download_retained_blob_bytes_checked(&self, name: &str) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
-        self.download_bytes_inner(name, DownloadVerify::BlobRetained).await
-    }
-
-    async fn download_bytes_inner(&self, name: &str, verify: DownloadVerify) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
+    async fn download_bytes_inner(&self, name: &str, verify: DownloadVerify<'_>) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
         let auth = self.personal_auth_with_gen();
         let has_auth = auth.is_some();
         let res = async {
@@ -1026,9 +1047,14 @@ impl<S: Store> SyncClient<S> {
                         match verify {
                             DownloadVerify::File => auth.verify_file(&self.app, name, &body, signed.as_ref(), true).await?,
                             DownloadVerify::BlobStrict => auth.verify_blob(&self.app, name, &body, signed.as_ref()).await?,
-                            DownloadVerify::BlobRetained => auth.verify_retained_blob(&self.app, name, &body, signed.as_ref()).await?,
+                            DownloadVerify::BlobRetained(binding) => auth.verify_retained_blob(&self.app, name, &body, signed.as_ref(), binding).await?,
                         }
                         self.ensure_personal_gen(auth_gen)?;
+                    } else if let DownloadVerify::BlobRetained(binding) = verify
+                        && !binding.holds(&body)
+                    {
+                        // Unverified, so whatever it carries is unsigned.
+                        return Err(Error::new(Kind::Untrusted, format!("{}/{name}: {RETAINED_MISMATCH}", self.app)));
                     }
                     Ok(Some((body, etag, signed)))
                 }
@@ -1690,6 +1716,7 @@ impl<S: Store> SyncClient<S> {
                 .then(|| guard.snapshots.get(&commit_key).map(|(id, _, _)| *id))
                 .flatten()
         };
+        let mut gone_entry = None;
         if expected_id.is_some() {
             for _ in 0..MAX_CACHE_FLUSH_RETRIES {
                 let Some(entry_id) = expected_id else { break };
@@ -1827,7 +1854,11 @@ impl<S: Store> SyncClient<S> {
                                         expected_id = Some(next_id);
                                         continue;
                                     }
-                                    ReconciledSnapshot::Gone => break,
+                                    ReconciledSnapshot::Gone => {
+                                        // Superseded by the PUT sent next; settled after the barrier below.
+                                        gone_entry = Some(entry_id);
+                                        break;
+                                    }
                                 }
                             }
                             CacheCheck::Replaced(next_id) => {
@@ -1879,6 +1910,11 @@ impl<S: Store> SyncClient<S> {
         }
         auth.flush_pending_versions().await?;
         self.ensure_personal_gen(auth_gen)?;
+        if let Some(entry_id) = gone_entry
+            && !self.settle_committed_snapshots(auth_gen, Settle::Entry(commit_key, entry_id))
+        {
+            return Err(Error::new(Kind::SignedOut, "personal signing auth changed during write"));
+        }
         auth.ensure_published(&self.session, false).await?;
         self.ensure_personal_gen(auth_gen)?;
         let log_before = auth.signed_log_id(&self.app).await;
@@ -1925,8 +1961,9 @@ impl<S: Store> SyncClient<S> {
     }
 
     /// Reconciles an uncommitted-log snapshot recovery entry against `/snapshot`
-    /// before reusing or removing it. Network or persistence errors retain the
-    /// recovery entry so the committed snapshot remains recoverable on retry.
+    /// before reusing it. A `Gone` entry stays for the caller to settle after
+    /// its durability barrier; network or persistence errors retain it too, so
+    /// the committed snapshot remains recoverable on retry.
     async fn reconcile_snapshot_commit(
         &self,
         auth: &PersonalAuth,
@@ -1948,17 +1985,15 @@ impl<S: Store> SyncClient<S> {
         self.ensure_personal_gen(auth_gen)?;
         match fetched {
             Fetched::Missing => {
+                // Left for the caller to settle once the marker is persisted.
                 let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
                 if slot.generation == auth_gen && slot.auth.is_some() {
-                    let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                    if guard.generation == auth_gen {
-                        match guard.snapshots.get(&commit_key) {
-                            Some((cur_id, _, _)) if *cur_id == entry_id => {
-                                guard.snapshots.remove(&commit_key);
-                            }
-                            Some((cur_id, _, _)) => return Ok(ReconciledSnapshot::Replaced(*cur_id)),
-                            None => {}
-                        }
+                    let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                    if guard.generation == auth_gen
+                        && let Some((cur_id, _, _)) = guard.snapshots.get(&commit_key)
+                        && *cur_id != entry_id
+                    {
+                        return Ok(ReconciledSnapshot::Replaced(*cur_id));
                     }
                 } else {
                     drop(slot);
@@ -2005,14 +2040,11 @@ impl<S: Store> SyncClient<S> {
                     let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                     if guard.generation == auth_gen {
                         return Ok(match guard.snapshots.get(&commit_key) {
-                            Some((cur_id, _, _)) if *cur_id == entry_id => {
+                            Some((cur_id, _, _)) if *cur_id == entry_id && same_snapshot => {
                                 guard.snapshots.remove(&commit_key);
-                                if same_snapshot {
-                                    ReconciledSnapshot::Hit(expected_etag.to_string(), snap.log)
-                                } else {
-                                    ReconciledSnapshot::Gone
-                                }
+                                ReconciledSnapshot::Hit(expected_etag.to_string(), snap.log)
                             }
+                            Some((cur_id, _, _)) if *cur_id == entry_id => ReconciledSnapshot::Gone,
                             Some((cur_id, _, _)) => ReconciledSnapshot::Replaced(*cur_id),
                             None => ReconciledSnapshot::Gone,
                         });
@@ -2552,11 +2584,21 @@ enum DetachedReconcile {
     Gone,
 }
 
+/// Which snapshot recovery entries a persisted watermark settles.
+#[derive(Clone)]
+enum Settle {
+    Nothing,
+    /// The entry under this key, if it still has this id.
+    Entry(SnapshotCommitKey, u64),
+    /// Entries at or below this seq of this log (of no known log for `None`).
+    Covered(Option<String>, i64),
+}
+
 #[derive(Clone, Copy)]
-enum DownloadVerify {
+enum DownloadVerify<'a> {
     File,
     BlobStrict,
-    BlobRetained,
+    BlobRetained(RetainedBinding<'a>),
 }
 
 /// Where a download goes.

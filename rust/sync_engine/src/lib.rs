@@ -19,6 +19,7 @@ use std::collections::HashSet;
 use std::future::Future;
 
 pub use fl_sync::{Hlc, Op};
+pub use fl_lkc::personal::{RETAINED_MISMATCH, RetainedBinding};
 use serde_json::Value;
 
 use crate::log::Appended;
@@ -238,15 +239,23 @@ pub trait BlobStore: Send + Sync + 'static {
     fn get_blob(&self, name: String) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
 
     /// Like [Self::get_blob], answering `(bytes, was_signed)` and permitting an
-    /// unsigned pre-signing blob only when [allow_retained_unsigned] is true
-    /// (bound to a retained reference from a batch or snapshot) and the blob
-    /// was never previously signed.
+    /// unsigned pre-signing blob only when [retained] is given (a reference
+    /// retained by a batch or snapshot, or by this device's own content), the
+    /// bytes hold it, and the blob was never previously signed.
     fn get_blob_verified(
         &self,
         name: String,
-        _allow_retained_unsigned: bool,
+        retained: Option<RetainedBinding<'_>>,
     ) -> impl Future<Output = Result<Option<(Vec<u8>, bool)>>> + Send {
-        async move { Ok(self.get_blob(name).await?.map(|b| (b, false))) }
+        async move {
+            let Some(body) = self.get_blob(name.clone()).await? else {
+                return Ok(None);
+            };
+            if retained.is_some_and(|b| !b.holds(&body)) {
+                return Err(Error::Untrusted(format!("{name}: {RETAINED_MISMATCH}")));
+            }
+            Ok(Some((body, false)))
+        }
     }
 
     /// The blobs whose name starts with [prefix], and when each was written

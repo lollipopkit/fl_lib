@@ -2,7 +2,7 @@
 //! as batches of ops, applies the ops other devices sent that win, and writes
 //! a snapshot when the log asks for one.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 
@@ -145,6 +145,14 @@ struct PendingSnapshot {
     created_at: i64,
 }
 
+/// A verified signed snapshot's log, seq and the blobs it names
+/// ([engine::BlobBindings::covering]).
+struct Covering {
+    log: String,
+    seq: i64,
+    blobs: HashMap<String, Option<String>>,
+}
+
 pub struct LogSync<H, T, S> {
     core: Core<H, T, S>,
     transport: Arc<T>,
@@ -274,6 +282,8 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
 
     async fn read(&self, run: &Run<'_>) -> Result<()> {
         self.core.begin_read();
+        // What a verified signed snapshot covers, fetched once a read needs it.
+        let mut covering: Option<Option<Covering>> = None;
         loop {
             let cursor = self.core.get_int(CURSOR).await?;
             let log = if cursor == 0 { None } else { self.core.get(LOG).await? };
@@ -295,7 +305,24 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                 }
                 Page::Batches { log, batches, more } => {
                     for (seq, body, signed) in batches {
-                        let ops = self.core.decode_bound(&body, &format!("batch {seq}")).await?;
+                        let mut ops = self.core.decode_bound(&body, &format!("batch {seq}")).await?;
+                        // An unsigned batch accepted here predates signing: a
+                        // blob it names without a digest is bound by a signed
+                        // snapshot covering it, or by nothing.
+                        if !signed
+                            && let Some((batch_ops, bindings)) = ops.as_mut()
+                            && !bindings.binds_all(batch_ops)
+                        {
+                            if covering.is_none() {
+                                covering = Some(self.signed_snapshot_covering().await?);
+                            }
+                            if let Some(Some(c)) = &covering
+                                && log.as_ref() == Some(&c.log)
+                                && c.seq >= seq
+                            {
+                                bindings.covering = Some(c.blobs.clone());
+                            }
+                        }
                         self.core
                             .apply_bound(run, ops, signed, self.state(vec![(LOG, log.clone()), (CURSOR, Some(seq.to_string()))]), false)
                             .await?;
@@ -306,6 +333,15 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                 }
             }
         }
+    }
+
+    /// What the snapshot covers, when it is signed.
+    async fn signed_snapshot_covering(&self) -> Result<Option<Covering>> {
+        let Some(snapshot) = self.transport.snapshot().await?.filter(|s| s.signed) else {
+            return Ok(None);
+        };
+        let decoded = self.core.decode_bound(&snapshot.body, &format!("snapshot {}", snapshot.seq)).await?;
+        Ok(decoded.map(|(ops, bindings)| Covering { log: snapshot.log, seq: snapshot.seq, blobs: bindings.covering_of(&ops) }))
     }
 
     fn state(&self, values: Vec<(&str, Option<String>)>) -> Vec<(String, Option<String>)> {

@@ -382,7 +382,11 @@ struct MemSecrets {
     kept: Mutex<HashMap<String, String>>,
     epochs: Mutex<HashMap<String, i64>>,
     pending: Mutex<HashMap<String, String>>,
+    /// Runs after each `set_pending`, with what was saved.
+    on_set_pending: Mutex<Option<PendingHook>>,
 }
+
+type PendingHook = Box<dyn Fn(&HashMap<String, String>) + Send + Sync>;
 
 impl MemSecrets {
     fn with(password: &str) -> Arc<Self> {
@@ -468,7 +472,10 @@ impl Secrets for MemSecrets {
 
     fn set_pending(&self, pending: HashMap<String, String>) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
-            *self.pending.lock().unwrap() = pending;
+            *self.pending.lock().unwrap() = pending.clone();
+            if let Some(hook) = self.on_set_pending.lock().unwrap().as_ref() {
+                hook(&pending);
+            }
             Ok(())
         })
     }
@@ -4159,23 +4166,43 @@ async fn lkc_retained_pre_signing_blob_remains_readable_while_stripped_signed_bl
     let client_b2 = make_client().await;
     client_b2.set_personal(Some(signed_apps_auth()));
     let log_b2 = LogSync::new(dev_b2.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_b2, account: "u1".into() }), sync_key_b2);
+    let snapshot_before_b2 = snapshot.lock().unwrap().clone();
     log_b2.sync().await.unwrap();
-    assert_eq!(dev_b2.host.value("servers", "pre"), Some(pre_val));
+    assert_eq!(dev_b2.host.value("servers", "pre"), Some(pre_val.clone()));
     assert!(dev_b2.host.lock().state.get("log.legacy_blobs").is_some_and(|raw| raw.contains(&pre_blob_name)));
 
-    // 3c. A validly sealed but different unsigned ciphertext under the retained name fails the
-    //     signed snapshot's digest binding, under `signed_apps` too.
+    // B2 wrote the signed snapshot now on the server, binding `pre` to its original ciphertext.
     let original_pre = blobs.lock().unwrap().get(&pre_blob_name).cloned().unwrap();
+    let b2_snapshot = snapshot.lock().unwrap().clone().unwrap();
+    assert_ne!(Some(&b2_snapshot), snapshot_before_b2.as_ref());
+    assert!(b2_snapshot.2.is_some());
+    let (_, b2_doc) = crate::engine::parse(&seal_b2.open(&b2_snapshot.1).unwrap()).unwrap();
+    assert_eq!(b2_doc["legacy_blobs"][&pre_blob_name], json!(blake3::hash(&original_pre.0).to_hex().to_string()));
+
+    // A fresh `signed_apps` reader reads B2's snapshot with the original ciphertext...
+    let fresh_reader = || async {
+        let dev = Device::new("pw");
+        *dev.secrets.secret_key.lock().unwrap() = sk_a.clone();
+        let sync_key = dev.key(&key_file).await.unwrap();
+        let client = make_client().await;
+        client.set_personal(Some(signed_apps_auth()));
+        let log = LogSync::new(dev.host.clone(), Arc::new(crate::lkc::LkcLog { client, account: "u1".into() }), sync_key);
+        (dev, log)
+    };
+    let (dev_b3, log_b3) = fresh_reader().await;
+    log_b3.sync().await.unwrap();
+    assert_eq!(dev_b3.host.value("servers", "pre"), Some(pre_val));
+
+    // 3c. ...while a validly sealed but different unsigned ciphertext under the retained name
+    //     fails exactly the digest binding, not a missing one.
     let resealed = seal_b2.seal(&seal_b2.open(&original_pre.0).unwrap()).unwrap();
     assert_ne!(resealed, original_pre.0);
     blobs.lock().unwrap().insert(pre_blob_name.clone(), (resealed, None));
-    let dev_b3 = Device::new("pw");
-    *dev_b3.secrets.secret_key.lock().unwrap() = sk_a.clone();
-    let sync_key_b3 = dev_b3.key(&key_file).await.unwrap();
-    let client_b3 = make_client().await;
-    client_b3.set_personal(Some(signed_apps_auth()));
-    let log_b3 = LogSync::new(dev_b3.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_b3, account: "u1".into() }), sync_key_b3);
-    assert!(matches!(log_b3.sync().await, Err(Error::Untrusted(_))));
+    let (_dev_b4, log_b4) = fresh_reader().await;
+    match log_b4.sync().await {
+        Err(Error::Untrusted(detail)) => assert_eq!(detail, format!("serverbox/{pre_blob_name}: {}", crate::RETAINED_MISMATCH)),
+        other => panic!("expected digest mismatch, got {other:?}"),
+    }
     blobs.lock().unwrap().insert(pre_blob_name.clone(), original_pre);
 
     // 4. Stripping signature from `post_blob_name` (previously signed!) MUST be rejected as `Untrusted`!
@@ -4403,9 +4430,15 @@ async fn engine_blob_hardening_unbound_legacy_lying_listing_and_local_refresh() 
         async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
             Ok(self.blobs.lock().unwrap().get(&name).map(|(b, _, _)| b.clone()))
         }
-        async fn get_blob_verified(&self, name: String, _allow_retained_unsigned: bool) -> Result<Option<(Vec<u8>, bool)>> {
+        async fn get_blob_verified(&self, name: String, retained: Option<crate::RetainedBinding<'_>>) -> Result<Option<(Vec<u8>, bool)>> {
             self.gets.lock().unwrap().push(name.clone());
-            Ok(self.blobs.lock().unwrap().get(&name).map(|(b, actual, _)| (b.clone(), *actual)))
+            let found = self.blobs.lock().unwrap().get(&name).map(|(b, actual, _)| (b.clone(), *actual));
+            if let Some((body, false)) = &found
+                && retained.is_some_and(|r| !r.holds(body))
+            {
+                return Err(Error::Untrusted(format!("{name}: {}", crate::RETAINED_MISMATCH)));
+            }
+            Ok(found)
         }
         async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
             Ok(self
@@ -4586,4 +4619,198 @@ async fn recovered_snapshot_prefers_resolved_log_over_captured() {
     assert_eq!(recover_snapshot(Some("log-1"), Some("log-recreated")).await, (2, false));
     // No resolved binding: the captured one is kept.
     assert_eq!(recover_snapshot(Some("log-1"), None).await, (1, true));
+}
+
+#[tokio::test]
+async fn key_write_refused_before_dispatch_rolls_back_only_its_own_intent() {
+    let d = Device::new("pw");
+    let file = Arc::new(MemKeyFile::default());
+    // A write intent this write did not create.
+    let prior = serde_json::json!({ "epoch": 9, "pwd": "older" }).to_string();
+    d.secrets.pending.lock().unwrap().insert("intent:u1".into(), prior.clone());
+    // The account switches right after the write intent is staged, before
+    // the PUT is dispatched.
+    let ring = d.ring.clone();
+    let switched = Arc::new(AtomicBool::new(false));
+    let flag = switched.clone();
+    *d.secrets.on_set_pending.lock().unwrap() = Some(Box::new(move |p| {
+        if p.get("intent:u1").is_some_and(|raw| !raw.contains("older")) && !flag.swap(true, Ordering::SeqCst) {
+            ring.sync_lkc_account(Some("u2"));
+        }
+    }));
+    let res = d.ring.of_lkc(Arc::new(KeyFileOf(file.clone(), "u1".into())), true).await;
+    assert!(matches!(res, Err(Error::SignedOut)), "{:?}", res.err());
+    assert!(switched.load(Ordering::SeqCst));
+    assert!(file.file.lock().unwrap().is_none(), "no PUT after the refusal");
+    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:u1"), Some(&prior), "only the refused write's own intent goes");
+}
+
+#[tokio::test]
+async fn key_write_intent_is_restored_after_a_lost_cas_and_kept_after_a_transport_error() {
+    struct FlakyKeyFile {
+        writes: AtomicU64,
+    }
+    impl KeyFile for FlakyKeyFile {
+        fn id(&self) -> String {
+            "remote-1".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn write(&self, _: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async {
+                // A lost CAS first; then a PUT that may have reached the backend.
+                match self.writes.fetch_add(1, Ordering::SeqCst) {
+                    0 => Ok(None),
+                    _ => Err(Error::Host("connection reset".into())),
+                }
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+    let d = Device::new("pw");
+    let prior = serde_json::json!({ "epoch": 9, "pwd": "older" }).to_string();
+    d.secrets.pending.lock().unwrap().insert("intent:remote-1".into(), prior.clone());
+    let history = Arc::new(Mutex::new(Vec::new()));
+    let seen = history.clone();
+    *d.secrets.on_set_pending.lock().unwrap() = Some(Box::new(move |p| {
+        seen.lock().unwrap().push(p.get("intent:remote-1").cloned());
+    }));
+    let res = d.ring.of(Arc::new(FlakyKeyFile { writes: AtomicU64::new(0) }), true).await;
+    assert!(matches!(res, Err(Error::Host(_))), "{:?}", res.err());
+    let history = history.lock().unwrap().clone();
+    let staged = history[0].clone().expect("the first write stages its intent");
+    assert_ne!(staged, prior);
+    assert_eq!(history[1].as_ref(), Some(&prior), "a lost CAS restores the intent it replaced");
+    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:remote-1"), Some(&staged), "a PUT that may have landed keeps its intent");
+}
+
+// Pre-signing batches below the signing floor: accepted unsigned, while the
+// account's blob policy refuses an unsigned blob read strictly.
+
+struct BlobLockedLog {
+    inner: Arc<MemLog>,
+    /// Whether the snapshot there reads as verified signed.
+    snapshot_signed: bool,
+}
+
+impl BlobStore for BlobLockedLog {
+    fn signs_blobs(&self) -> bool {
+        true
+    }
+
+    async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
+        self.inner.put_blob(name, body).await
+    }
+
+    async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
+        self.inner.get_blob(name).await
+    }
+
+    async fn get_blob_verified(&self, name: String, retained: Option<crate::RetainedBinding<'_>>) -> Result<Option<(Vec<u8>, bool)>> {
+        let Some(body) = self.inner.get_blob(name.clone()).await? else {
+            return Ok(None);
+        };
+        match retained {
+            None => Err(Error::Untrusted(format!("{name}: server stripped signature"))),
+            Some(binding) if !binding.holds(&body) => Err(Error::Untrusted(format!("{name}: {}", crate::RETAINED_MISMATCH))),
+            Some(_) => Ok(Some((body, false))),
+        }
+    }
+
+    async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
+        self.inner.blobs(prefix).await
+    }
+
+    async fn delete_blob(&self, name: String) -> Result<()> {
+        self.inner.delete_blob(name).await
+    }
+}
+
+impl LogTransport for BlobLockedLog {
+    async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
+        self.inner.append(key, body).await
+    }
+
+    async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
+        self.inner.read(after, log).await
+    }
+
+    async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
+        self.inner.put_snapshot(seq, body).await
+    }
+
+    async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
+        Ok(self.inner.snapshot().await?.map(|s| SnapshotBody { signed: self.snapshot_signed, ..s }))
+    }
+}
+
+#[tokio::test]
+async fn pre_signing_batch_blob_is_bound_by_its_digest_or_a_covering_signed_snapshot() {
+    let file = Arc::new(MemKeyFile::default());
+    let big = json!({ "payload": "p".repeat(70 << 10) });
+    // A pre-signing device writes batch 1 naming an unsigned blob, no digest beside it.
+    let writer = Device::new("pw");
+    let key = writer.key(&file).await.unwrap();
+    let inner = MemLog::new();
+    writer.host.edit("servers", "pre", Some(big.clone()));
+    writer.log(&inner, &file).await.sync().await.unwrap();
+    let (blob_name, original) = inner.lock().blobs.iter().map(|(n, (b, _))| (n.clone(), b.clone())).next().unwrap();
+    let original_batch = inner.lock().batches[0].2.clone();
+    let (ops, doc) = crate::engine::parse(&key.open(&original_batch).unwrap()).unwrap();
+    assert!(!doc.contains_key("legacy_blobs"));
+    let digest_extra = |hex: String| {
+        let mut extra = serde_json::Map::new();
+        extra.insert("legacy_blobs".into(), json!({ blob_name.clone(): hex }));
+        extra
+    };
+    let reseal = |b: &[u8]| key.seal(&key.open(b).unwrap()).unwrap();
+
+    let read = |snapshot_signed: bool| {
+        let inner = inner.clone();
+        let file = file.clone();
+        async move {
+            let dev = Device::new("pw");
+            let transport = Arc::new(BlobLockedLog { inner, snapshot_signed });
+            let res = LogSync::new(dev.host.clone(), transport, dev.key(&file).await.unwrap()).pull().await;
+            (res, dev.host.value("servers", "pre"))
+        }
+    };
+    let set_blob = |b: Vec<u8>| inner.lock().blobs.get_mut(&blob_name).unwrap().0 = b;
+    let mismatch = format!("{blob_name}: {}", crate::RETAINED_MISMATCH);
+
+    // No binding anywhere: refused, never read unbound.
+    let (res, value) = read(true).await;
+    assert!(matches!(res, Err(Error::Untrusted(d)) if d.ends_with("server stripped signature")));
+    assert_eq!(value, None);
+
+    // A signed snapshot covering batch 1 binds the blob: readable, and other bytes are refused.
+    let covering = key.seal(&crate::engine::encode(&ops, digest_extra(blake3::hash(&original).to_hex().to_string())).unwrap()).unwrap();
+    inner.lock().snapshot = Some((1, covering.clone()));
+    let (res, value) = read(true).await;
+    res.unwrap();
+    assert_eq!(value, Some(big.clone()));
+    set_blob(reseal(&original));
+    assert!(matches!(read(true).await.0, Err(Error::Untrusted(d)) if d == mismatch));
+    set_blob(original.clone());
+    // Unsigned, the snapshot binds nothing.
+    assert!(matches!(read(false).await.0, Err(Error::Untrusted(d)) if d.ends_with("server stripped signature")));
+
+    // A covering signed snapshot that does not name the blob: a later op replaced it.
+    let replaced = vec![Op { d: Some(json!({ "small": 1 })), ..ops[0].clone() }];
+    inner.lock().snapshot = Some((1, key.seal(&crate::engine::encode(&replaced, serde_json::Map::new()).unwrap()).unwrap()));
+    let (res, value) = read(true).await;
+    res.unwrap();
+    assert_eq!(value, None);
+
+    // The unsigned batch's own digest binds it as far as the batch is trusted.
+    inner.lock().snapshot = None;
+    inner.lock().batches[0].2 = key.seal(&crate::engine::encode(&ops, digest_extra(blake3::hash(&original).to_hex().to_string())).unwrap()).unwrap();
+    let (res, value) = read(true).await;
+    res.unwrap();
+    assert_eq!(value, Some(big));
+    set_blob(reseal(&original));
+    assert!(matches!(read(true).await.0, Err(Error::Untrusted(d)) if d == mismatch));
 }

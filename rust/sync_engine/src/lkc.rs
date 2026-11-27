@@ -2,13 +2,14 @@
 //! file, `identity.age`, written only if unchanged ([KeyFile]).
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use fl_lkc::Store;
 use fl_lkc::sync::{Committed, Condition, Error as LkcError, Kind, LogRead, SyncClient};
 
 use crate::key::{BoxFuture, KeyFile, Versioned};
 use crate::log::{Appended, LogTransport, Page, SnapshotBody};
-use crate::{BlobStore, Error, Listed, Result};
+use crate::{BlobStore, Error, Listed, Result, RetainedBinding};
 
 /// The key file's name beside the log.
 pub const KEY_FILE: &str = "identity.age";
@@ -46,17 +47,24 @@ impl<S: Store> BlobStore for LkcLog<S> {
         let (res, signed) = self.client.upload_blob_bytes_checked(&name, body.clone()).await;
         match res {
             Ok(_) => Ok(signed),
-            Err(e) if e.kind == Kind::Changed => match self.get_blob_verified(name.clone(), true).await? {
-                None => Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob"))),
-                Some((_, true)) => Ok(true),
-                Some((remote_bytes, false)) => {
-                    if signed && remote_bytes == body {
-                        Err(Error::Untrusted(format!("{name}: server stripped signature on upload")))
-                    } else {
-                        Ok(false)
-                    }
+            Err(e) if e.kind == Kind::Changed => {
+                // Probes only whether the blob there is signed: an unsigned one
+                // other than [body] is bound by the caller against its content.
+                let differs = AtomicBool::new(false);
+                let same = |b: &[u8]| {
+                    let same = b == body.as_slice();
+                    differs.store(!same, Ordering::Relaxed);
+                    same
+                };
+                match self.get_blob_verified(name.clone(), Some(RetainedBinding::Content(&same))).await {
+                    Ok(None) => Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob"))),
+                    Ok(Some((_, true))) => Ok(true),
+                    Ok(Some((_, false))) if signed => Err(Error::Untrusted(format!("{name}: server stripped signature on upload"))),
+                    Ok(Some((_, false))) => Ok(false),
+                    Err(Error::Untrusted(_)) if differs.load(Ordering::Relaxed) => Ok(false),
+                    Err(e) => Err(e),
                 }
-            },
+            }
             Err(e) => Err(remote(e)),
         }
     }
@@ -65,11 +73,10 @@ impl<S: Store> BlobStore for LkcLog<S> {
         Ok(self.client.download_blob_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
     }
 
-    async fn get_blob_verified(&self, name: String, allow_retained_unsigned: bool) -> Result<Option<(Vec<u8>, bool)>> {
-        let (fetched, verified_auth) = if allow_retained_unsigned {
-            self.client.download_retained_blob_bytes_checked(&name).await
-        } else {
-            self.client.download_blob_bytes_checked(&name).await
+    async fn get_blob_verified(&self, name: String, retained: Option<RetainedBinding<'_>>) -> Result<Option<(Vec<u8>, bool)>> {
+        let (fetched, verified_auth) = match retained {
+            Some(binding) => self.client.download_retained_blob_bytes_checked(&name, binding).await,
+            None => self.client.download_blob_bytes_checked(&name).await,
         };
         Ok(fetched.map_err(remote)?.map(|(body, _, sig)| (body, verified_auth && sig.is_some())))
     }

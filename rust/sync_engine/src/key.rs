@@ -218,6 +218,12 @@ impl WriteIntent {
     }
 }
 
+/// A write intent as staged by one write, and the one it replaced.
+struct StagedIntent {
+    written: String,
+    prior: Option<String>,
+}
+
 /// An external account-key intent: only one carrying explicit provenance
 /// (`owners`) counts, whatever its `pwd` parses as.
 fn decode_external_intent(raw: &str) -> Option<RecoveredExternal> {
@@ -771,27 +777,40 @@ impl RingInner {
         Ok(())
     }
 
-    async fn stage_write_intent(&self, id: &str, expected_forget_gen: u64, epoch: i64, pwd: &str) -> Result<()> {
+    /// Records the pre-CAS write intent for [id], returning what it replaced
+    /// so a write that never reaches the backend restores exactly that.
+    async fn stage_write_intent(&self, id: &str, expected_forget_gen: u64, epoch: i64, pwd: &str) -> Result<StagedIntent> {
         let _st = self.pending_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.pending().await?;
         let key = write_intent_key(id);
-        let encoded = WriteIntent { epoch, pwd: pwd.to_string() }.encode();
-        if all.get(&key) == Some(&encoded) {
-            return Ok(());
+        let written = WriteIntent { epoch, pwd: pwd.to_string() }.encode();
+        let prior = all.get(&key).cloned();
+        if prior.as_ref() != Some(&written) {
+            all.insert(key, written.clone());
+            self.secrets.set_pending(all).await?;
         }
-        all.insert(key, encoded);
-        self.secrets.set_pending(all).await
+        Ok(StagedIntent { written, prior })
     }
 
-    async fn clear_write_intent(&self, id: &str, expected_forget_gen: u64) -> Result<()> {
+    /// Undoes [staged] for a write known not to have committed, unless the
+    /// intent changed since: only what that write created goes.
+    async fn rollback_write_intent(&self, id: &str, expected_forget_gen: u64, staged: &StagedIntent) -> Result<()> {
+        if staged.prior.as_ref() == Some(&staged.written) {
+            return Ok(());
+        }
         let _st = self.pending_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.pending().await?;
-        if all.remove(&write_intent_key(id)).is_some() {
-            self.secrets.set_pending(all).await?;
+        let key = write_intent_key(id);
+        if all.get(&key) != Some(&staged.written) {
+            return Ok(());
         }
-        Ok(())
+        match &staged.prior {
+            Some(p) => all.insert(key, p.clone()),
+            None => all.remove(&key),
+        };
+        self.secrets.set_pending(all).await
     }
 
     async fn reconcile_pending_locked(&self, st: &mut PendingState, id: &str, settled_pwd: &str, preserve_same_pending: bool) -> Result<()> {
@@ -1552,15 +1571,57 @@ impl SyncKey {
     /// from a CAS miss (`Ok(None)` -> HTTP 412) and uncommitted transport errors.
     async fn commit_key_file(&self, body: Vec<u8>, if_version: Option<String>) -> Result<Option<(String, Option<String>)>> {
         let id = self.id();
-        let superseded_seq = {
-            let table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
-            self.writable_in(&table, &id)?;
-            table
-                .pending_writes
-                .get(&id)
-                .filter(|pw| pw.handle_id <= self.handle_id)
-                .map(|pw| pw.seq)
+        let superseded_seq = self.admit_write(&id)?;
+        self.put_key_file(id, superseded_seq, body, if_version).await
+    }
+
+    /// [Self::commit_key_file] behind a pre-CAS write intent for `(epoch,
+    /// pwd)`: rolled back when the write is refused before dispatch or loses
+    /// its CAS, kept whenever the PUT may have reached the backend.
+    async fn commit_key_file_with_intent(
+        &self,
+        body: Vec<u8>,
+        if_version: Option<String>,
+        epoch: i64,
+        pwd: &str,
+    ) -> Result<Option<(String, Option<String>)>> {
+        let id = self.id();
+        let staged = self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
+        let superseded_seq = match self.admit_write(&id) {
+            Ok(seq) => seq,
+            Err(e) => {
+                // A rollback that fails leaves an intent for a write that never
+                // committed: the next open finds the remote unchanged and clears it.
+                let _ = self.ring.rollback_write_intent(&id, self.forget_gen, &staged).await;
+                return Err(e);
+            }
         };
+        let res = self.put_key_file(id.clone(), superseded_seq, body, if_version).await;
+        if matches!(res, Ok(None)) {
+            let _ = self.ring.rollback_write_intent(&id, self.forget_gen, &staged).await;
+        }
+        res
+    }
+
+    /// Whether a write may be dispatched now, with the pending write it would
+    /// supersede.
+    fn admit_write(&self, id: &str) -> Result<Option<u64>> {
+        let table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+        self.writable_in(&table, id)?;
+        Ok(table
+            .pending_writes
+            .get(id)
+            .filter(|pw| pw.handle_id <= self.handle_id)
+            .map(|pw| pw.seq))
+    }
+
+    async fn put_key_file(
+        &self,
+        id: String,
+        superseded_seq: Option<u64>,
+        body: Vec<u8>,
+        if_version: Option<String>,
+    ) -> Result<Option<(String, Option<String>)>> {
         match self.file().write(body.clone(), if_version.clone()).await {
             Ok(Some(version)) => {
                 let forgotten = {
@@ -1657,9 +1718,7 @@ impl SyncKey {
             other => other?,
         };
         let body = self.sealed(identities, epoch, pwd, &sk)?;
-        self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
-        let Some((version, persist_err)) = self.commit_key_file(body, if_version).await? else {
-            let _ = self.ring.clear_write_intent(&id, self.forget_gen).await;
+        let Some((version, persist_err)) = self.commit_key_file_with_intent(body, if_version, epoch, pwd).await? else {
             return Ok(None);
         };
         if generated {
@@ -1830,9 +1889,7 @@ impl SyncKey {
                             continue;
                         }
                         let sealed = self.sealed(&identities, epoch, pwd, staged)?;
-                        self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
-                        let Some((written, persist_err)) = self.commit_key_file(sealed, Some(version)).await? else {
-                            let _ = self.ring.clear_write_intent(&id, self.forget_gen).await;
+                        let Some((written, persist_err)) = self.commit_key_file_with_intent(sealed, Some(version), epoch, pwd).await? else {
                             continue;
                         };
                         init.committed_staged = Some(staged.format().to_string());
@@ -1891,9 +1948,7 @@ impl SyncKey {
                             continue;
                         }
                         let sealed = self.sealed(&identities, epoch, pwd, staged)?;
-                        self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
-                        let Some((written, persist_err)) = self.commit_key_file(sealed, Some(version)).await? else {
-                            let _ = self.ring.clear_write_intent(&id, self.forget_gen).await;
+                        let Some((written, persist_err)) = self.commit_key_file_with_intent(sealed, Some(version), epoch, pwd).await? else {
                             continue;
                         };
                         init.committed_staged = Some(staged.format().to_string());

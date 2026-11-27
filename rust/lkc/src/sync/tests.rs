@@ -2061,8 +2061,7 @@ async fn detached_snapshot_recovery_requires_signature_and_preserves_recorded_lo
 
     // 5. When `observed_log` is `Some("a2")` (from 410) while `PersonalAuth.signed_log_ids` is still
     //    `None`, flushing with conflicting `log = Some("a1")` MUST NOT bind `PersonalAuth` to `"a1"`.
-    let auth3_keeper = TestKeeper::new();
-    let auth3 = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), auth3_keeper.clone()));
+    let auth3 = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), TestKeeper::new()));
     sync.set_personal(Some(auth3.clone()));
     let _ = sync.read_log(0, None, None).await.unwrap(); // 410 Sync-Log: a2 -> sets observed_log = Some("a2")
     assert!(!sync.flush_committed_snapshot("u1", Some("a1"), 5).await.unwrap());
@@ -2070,19 +2069,27 @@ async fn detached_snapshot_recovery_requires_signature_and_preserves_recorded_lo
     assert!(sync.flush_committed_snapshot("u1", Some("a2"), 6).await.unwrap());
     assert_eq!(auth3.signed_log_id("serverbox").await.as_deref(), Some("a2"));
 
-    // 5b. Detached recovery of the old seq whose `/snapshot` is gone (404) records only the
-    //     signed-snapshot marker: neither the replacement log binding nor its floor moves.
-    let floor = |keeper: &TestKeeper| {
+    // 5b. Detached recovery of the old seq whose `/snapshot` is gone (404) records the
+    //     signed-snapshot marker, leaving the replacement log binding and its floor. A fresh
+    //     auth per case keeps an earlier marker from satisfying the assertion.
+    let persisted = |keeper: &TestKeeper| {
         let saved: serde_json::Value = serde_json::from_str(&keeper.saved.lock().unwrap()).unwrap();
-        (saved["signed_log_ids"]["serverbox"].as_str().map(str::to_string), saved["signed_log_from"]["serverbox"].as_i64())
+        (
+            saved["signed_log_ids"]["serverbox"].as_str().map(str::to_string),
+            saved["signed_log_from"]["serverbox"].as_i64(),
+            saved["signed_snapshots"].as_array().is_some_and(|apps| apps.iter().any(|a| a == "serverbox")),
+        )
     };
-    assert_eq!(floor(&auth3_keeper), (Some("a2".into()), Some(6)));
     *served.lock().unwrap() = None;
     for log in [Some("a1"), None] {
+        let keeper = TestKeeper::new();
+        let auth = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), keeper.clone()));
+        sync.set_personal(Some(auth.clone()));
+        auth.record_batch_written("serverbox", "a2", 6).await.unwrap();
+        assert_eq!(persisted(&keeper), (Some("a2".into()), Some(6), false), "{log:?}");
         let (recovered, resolved) = sync.flush_committed_snapshot_bytes("u1", log, 5, &snap_body).await.unwrap();
         assert!(!recovered && resolved.is_none(), "{log:?}");
-        assert_eq!(auth3.signed_log_id("serverbox").await.as_deref(), Some("a2"));
-        assert_eq!(floor(&auth3_keeper), (Some("a2".into()), Some(6)), "{log:?}");
+        assert_eq!(persisted(&keeper), (Some("a2".into()), Some(6), true), "{log:?}");
     }
 
     // 6. Concurrent `read_log` 410 setting `observed_log = Some("a2")` DURING `keeper.save` of
@@ -2207,4 +2214,86 @@ async fn a_malformed_410_keeps_pending_commits() {
     let guard = sync.pending_commits.lock().unwrap();
     assert!(!guard.batches.contains_key(&batch_key));
     assert_eq!(guard.observed_log.as_deref(), Some("b2"));
+}
+
+#[tokio::test]
+async fn a_404_settles_only_the_reconciled_snapshot_entry_once_its_marker_is_persisted() {
+    let (_fake, sync) = homebase(|_| Response::status(404)).await;
+    let body = b"snap-body";
+    let hit = (5i64, *blake3::hash(body).as_bytes());
+    let unrelated = [(3i64, [1u8; 32]), (4i64, [2u8; 32])];
+    let attach = |hit_too: bool| {
+        let keeper = TestKeeper::new();
+        sync.set_personal(Some(Arc::new(PersonalAuth::new(crate::team::identity::AccountKey::generate("u1"), Default::default(), keeper.clone()))));
+        let mut guard = sync.pending_commits.lock().unwrap();
+        let id = guard.next_id();
+        guard.snapshots.insert(unrelated[0], (id, SnapshotLogBinding::Unknown, "e3".into()));
+        let id = guard.next_id();
+        guard.snapshots.insert(unrelated[1], (id, SnapshotLogBinding::Assumed("a1".into()), "e4".into()));
+        if hit_too {
+            let id = guard.next_id();
+            guard.snapshots.insert(hit, (id, SnapshotLogBinding::Unknown, "e5".into()));
+        }
+        keeper
+    };
+    let pending = |key: &SnapshotCommitKey| sync.pending_commits.lock().unwrap().snapshots.contains_key(key);
+
+    // Cache miss: the 404 is settled without pruning unrelated entries.
+    let keeper = attach(false);
+    assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap(), (false, None));
+    assert!(keeper.saved.lock().unwrap().contains("signed_snapshots"));
+    assert!(unrelated.iter().all(pending));
+
+    // Cache hit: the checked entry stays until the marker is persisted, then only it goes.
+    let keeper = attach(true);
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap_err().kind, Kind::Invalid);
+    assert!(pending(&hit));
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap(), (false, None));
+    assert!(!pending(&hit));
+    assert!(unrelated.iter().all(pending));
+}
+
+#[tokio::test]
+async fn a_replaced_remote_snapshot_settles_the_checked_entry_only_after_verification_persists() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let remote_sig = PersonalAuth::new(key.clone(), Default::default(), TestKeeper::new()).sign_snapshot("serverbox", 9, b"remote").await.signature;
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", p) if p.ends_with("/snapshot") => Response::status(200)
+            .header("ETag", "\"r-e\"")
+            .header("Sync-Log", "c1")
+            .header("Sync-Seq", "9")
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", &pub_key)
+            .header("X-Signature", &remote_sig)
+            .body("remote"),
+        _ => Response::status(404),
+    })
+    .await;
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, Default::default(), keeper.clone()));
+    sync.set_personal(Some(auth.clone()));
+    let body = b"snap-body";
+    let hit = (5i64, *blake3::hash(body).as_bytes());
+    let unrelated = (3i64, [1u8; 32]);
+    {
+        let mut guard = sync.pending_commits.lock().unwrap();
+        let id = guard.next_id();
+        guard.snapshots.insert(unrelated, (id, SnapshotLogBinding::Unknown, "e3".into()));
+        let id = guard.next_id();
+        guard.snapshots.insert(hit, (id, SnapshotLogBinding::Unknown, "e5".into()));
+    }
+    let pending = |key: &SnapshotCommitKey| sync.pending_commits.lock().unwrap().snapshots.contains_key(key);
+
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap_err().kind, Kind::Invalid);
+    assert!(pending(&hit), "the checked entry stays until the replacement is persisted");
+
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap(), (false, None));
+    assert!(!pending(&hit));
+    assert!(pending(&unrelated));
+    assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("c1"));
 }
