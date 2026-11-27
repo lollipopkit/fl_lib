@@ -57,7 +57,7 @@ impl std::fmt::Debug for Stored {
 pub struct Session<S: Store> {
     client: Arc<Client>,
     store: S,
-    tokens: Mutex<Option<Tokens>>,
+    tokens: Mutex<(u64, Option<Tokens>)>,
     /// Held across a refresh, and by everything that replaces the tokens.
     refreshing: tokio::sync::Mutex<()>,
 }
@@ -78,7 +78,8 @@ impl<S: Store> Session<S> {
             Some(s) => Some(Tokens::stored(s.access, s.refresh, s.expires_at)),
             None => None,
         };
-        Self { client, store, tokens: Mutex::new(tokens), refreshing: tokio::sync::Mutex::new(()) }
+        let generation = u64::from(tokens.is_some());
+        Self { client, store, tokens: Mutex::new((generation, tokens)), refreshing: tokio::sync::Mutex::new(()) }
     }
 
     pub fn client(&self) -> &Arc<Client> {
@@ -89,12 +90,27 @@ impl<S: Store> Session<S> {
         self.current().is_some()
     }
 
-    fn current(&self) -> Option<Tokens> {
-        self.tokens.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    /// Monotonic session identity while signed in; `None` when signed out.
+    /// Advances whenever a session is signed in or ended, while staying stable
+    /// across ordinary token refreshes of the same session.
+    pub fn identity(&self) -> Option<u64> {
+        let state = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        state.1.as_ref().map(|_| state.0)
     }
 
-    fn set(&self, tokens: Option<Tokens>) {
-        *self.tokens.lock().unwrap_or_else(|e| e.into_inner()) = tokens;
+    fn current(&self) -> Option<Tokens> {
+        self.tokens.lock().unwrap_or_else(|e| e.into_inner()).1.clone()
+    }
+
+    fn replace_session(&self, tokens: Option<Tokens>) {
+        let mut state = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        state.0 = state.0.wrapping_add(1);
+        state.1 = tokens;
+    }
+
+    fn set_refreshed(&self, tokens: Tokens) {
+        let mut state = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
+        state.1 = Some(tokens);
     }
 
     /// Tokens a sign-in was granted, saved. A session they replace is let go
@@ -116,7 +132,7 @@ impl<S: Store> Session<S> {
         if previous != tokens.refresh {
             self.revoke(previous).await;
         }
-        self.set(Some(tokens));
+        self.replace_session(Some(tokens));
         Ok(())
     }
 
@@ -131,6 +147,20 @@ impl<S: Store> Session<S> {
     pub async fn access_token(&self) -> Result<String, Error> {
         let (token, ended) = {
             let _guard = self.refreshing.lock().await;
+            self.access_token_held().await
+        };
+        self.tell(ended).await;
+        token
+    }
+
+    /// Like [`Session::access_token`], rejecting with [`Failure::Rejected`] if
+    /// the current session identity is no longer `expected_id`.
+    pub async fn access_token_for(&self, expected_id: u64) -> Result<String, Error> {
+        let (token, ended) = {
+            let _guard = self.refreshing.lock().await;
+            if self.identity() != Some(expected_id) {
+                return Err(Error::new(Failure::Rejected, "session changed"));
+            }
             self.access_token_held().await
         };
         self.tell(ended).await;
@@ -165,7 +195,7 @@ impl<S: Store> Session<S> {
                     return (Err(Error::new(Failure::Rejected, format!("saving a refresh: {e}"))), ended);
                 }
                 let access = fresh.access.clone();
-                self.set(Some(fresh));
+                self.set_refreshed(fresh);
                 (Ok(access), None)
             }
             // Never reached the IdP, or refused without saying the token is
@@ -188,9 +218,19 @@ impl<S: Store> Session<S> {
     /// Signed out here only: homebase refused the token, which says nothing
     /// a revocation could still reach.
     pub async fn forget(&self, why: String) {
+        self.forget_for(None, why).await;
+    }
+
+    /// Ends the session only if `expected_id` still matches (or is `None`), so
+    /// a late refusal from a superseded session cannot sign out its replacement.
+    pub async fn forget_for(&self, expected_id: Option<u64>, why: String) {
         let ended = {
             let _guard = self.refreshing.lock().await;
-            self.drop_session(why).await
+            if expected_id.is_some_and(|id| self.identity() != Some(id)) {
+                None
+            } else {
+                self.drop_session(why).await
+            }
         };
         self.tell(ended).await;
     }
@@ -212,7 +252,7 @@ impl<S: Store> Session<S> {
     /// every request waits on the lock.
     async fn drop_session(&self, why: String) -> Option<String> {
         let was = self.current().is_some();
-        self.set(None);
+        self.replace_session(None);
         let saved = self.store.save(None).await;
         was.then(|| match saved {
             Ok(()) => why,

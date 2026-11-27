@@ -229,7 +229,7 @@ impl BlobStore for MemLog {
     }
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
-        Ok(self.lock().blobs.iter().filter(|(n, _)| n.starts_with(&prefix)).map(|(n, (_, at))| Listed { name: n.clone(), at: Some(*at) }).collect())
+        Ok(self.lock().blobs.iter().filter(|(n, _)| n.starts_with(&prefix)).map(|(n, (_, at))| Listed { name: n.clone(), at: Some(*at), signed: false }).collect())
     }
 
     async fn delete_blob(&self, name: String) -> Result<()> {
@@ -271,7 +271,7 @@ impl LogTransport for MemLog {
         }
         let next: Vec<_> = s.batches.iter().filter(|(seq, _, _)| *seq > after).collect();
         let more = next.len() > self.page;
-        Ok(Page::Batches { log: Some(s.log.clone()), batches: next.into_iter().take(self.page).map(|(seq, _, b)| (*seq, b.clone())).collect(), more })
+        Ok(Page::Batches { log: Some(s.log.clone()), batches: next.into_iter().take(self.page).map(|(seq, _, b)| (*seq, b.clone(), false)).collect(), more })
     }
 
     async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
@@ -285,7 +285,7 @@ impl LogTransport for MemLog {
 
     async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
         let s = self.lock();
-        Ok(s.snapshot.as_ref().map(|(seq, body)| SnapshotBody { log: s.log.clone(), seq: *seq, body: body.clone() }))
+        Ok(s.snapshot.as_ref().map(|(seq, body)| SnapshotBody { log: s.log.clone(), seq: *seq, body: body.clone(), signed: false }))
     }
 }
 
@@ -313,7 +313,7 @@ impl BlobStore for MemFiles {
     }
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
-        Ok(self.files.lock().unwrap().iter().filter(|(n, _)| n.starts_with(&prefix)).map(|(n, (_, at))| Listed { name: n.clone(), at: Some(*at) }).collect())
+        Ok(self.files.lock().unwrap().iter().filter(|(n, _)| n.starts_with(&prefix)).map(|(n, (_, at))| Listed { name: n.clone(), at: Some(*at), signed: false }).collect())
     }
 
     async fn delete_blob(&self, name: String) -> Result<()> {
@@ -1563,15 +1563,19 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
     let account_key = fl_lkc::team::identity::AccountKey::generate("u1");
     let pub_key = account_key.signing_public();
     let recipient = account_key.recipient();
+    type StoredSnap = (Vec<u8>, Option<String>);
     let snapshot_puts = Arc::new(AtomicU64::new(0));
+    let stored_snapshot: Arc<Mutex<Option<StoredSnap>>> = Arc::new(Mutex::new(None));
     let deleted_blobs = Arc::new(Mutex::new(Vec::<String>::new()));
     let head = Arc::new(AtomicU64::new(0));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let snap_puts_srv = snapshot_puts.clone();
+    let stored_snap_srv = stored_snapshot.clone();
     let deleted_srv = deleted_blobs.clone();
     let head_srv = head.clone();
+    let pub_key_srv = pub_key.clone();
     let server = tokio::spawn(async move {
         while let Ok((mut stream, _)) = listener.accept().await {
             let mut buf = Vec::new();
@@ -1608,45 +1612,65 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
                 buf.extend_from_slice(&tmp[..n]);
             }
 
-            let (status, extra_headers, body) = match (method, path) {
+            let req_sig = head_str
+                .lines()
+                .find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case("x-signature").then(|| v.trim().to_string())
+                });
+            let req_body = buf[header_end..header_end + content_len].to_vec();
+
+            let (status, extra_headers, body_bytes): (&str, String, Vec<u8>) = match (method, path) {
                 ("GET", "/v2/keys") => (
                     "200 OK",
-                    "Content-Type: application/json\r\n",
-                    json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } }).to_string(),
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } }).to_string().into_bytes(),
                 ),
                 ("GET", "/v2/sync/serverbox/log") => (
                     "200 OK",
-                    "Content-Type: application/json\r\n",
-                    json!({ "code": 0, "data": { "log": "6f1c", "batches": [], "head": head_srv.load(Ordering::SeqCst), "snapshot_seq": 0, "more": false } }).to_string(),
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "code": 0, "data": { "log": "6f1c", "batches": [], "head": head_srv.load(Ordering::SeqCst), "snapshot_seq": 0, "more": false } }).to_string().into_bytes(),
                 ),
                 ("POST", "/v2/sync/serverbox/log") => {
                     let seq = head_srv.fetch_add(1, Ordering::SeqCst) + 1;
                     (
                         "200 OK",
-                        "Content-Type: application/json\r\n",
-                        json!({ "code": 0, "data": { "log": "6f1c", "seq": seq, "live": { "batches": seq, "bytes": 4 }, "compact": true } }).to_string(),
+                        "Content-Type: application/json\r\n".into(),
+                        json!({ "code": 0, "data": { "log": "6f1c", "seq": seq, "live": { "batches": seq, "bytes": 4 }, "compact": true } }).to_string().into_bytes(),
                     )
                 }
                 ("PUT", "/v2/sync/serverbox/snapshot") => {
                     snap_puts_srv.fetch_add(1, Ordering::SeqCst);
-                    ("204 No Content", "ETag: \"snap-e1\"\r\n", String::new())
+                    *stored_snap_srv.lock().unwrap() = Some((req_body, req_sig));
+                    ("204 No Content", "ETag: \"snap-e1\"\r\n".into(), Vec::new())
                 }
+                ("GET", "/v2/sync/serverbox/snapshot") => match stored_snap_srv.lock().unwrap().clone() {
+                    None => ("404 Not Found", String::new(), Vec::new()),
+                    Some((b, sig)) => {
+                        let mut hdrs = "ETag: \"snap-e1\"\r\nSync-Log: 6f1c\r\nSync-Seq: 1\r\n".to_string();
+                        if let Some(s) = sig {
+                            hdrs.push_str(&format!("X-Signer: u1\r\nX-Signing-Key: {pub_key_srv}\r\nX-Signature: {s}\r\n"));
+                        }
+                        ("200 OK", hdrs, b)
+                    }
+                },
                 ("GET", "/v2/sync/serverbox") => (
                     "200 OK",
-                    "Content-Type: application/json\r\n",
-                    json!({ "data": [{ "name": "op-old-dead.age", "etag": "b1", "size": 10, "updated_at": "2020-01-01T00:00:00Z" }] }).to_string(),
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": [{ "name": "op-old-dead.age", "etag": "b1", "size": 10, "updated_at": "2020-01-01T00:00:00Z" }] }).to_string().into_bytes(),
                 ),
                 ("DELETE", p) if p.starts_with("/v2/sync/serverbox/") => {
                     deleted_srv.lock().unwrap().push(p.trim_start_matches("/v2/sync/serverbox/").to_string());
-                    ("204 No Content", "", String::new())
+                    ("204 No Content", String::new(), Vec::new())
                 }
-                _ => ("404 Not Found", "", String::new()),
+                _ => ("404 Not Found", String::new(), Vec::new()),
             };
-            let resp = format!(
-                "HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
+            let head_out = format!(
+                "HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                body_bytes.len()
             );
-            let _ = stream.write_all(resp.as_bytes()).await;
+            let _ = stream.write_all(head_out.as_bytes()).await;
+            let _ = stream.write_all(&body_bytes).await;
         }
     });
 
@@ -1941,6 +1965,7 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
         enc.finish().unwrap()
     };
     let b_blob_sealed = key.seal(&b_blob_plain).unwrap();
+    let b_blob_sig = auth_for_sign.sign_file("serverbox", &live_blob_name, 1, &b_blob_sealed).await;
     let b_idem = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     let b_sig = auth_for_sign.sign_batch("serverbox", b_idem, &b_body).await;
     let b_digest = blake3::hash(&b_body).to_hex().to_string();
@@ -1958,6 +1983,8 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
     };
 
     let snapshot_puts = Arc::new(AtomicU64::new(0));
+    let snapshot_seqs = Arc::new(Mutex::new(Vec::<i64>::new()));
+    let last_snap_seq = Arc::new(std::sync::atomic::AtomicI64::new(0));
     let deleted_blobs = Arc::new(Mutex::new(Vec::<String>::new()));
     let head = Arc::new(AtomicU64::new(0));
     let serve_seq2 = Arc::new(AtomicBool::new(false));
@@ -1965,12 +1992,15 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let snap_puts_srv = snapshot_puts.clone();
+    let snap_seqs_srv = snapshot_seqs.clone();
+    let last_snap_srv = last_snap_seq.clone();
     let deleted_srv = deleted_blobs.clone();
     let head_srv = head.clone();
     let serve_seq2_srv = serve_seq2.clone();
     let pub_key_srv = pub_key.clone();
     let rec_srv = recipient.clone();
     let b_sig_str = b_sig.signature.clone();
+    let b_blob_sig_str = b_blob_sig.signature.clone();
     let live_blob_srv = live_blob_name.clone();
     let live_blob_path = format!("/v2/sync/serverbox/{live_blob_name}");
     let server = tokio::spawn(async move {
@@ -2033,10 +2063,11 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
                         vec![]
                     };
                     let cur_head = if serve_seq2_srv.load(Ordering::SeqCst) { 2 } else { head_srv.load(Ordering::SeqCst) };
+                    let snap_seq = last_snap_srv.load(Ordering::SeqCst);
                     (
                         "200 OK",
                         "Content-Type: application/json\r\n".into(),
-                        json!({ "code": 0, "data": { "log": "6f1c", "batches": batches, "head": cur_head, "snapshot_seq": 0, "more": false } })
+                        json!({ "code": 0, "data": { "log": "6f1c", "batches": batches, "head": cur_head, "snapshot_seq": snap_seq, "more": false } })
                             .to_string()
                             .into_bytes(),
                     )
@@ -2052,22 +2083,61 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
                     )
                 }
                 ("PUT", "/v2/sync/serverbox/snapshot") => {
-                    let n = snap_puts_srv.fetch_add(1, Ordering::SeqCst) + 1;
-                    ("204 No Content", format!("ETag: \"snap-e{n}\"\r\n"), Vec::new())
+                    let req_seq = query
+                        .split('&')
+                        .find_map(|kv| kv.strip_prefix("seq=")?.parse::<i64>().ok())
+                        .unwrap_or(0);
+                    let cur_head = if serve_seq2_srv.load(Ordering::SeqCst) {
+                        2i64
+                    } else {
+                        head_srv.load(Ordering::SeqCst) as i64
+                    };
+                    let prev_snap = last_snap_srv.load(Ordering::SeqCst);
+                    if req_seq <= prev_snap {
+                        (
+                            "409 Conflict",
+                            "Content-Type: application/json\r\n".into(),
+                            json!({ "code": 4, "reason": "sync_snapshot_stale", "data": "" }).to_string().into_bytes(),
+                        )
+                    } else if req_seq <= 0 || req_seq > cur_head {
+                        (
+                            "422 Unprocessable Entity",
+                            "Content-Type: application/json\r\n".into(),
+                            json!({ "code": 4, "reason": "sync_seq_invalid", "data": "" }).to_string().into_bytes(),
+                        )
+                    } else {
+                        last_snap_srv.store(req_seq, Ordering::SeqCst);
+                        snap_seqs_srv.lock().unwrap().push(req_seq);
+                        let n = snap_puts_srv.fetch_add(1, Ordering::SeqCst) + 1;
+                        ("204 No Content", format!("ETag: \"snap-e{n}\"\r\nSync-Log: 6f1c\r\n"), Vec::new())
+                    }
                 }
                 ("GET", "/v2/sync/serverbox") => (
                     "200 OK",
                     "Content-Type: application/json\r\n".into(),
                     json!({ "data": [
-                        { "name": live_blob_srv, "etag": "b-live", "size": b_blob_sealed.len(), "updated_at": "2020-01-01T00:00:00Z" },
+                        {
+                            "name": live_blob_srv,
+                            "etag": "b-live",
+                            "size": b_blob_sealed.len(),
+                            "updated_at": "2020-01-01T00:00:00Z",
+                            "signer": "u1",
+                            "signing_key": pub_key_srv,
+                            "signature": b_blob_sig_str,
+                            "version": 1
+                        },
                         { "name": "op-truly-dead.age", "etag": "b-dead", "size": 10, "updated_at": "2020-01-01T00:00:00Z" }
                     ] })
                     .to_string()
                     .into_bytes(),
                 ),
-                ("GET", p) if p == live_blob_path => {
-                    ("200 OK", "ETag: \"b-live\"\r\n".into(), b_blob_sealed.clone())
-                }
+                ("GET", p) if p == live_blob_path => (
+                    "200 OK",
+                    format!(
+                        "ETag: \"b-live\"\r\nX-Signer: u1\r\nX-Signing-Key: {pub_key_srv}\r\nX-Signature: {b_blob_sig_str}\r\nX-Sync-Version: 1\r\n"
+                    ),
+                    b_blob_sealed.clone(),
+                ),
                 ("PUT", p) if p == live_blob_path => {
                     ("412 Precondition Failed", String::new(), Vec::new())
                 }
@@ -2112,6 +2182,7 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
     //    `op-truly-dead.age` (NEVER deleting `op-reused-live.age`!).
     log_sync.sync().await.unwrap();
     assert_eq!(snapshot_puts.load(Ordering::SeqCst), 2);
+    assert_eq!(*snapshot_seqs.lock().unwrap(), vec![1, 2]);
     assert_eq!(d.host.value("servers", "from_b"), Some(b_val));
     let deleted = deleted_blobs.lock().unwrap().clone();
     assert_eq!(deleted, vec!["op-truly-dead.age".to_string()]);
@@ -3483,9 +3554,21 @@ async fn released_handle_late_ok_preserves_replacement_pending_write_and_forget_
         release: release_slow.clone(),
     });
     let h1 = d.ring.of(slow_kf.clone(), true).await.unwrap();
-    slow_kf.block_write.store(true, Ordering::SeqCst);
-    let h1_task = tokio::spawn(async move { h1.rotate().await });
-    slow_started.notified().await;
+    let h1_at_hook = Arc::new(tokio::sync::Notify::new());
+    let h1_resume_hook = Arc::new(tokio::sync::Notify::new());
+    let h1_at_c = h1_at_hook.clone();
+    let h1_res_c = h1_resume_hook.clone();
+    let h1_task = tokio::spawn(async move {
+        h1.rotate_after_check(move || {
+            Box::pin(async move {
+                h1_at_c.notify_one();
+                h1_res_c.notified().await;
+                Ok(())
+            })
+        })
+        .await
+    });
+    h1_at_hook.notified().await;
 
     d.ring.release("remote-1");
     let mem = Arc::new(MemKeyFile::default());
@@ -3493,8 +3576,8 @@ async fn released_handle_late_ok_preserves_replacement_pending_write_and_forget_
     assert!(matches!(d.ring.of(replacement_kf.clone(), true).await, Err(Error::Host(_))));
     assert!(d.ring.store_secret_key(&other_b).await.is_err());
 
-    // Now let released H1 complete `Ok(Some("v-old"))`: H2's pending write MUST remain intact!
-    release_slow.notify_one();
+    // Now let released H1 complete `Ok(Some("v0"))`: H2's pending write MUST remain intact!
+    h1_resume_hook.notify_one();
     h1_task.await.unwrap().unwrap();
     assert!(d.ring.store_secret_key(&other_b).await.is_err(), "released handle's late Ok must not clear replacement pending_write");
 
@@ -3593,9 +3676,23 @@ async fn released_handle_late_ok_preserves_replacement_pending_write_and_forget_
         release: release_late_fail.clone(),
     });
     let h_old = d.ring.of(h_old_kf.clone(), true).await.unwrap();
+    let hold_at_hook = Arc::new(tokio::sync::Notify::new());
+    let hold_resume_hook = Arc::new(tokio::sync::Notify::new());
+    let hold_at_c = hold_at_hook.clone();
+    let hold_res_c = hold_resume_hook.clone();
+    let h_old_task = tokio::spawn(async move {
+        h_old
+            .rotate_after_check(move || {
+                Box::pin(async move {
+                    hold_at_c.notify_one();
+                    hold_res_c.notified().await;
+                    Ok(())
+                })
+            })
+            .await
+    });
+    hold_at_hook.notified().await;
     h_old_kf.block_write.store(true, Ordering::SeqCst);
-    let h_old_task = tokio::spawn(async move { h_old.rotate().await });
-    late_fail_started.notified().await;
 
     d.ring.release("remote-2");
     let h_new_kf = Arc::new(PersistFailThenOkKeyFile {
@@ -3619,9 +3716,364 @@ async fn released_handle_late_ok_preserves_replacement_pending_write_and_forget_
     }
     d.ring.of(Arc::new(RenamedKeyFile(h_new_kf)), true).await.unwrap();
 
-    // Let H_old fail watermark persistence late: MUST NOT insert stale `PendingKeyWrite` over H_new!
+    // Let H_old proceed and fail watermark persistence late: MUST NOT insert stale `PendingKeyWrite` over H_new!
+    hold_resume_hook.notify_one();
+    late_fail_started.notified().await;
     release_late_fail.notify_one();
     assert!(h_old_task.await.unwrap().is_err());
     let other_c = fl_lkc::secret_key::SecretKey::generate().format().to_string();
     d.ring.store_secret_key(&other_c).await.unwrap();
+}
+
+#[tokio::test]
+async fn rotate_and_merge_coordinate_with_secret_key_import_and_reject_reserved_ids() {
+    let d = Device::new("pw");
+    let inner = Arc::new(MemKeyFile::default());
+    let handle = d.key(&inner).await.unwrap();
+    let before = inner.file.lock().unwrap().clone();
+
+    // 1. Concurrent `store_secret_key` after `rotate` verified old key MUST reject the stale rotation PUT!
+    let new_sk = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    let ring_c = d.ring.clone();
+    let sk_c = new_sk.clone();
+    let err = handle
+        .rotate_after_check(move || {
+            Box::pin(async move {
+                ring_c.store_secret_key(&sk_c).await?;
+                Ok(())
+            })
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Host(_)));
+    assert_eq!(*inner.file.lock().unwrap(), before, "rotation under stale secret key must not overwrite remote");
+
+    // 2. Reserved `2fa:` and `intent:` remote IDs are rejected at entry so they can never collide with epoch/pending keys.
+    struct BadIdKeyFile(&'static str);
+    impl KeyFile for BadIdKeyFile {
+        fn id(&self) -> String {
+            self.0.into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn write(&self, _: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(Some("v1".into())) })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+    let epochs_before = d.secrets.epochs.lock().unwrap().clone();
+    assert!(d.ring.of(Arc::new(BadIdKeyFile("2fa:account")), true).await.is_err());
+    assert!(d.ring.of(Arc::new(BadIdKeyFile("intent:account")), true).await.is_err());
+    assert!(d.ring.forget("2fa:account").await.is_err());
+    assert_eq!(*d.secrets.epochs.lock().unwrap(), epochs_before);
+}
+
+#[tokio::test]
+async fn lkc_retained_pre_signing_blob_remains_readable_while_stripped_signed_blob_is_rejected() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let account_key = fl_lkc::team::identity::AccountKey::generate("u1");
+    let pub_key = account_key.signing_public();
+    let recipient = account_key.recipient();
+
+    type SigTriple = Option<(String, String, String)>;
+    type StoredBlob = (Vec<u8>, SigTriple);
+    type StoredBatch = (i64, String, Vec<u8>, SigTriple);
+    type StoredSnapshot = (i64, Vec<u8>, SigTriple);
+    let blobs: Arc<Mutex<BTreeMap<String, StoredBlob>>> = Arc::new(Mutex::new(BTreeMap::new()));
+    let batches: Arc<Mutex<Vec<StoredBatch>>> = Arc::new(Mutex::new(Vec::new()));
+    let snapshot: Arc<Mutex<Option<StoredSnapshot>>> = Arc::new(Mutex::new(None));
+    let strip_blob: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+    let blobs_srv = blobs.clone();
+    let batches_srv = batches.clone();
+    let snap_srv = snapshot.clone();
+    let strip_srv = strip_blob.clone();
+    let pk_srv = pub_key.clone();
+    let rec_srv = recipient.clone();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 4096];
+            let header_end = loop {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(pos + 4);
+                }
+            };
+            let Some(header_end) = header_end else { continue };
+            let head_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
+            let first_line = head_str.lines().next().unwrap_or("");
+            let mut parts = first_line.split_whitespace();
+            let method = parts.next().unwrap_or("");
+            let full_path = parts.next().unwrap_or("");
+            let (path, query) = full_path.split_once('?').unwrap_or((full_path, ""));
+            let find_hdr = |name: &str| -> Option<String> {
+                head_str.lines().find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case(name).then(|| v.trim().to_string())
+                })
+            };
+            let content_len: usize = find_hdr("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+            while buf.len() < header_end + content_len {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+            }
+            let req_body = buf[header_end..header_end + content_len].to_vec();
+            let sig_tuple = find_hdr("x-signature").map(|sig| {
+                let ver = find_hdr("x-sync-version").unwrap_or_default();
+                ("u1".to_string(), pk_srv.clone(), format!("{sig}|{ver}"))
+            });
+
+            let (status, extra_headers, body_bytes): (&str, String, Vec<u8>) = match (method, path) {
+                ("GET", "/v2/keys") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": { "recipient": rec_srv, "signing_key": pk_srv, "next_seq": 2, "prev_signing_key": pk_srv } })
+                        .to_string()
+                        .into_bytes(),
+                ),
+                ("GET", "/v2/sync/serverbox") => {
+                    let list: Vec<Value> = blobs_srv
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .map(|(name, (b, sig))| {
+                            let mut obj = json!({
+                                "name": name,
+                                "etag": "e1",
+                                "size": b.len(),
+                                "updated_at": "2025-01-01T00:00:00Z",
+                            });
+                            if let Some((signer, pk, sig_ver)) = sig {
+                                let (s, v) = sig_ver.split_once('|').unwrap_or((sig_ver, ""));
+                                obj["signer"] = json!(signer);
+                                obj["signing_key"] = json!(pk);
+                                obj["signature"] = json!(s);
+                                if let Ok(vn) = v.parse::<i64>() {
+                                    obj["version"] = json!(vn);
+                                }
+                            }
+                            obj
+                        })
+                        .collect();
+                    ("200 OK", "Content-Type: application/json\r\n".into(), json!({ "data": list }).to_string().into_bytes())
+                }
+                ("PUT", "/v2/sync/serverbox/snapshot") => {
+                    let seq: i64 = query.split('&').find_map(|kv| kv.strip_prefix("seq=")?.parse().ok()).unwrap_or(1);
+                    *snap_srv.lock().unwrap() = Some((seq, req_body, sig_tuple));
+                    ("204 No Content", "ETag: \"snap-1\"\r\nSync-Log: 6f1c\r\n".into(), Vec::new())
+                }
+                ("GET", "/v2/sync/serverbox/snapshot") => match snap_srv.lock().unwrap().clone() {
+                    None => ("404 Not Found", String::new(), Vec::new()),
+                    Some((seq, b, sig)) => {
+                        let mut hdrs = format!("ETag: \"snap-1\"\r\nSync-Log: 6f1c\r\nSync-Seq: {seq}\r\n");
+                        if let Some((signer, pk, sig_ver)) = sig {
+                            let (s, _) = sig_ver.split_once('|').unwrap_or((&sig_ver, ""));
+                            hdrs.push_str(&format!("X-Signer: {signer}\r\nX-Signing-Key: {pk}\r\nX-Signature: {s}\r\n"));
+                        }
+                        ("200 OK", hdrs, b)
+                    }
+                },
+                ("POST", "/v2/sync/serverbox/log") => {
+                    let idem = find_hdr("idempotency-key").unwrap_or_default();
+                    let mut bs = batches_srv.lock().unwrap();
+                    let seq = bs.len() as i64 + 1;
+                    let compact = seq >= 2;
+                    bs.push((seq, idem, req_body, sig_tuple));
+                    (
+                        "200 OK",
+                        "Content-Type: application/json\r\n".into(),
+                        json!({ "code": 0, "data": { "log": "6f1c", "seq": seq, "live": { "batches": seq, "bytes": 4 }, "compact": compact } })
+                            .to_string()
+                            .into_bytes(),
+                    )
+                }
+                ("GET", "/v2/sync/serverbox/log") => {
+                    let after: i64 = query.split('&').find_map(|kv| kv.strip_prefix("after=")?.parse().ok()).unwrap_or(0);
+                    let snap_seq = snap_srv.lock().unwrap().as_ref().map_or(0, |(s, _, _)| *s);
+                    if after == 0 && snap_seq > 0 {
+                        (
+                            "410 Gone",
+                            "Content-Type: application/json\r\nSync-Log: 6f1c\r\nSync-Snapshot-Seq: 2\r\n".into(),
+                            json!({ "code": 4, "reason": "sync_compacted", "data": "" }).to_string().into_bytes(),
+                        )
+                    } else {
+                        let bs = batches_srv.lock().unwrap();
+                        let head = bs.len() as i64;
+                        let out: Vec<Value> = bs
+                            .iter()
+                            .filter(|(s, _, _, _)| *s > after)
+                            .map(|(s, idem, b, sig)| {
+                                const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+                                let mut b64 = String::new();
+                                for c in b.chunks(3) {
+                                    let n = ((c[0] as u32) << 16) | ((*c.get(1).unwrap_or(&0) as u32) << 8) | (*c.get(2).unwrap_or(&0) as u32);
+                                    b64.push(T[((n >> 18) & 63) as usize] as char);
+                                    b64.push(T[((n >> 12) & 63) as usize] as char);
+                                    b64.push(if c.len() > 1 { T[((n >> 6) & 63) as usize] as char } else { '=' });
+                                    b64.push(if c.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+                                }
+                                let dig = blake3::hash(b).to_hex().to_string();
+                                let mut obj = json!({ "seq": s, "body": b64, "digest": dig, "idempotency_key": idem });
+                                if let Some((signer, pk, sig_ver)) = sig {
+                                    let (sv, _) = sig_ver.split_once('|').unwrap_or((sig_ver, ""));
+                                    obj["signer"] = json!(signer);
+                                    obj["signing_key"] = json!(pk);
+                                    obj["signature"] = json!(sv);
+                                }
+                                obj
+                            })
+                            .collect();
+                        (
+                            "200 OK",
+                            "Content-Type: application/json\r\n".into(),
+                            json!({ "code": 0, "data": { "log": "6f1c", "batches": out, "head": head, "snapshot_seq": snap_seq, "more": false } })
+                                .to_string()
+                                .into_bytes(),
+                        )
+                    }
+                }
+                ("PUT", p) if p.starts_with("/v2/sync/serverbox/op-") => {
+                    let name = p.trim_start_matches("/v2/sync/serverbox/").to_string();
+                    let mut map = blobs_srv.lock().unwrap();
+                    if let std::collections::btree_map::Entry::Vacant(e) = map.entry(name) {
+                        e.insert((req_body, sig_tuple));
+                        ("204 No Content", "ETag: \"b1\"\r\n".into(), Vec::new())
+                    } else {
+                        ("412 Precondition Failed", String::new(), Vec::new())
+                    }
+                }
+                ("GET", p) if p.starts_with("/v2/sync/serverbox/op-") => {
+                    let name = p.trim_start_matches("/v2/sync/serverbox/");
+                    let stripped = strip_srv.lock().unwrap().as_deref() == Some(name);
+                    match blobs_srv.lock().unwrap().get(name).cloned() {
+                        None => ("404 Not Found", String::new(), Vec::new()),
+                        Some((b, sig)) => {
+                            let mut hdrs = "ETag: \"b1\"\r\n".to_string();
+                            if !stripped
+                                && let Some((signer, pk, sig_ver)) = sig
+                            {
+                                let (sv, v) = sig_ver.split_once('|').unwrap_or((&sig_ver, "1"));
+                                hdrs.push_str(&format!("X-Signer: {signer}\r\nX-Signing-Key: {pk}\r\nX-Signature: {sv}\r\nX-Sync-Version: {v}\r\n"));
+                            }
+                            ("200 OK", hdrs, b)
+                        }
+                    }
+                }
+                _ => ("404 Not Found", String::new(), Vec::new()),
+            };
+            let head_out = format!(
+                "HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                body_bytes.len()
+            );
+            let _ = stream.write_all(head_out.as_bytes()).await;
+            let _ = stream.write_all(&body_bytes).await;
+        }
+    });
+
+    struct SimpleKeeper(Mutex<String>);
+    impl fl_lkc::personal::VersionKeeper for SimpleKeeper {
+        fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
+            *self.0.lock().unwrap() = json;
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    struct MemSessionStore;
+    impl fl_lkc::Store for MemSessionStore {
+        async fn save(&self, _: Option<fl_lkc::Stored>) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+
+    let base = format!("http://{addr}");
+    let make_client = || async {
+        let client = Arc::new(fl_lkc::Client::with(&format!("{base}/auth/v1/"), "app", &base).unwrap());
+        let stored = fl_lkc::Stored { access: "tok".into(), refresh: Some("r".into()), expires_at: now_ms() + 3_600_000, refreshing: false };
+        let session = Arc::new(fl_lkc::Session::restore(client, MemSessionStore, Some(stored)).await);
+        Arc::new(fl_lkc::sync::SyncClient::new(session, "serverbox"))
+    };
+
+    let key_file = Arc::new(MemKeyFile::default());
+    let dev_a = Device::new("pw");
+    let sk_a = dev_a.secrets.secret_key.lock().unwrap().clone();
+    let sync_key_a = dev_a.key(&key_file).await.unwrap();
+    let client_a = make_client().await;
+    let log_a = LogSync::new(dev_a.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_a.clone(), account: "u1".into() }), sync_key_a);
+
+    // 1. Pre-signing: Device A uploads large record `pre` (>64 KiB) UNSIGNED at seq 1.
+    let pre_val = json!({ "a": 1, "payload": "p".repeat(70 << 10) });
+    dev_a.host.edit("servers", "pre", Some(pre_val.clone()));
+    log_a.sync().await.unwrap();
+    assert_eq!(blobs.lock().unwrap().len(), 1);
+    let pre_blob_name = blobs.lock().unwrap().keys().next().unwrap().clone();
+
+    // Simulate host model re-serialization changing JSON key order / extra field without bumping HLC,
+    // plus clear `log.legacy_blobs` cache so `Sender` exercises remote ciphertext binding on compaction!
+    dev_a.host.lock().state.remove("log.legacy_blobs");
+    if let Some((_, val)) = dev_a.host.lock().records.get_mut(&("servers".into(), "pre".into())) {
+        *val = Some(json!({ "payload": "p".repeat(70 << 10), "a": 1, "migrated_default": false }));
+    }
+
+    // 2. Post-signing: attach PersonalAuth, upload large record `post` SIGNED at seq 2 (triggers signed snapshot covering `pre` + `post`!).
+    let auth_a = Arc::new(fl_lkc::personal::PersonalAuth::new(
+        account_key.clone(),
+        fl_lkc::personal::PersonalVersions::default(),
+        Arc::new(SimpleKeeper(Mutex::new(String::new()))),
+    ));
+    client_a.set_personal(Some(auth_a));
+    let post_val = json!({ "payload": "s".repeat(70 << 10) });
+    dev_a.host.edit("servers", "post", Some(post_val.clone()));
+    log_a.sync().await.unwrap();
+    let post_blob_name = blobs.lock().unwrap().keys().find(|k| *k != &pre_blob_name).unwrap().clone();
+
+    // Seed an unbound unsigned `op-def.age` on the server as well.
+    blobs.lock().unwrap().insert("op-def.age".into(), (b"age-encryption.org/v1\n---\nx\n".to_vec(), None));
+
+    // 3. Device B (with BOTH `signed_apps` and `signed_blobs` active!) reads the compacted signed snapshot:
+    //    `pre_blob_name` (unsigned pre-signing blob retained by snapshot) MUST remain readable with its
+    //    original remote ciphertext content, while direct unbound `download_blob_bytes("op-def.age")`
+    //    MUST remain `Kind::Untrusted`!
+    let dev_b = Device::new("pw");
+    *dev_b.secrets.secret_key.lock().unwrap() = sk_a.clone();
+    let sync_key_b = dev_b.key(&key_file).await.unwrap();
+    let client_b = make_client().await;
+    let keeper_b = Arc::new(SimpleKeeper(Mutex::new(String::new())));
+    let init_b = fl_lkc::personal::PersonalVersions::from_json(r#"{"v":2,"signed_apps":["serverbox"],"signed_blobs":["serverbox"]}"#).unwrap();
+    client_b.set_personal(Some(Arc::new(fl_lkc::personal::PersonalAuth::new(account_key.clone(), init_b.clone(), keeper_b))));
+    assert_eq!(client_b.download_blob_bytes("op-def.age").await.unwrap_err().kind, fl_lkc::sync::Kind::Untrusted);
+    let log_b = LogSync::new(dev_b.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_b, account: "u1".into() }), sync_key_b);
+    log_b.sync().await.unwrap();
+    assert_eq!(dev_b.host.value("servers", "pre"), Some(pre_val));
+    assert_eq!(dev_b.host.value("servers", "post"), Some(post_val));
+
+    // 4. Stripping signature from `post_blob_name` (previously signed!) MUST be rejected as `Untrusted`!
+    *strip_blob.lock().unwrap() = Some(post_blob_name);
+    let dev_c = Device::new("pw");
+    *dev_c.secrets.secret_key.lock().unwrap() = sk_a;
+    let sync_key_c = dev_c.key(&key_file).await.unwrap();
+    let client_c = make_client().await;
+    client_c.set_personal(Some(Arc::new(fl_lkc::personal::PersonalAuth::new(
+        account_key,
+        init_b,
+        Arc::new(SimpleKeeper(Mutex::new(String::new()))),
+    ))));
+    let log_c = LogSync::new(dev_c.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_c, account: "u1".into() }), sync_key_c);
+    assert!(matches!(log_c.sync().await, Err(Error::Untrusted(_))));
+
+    server.abort();
 }

@@ -776,4 +776,242 @@ void main() {
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), conflictingKey);
     expect(await c1AfterRestart.ensurePersonalAuth('test'), isTrue);
   });
+
+  test('pending passphrase record is retained across secret-key mismatch and syncLkcAccount isolates probes', () async {
+    SharedPreferences.setMockInitialValues({});
+    SecureProp.legacyApart = false;
+    const currentUid = 'u1';
+    final files = <String, (String etag, List<int> body, ({String signer, String pk, String sig, String? ver})? signed)>{};
+    final userKeys = <String, Map<String, Object?>>{};
+    var version = 0;
+    Completer<void>? probeStarted;
+    Completer<void>? releaseProbe;
+
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() {
+      SecureProp.legacyApart = null;
+      LkcClient.debugOnAccountKeyHeldRead = null;
+      return server.close(force: true);
+    });
+    server.listen((r) async {
+      final body = await r.fold<List<int>>([], (a, b) => a..addAll(b));
+      final res = r.response;
+      final path = r.uri.path;
+      if (path == '/v2/keys') {
+        res.headers.contentType = ContentType.json;
+        if (r.method == 'GET') {
+          final existing = userKeys[currentUid] ?? {'recipient': null, 'signing_key': null, 'next_seq': 1, 'prev_signing_key': null};
+          res.write(jsonEncode({'data': existing}));
+        } else if (r.method == 'PUT') {
+          final parsed = jsonDecode(utf8.decode(body)) as Map<String, dynamic>;
+          final prev = userKeys[currentUid]?['signing_key'] ?? parsed['signing_key'];
+          userKeys[currentUid] = {
+            'recipient': parsed['recipient'],
+            'signing_key': parsed['signing_key'],
+            'prev_signing_key': prev,
+            'next_seq': (parsed['seq'] as int) + 1,
+          };
+          res.write(jsonEncode({'data': null}));
+        } else {
+          res.write(jsonEncode({'code': 0}));
+        }
+        await res.close();
+        return;
+      }
+      const prefix = '/v2/sync/';
+      if (path.startsWith(prefix)) {
+        final rest = path.substring(prefix.length);
+        final key = '$currentUid:$rest';
+        final entry = files[key];
+        switch (r.method) {
+          case 'HEAD':
+            if (entry == null) {
+              res.statusCode = 404;
+            } else {
+              res
+                ..statusCode = 200
+                ..headers.set('ETag', '"${entry.$1}"');
+            }
+          case 'GET':
+            final started = probeStarted;
+            final release = releaseProbe;
+            if (rest == 'test/identity.age' && started != null && release != null && !started.isCompleted) {
+              started.complete();
+              await release.future;
+            }
+            if (entry == null) {
+              res.statusCode = 404;
+            } else {
+              res.headers.set('ETag', '"${entry.$1}"');
+              if (entry.$3 case final s?) {
+                res.headers
+                  ..set('X-Signer', s.signer)
+                  ..set('X-Signing-Key', s.pk)
+                  ..set('X-Signature', s.sig);
+                if (s.ver != null) res.headers.set('X-Sync-Version', s.ver!);
+              }
+              res.add(entry.$2);
+            }
+          case 'PUT':
+            final etag = 'e${++version}';
+            final sigHdr = r.headers.value('x-signature');
+            final pk = userKeys[currentUid]?['signing_key'] as String?;
+            final signed = (sigHdr != null && pk != null)
+                ? (signer: currentUid, pk: pk, sig: sigHdr, ver: r.headers.value('x-sync-version'))
+                : null;
+            files[key] = (etag, body, signed);
+            res
+              ..statusCode = 204
+              ..headers.set('ETag', '"$etag"');
+          default:
+            res.statusCode = 404;
+        }
+        await res.close();
+        return;
+      }
+      res.statusCode = 404;
+      await res.close();
+    });
+
+    final base = Uri.parse('http://127.0.0.1:${server.port}');
+    final tokenJson = jsonEncode({
+      'access': 'a1',
+      'refresh': 'r1',
+      'expires_at': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    });
+    final realKey = SyncKeyring.generateSecretKey();
+    final wrongKey = SyncKeyring.generateSecretKey();
+    FlutterSecureStorage.setMockInitialValues({
+      'lkcToken': tokenJson,
+      'bakPwd': 'oldPw',
+      'syncSecretKey': realKey,
+    });
+    SecureProp.resetRateLimits();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    LkcClient clientFor(String uid) => LkcClient(
+      oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://auth/callback', issuer: base.resolve('/auth/v1/')),
+      baseUrl: base,
+      cache: LkcMemoryCache(),
+    )..user.value = LkcUser(id: uid, name: uid, group: 'user', createdAt: now, updatedAt: now);
+
+    // 1. Seed u1's remote `lkc/identity.age` under `(oldPw, realKey)`.
+    final seedClient = clientFor('u1');
+    expect(await seedClient.ensurePersonalAuth('test'), isTrue);
+
+    // 2. Device currently holds `wrongKey`, password changed `oldPw -> newPw` offline:
+    //    flush sees `wrongPassphrase` on both `oldPw` and `newPw` due to `wrongKey`,
+    //    and MUST retain `lkcAccountKeyPendingPwd.u1` rather than clearing it!
+    await const SecureProp('lkcAccountKey.u1').write(null, limited: false);
+    await SecureStoreProps.bakPwd.write('newPw', limited: false);
+    await SecureStoreProps.syncSecretKey.write(wrongKey, limited: false);
+    final c1 = clientFor('u1');
+    await c1.changePersonalAuthPassphrase(old: 'oldPw', newPassphrase: 'newPw');
+    final retainedPending = await const SecureProp('lkcAccountKeyPendingPwd.u1').read(limited: false);
+    expect(retainedPending, isNotNull, reason: 'ambiguous wrongPassphrase must not drop pending passphrase record');
+
+    // Once the user imports `realKey`, `ensurePersonalAuth` flushes `oldPw -> newPw` and clears `lkcAccountKeyPendingPwd.u1`!
+    await SyncKeyring.storeSecretKey(realKey);
+    expect(await c1.ensurePersonalAuth('test'), isTrue);
+    expect(await const SecureProp('lkcAccountKeyPendingPwd.u1').read(limited: false), isNull);
+
+    // 2b. Key-refetch invalidation check (`_refetchAccountKey`):
+    //     Another device rotates u1's account key and uploads a signed file.
+    //     If `stillValid()` turns false after reading `held`, `_accountKeyProp('u1')`
+    //     must NOT be overwritten; a valid refetch then caches the rotated key.
+    final initialCachedKey = await const SecureProp('lkcAccountKey.u1').read(limited: false);
+    expect(initialCachedKey, isNotNull);
+    final rotator = clientFor('u1');
+    final rotatedKey = await (await rotator.teams()).rotateAccountKey(
+      passphrase: 'newPw',
+      secretKey: realKey,
+      allowLegacy: false,
+    );
+    expect(rotatedKey.toText(), isNot(initialCachedKey));
+    final rotatorSync = await rotator.sync('test');
+    rotatorSync.setPersonalAuth(
+      auth: LkcPersonalAuth.open(
+        key: rotatedKey,
+        versions: '',
+        save: (_) async => true,
+        fetchKey: () async => null,
+      ),
+    );
+    final srcFile = File('${dir.path}/rot-src.age')..writeAsStringSync('age-encryption.org/v1\n---\npayload\n');
+    final dstFile = File('${dir.path}/rot-dst.age');
+    await rotatorSync.upload(name: 'rotated.age', from: srcFile.path);
+
+    final syncU1 = await c1.sync('test');
+    LkcClient.debugOnAccountKeyHeldRead = (_) {
+      c1.user.value = null;
+    };
+    await expectLater(syncU1.download(name: 'rotated.age', to: dstFile.path), throwsA(anything));
+    expect(
+      await const SecureProp('lkcAccountKey.u1').read(limited: false),
+      initialCachedKey,
+      reason: 'invalidated refetch must not write rotated key into cache',
+    );
+
+    // Re-open personal auth validly: valid refetch caches `rotatedKey` and verifies download!
+    LkcClient.debugOnAccountKeyHeldRead = null;
+    final c1Valid = clientFor('u1');
+    expect(await c1Valid.ensurePersonalAuth('test'), isTrue);
+    final syncU1Valid = await c1Valid.sync('test');
+    await syncU1Valid.download(name: 'rotated.age', to: dstFile.path);
+    expect(await const SecureProp('lkcAccountKey.u1').read(limited: false), rotatedKey.toText());
+
+    // 3. `syncLkcAccount`: invalidates in-flight probe & clears Rust missing-key status for u1
+    //    while preserving missing-key status for folder remotes!
+    await SyncKeyring.ofLkc(syncU1Valid, 'u1'); // Creates 2FA `test/identity.age` for u1
+    final folderSealedBytes = files['u1:test/identity.age']!.$2;
+
+    FlutterSecureStorage.setMockInitialValues({'lkcToken': tokenJson, 'bakPwd': 'newPw'});
+    SharedPreferences.setMockInitialValues({});
+    SecureProp.resetRateLimits();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+    SyncKeyring.allowAutoGenerateSecretKey = () => false;
+
+    // Seed a folder remote that reports `secretKeyMissing` in Rust.
+    final folder = _ReadOnlyKeyFile('folder-1', Uint8List.fromList(folderSealedBytes));
+    await expectLater(SyncKeyring.ofFiles(folder, create: false), throwsA(isA<SyncSecretKeyMissing>()));
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // Start an in-flight probe for u1, then switch to u2 before the probe completes.
+    probeStarted = Completer<void>();
+    releaseProbe = Completer<void>();
+    final probeFuture = SyncKeyring.lkcSealedWithSecretKey(syncU1Valid, 'u1');
+    await probeStarted.future;
+    SyncKeyring.syncLkcAccount('u2');
+    // Folder remote's missing-key status MUST remain preserved!
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    releaseProbe.complete();
+    expect(await probeFuture, isTrue);
+
+    // Release folder remote: if u1's stale probe had NOT been invalidated, `secretKeyMissing`
+    // would stay true! With invalidation, it drops to false.
+    SyncKeyring.release('folder-1');
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+  });
+}
+
+final class _ReadOnlyKeyFile implements SyncKeyFile {
+  final String _id;
+  final Uint8List _body;
+  _ReadOnlyKeyFile(this._id, this._body);
+
+  @override
+  String get id => _id;
+
+  @override
+  Future<({Uint8List body, String version})?> read() async => (body: _body, version: 'v1');
+
+  @override
+  Future<String?> write(Uint8List body, {required String? ifVersion}) async => null;
+
+  @override
+  Future<bool> canCreate() async => false;
 }

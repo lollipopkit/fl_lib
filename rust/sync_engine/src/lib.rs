@@ -71,11 +71,11 @@ pub enum Error {
     /// persistence failed ([detail]); the engine advances its local checkpoint
     /// from [appended] so the mutation is not resent.
     AppendPersistFailed { appended: Appended, detail: String },
-    /// The remote snapshot already committed at [seq], but local watermark
-    /// persistence failed ([detail]); the engine retains the committed snapshot
-    /// so a retry flushes local persistence without resending it, then sweeps
-    /// covered blobs.
-    SnapshotPersistFailed { seq: i64, detail: String },
+    /// The remote snapshot already committed at [seq] (on [log], when reported
+    /// by the response), but local watermark persistence failed ([detail]); the
+    /// engine retains the committed snapshot so a retry flushes local
+    /// persistence without resending it, then sweeps covered blobs.
+    SnapshotPersistFailed { log: Option<String>, seq: i64, detail: String },
     /// The remote key file already committed at [version], but local signing
     /// watermark persistence failed ([detail]); the key engine reconciles the
     /// committed write and retries watermark flush without resending the PUT.
@@ -206,6 +206,12 @@ pub trait Seal: Send + Sync + 'static {
     /// (`fl_sync::blob_name`).
     fn name_of(&self, data: &[u8]) -> String;
 
+    /// Whether [name] matches [Self::name_of] under the current or any kept
+    /// historical identity of this seal.
+    fn matches_name_of(&self, name: &str, data: &[u8]) -> bool {
+        name == self.name_of(data)
+    }
+
     /// Looks again for the account's key, after something did not [open]:
     /// whether a newer one was found (the key was replaced elsewhere).
     fn refresh(&self) -> impl Future<Output = Result<bool>> + Send;
@@ -213,11 +219,35 @@ pub trait Seal: Send + Sync + 'static {
 
 /// Where large records are kept beside the ops (`op-<name>.age`).
 pub trait BlobStore: Send + Sync + 'static {
+    /// Whether this store currently attaches personal/team signatures to newly
+    /// uploaded blobs and containers.
+    fn signs_blobs(&self) -> bool {
+        false
+    }
+
     /// [body] kept as [name]; already there is done.
     fn put_blob(&self, name: String, body: Vec<u8>) -> impl Future<Output = Result<()>> + Send;
 
+    /// Like [Self::put_blob], answering whether the stored blob carries an
+    /// authenticated signature.
+    fn put_blob_signed(&self, name: String, body: Vec<u8>) -> impl Future<Output = Result<bool>> + Send {
+        async move { self.put_blob(name, body).await.map(|_| false) }
+    }
+
     /// The blob [name], `None` when it is gone.
     fn get_blob(&self, name: String) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
+
+    /// Like [Self::get_blob], answering `(bytes, was_signed)` and permitting an
+    /// unsigned pre-signing blob only when [allow_retained_unsigned] is true
+    /// (bound to a retained reference from a batch or snapshot) and the blob
+    /// was never previously signed.
+    fn get_blob_verified(
+        &self,
+        name: String,
+        _allow_retained_unsigned: bool,
+    ) -> impl Future<Output = Result<Option<(Vec<u8>, bool)>>> + Send {
+        async move { Ok(self.get_blob(name).await?.map(|b| (b, false))) }
+    }
 
     /// The blobs whose name starts with [prefix], and when each was written
     /// (Unix ms).
@@ -232,6 +262,8 @@ pub struct Listed {
     pub name: String,
     /// When it was written, Unix ms; `None` when the store does not say.
     pub at: Option<i64>,
+    /// Whether the listing reports an attached signature on the entry.
+    pub signed: bool,
 }
 
 pub(crate) fn now_ms() -> i64 {

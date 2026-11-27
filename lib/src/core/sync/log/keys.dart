@@ -62,14 +62,25 @@ abstract final class SyncKeyring {
       rust_sync.deriveSyncPassphrase(password: password, secretKey: secretKey);
 
   static String? _label;
+  static (bool, String?) _lastLkcAccount = (false, null);
 
   /// [label] begins the key file's comment line (`ServerBox sync key`). Once,
   /// at launch. The keys are made when first asked for: without fl_lib's
   /// Rust, asking fails and the app runs on.
   static void init({required String label}) => _label ??= label;
 
-  static SyncKeys get _ring =>
-      _keys ??= SyncKeys(label: _label ?? (throw StateError('SyncKeyring.init was not called')), secrets: _secrets);
+  static SyncKeys get _ring {
+    var keys = _keys;
+    if (keys == null) {
+      final label = _label ?? (throw StateError('SyncKeyring.init was not called'));
+      keys = SyncKeys(label: label, secrets: _secrets);
+      if (_lastLkcAccount.$1) {
+        keys.syncLkcAccount(account: _lastLkcAccount.$2);
+      }
+      _keys = keys;
+    }
+    return keys;
+  }
 
   static Future<T> _said<T>(Future<T> Function() run) async {
     try {
@@ -185,7 +196,15 @@ abstract final class SyncKeyring {
     if (_accountKeySealedFor != null && _accountKeySealedFor != account) {
       _accountKeySealedFor = null;
     }
-    return _said(() => _ring.lkcSealedWithSecretKey(lkc: sync, account: account));
+    final SyncKeys ring;
+    final BigInt expectedSwitchGen;
+    try {
+      ring = _ring;
+      expectedSwitchGen = ring.registerLkcProbe(account: account);
+    } on SyncEngineError catch (e) {
+      return Future.error(syncException(e));
+    }
+    return _said(() => ring.lkcSealedWithSecretKey(lkc: sync, account: account, expectedSwitchGen: expectedSwitchGen));
   }
 
   /// [account]'s LK Cloud account key is sealed with a secret key this device
@@ -206,13 +225,17 @@ abstract final class SyncKeyring {
     }
   }
 
-  /// Updates the active LK Cloud account, clearing any stale account-key
-  /// sealed flag left by a different account before notifying listeners.
+  /// Updates the active LK Cloud account, invalidating any in-flight
+  /// missing-key probe for a previous LK Cloud account and clearing only that
+  /// previous account's missing-key status while preserving folder remotes and
+  /// [account].
   static void syncLkcAccount(String? account) {
     if (_accountKeySealedFor != null && _accountKeySealedFor != account) {
       _accountKeySealedFor = null;
-      _syncNotifiers();
     }
+    _lastLkcAccount = (true, account);
+    _keys?.syncLkcAccount(account: account);
+    _syncNotifiers();
   }
 
   /// The secret key currently staged in the pending slot, if any (read only).
@@ -400,6 +423,7 @@ abstract final class SyncKeyring {
     allowAutoGenerateSecretKey = null;
     debugOnExternalStage = null;
     _accountKeySealedFor = null;
+    _lastLkcAccount = (false, null);
     _secretKeyLock = Future.value();
   }
 }

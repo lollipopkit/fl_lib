@@ -290,6 +290,11 @@ final class LkcClient {
   /// not yet re-seal `lkc/identity.age` (e.g. offline).
   static SecureProp _pendingAccountKeyPwdProp(String uid) => SecureProp('lkcAccountKeyPendingPwd.$uid');
 
+  /// Test hook invoked immediately after reading the cached account key during
+  /// [_refetchAccountKey].
+  @visibleForTesting
+  static FutureOr<void> Function(String uid)? debugOnAccountKeyHeldRead;
+
   /// Detaches personal-space signing auth (and optionally clears the cached
   /// account key, e.g. after replacing the client-side secret key).
   Future<void> resetPersonalAuth({bool clearCachedKey = false}) async {
@@ -728,12 +733,16 @@ final class LkcClient {
       final key = opened.key();
       if (key.userId() != uid) return null;
       if (opened.twoFactor()) await markAccountKey2fa(uid);
+      if (!stillValid()) return null;
       final text = key.toText();
       // Kept only as the signer takes it: a rotation of the key held.
       final held = await _accountKeyProp(uid).read(limited: false);
+      await debugOnAccountKeyHeldRead?.call(uid);
+      if (!stillValid()) return null;
       if (held != null && held.isNotEmpty && !key.follows(earlier: LkcAccountKey.fromText(text: held))) return null;
+      if (!stillValid()) return null;
       await _accountKeyProp(uid).write(text, limited: false);
-      return text;
+      return stillValid() ? text : null;
     } catch (e, s) {
       Loggers.app.warning('Account key not read again', e, s);
       return null;
@@ -840,10 +849,23 @@ final class LkcClient {
     required String old,
     required String newPassphrase,
   }) async {
-    final uid = user.value?.id;
-    if (!signedIn || uid == null || old.isEmpty || newPassphrase.isEmpty || old == newPassphrase) return;
+    if (old.isEmpty || newPassphrase.isEmpty || old == newPassphrase) return;
+    try {
+      await _ensureSession();
+    } catch (_) {}
+    final uid =
+        user.value?.id ??
+        (_session == null || signedIn
+            ? _cached(_kUser, (d) => LkcUser.fromJson(d as Map<String, dynamic>))?.id
+            : null);
+    if (uid == null || (_session != null && !signedIn)) return;
     await _serializePassphrase(uid, () async {
-      if (!signedIn || user.value?.id != uid) return;
+      final activeUid =
+          user.value?.id ??
+          (_session == null || signedIn
+              ? _cached(_kUser, (d) => LkcUser.fromJson(d as Map<String, dynamic>))?.id
+              : null);
+      if ((_session != null && !signedIn) || activeUid != uid) return;
       final pendingProp = _pendingAccountKeyPwdProp(uid);
       final existing = await _readPendingPassphrase(pendingProp);
       final sources = <String>[];
@@ -857,7 +879,9 @@ final class LkcClient {
       }
       if (!sources.contains(old)) sources.add(old);
       await _writePendingPassphrase(pendingProp, sources: sources, target: newPassphrase);
-      await _flushPendingAccountKeyPassphraseUnlocked(uid, targetPassphrase: newPassphrase);
+      if (signedIn && user.value?.id == uid) {
+        await _flushPendingAccountKeyPassphraseUnlocked(uid, targetPassphrase: newPassphrase);
+      }
     });
   }
 
@@ -875,15 +899,20 @@ final class LkcClient {
   }
 
   Future<void> _flushPendingAccountKeyPassphraseUnlocked(String uid, {String? targetPassphrase}) async {
-    if (!signedIn || user.value?.id != uid) return;
+    if (user.value?.id != uid) return;
+    try {
+      await _ensureSession();
+    } catch (_) {}
+    bool sameAccount() => signedIn && user.value?.id == uid;
+    if (!sameAccount()) return;
     final pendingProp = _pendingAccountKeyPwdProp(uid);
     final record = await _readPendingPassphrase(pendingProp);
     if (record == null || record.sources.isEmpty) return;
-    if (!signedIn || user.value?.id != uid) return;
+    if (!sameAccount()) return;
     final storedPwd = targetPassphrase == null ? await SecureStoreProps.bakPwd.read(limited: false) : null;
     final newPwd = targetPassphrase ?? (storedPwd != null && storedPwd.isNotEmpty ? storedPwd : record.target);
     final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
-    if (!signedIn || user.value?.id != uid) return;
+    if (!sameAccount()) return;
     if (newPwd == null || newPwd.isEmpty || secretKey == null || secretKey.isEmpty) return;
 
     final candidates = <String>[...record.sources];
@@ -900,24 +929,20 @@ final class LkcClient {
     }
 
     final upgraded = await isAccountKey2fa(uid);
-    if (!signedIn || user.value?.id != uid) return;
+    if (!sameAccount()) return;
     try {
       final t = await teams();
-      if (!signedIn || user.value?.id != uid) return;
+      if (!sameAccount()) return;
       final hasKey = await t.hasAccountKey();
-      if (!signedIn || user.value?.id != uid) return;
+      if (!sameAccount()) return;
       if (!hasKey) {
         await pendingProp.write(null, limited: false);
         return;
       }
 
-      final remaining = <String>[...candidates];
       for (final oldPwd in candidates) {
-        if (!signedIn || user.value?.id != uid) return;
-        if (oldPwd == newPwd) {
-          remaining.remove(oldPwd);
-          continue;
-        }
+        if (!sameAccount()) return;
+        if (oldPwd == newPwd) continue;
         try {
           await t.changeKeyPassphrase(
             old: oldPwd,
@@ -925,47 +950,43 @@ final class LkcClient {
             secretKey: secretKey,
             allowLegacy: !upgraded,
           );
-          if (!signedIn || user.value?.id != uid) return;
+          if (!sameAccount()) return;
           await markAccountKey2fa(uid);
-          if (!signedIn || user.value?.id != uid) return;
+          if (!sameAccount()) return;
           await pendingProp.write(null, limited: false);
           return;
         } on LkcTeamError catch (e) {
           if (e.kind == LkcTeamErrorKind.wrongPassphrase) {
-            // Try the next recorded source/previous target before giving up.
-            remaining.remove(oldPwd);
+            // Retain all recorded candidates: `wrongPassphrase` may reflect a
+            // secret-key mismatch rather than an obsolete source passphrase.
             continue;
-          }
-          // Transient failure: retain remaining candidates and target for retry.
-          if (signedIn && user.value?.id == uid && remaining.isNotEmpty) {
-            await _writePendingPassphrase(pendingProp, sources: remaining, target: newPwd);
           }
           Loggers.app.warning('Deferred LK Cloud account key passphrase change failed', e);
           return;
         }
       }
 
-      // None of the recorded source passphrases matched; check whether the
-      // remote key is already sealed under `newPwd` before clearing recovery state.
-      if (!signedIn || user.value?.id != uid) return;
+      // None of the recorded source passphrases opened the remote key with the
+      // current secret key; clear the pending record ONLY when the remote key
+      // is confirmed sealed under `(newPwd, secretKey)` (or no longer exists),
+      // never on an ambiguous `wrongPassphrase` mismatch.
+      if (!sameAccount()) return;
       try {
         final fetched = await t.fetchAccountKey(
           passphrase: newPwd,
           secretKey: secretKey,
           allowLegacy: !upgraded,
         );
-        if (!signedIn || user.value?.id != uid) return;
-        if (fetched != null && fetched.twoFactor()) {
-          await markAccountKey2fa(uid);
-        }
-        if (!signedIn || user.value?.id != uid) return;
-        await pendingProp.write(null, limited: false);
-      } on LkcTeamError catch (e) {
-        if (e.kind == LkcTeamErrorKind.wrongPassphrase) {
-          if (!signedIn || user.value?.id != uid) return;
-          // Neither recorded sources nor target open the remote key: drop stale pending.
+        if (!sameAccount()) return;
+        if (fetched == null) {
           await pendingProp.write(null, limited: false);
-        } else {
+        } else if (fetched.twoFactor()) {
+          await markAccountKey2fa(uid);
+          if (!sameAccount()) return;
+          await pendingProp.write(null, limited: false);
+        }
+      } on LkcTeamError catch (e) {
+        if (e.kind != LkcTeamErrorKind.wrongPassphrase) {
           Loggers.app.warning('Deferred LK Cloud account key passphrase verification failed', e);
         }
       }
@@ -1125,7 +1146,7 @@ final class LkcClient {
     for (final s in _resolvedSyncs.values) {
       s.clearPersonalAuth();
     }
-    SyncKeyring.clearAccountKeySealed();
+    SyncKeyring.syncLkcAccount(null);
     _refreshedAt = null;
     usage.value = null;
     user.value = null;

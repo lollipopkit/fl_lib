@@ -177,6 +177,16 @@ fn write_intent_key(id: &str) -> String {
     format!("{WRITE_INTENT_PREFIX}{id}")
 }
 
+fn validate_remote_id(id: &str) -> Result<()> {
+    if id.is_empty() {
+        return Err(Error::Host("remote key id cannot be empty".into()));
+    }
+    if id.starts_with(TWO_FA_PREFIX) || id.starts_with(WRITE_INTENT_PREFIX) {
+        return Err(Error::Host(format!("reserved remote key id prefix: {id}")));
+    }
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Eq)]
 struct WriteIntent {
     epoch: i64,
@@ -355,6 +365,14 @@ struct KeyTable {
     /// not yet completed, retained across [`KeyRing::release`] until flushed or
     /// [`KeyRing::forget`].
     pending_writes: HashMap<String, PendingKeyWrite>,
+    /// Active LK Cloud account as last synchronized via [`KeyRing::sync_lkc_account`],
+    /// alongside all LK Cloud account IDs touched here and a monotonic switch
+    /// counter so switching accounts or signing out invalidates in-flight LK
+    /// Cloud probes and clears only that previous account's status without
+    /// disturbing folder remotes.
+    lkc_active: Option<Option<String>>,
+    lkc_known: BTreeSet<String>,
+    lkc_switch_gen: u64,
 }
 
 impl KeyTable {
@@ -499,10 +517,6 @@ impl RingInner {
         self.recheck_gen.fetch_add(1, Ordering::AcqRel);
     }
 
-    fn probe_snapshot(&self, id: &str) -> (u64, u64) {
-        let table = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-        (self.recheck_gen(), table.gen_of(id))
-    }
     fn said_mismatch(&self, id: &str) {
         self.secret_key_missing.send_if_modified(|now| now.remove(id));
         self.mismatch.send_if_modified(|now| now.insert(id.to_string()));
@@ -671,6 +685,7 @@ impl RingInner {
     }
 
     async fn set_epoch_2fa(&self, id: &str, expected_forget_gen: u64, epoch: i64) -> Result<()> {
+        validate_remote_id(id)?;
         let _guard = self.epochs_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.epochs().await?;
@@ -689,6 +704,7 @@ impl RingInner {
     }
 
     async fn clear_epoch(&self, id: &str) -> Result<()> {
+        validate_remote_id(id)?;
         let _guard = self.epochs_lock.lock().await;
         let mut all = self.secrets.epochs().await?;
         let removed_epoch = all.remove(id).is_some();
@@ -1011,13 +1027,37 @@ impl KeyRing {
     /// password does not open it. Without [create] (a restore, nothing
     /// synced), none is put where there is none: [Error::KeyNotHere].
     pub async fn of(&self, file: Arc<dyn KeyFile>, create: bool) -> Result<Arc<SyncKey>> {
+        self.of_inner(file, create, false).await
+    }
+
+    /// Registers [account] as an LK Cloud key remote before opening, so a
+    /// subsequent [`Self::sync_lkc_account`] switch or sign-out releases it.
+    pub async fn of_lkc(&self, file: Arc<dyn KeyFile>, create: bool) -> Result<Arc<SyncKey>> {
+        self.of_inner(file, create, true).await
+    }
+
+    async fn of_inner(&self, file: Arc<dyn KeyFile>, create: bool, lkc: bool) -> Result<Arc<SyncKey>> {
         let id = file.id();
-        let (key, fresh) = {
+        validate_remote_id(&id)?;
+        let (key, fresh, start_switch_gen) = {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            let switch_gen = if lkc {
+                if table
+                    .lkc_active
+                    .as_ref()
+                    .is_some_and(|a| a.as_deref() != Some(id.as_str()))
+                {
+                    return Err(Error::SignedOut);
+                }
+                table.lkc_known.insert(id.clone());
+                Some(table.lkc_switch_gen)
+            } else {
+                None
+            };
             match table.keys.get(&id) {
                 Some(k) => {
                     *k.file.lock().unwrap_or_else(|e| e.into_inner()) = file;
-                    (k.clone(), false)
+                    (k.clone(), false, switch_gen)
                 }
                 None => {
                     table.next_handle_id = table.next_handle_id.wrapping_add(1);
@@ -1032,7 +1072,7 @@ impl KeyRing {
                         checking: Mutex::new(()),
                     });
                     table.keys.insert(id.clone(), key.clone());
-                    (key, true)
+                    (key, true, switch_gen)
                 }
             }
         };
@@ -1040,21 +1080,109 @@ impl KeyRing {
             // A restore's lookup leaves nothing behind for a remote nothing
             // syncs to; any committed write awaiting watermark flush stays in
             // `KeyTable::pending_writes` across lookups and releases.
-            if !create && fresh {
-                let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) && !table.pending_writes.contains_key(&id) {
-                    table.keys.remove(&id);
-                }
+            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            if !create
+                && fresh
+                && table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key))
+                && !table.pending_writes.contains_key(&id)
+            {
+                table.keys.remove(&id);
+            }
+            if start_switch_gen.is_some_and(|g| {
+                table.lkc_switch_gen != g
+                    || table
+                        .lkc_active
+                        .as_ref()
+                        .is_some_and(|a| a.as_deref() != Some(id.as_str()))
+            }) {
+                return Err(Error::SignedOut);
             }
             return Err(e);
         }
+        if let Some(g) = start_switch_gen {
+            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            if table.lkc_switch_gen != g
+                || table
+                    .lkc_active
+                    .as_ref()
+                    .is_some_and(|a| a.as_deref() != Some(id.as_str()))
+            {
+                if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) {
+                    table.keys.remove(&id);
+                    table.bump_id(&id);
+                    self.0.said_ok(&id);
+                }
+                return Err(Error::SignedOut);
+            }
+        }
         Ok(key)
+    }
+
+    /// Synchronizes the active LK Cloud account (`None` when signed out):
+    /// invalidates any in-flight missing-key probe for a previous LK Cloud
+    /// account and clears only that previous LK Cloud account's missing-key /
+    /// mismatch status, preserving folder remotes and the newly active account.
+    pub fn sync_lkc_account(&self, account: Option<&str>) {
+        let active = account.filter(|s| validate_remote_id(s).is_ok());
+        let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        let next_active = active.map(str::to_string);
+        let was_unset = table.lkc_active.is_none();
+        let prev_active = table.lkc_active.replace(next_active.clone()).flatten();
+        let mut stale: Vec<String> = table
+            .lkc_known
+            .iter()
+            .filter(|id| Some(id.as_str()) != active)
+            .cloned()
+            .collect();
+        if let Some(prev) = prev_active.as_ref()
+            && Some(prev.as_str()) != active
+            && !stale.contains(prev)
+        {
+            stale.push(prev.clone());
+        }
+        let switched = if was_unset {
+            active.is_none() || !stale.is_empty()
+        } else {
+            prev_active != next_active || !stale.is_empty()
+        };
+        if switched {
+            table.lkc_switch_gen = table.lkc_switch_gen.wrapping_add(1);
+        }
+        for id in stale {
+            table.lkc_known.remove(&id);
+            table.keys.remove(&id);
+            table.bump_id(&id);
+            self.0.said_ok(&id);
+        }
+        if let Some(uid) = active {
+            table.lkc_known.insert(uid.to_string());
+        }
+    }
+
+    /// Captures the current LK Cloud account-switch generation synchronously at
+    /// probe creation time so an account switch or sign-out before Tokio polls
+    /// the probe future still invalidates it.
+    pub fn register_lkc_probe(&self, account: &str) -> Result<u64> {
+        validate_remote_id(account)?;
+        let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        if table
+            .lkc_active
+            .as_ref()
+            .is_none_or(|a| a.as_deref() == Some(account))
+        {
+            table.lkc_known.insert(account.to_string());
+        }
+        Ok(table.lkc_switch_gen)
     }
 
     /// [id]'s remote is not synced here any more (turned off): its key is read
     /// again next time, and nothing is said of it meanwhile.
     pub fn release(&self, id: &str) {
+        if validate_remote_id(id).is_err() {
+            return;
+        }
         let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        table.lkc_known.remove(id);
         table.keys.remove(id);
         table.bump_id(id);
         self.0.said_ok(id);
@@ -1063,8 +1191,10 @@ impl KeyRing {
     /// [id]'s remote is gone from this device (signed out, another server): as
     /// [release], and what this device knew of its file goes too.
     pub async fn forget(&self, id: &str) -> Result<()> {
+        validate_remote_id(id)?;
         {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            table.lkc_known.remove(id);
             table.keys.remove(id);
             table.pending_writes.remove(id);
             table.committed_handle_ids.remove(id);
@@ -1156,21 +1286,53 @@ impl KeyRing {
     /// if this remote's open/release generation and ring recheck generation are
     /// still current.
     pub async fn sealed_with_secret_key(&self, file: Arc<dyn KeyFile>) -> Result<bool> {
+        self.sealed_with_secret_key_inner(file, None).await
+    }
+
+    /// LK Cloud account variant of [`Self::sealed_with_secret_key`] bound to
+    /// [expected_switch_gen] from [`Self::register_lkc_probe`].
+    pub async fn lkc_sealed_with_secret_key(&self, file: Arc<dyn KeyFile>, expected_switch_gen: u64) -> Result<bool> {
+        self.sealed_with_secret_key_inner(file, Some(expected_switch_gen)).await
+    }
+
+    async fn sealed_with_secret_key_inner(&self, file: Arc<dyn KeyFile>, lkc_switch_gen: Option<u64>) -> Result<bool> {
         let id = file.id();
-        let (recheck_before, id_gen_before) = self.0.probe_snapshot(&id);
+        validate_remote_id(&id)?;
+        let (recheck_before, id_gen_before, lkc_allowed_before) = {
+            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            let allowed = match lkc_switch_gen {
+                None => true,
+                Some(expected) => {
+                    let ok = table.lkc_switch_gen == expected
+                        && table.lkc_active.as_ref().is_none_or(|a| a.as_deref() == Some(id.as_str()));
+                    if ok {
+                        table.lkc_known.insert(id.clone());
+                    }
+                    ok
+                }
+            };
+            (self.0.recheck_gen(), table.gen_of(&id), allowed)
+        };
         let sk_before = self.0.secret_key().await?;
         let pwd = self.0.password().await?;
         let sealed = match file.read().await? {
             Some((body, _)) => open_with_password(&body, &pwd)?.is_none(),
             None => false,
         };
-        if sealed && sk_before.is_none() {
+        if sealed && sk_before.is_none() && lkc_allowed_before {
             let sk_now = self.0.secret_key().await?;
             let pwd_now = self.0.secrets.password().await?;
             if sk_now.is_none() && pwd_now.as_deref() == Some(pwd.as_str()) {
                 let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                let lkc_still_allowed = match lkc_switch_gen {
+                    None => true,
+                    Some(expected) => {
+                        table.lkc_switch_gen == expected
+                            && table.lkc_active.as_ref().is_none_or(|a| a.as_deref() == Some(id.as_str()))
+                    }
+                };
                 let already_opened = table.keys.get(&id).is_some_and(|k| k.lock().opened.is_some());
-                if !already_opened && table.gen_of(&id) == id_gen_before && self.0.recheck_gen() == recheck_before {
+                if lkc_still_allowed && !already_opened && table.gen_of(&id) == id_gen_before && self.0.recheck_gen() == recheck_before {
                     self.0.said_missing(&id);
                 }
             }
@@ -1749,7 +1911,18 @@ impl SyncKey {
                 let mut order = vec![remote[0].clone(), current];
                 order.extend(remote.iter().skip(1).cloned());
                 let identities = self.merged(order);
-                let Some((written, persist_err)) = self.commit_key_file(self.sealed(&identities, epoch, pwd, sk)?, Some(version)).await? else { return Ok(false) };
+                let (written, persist_err) = {
+                    let _init = self.ring.secret_key_init.lock().await;
+                    self.ring.ensure_not_forgotten(&self.id(), self.forget_gen)?;
+                    let cur_sk = self.ring.secret_key().await?;
+                    if cur_sk.as_ref().map(|k| k.format()) != Some(sk.format()) {
+                        return Ok(false);
+                    }
+                    let Some(res) = self.commit_key_file(self.sealed(&identities, epoch, pwd, sk)?, Some(version)).await? else {
+                        return Ok(false);
+                    };
+                    res
+                };
                 self.use_identities(identities, true).await?;
                 if let Some(detail) = persist_err {
                     self.ring.record_committed_write(&self.id(), self.forget_gen, epoch, pwd).await?;
@@ -1825,8 +1998,17 @@ impl SyncKey {
             identities.truncate(HISTORY + 1);
             (identities, s.epoch, s.opened.as_ref().map(|(v, _)| v.clone()))
         };
-        let Some((version, persist_err)) = self.commit_key_file(self.sealed(&identities, epoch, &pwd, &sk)?, opened).await? else {
-            return Err(Error::Host("identity.age changed meanwhile".into()));
+        let (version, persist_err) = {
+            let _init = self.ring.secret_key_init.lock().await;
+            self.ring.ensure_not_forgotten(&self.id(), self.forget_gen)?;
+            let cur_sk = self.ring.secret_key().await?;
+            if cur_sk.as_ref().map(|k| k.format()) != Some(sk.format()) {
+                return Err(Error::Host("the secret key changed during rotation".into()));
+            }
+            let Some(res) = self.commit_key_file(self.sealed(&identities, epoch, &pwd, &sk)?, opened).await? else {
+                return Err(Error::Host("identity.age changed meanwhile".into()));
+            };
+            res
         };
         {
             let mut s = self.lock();
@@ -1918,6 +2100,13 @@ impl Seal for SyncKey {
     fn name_of(&self, data: &[u8]) -> String {
         let first = self.lock().identities.first().cloned().unwrap_or_default();
         fl_sync::blob_name(&first, data)
+    }
+
+    fn matches_name_of(&self, name: &str, data: &[u8]) -> bool {
+        self.lock()
+            .identities
+            .iter()
+            .any(|id| name == fl_sync::blob_name(id, data))
     }
 
     /// Reads the file again: whether it held keys not here.

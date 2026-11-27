@@ -311,6 +311,10 @@ struct VersionState {
     /// True when a committed remote write advanced `data` in memory but
     /// `VersionKeeper::save` has not yet succeeded for it.
     dirty: bool,
+    /// Write-once log blobs observed or written with a signature on this auth
+    /// instance (`"{app}/{name}"`), kept in memory so `PersonalVersions` JSON
+    /// stays bounded while blocking unsigned replacements of signed blobs.
+    seen_signed_blobs: BTreeSet<String>,
 }
 
 /// Signs outgoing writes and verifies incoming reads for one user's personal
@@ -329,7 +333,11 @@ impl PersonalAuth {
     pub fn new(key: AccountKey, versions: PersonalVersions, keeper: Arc<dyn VersionKeeper>) -> Self {
         Self {
             key: RwLock::new(key),
-            versions: AsyncMutex::new(VersionState { data: versions, dirty: false }),
+            versions: AsyncMutex::new(VersionState {
+                data: versions,
+                dirty: false,
+                seen_signed_blobs: BTreeSet::new(),
+            }),
             keeper,
             published: AsyncMutex::new(false),
             source: None,
@@ -478,6 +486,21 @@ impl PersonalAuth {
         self.record_committed(|v| v.saw_blob(app)).await
     }
 
+    /// Records a committed signed write-once log blob named [name], remembering
+    /// [name] as signed on this auth instance without adding it to persisted
+    /// per-file watermarks.
+    pub async fn record_named_blob_written(&self, app: &str, name: &str) -> Result<(), Error> {
+        let mut held = self.versions.lock().await;
+        held.seen_signed_blobs.insert(file_key(app, name));
+        let mut next = held.data.clone();
+        next.saw_blob(app);
+        if next != held.data {
+            held.data = next;
+            held.dirty = true;
+        }
+        Self::flush(&self.keeper, &mut held).await
+    }
+
     /// Records a committed signed batch append at [seq] of [log].
     pub async fn record_batch_written(&self, app: &str, log: &str, seq: i64) -> Result<(), Error> {
         self.record_committed(|v| v.mark_log_signed_at(app, Some(log), seq)).await
@@ -526,13 +549,36 @@ impl PersonalAuth {
         self.verify_blob_digest(app, name, &digest(body), signed).await
     }
 
+    /// Verifies a downloaded write-once log blob bound to a pre-signing
+    /// reference retained by a batch or snapshot: permits an unsigned response
+    /// only when [name] has never been seen or written signed and [app] has not
+    /// locked ordinary files to signed-only.
+    pub async fn verify_retained_blob(&self, app: &str, name: &str, body: &[u8], signed: Option<&Signed>) -> Result<(), Error> {
+        self.verify_blob_digest_inner(app, name, &digest(body), signed, true).await
+    }
+
     /// Streaming variant of [`Self::verify_blob`] taking a precomputed blake3 digest.
     pub async fn verify_blob_digest(&self, app: &str, name: &str, body_digest: &[u8; KEY_LEN], signed: Option<&Signed>) -> Result<(), Error> {
+        self.verify_blob_digest_inner(app, name, body_digest, signed, false).await
+    }
+
+    async fn verify_blob_digest_inner(
+        &self,
+        app: &str,
+        name: &str,
+        body_digest: &[u8; KEY_LEN],
+        signed: Option<&Signed>,
+        allow_retained_unsigned: bool,
+    ) -> Result<(), Error> {
+        let key = file_key(app, name);
         let Some(s) = signed else {
             // TODO(migration): reject unsigned personal blobs unconditionally
             // once pre-signing uploads are no longer present.
             let mut held = self.versions.lock().await;
-            if held.data.blob_requires_signature(app) || held.data.requires_signature(app, Some(name)) {
+            let must_be_signed = held.seen_signed_blobs.contains(&key)
+                || held.data.files.contains_key(&key)
+                || (!allow_retained_unsigned && held.data.blob_requires_signature(app));
+            if must_be_signed {
                 return Err(untrusted(format!("{app}/{name}: server stripped signature")));
             }
             return Self::flush(&self.keeper, &mut held).await;
@@ -544,11 +590,16 @@ impl PersonalAuth {
         let owner = self.verify_own_key(s, &format!("{app}/{name}")).await?;
         let msg = crypto::sync_file_message(&owner, app, name, 0, version, body_digest);
         verify_sig(s, &msg, &format!("{app}/{name}"))?;
-        self.persist_checked(|v| {
-            v.saw_blob(app);
-            Ok(())
-        })
-        .await
+        let mut held = self.versions.lock().await;
+        let mut next = held.data.clone();
+        next.saw_blob(app);
+        if next != held.data || held.dirty {
+            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
+            held.data = next;
+            held.dirty = false;
+        }
+        held.seen_signed_blobs.insert(key);
+        Ok(())
     }
 
     /// Streaming variant of [`Self::verify_file`] taking a precomputed blake3 digest.

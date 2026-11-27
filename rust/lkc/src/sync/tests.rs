@@ -462,7 +462,7 @@ async fn committed_write_survives_keeper_failure_and_retries_without_resending()
     keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "s-committed".into(), seq: 1 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "s-committed".into(), seq: 1, log: None }));
     assert_eq!(fake.requests("/v2/sync/serverbox/snapshot").len(), 1);
 
     keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -513,9 +513,9 @@ async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
     let (_fake, sync) = homebase(move |_| {
         let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let (etag, ver, sig, body) = if n == 0 {
-            ("\"e2\"", "2", sig2.signature.as_str(), "v2-body")
-        } else {
             ("\"e1\"", "1", sig1.signature.as_str(), "v1-body")
+        } else {
+            ("\"e2\"", "2", sig2.signature.as_str(), "v2-body")
         };
         Response::status(200)
             .header("ETag", etag)
@@ -528,11 +528,48 @@ async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
     .await;
     sync.set_personal(Some(auth));
 
+    let v1_verified = Arc::new(tokio::sync::Notify::new());
+    let release_v1 = Arc::new(tokio::sync::Notify::new());
+    let hook_fired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let v1_ver_c = v1_verified.clone();
+        let rel_v1_c = release_v1.clone();
+        let fired_c = hook_fired.clone();
+        *sync.after_verify_before_rename.lock().unwrap() = Some(Arc::new(move || {
+            let v1_ver = v1_ver_c.clone();
+            let rel_v1 = rel_v1_c.clone();
+            let first = !fired_c.swap(true, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if first {
+                    v1_ver.notify_one();
+                    rel_v1.notified().await;
+                }
+            })
+        }));
+    }
+
     let dir = tempdir::Dir::new();
     let to = dir.path().join("bak.age");
-    let (r1, r2) = tokio::join!(sync.download(NAME, &to, None), sync.download(NAME, &to, None));
-    assert!(r1.is_ok() || r2.is_ok());
-    // Whichever order ran, the installed file MUST end up as v2-body (never rolled back to v1-body).
+    let sync1 = sync.clone();
+    let to1 = to.clone();
+    let t1 = tokio::spawn(async move { sync1.download(NAME, &to1, None).await });
+    // Wait until version 1 has finished signature/version verification and is paused right before rename.
+    v1_verified.notified().await;
+    assert!(!to.exists(), "v1 must pause before rename");
+
+    // Start version 2 targeting the same destination; it MUST remain blocked on `dest_lock` until v1 finishes.
+    let sync2 = sync.clone();
+    let to2 = to.clone();
+    let mut t2 = tokio::spawn(async move { sync2.download(NAME, &to2, None).await });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut t2).await.is_err(),
+        "v2 download must remain blocked on destination lock while v1 holds it"
+    );
+    assert_eq!(req_n.load(std::sync::atomic::Ordering::SeqCst), 1, "v2 must not even fetch before acquiring dest_lock");
+
+    release_v1.notify_one();
+    assert_eq!(t1.await.unwrap().unwrap(), Fetched::Saved("e1".into()));
+    assert_eq!(t2.await.unwrap().unwrap(), Fetched::Saved("e2".into()));
     assert_eq!(std::fs::read(&to).unwrap(), b"v2-body");
 }
 
@@ -1244,7 +1281,7 @@ async fn cached_append_and_snapshot_invalidated_when_personal_log_changes() {
     // 4. Snapshot at seq 1 (<= head 1) on log-2 fails local persistence -> cached for log-2.
     keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-log2".into(), seq: 1 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-log2".into(), seq: 1, log: None }));
     assert_eq!(snap_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
     // 5. Server resets log to empty (`log: None`, `head: 0`); read_log clears stale cached entries.
@@ -1516,7 +1553,7 @@ async fn fresh_auth_snapshot_recovery_reconciles_unknown_log_without_dropping_or
     // recover `"snap-1"` without resending PUT (which would fail with `sync_snapshot_stale`).
     keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = sync.put_snapshot_bytes(5, b"snap-body".to_vec()).await.unwrap_err();
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-1".into(), seq: 5 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-1".into(), seq: 5, log: None }));
     assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
     keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -1535,7 +1572,7 @@ async fn fresh_auth_snapshot_recovery_reconciles_unknown_log_without_dropping_or
 
     keeper_b.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = sync.put_snapshot_bytes(5, b"snap-body".to_vec()).await.unwrap_err();
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-2".into(), seq: 5 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-2".into(), seq: 5, log: None }));
     assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
 
     // Wipe remote snapshot (simulating log reset while local `signed_log_id` is still None).
@@ -1734,7 +1771,7 @@ async fn snapshot_reconcile_save_failure_keeps_entry_retryable_across_log_mismat
 
     // 1. PUT commits on a2 without Sync-Log header; save fails -> cached as Assumed("a1").
     let err = sync.put_snapshot_bytes(5, b"snap-a2-body".to_vec()).await.unwrap_err();
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-a2".into(), seq: 5 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-a2".into(), seq: 5, log: None }));
     assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
     // 2. 410 identifies a2 -> retains entry as Unknown and flushes step 1 (`PersonalAuth` still reports a1).
@@ -1744,7 +1781,7 @@ async fn snapshot_reconcile_save_failure_keeps_entry_retryable_across_log_mismat
 
     // 3. First retry reconciles `/snapshot`, confirms match, but step 2 fails saving a2.
     let err = sync.put_snapshot_bytes(5, b"snap-a2-body".to_vec()).await.unwrap_err();
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-a2".into(), seq: 5 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-a2".into(), seq: 5, log: Some("a2".into()) }));
     assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
     // 4. Second retry MUST NOT discard the entry due to PersonalAuth still reporting a1;
@@ -1752,4 +1789,73 @@ async fn snapshot_reconcile_save_failure_keeps_entry_retryable_across_log_mismat
     assert_eq!(sync.put_snapshot_bytes(5, b"snap-a2-body".to_vec()).await.unwrap(), "snap-a2");
     assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("a2"));
+}
+
+#[tokio::test]
+async fn delete_binds_session_identity_across_lock_and_retry_while_waiting_on_same_account_put() {
+    let put_started = Arc::new(tokio::sync::Notify::new());
+    let release_put = Arc::new(tokio::sync::Notify::new());
+    let delete_503 = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let delete_tokens = Arc::new(StdMutex::new(Vec::<String>::new()));
+
+    let ps = put_started.clone();
+    let rp = release_put.clone();
+    let d503 = delete_503.clone();
+    let dt = delete_tokens.clone();
+
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("PUT", p) if p.ends_with(NAME) => {
+            ps.notify_one();
+            Response::status(204).header("ETag", "\"e-put\"")
+        }
+        ("DELETE", p) if p.ends_with(NAME) => {
+            let auth_hdr = r.header("authorization").unwrap_or("").to_string();
+            dt.lock().unwrap().push(auth_hdr);
+            if d503.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                return Response::status(503).header("Retry-After", "1");
+            }
+            Response::status(204)
+        }
+        _ => Response::status(404),
+    })
+    .await;
+    let _ = rp;
+
+    // 1. Same-account DELETE waits on per-name lock behind an in-flight lock holder, then dispatches.
+    let lock = sync.file_lock(NAME);
+    let guard = lock.lock().await;
+    let sync_same = sync.clone();
+    let mut del_same = tokio::spawn(async move { sync_same.delete(NAME, None).await });
+    assert!(tokio::time::timeout(Duration::from_millis(30), &mut del_same).await.is_err());
+    assert!(delete_tokens.lock().unwrap().is_empty());
+    drop(guard);
+    assert!(del_same.await.unwrap().unwrap());
+    assert_eq!(delete_tokens.lock().unwrap().len(), 1);
+
+    // 2. Session switch while DELETE waits on `_file_guard` MUST reject BEFORE dispatch!
+    delete_tokens.lock().unwrap().clear();
+    let guard2 = lock.lock().await;
+    let sync_switch = sync.clone();
+    let del_switch = tokio::spawn(async move { sync_switch.delete(NAME, None).await });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    sync.session()
+        .sign_in(crate::Tokens::stored("tok-u2".into(), Some("ref-u2".into()), crate::now_ms() + 3_600_000))
+        .await
+        .unwrap();
+    drop(guard2);
+    assert_eq!(del_switch.await.unwrap().unwrap_err().kind, Kind::SignedOut);
+    assert!(delete_tokens.lock().unwrap().is_empty(), "stale session DELETE must not dispatch after session switch");
+
+    // 3. Session switch during `503 Retry-After` backoff MUST abort the retry before sending with u3's token!
+    delete_503.store(true, std::sync::atomic::Ordering::SeqCst);
+    let sync_retry = sync.clone();
+    let del_retry = tokio::spawn(async move { sync_retry.delete(NAME, None).await });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(delete_tokens.lock().unwrap().as_slice(), &["Bearer tok-u2".to_string()]);
+    sync.session()
+        .sign_in(crate::Tokens::stored("tok-u3".into(), Some("ref-u3".into()), crate::now_ms() + 3_600_000))
+        .await
+        .unwrap();
+    assert_eq!(del_retry.await.unwrap().unwrap_err().kind, Kind::SignedOut);
+    assert_eq!(delete_tokens.lock().unwrap().as_slice(), &["Bearer tok-u2".to_string()], "retry must not send under u3 token");
 }

@@ -28,11 +28,11 @@ pub trait LogTransport: BlobStore {
 
     /// Persists the local watermark for a snapshot that already committed
     /// remotely at [seq] (on [log], when known), without resending [body] when
-    /// the transport supports direct watermark flushing.
-    fn flush_committed_snapshot(&self, _log: Option<String>, seq: i64, body: Vec<u8>) -> impl Future<Output = Result<bool>> + Send {
+    /// the transport supports direct watermark flushing. Returns `(written, resolved_log)`.
+    fn flush_committed_snapshot(&self, log: Option<String>, seq: i64, body: Vec<u8>) -> impl Future<Output = Result<(bool, Option<String>)>> + Send {
         async move {
             match self.put_snapshot(seq, body).await {
-                Ok(written) => Ok(written),
+                Ok(written) => Ok((written, log)),
                 Err(Error::SnapshotPersistFailed { detail, .. }) => Err(Error::Host(detail)),
                 Err(e) => Err(e),
             }
@@ -53,7 +53,7 @@ pub struct Appended {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Page {
-    Batches { log: Option<String>, batches: Vec<(i64, Vec<u8>)>, more: bool },
+    Batches { log: Option<String>, batches: Vec<(i64, Vec<u8>, bool)>, more: bool },
     /// The batches after the cursor are gone, or it was of another log: the
     /// snapshot is read, then the log after it.
     Compacted { log: Option<String> },
@@ -64,6 +64,7 @@ pub struct SnapshotBody {
     pub log: String,
     pub seq: i64,
     pub body: Vec<u8>,
+    pub signed: bool,
 }
 
 const PREFIX: &str = "log.";
@@ -74,6 +75,8 @@ const JOINED: &str = "joined";
 const JOIN_LOG: &str = "join_log";
 const JOIN_SENT: &str = "join_sent";
 const ACCOUNT: &str = "account";
+const SIGNED_BLOBS: &str = "signed_blobs";
+const LEGACY_BLOBS: &str = "legacy_blobs";
 /// Set by builds that dropped what they did not carry.
 /// TODO: remove once no install has the row.
 const PARTIAL: &str = "partial";
@@ -180,7 +183,10 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let read = self.pull_in(&run).await;
         let defer_sweep = if let Some(pending) = flushed {
             if read.is_ok() {
-                if self.core.get(LOG).await? == pending.log && self.core.get_int(CURSOR).await? <= pending.seq {
+                if pending.log.is_some()
+                    && self.core.get(LOG).await? == pending.log
+                    && self.core.get_int(CURSOR).await? <= pending.seq
+                {
                     self.core.sweep_blobs_as_of(pending.named, pending.created_at).await;
                     false
                 } else {
@@ -279,13 +285,17 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                         }
                         continue;
                     };
-                    let ops = self.core.decode(&snapshot.body, &format!("snapshot {}", snapshot.seq)).await?;
-                    self.core.apply(run, ops, self.state(vec![(LOG, Some(snapshot.log)), (CURSOR, Some(snapshot.seq.to_string()))]), false).await?;
+                    let ops = self.core.decode_bound(&snapshot.body, &format!("snapshot {}", snapshot.seq)).await?;
+                    self.core
+                        .apply_bound(run, ops, snapshot.signed, self.state(vec![(LOG, Some(snapshot.log)), (CURSOR, Some(snapshot.seq.to_string()))]), false)
+                        .await?;
                 }
                 Page::Batches { log, batches, more } => {
-                    for (seq, body) in batches {
-                        let ops = self.core.decode(&body, &format!("batch {seq}")).await?;
-                        self.core.apply(run, ops, self.state(vec![(LOG, log.clone()), (CURSOR, Some(seq.to_string()))]), false).await?;
+                    for (seq, body, signed) in batches {
+                        let ops = self.core.decode_bound(&body, &format!("batch {seq}")).await?;
+                        self.core
+                            .apply_bound(run, ops, signed, self.state(vec![(LOG, log.clone()), (CURSOR, Some(seq.to_string()))]), false)
+                            .await?;
                     }
                     if !more {
                         return Ok(());
@@ -335,7 +345,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             }
         }
         let carried: Vec<_> = all.iter().filter(|r| run.carries(&r.c)).cloned().collect();
-        let (ops, complete) = core.ops_of(&carried).await?;
+        let (ops, complete, bindings) = core.ops_of_bound(&carried).await?;
         // A record that could not be read stops the send just before it, so it
         // and what follows are read again next time.
         let stopped = ops.last().map(|op| op.h);
@@ -344,7 +354,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let mut last = sent;
         let mut join_last = join_sent.clone();
         let mut join_log = if joining && join_sent.is_some() { log.clone() } else { None };
-        let batches = core.batches(ops)?;
+        let batches = core.batches_bound(ops, &bindings)?;
         let had_batches = !batches.is_empty();
         let last_idx = batches.len().saturating_sub(1);
         for (idx, (chunk, body)) in batches.into_iter().enumerate() {
@@ -468,13 +478,30 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     }
 
     async fn flush_pending_snapshot(&self) -> Result<Option<PendingSnapshot>> {
-        let Some(pending) = self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
+        let Some(mut pending) = self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
             return Ok(None);
         };
-        let written = self
+        let (written, resolved_log) = match self
             .transport
             .flush_committed_snapshot(pending.log.clone(), pending.seq, pending.body.clone())
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(Error::SnapshotPersistFailed { log: Some(discovered), detail, .. }) => {
+                if let Some(held) = self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()).as_mut()
+                    && held.seq == pending.seq
+                    && held.log.is_none()
+                {
+                    held.log = Some(discovered);
+                }
+                return Err(Error::Host(detail));
+            }
+            Err(Error::SnapshotPersistFailed { detail, .. }) => return Err(Error::Host(detail)),
+            Err(e) => return Err(e),
+        };
+        if pending.log.is_none() {
+            pending.log = resolved_log;
+        }
         *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(written.then_some(pending))
     }
@@ -486,13 +513,13 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         if cursor == 0 {
             return Ok(false);
         }
-        let log = core.get(LOG).await?;
         let created_at = now_ms();
-        let Some(ops) = core.snapshot_ops(run).await? else {
+        let Some((ops, bindings)) = core.snapshot_ops_bound(run).await? else {
             core.host.warn("Sync snapshot left: a record could not be read".into());
             return Ok(false);
         };
-        let body = core.seal.seal(&engine::encode(&ops, Map::new())?)?;
+        let extra = bindings.extra_for(&ops);
+        let body = core.seal.seal(&engine::encode(&ops, extra)?)?;
         let named: HashSet<String> = ops.iter().filter_map(|op| Core::<H, T, S>::blob_of(&op.d).map(str::to_string)).collect();
         match self.transport.put_snapshot(cursor, body.clone()).await {
             Ok(false) => {
@@ -500,7 +527,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                 return Ok(true);
             }
             Ok(true) => {}
-            Err(Error::SnapshotPersistFailed { seq, detail }) => {
+            Err(Error::SnapshotPersistFailed { log, seq, detail }) => {
                 *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingSnapshot { log, seq, body, named, created_at });
                 return Err(Error::Host(detail));
             }
@@ -513,7 +540,13 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
     /// Forgets the log: the next sync reads it from its start and joins it
     /// again. For another account, or what is carried changing.
     pub async fn forget(host: &H) -> Result<()> {
-        host.set_state([LOG, CURSOR, SENT, JOINED, JOIN_LOG, JOIN_SENT, PARTIAL].iter().map(|k| (format!("{PREFIX}{k}"), None)).collect()).await?;
+        host.set_state(
+            [LOG, CURSOR, SENT, JOINED, JOIN_LOG, JOIN_SENT, PARTIAL]
+                .iter()
+                .map(|k| (format!("{PREFIX}{k}"), None))
+                .collect(),
+        )
+        .await?;
         host.forget_passed(PREFIX.to_string()).await
     }
 
@@ -524,6 +557,11 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             return Ok(());
         }
         Self::forget(host).await?;
-        host.set_state(vec![(key, Some(account.to_string()))]).await
+        host.set_state(vec![
+            (format!("{PREFIX}{SIGNED_BLOBS}"), None),
+            (format!("{PREFIX}{LEGACY_BLOBS}"), None),
+            (key, Some(account.to_string())),
+        ])
+        .await
     }
 }

@@ -2,7 +2,7 @@
 //! (a large one as a blob), sealing them in batches, and handing the host the
 //! ops other devices sent.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::{Read as _, Write as _};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,6 +25,16 @@ pub const INLINE_MAX: usize = 64 << 10;
 
 const BLOB_KEY: &str = "$blob";
 const BLOB_PREFIX: &str = "op-";
+const LEGACY_BLOBS_EXTRA: &str = "legacy_blobs";
+const SIGNED_BLOBS_STATE: &str = "signed_blobs";
+const LEGACY_BLOBS_STATE: &str = "legacy_blobs";
+
+#[derive(Clone, Default)]
+pub(crate) struct BlobBindings {
+    /// Pre-signing unsigned blobs retained in a signed batch or snapshot
+    /// (`name -> blake3_hex(remote_sealed_ciphertext)`).
+    pub legacy_blobs: HashMap<String, String>,
+}
 
 /// A blob nothing names is removed this long after it was written: a batch
 /// being sent now may name it.
@@ -131,29 +141,111 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
         self.host.set_state(values.into_iter().map(|(k, v)| (format!("{}{k}", self.prefix), v)).collect()).await
     }
 
+    async fn known_signed_blobs(&self) -> Result<HashSet<String>> {
+        let Some(raw) = self.get(SIGNED_BLOBS_STATE).await? else {
+            return Ok(HashSet::new());
+        };
+        Ok(serde_json::from_str::<Vec<String>>(&raw).unwrap_or_default().into_iter().collect())
+    }
+
+    async fn record_signed_blobs(&self, added: &HashSet<String>) -> Result<()> {
+        if added.is_empty() {
+            return Ok(());
+        }
+        let mut cur = self.known_signed_blobs().await?;
+        let before = cur.len();
+        cur.extend(added.iter().cloned());
+        if cur.len() != before {
+            let mut sorted: Vec<String> = cur.into_iter().collect();
+            sorted.sort();
+            let raw = serde_json::to_string(&sorted).map_err(|e| Error::Host(e.to_string()))?;
+            self.put(vec![(SIGNED_BLOBS_STATE, Some(raw))]).await?;
+        }
+        Ok(())
+    }
+
+    async fn known_legacy_blobs(&self) -> Result<HashMap<String, String>> {
+        let Some(raw) = self.get(LEGACY_BLOBS_STATE).await? else {
+            return Ok(HashMap::new());
+        };
+        Ok(serde_json::from_str::<HashMap<String, String>>(&raw).unwrap_or_default())
+    }
+
+    async fn record_legacy_blobs(&self, added: &HashMap<String, String>) -> Result<()> {
+        if added.is_empty() {
+            return Ok(());
+        }
+        let mut cur: BTreeMap<String, String> = self.known_legacy_blobs().await?.into_iter().collect();
+        let mut changed = false;
+        for (k, v) in added {
+            if cur.get(k) != Some(v) {
+                cur.insert(k.clone(), v.clone());
+                changed = true;
+            }
+        }
+        if changed {
+            let raw = serde_json::to_string(&cur).map_err(|e| Error::Host(e.to_string()))?;
+            self.put(vec![(LEGACY_BLOBS_STATE, Some(raw))]).await?;
+        }
+        Ok(())
+    }
+
     // Records as ops.
 
     /// [records] (the oldest first) as ops; `complete` false when one could
     /// not be read now: the ops are those before it.
     pub async fn ops_of(&self, records: &[Stamped]) -> Result<(Vec<Op>, bool)> {
-        let mut sender = Sender::default();
+        let (ops, complete, _) = self.ops_of_bound(records).await?;
+        Ok((ops, complete))
+    }
+
+    pub async fn ops_of_bound(&self, records: &[Stamped]) -> Result<(Vec<Op>, bool, BlobBindings)> {
+        let known_signed = self.known_signed_blobs().await?;
+        let known_legacy = if matches!(self.naming, Naming::Keyed) && self.blobs.signs_blobs() {
+            self.known_legacy_blobs().await?
+        } else {
+            HashMap::new()
+        };
+        let mut sender = Sender::new(known_signed, known_legacy);
         let mut ops = Vec::new();
         for chunk in records.chunks(READ_CHUNK) {
-            let read = self.host.read(chunk.iter().map(|r| (r.c.clone(), r.id.clone())).collect()).await?;
+            let read = match self.host.read(chunk.iter().map(|r| (r.c.clone(), r.id.clone())).collect()).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = self.record_signed_blobs(&sender.newly_signed).await;
+                    let _ = self.record_legacy_blobs(&sender.newly_legacy).await;
+                    return Err(e);
+                }
+            };
             if read.len() != chunk.len() {
+                let _ = self.record_signed_blobs(&sender.newly_signed).await;
+                let _ = self.record_legacy_blobs(&sender.newly_legacy).await;
                 return Err(Error::Host(format!("read {} of {} records", read.len(), chunk.len())));
             }
             for (r, d) in chunk.iter().zip(read) {
                 let d = match d {
-                    Read::Unread => return Ok((ops, false)),
+                    Read::Unread => {
+                        self.record_signed_blobs(&sender.newly_signed).await?;
+                        self.record_legacy_blobs(&sender.newly_legacy).await?;
+                        return Ok((ops, false, sender.bindings()));
+                    }
                     Read::Silent => continue,
                     Read::Gone => None,
                     Read::Value(v) => Some(v),
                 };
-                ops.push(sender.send(self, Op { c: r.c.clone(), id: r.id.clone(), h: r.h, d }).await?);
+                match sender.send(self, Op { c: r.c.clone(), id: r.id.clone(), h: r.h, d }).await {
+                    Ok(op) => ops.push(op),
+                    Err(e) => {
+                        let _ = self.record_signed_blobs(&sender.newly_signed).await;
+                        let _ = self.record_legacy_blobs(&sender.newly_legacy).await;
+                        return Err(e);
+                    }
+                }
             }
         }
-        Ok((ops, true))
+        self.record_signed_blobs(&sender.newly_signed).await?;
+        self.record_legacy_blobs(&sender.newly_legacy).await?;
+        Ok((ops, true, sender.bindings()))
     }
 
     /// The blob of the op stamped [h].
@@ -212,30 +304,91 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     /// unreadable is left out (a later op of its record has replaced it, or
     /// nothing here reads it). With [wait], a blob not there is
     /// [Error::Pending]: it may only not have arrived.
-    pub async fn resolve(&self, ops: Vec<Op>, wait: bool) -> Result<Vec<Op>> {
+    async fn resolve_bound(
+        &self,
+        ops: Vec<Op>,
+        bindings: &BlobBindings,
+        container_signed: bool,
+        wait: bool,
+    ) -> Result<Vec<Op>> {
+        let known_signed = self.known_signed_blobs().await?;
+        let mut newly_signed = HashSet::new();
+        let mut newly_legacy = HashMap::new();
         let mut out = Vec::with_capacity(ops.len());
         for op in ops {
             let Some(name) = Self::blob_of(&op.d).map(str::to_string) else {
                 out.push(op);
                 continue;
             };
-            let Some(sealed) = self.blobs.get_blob(name.clone()).await? else {
+            let h_text = op.h.to_string();
+            let bound_to_op = match self.naming {
+                Naming::Keyed => name
+                    .strip_prefix(BLOB_PREFIX)
+                    .and_then(|s| s.strip_suffix(".age"))
+                    .is_some_and(|stem| self.seal.matches_name_of(stem, h_text.as_bytes())),
+                Naming::ByDevice => name == self.blob_name(op.h),
+            };
+            let expected_legacy_digest = bindings.legacy_blobs.get(&name);
+            let allow_retained_unsigned = bound_to_op
+                && !known_signed.contains(&name)
+                && !newly_signed.contains(&name)
+                && (!container_signed || expected_legacy_digest.is_some());
+            let require_signed = known_signed.contains(&name)
+                || newly_signed.contains(&name)
+                || (container_signed && expected_legacy_digest.is_none());
+            let fetched = match self.blobs.get_blob_verified(name.clone(), allow_retained_unsigned).await {
+                Ok(v) => v,
+                Err(e) => {
+                    let _ = self.record_signed_blobs(&newly_signed).await;
+                    let _ = self.record_legacy_blobs(&newly_legacy).await;
+                    return Err(e);
+                }
+            };
+            let Some((sealed, was_signed)) = fetched else {
                 if wait {
+                    self.record_signed_blobs(&newly_signed).await?;
+                    self.record_legacy_blobs(&newly_legacy).await?;
                     return Err(Error::Pending(name));
                 }
                 self.host.warn(format!("Sync passed over {}/{}: its blob is gone", op.c, op.id));
                 continue;
             };
+            if require_signed && !was_signed {
+                self.record_signed_blobs(&newly_signed).await?;
+                self.record_legacy_blobs(&newly_legacy).await?;
+                return Err(Error::Untrusted(format!("{name}: server stripped signature")));
+            }
+            if was_signed {
+                newly_signed.insert(name.clone());
+            } else if let Some(expected_hex) = expected_legacy_digest {
+                let actual_hex = blake3::hash(&sealed).to_hex();
+                if actual_hex.as_str() != expected_hex.as_str() {
+                    self.record_signed_blobs(&newly_signed).await?;
+                    self.record_legacy_blobs(&newly_legacy).await?;
+                    return Err(Error::Untrusted(format!("{name}: retained pre-signing blob content mismatch")));
+                }
+            }
             let d = match self.open(&sealed).await {
                 Ok(plain) => gunzip(&plain).and_then(|json| serde_json::from_slice::<Value>(&json).map_err(|e| Error::Unreadable(e.to_string()))),
                 Err(e @ Error::Unreadable(_)) => Err(e),
-                Err(e) => return Err(e),
+                Err(e) => {
+                    self.record_signed_blobs(&newly_signed).await?;
+                    self.record_legacy_blobs(&newly_legacy).await?;
+                    return Err(e);
+                }
             };
             match d {
-                Ok(d) => out.push(Op { d: (!d.is_null()).then_some(d), ..op }),
+                Ok(d) => {
+                    if !was_signed && container_signed && matches!(self.naming, Naming::Keyed) {
+                        newly_legacy.insert(name.clone(), blake3::hash(&sealed).to_hex().to_string());
+                    }
+                    out.push(Op { d: (!d.is_null()).then_some(d), ..op });
+                }
                 Err(e) => self.host.warn(format!("Sync passed over {}/{}: its blob is unreadable: {e}", op.c, op.id)),
             }
         }
+        self.record_signed_blobs(&newly_signed).await?;
+        self.record_legacy_blobs(&newly_legacy).await?;
         Ok(out)
     }
 
@@ -261,22 +414,43 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     /// and what it keeps for the others ([Host::pass]); `None` when a record
     /// could not be read.
     pub async fn snapshot_ops(&self, run: &Run<'_>) -> Result<Option<Vec<Op>>> {
+        Ok(self.snapshot_ops_bound(run).await?.map(|(ops, _)| ops))
+    }
+
+    pub async fn snapshot_ops_bound(&self, run: &Run<'_>) -> Result<Option<(Vec<Op>, BlobBindings)>> {
         self.host.stamp().await?;
         let all: Vec<Stamped> = self.host.all().await?.into_iter().filter(|r| run.carries(&r.c)).collect();
-        let (mut ops, complete) = self.ops_of(&all).await?;
+        let (mut ops, complete, mut bindings) = self.ops_of_bound(&all).await?;
         if !complete {
             return Ok(None);
         }
         // Kept for the others: what this device does not sync, and what it
         // does not keep (a newer build's collections).
         let held: HashSet<(&str, &str)> = all.iter().map(|r| (r.c.as_str(), r.id.as_str())).collect();
-        let mut sender = Sender::default();
+        let known_signed = self.known_signed_blobs().await?;
+        let known_legacy = if matches!(self.naming, Naming::Keyed) && self.blobs.signs_blobs() {
+            self.known_legacy_blobs().await?
+        } else {
+            HashMap::new()
+        };
+        let mut sender = Sender::new(known_signed, known_legacy);
         for op in self.host.passed(self.prefix.to_string()).await? {
             if !run.carries(&op.c) || !held.contains(&(op.c.as_str(), op.id.as_str())) {
-                ops.push(sender.send(self, op).await?);
+                match sender.send(self, op).await {
+                    Ok(sent) => ops.push(sent),
+                    Err(e) => {
+                        let _ = self.record_signed_blobs(&sender.newly_signed).await;
+                        let _ = self.record_legacy_blobs(&sender.newly_legacy).await;
+                        return Err(e);
+                    }
+                }
             }
         }
-        Ok(Some(ops))
+        self.record_signed_blobs(&sender.newly_signed).await?;
+        self.record_legacy_blobs(&sender.newly_legacy).await?;
+        let passed_bindings = sender.bindings();
+        bindings.legacy_blobs.extend(passed_bindings.legacy_blobs);
+        Ok(Some((ops, bindings)))
     }
 
     /// The ops that win over what is here written, then [state] set. Without
@@ -284,16 +458,28 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     /// [wait_for_blobs], nothing is written while a blob is not there yet
     /// ([Error::Pending]).
     pub async fn apply(&self, run: &Run<'_>, received: Option<Vec<Op>>, state: Vec<(String, Option<String>)>, wait_for_blobs: bool) -> Result<()> {
-        if let Some(received) = received {
+        self.apply_bound(run, received.map(|ops| (ops, BlobBindings::default())), false, state, wait_for_blobs)
+            .await
+    }
+
+    pub async fn apply_bound(
+        &self,
+        run: &Run<'_>,
+        received: Option<(Vec<Op>, BlobBindings)>,
+        container_signed: bool,
+        state: Vec<(String, Option<String>)>,
+        wait_for_blobs: bool,
+    ) -> Result<()> {
+        if let Some((received, bindings)) = received {
             let (carried, passed): (Vec<Op>, Vec<Op>) = received.into_iter().partition(|op| run.carries(&op.c));
             // Kept for the others: a snapshot written here carries them on,
             // as content, not a blob's name, so a key rotated here seals them
             // again.
-            let passed = self.resolve(Self::newest(passed), wait_for_blobs).await?;
+            let passed = self.resolve_bound(Self::newest(passed), &bindings, container_signed, wait_for_blobs).await?;
             if !passed.is_empty() {
                 self.host.pass(self.prefix.to_string(), passed).await?;
             }
-            let ops = self.resolve(carried, wait_for_blobs).await?;
+            let ops = self.resolve_bound(carried, &bindings, container_signed, wait_for_blobs).await?;
             if !ops.is_empty() {
                 let unkept = self.host.apply(ops).await?;
                 if !unkept.is_empty() {
@@ -307,13 +493,18 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     /// [ops] in batches each sealed under [BATCH_MAX]. One op too large alone
     /// is left out and said.
     pub fn batches(&self, ops: Vec<Op>) -> Result<Vec<(Vec<Op>, Vec<u8>)>> {
+        self.batches_bound(ops, &BlobBindings::default())
+    }
+
+    pub fn batches_bound(&self, ops: Vec<Op>, bindings: &BlobBindings) -> Result<Vec<(Vec<Op>, Vec<u8>)>> {
         let mut out = Vec::new();
         let mut todo = vec![ops];
         while let Some(ops) = todo.pop() {
             if ops.is_empty() {
                 continue;
             }
-            let body = self.seal.seal(&encode(&ops, Map::new())?)?;
+            let extra = bindings.extra_for(&ops);
+            let body = self.seal.seal(&encode(&ops, extra)?)?;
             if body.len() <= BATCH_MAX {
                 out.push((ops, body));
                 continue;
@@ -348,7 +539,7 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     /// [sealed]'s ops; `None`, said, for one nothing here can ever read (not
     /// sealed to this key, damaged), so the read goes on past it. A newer
     /// format stops the read.
-    pub async fn decode(&self, sealed: &[u8], what: &str) -> Result<Option<Vec<Op>>> {
+    pub async fn decode_bound(&self, sealed: &[u8], what: &str) -> Result<Option<(Vec<Op>, BlobBindings)>> {
         let plain = match self.open(sealed).await {
             Ok(plain) => plain,
             Err(Error::Unreadable(e)) => {
@@ -357,7 +548,7 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
             }
             Err(e) => return Err(e),
         };
-        Ok(self.parse(&plain, what)?.map(|(ops, _)| ops))
+        Ok(self.parse(&plain, what)?.map(|(ops, doc)| (ops, BlobBindings::from_doc(&doc))))
     }
 
     /// [plain]'s ops and what it holds besides; `None`, said, when it is not
@@ -374,14 +565,151 @@ impl<H: Host, B: BlobStore, S: Seal> Core<H, B, S> {
     }
 }
 
+impl BlobBindings {
+    pub fn from_doc(doc: &Map<String, Value>) -> Self {
+        let legacy_blobs = doc
+            .get(LEGACY_BLOBS_EXTRA)
+            .and_then(Value::as_object)
+            .map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self { legacy_blobs }
+    }
+
+    pub fn extra_for(&self, ops: &[Op]) -> Map<String, Value> {
+        let mut extra = Map::new();
+        let mut legacy = BTreeMap::new();
+        for op in ops {
+            if let Some(name) = Core::<DummyHost, DummyBlobs, DummySeal>::blob_name_in_op(&op.d)
+                && let Some(digest) = self.legacy_blobs.get(name)
+            {
+                legacy.insert(name.to_string(), Value::String(digest.clone()));
+            }
+        }
+        if !legacy.is_empty() {
+            extra.insert(LEGACY_BLOBS_EXTRA.into(), Value::Object(legacy.into_iter().collect()));
+        }
+        extra
+    }
+}
+
+struct DummyHost;
+struct DummyBlobs;
+struct DummySeal;
+
+impl<H, B, S> Core<H, B, S> {
+    fn blob_name_in_op(d: &Option<Value>) -> Option<&str> {
+        match d {
+            Some(Value::Object(m)) if m.len() == 1 => m.get(BLOB_KEY)?.as_str(),
+            _ => None,
+        }
+    }
+}
+
 /// Sends ops: one larger than [INLINE_MAX] as a blob it names, sealed under
 /// the key now.
-#[derive(Default)]
 struct Sender {
-    there: Option<HashSet<String>>,
+    there: Option<HashMap<String, bool>>,
+    known_signed: HashSet<String>,
+    newly_signed: HashSet<String>,
+    known_legacy: HashMap<String, String>,
+    newly_legacy: HashMap<String, String>,
+    legacy_blobs: HashMap<String, String>,
 }
 
 impl Sender {
+    fn new(known_signed: HashSet<String>, known_legacy: HashMap<String, String>) -> Self {
+        Self {
+            there: None,
+            known_signed,
+            newly_signed: HashSet::new(),
+            known_legacy,
+            newly_legacy: HashMap::new(),
+            legacy_blobs: HashMap::new(),
+        }
+    }
+
+    fn bindings(&self) -> BlobBindings {
+        BlobBindings { legacy_blobs: self.legacy_blobs.clone() }
+    }
+
+    async fn bind_existing_unsigned_blob<H: Host, B: BlobStore, S: Seal>(
+        &mut self,
+        core: &Core<H, B, S>,
+        name: &str,
+        json: &[u8],
+        expected_conflict_value: Option<&Option<Value>>,
+    ) -> Result<()> {
+        if self.known_signed.contains(name) || self.newly_signed.contains(name) {
+            match core.blobs.get_blob_verified(name.to_string(), false).await? {
+                Some((_, true)) => return Ok(()),
+                Some((_, false)) => return Err(Error::Untrusted(format!("{name}: server stripped signature"))),
+                None => {
+                    let sealed = core.seal.seal(&gzip(json)?)?;
+                    let signed = core.blobs.put_blob_signed(name.to_string(), sealed).await?;
+                    if !signed && core.blobs.signs_blobs() {
+                        return Err(Error::Untrusted(format!("{name}: expected signed upload after missing blob")));
+                    }
+                    if signed {
+                        self.newly_signed.insert(name.to_string());
+                    }
+                    return Ok(());
+                }
+            }
+        }
+        if expected_conflict_value.is_none()
+            && let Some(cached) = self.known_legacy.get(name).or_else(|| self.newly_legacy.get(name)).cloned()
+        {
+            self.legacy_blobs.insert(name.to_string(), cached);
+            return Ok(());
+        }
+        match core.blobs.get_blob_verified(name.to_string(), true).await? {
+            Some((_, true)) => {
+                self.newly_signed.insert(name.to_string());
+                if let Some(there) = self.there.as_mut() {
+                    there.insert(name.to_string(), true);
+                }
+            }
+            Some((remote_sealed, false)) => {
+                let plain = core.open(&remote_sealed).await?;
+                let remote_json = gunzip(&plain)?;
+                let remote_val: Value =
+                    serde_json::from_slice(&remote_json).map_err(|e| Error::Unreadable(e.to_string()))?;
+                if let Some(expected_opt) = expected_conflict_value {
+                    let normalized_remote = (!remote_val.is_null()).then_some(&remote_val);
+                    if normalized_remote != expected_opt.as_ref() {
+                        return Err(Error::Untrusted(format!(
+                            "{name}: conflicting unsigned blob content mismatch"
+                        )));
+                    }
+                }
+                let hex = blake3::hash(&remote_sealed).to_hex().to_string();
+                self.newly_legacy.insert(name.to_string(), hex.clone());
+                self.legacy_blobs.insert(name.to_string(), hex);
+            }
+            None => {
+                if expected_conflict_value.is_some() {
+                    return Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob")));
+                }
+                let sealed = core.seal.seal(&gzip(json)?)?;
+                let signed = core.blobs.put_blob_signed(name.to_string(), sealed).await?;
+                if !signed && core.blobs.signs_blobs() {
+                    return Err(Error::Untrusted(format!("{name}: expected signed upload after missing blob")));
+                }
+                if let Some(there) = self.there.as_mut() {
+                    there.insert(name.to_string(), signed);
+                }
+                if signed {
+                    self.newly_signed.insert(name.to_string());
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn send<H: Host, B: BlobStore, S: Seal>(&mut self, core: &Core<H, B, S>, op: Op) -> Result<Op> {
         let json = serde_json::to_vec(&op.d).map_err(|e| Error::Host(e.to_string()))?;
         if json.len() <= INLINE_MAX {
@@ -389,12 +717,35 @@ impl Sender {
         }
         let name = core.blob_name(op.h);
         if self.there.is_none() {
-            self.there = Some(core.blobs.blobs(BLOB_PREFIX.to_string()).await?.into_iter().map(|b| b.name).collect());
+            self.there = Some(
+                core.blobs
+                    .blobs(BLOB_PREFIX.to_string())
+                    .await?
+                    .into_iter()
+                    .map(|b| (b.name, b.signed))
+                    .collect(),
+            );
         }
-        let there = self.there.as_mut().expect("listed");
-        if !there.contains(&name) {
-            core.blobs.put_blob(name.clone(), core.seal.seal(&gzip(&json)?)?).await?;
-            there.insert(name.clone());
+        let listed = self.there.as_ref().expect("listed").get(&name).copied();
+        match listed {
+            None => {
+                let sealed = core.seal.seal(&gzip(&json)?)?;
+                let signed = core.blobs.put_blob_signed(name.clone(), sealed).await?;
+                self.there.as_mut().expect("listed").insert(name.clone(), signed);
+                if signed {
+                    self.newly_signed.insert(name.clone());
+                } else if matches!(core.naming, Naming::Keyed) && core.blobs.signs_blobs() {
+                    self.bind_existing_unsigned_blob(core, &name, &json, Some(&op.d)).await?;
+                }
+            }
+            Some(true) => {
+                self.newly_signed.insert(name.clone());
+            }
+            Some(false) => {
+                if matches!(core.naming, Naming::Keyed) && core.blobs.signs_blobs() {
+                    self.bind_existing_unsigned_blob(core, &name, &json, None).await?;
+                }
+            }
         }
         Ok(Op { d: Some(json!({ BLOB_KEY: name })), ..op })
     }

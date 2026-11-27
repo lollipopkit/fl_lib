@@ -75,6 +75,7 @@ abstract class SyncKeys implements RustOpaqueInterface {
   Future<bool> lkcSealedWithSecretKey({
     required LkcSync lkc,
     required String account,
+    required BigInt expectedSwitchGen,
   });
 
   /// The key files the password here does not open.
@@ -121,6 +122,10 @@ abstract class SyncKeys implements RustOpaqueInterface {
   /// Every key in use checked again: the password here changed.
   Future<void> recheck();
 
+  /// Captures the LK Cloud account-switch generation synchronously before
+  /// starting an async missing-key probe.
+  BigInt registerLkcProbe({required String account});
+
   void release({required String id});
 
   /// The secret key LK Cloud's account key is first sealed with: the one
@@ -145,6 +150,11 @@ abstract class SyncKeys implements RustOpaqueInterface {
     required String key,
     required bool expectEmptyBefore,
   });
+
+  /// Synchronizes the active LK Cloud account (`None` when signed out),
+  /// invalidating in-flight missing-key probes for any previous LK Cloud
+  /// account and clearing only that previous account's missing-key status.
+  void syncLkcAccount({String? account});
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncLogEngine>>

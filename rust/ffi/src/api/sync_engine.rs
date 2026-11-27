@@ -127,7 +127,7 @@ impl SyncKeys {
     /// [create], none is made where there is none.
     pub async fn of_lkc(&self, lkc: &LkcSync, account: String, create: bool) -> R<SyncKeyHandle> {
         let file: Arc<dyn KeyFile> = Arc::new(LkcKeyFile { client: lkc.client(), account });
-        Ok(SyncKeyHandle(self.0.of(file, create).await?))
+        Ok(SyncKeyHandle(self.0.of_lkc(file, create).await?))
     }
 
     /// The key of a folder [id] names, its file reached through [file]
@@ -170,11 +170,26 @@ impl SyncKeys {
         }
     }
 
+    /// Synchronizes the active LK Cloud account (`None` when signed out),
+    /// invalidating in-flight missing-key probes for any previous LK Cloud
+    /// account and clearing only that previous account's missing-key status.
+    #[frb(sync)]
+    pub fn sync_lkc_account(&self, account: Option<String>) {
+        self.0.sync_lkc_account(account.as_deref());
+    }
+
+    /// Captures the LK Cloud account-switch generation synchronously before
+    /// starting an async missing-key probe.
+    #[frb(sync)]
+    pub fn register_lkc_probe(&self, account: String) -> R<u64> {
+        Ok(self.0.register_lkc_probe(&account)?)
+    }
+
     /// Whether [account]'s LK Cloud key file ([lkc]'s `identity.age`) is
     /// sealed with a secret key, read only: one to import here.
-    pub async fn lkc_sealed_with_secret_key(&self, lkc: &LkcSync, account: String) -> R<bool> {
+    pub async fn lkc_sealed_with_secret_key(&self, lkc: &LkcSync, account: String, expected_switch_gen: u64) -> R<bool> {
         let file: Arc<dyn KeyFile> = Arc::new(LkcKeyFile { client: lkc.client(), account });
-        Ok(self.0.sealed_with_secret_key(file).await?)
+        Ok(self.0.lkc_sealed_with_secret_key(file, expected_switch_gen).await?)
     }
 
     /// [candidate] as this device's secret key, settling [stage_id] when given

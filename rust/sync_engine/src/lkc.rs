@@ -34,11 +34,29 @@ pub struct LkcLog<S: Store> {
 }
 
 impl<S: Store> BlobStore for LkcLog<S> {
+    fn signs_blobs(&self) -> bool {
+        self.client.has_personal_auth()
+    }
+
     async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
-        match self.client.upload_blob_bytes(&name, body).await {
-            Ok(_) => Ok(()),
-            // Named by its content: the one there is this one.
-            Err(e) if e.kind == Kind::Changed => Ok(()),
+        self.put_blob_signed(name, body).await.map(|_| ())
+    }
+
+    async fn put_blob_signed(&self, name: String, body: Vec<u8>) -> Result<bool> {
+        let signed = self.client.has_personal_auth();
+        match self.client.upload_blob_bytes(&name, body.clone()).await {
+            Ok(_) => Ok(signed),
+            Err(e) if e.kind == Kind::Changed => match self.get_blob_verified(name.clone(), true).await? {
+                None => Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob"))),
+                Some((_, true)) => Ok(true),
+                Some((remote_bytes, false)) => {
+                    if signed && remote_bytes == body {
+                        Err(Error::Untrusted(format!("{name}: server stripped signature on upload")))
+                    } else {
+                        Ok(false)
+                    }
+                }
+            },
             Err(e) => Err(remote(e)),
         }
     }
@@ -47,8 +65,25 @@ impl<S: Store> BlobStore for LkcLog<S> {
         Ok(self.client.download_blob_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
     }
 
+    async fn get_blob_verified(&self, name: String, allow_retained_unsigned: bool) -> Result<Option<(Vec<u8>, bool)>> {
+        let fetched = if allow_retained_unsigned {
+            self.client.download_retained_blob_bytes(&name).await
+        } else {
+            self.client.download_blob_bytes(&name).await
+        };
+        Ok(fetched.map_err(remote)?.map(|(body, _, sig)| (body, sig.is_some())))
+    }
+
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
-        Ok(self.client.list().await.map_err(remote)?.into_iter().filter(|f| f.name.starts_with(&prefix)).map(|f| Listed { at: rfc3339_ms(&f.updated_at), name: f.name }).collect())
+        Ok(self
+            .client
+            .list()
+            .await
+            .map_err(remote)?
+            .into_iter()
+            .filter(|f| f.name.starts_with(&prefix))
+            .map(|f| Listed { at: rfc3339_ms(&f.updated_at), name: f.name, signed: f.signed.is_some() })
+            .collect())
     }
 
     async fn delete_blob(&self, name: String) -> Result<()> {
@@ -75,7 +110,11 @@ impl<S: Store> LogTransport for LkcLog<S> {
     async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
         Ok(match self.client.read_log(after, log.as_deref(), None).await.map_err(remote)? {
             LogRead::Compacted { log, .. } => Page::Compacted { log },
-            LogRead::Page { log, batches, more, .. } => Page::Batches { log, batches: batches.into_iter().map(|b| (b.seq, b.body)).collect(), more },
+            LogRead::Page { log, batches, more, .. } => Page::Batches {
+                log,
+                batches: batches.into_iter().map(|b| (b.seq, b.body, b.signed.is_some())).collect(),
+                more,
+            },
         })
     }
 
@@ -84,23 +123,36 @@ impl<S: Store> LogTransport for LkcLog<S> {
             Ok(_) => Ok(true),
             Err(LkcError { kind: Kind::Refused(reason), .. }) if reason == "sync_snapshot_stale" => Ok(false),
             Err(e) => {
-                if let Some(Committed::Snapshot { seq, .. }) = e.committed {
-                    return Err(Error::SnapshotPersistFailed { seq, detail: e.detail });
+                if let Some(Committed::Snapshot { log, seq, .. }) = e.committed {
+                    return Err(Error::SnapshotPersistFailed { log, seq, detail: e.detail });
                 }
                 Err(remote(e))
             }
         }
     }
 
-    async fn flush_committed_snapshot(&self, log: Option<String>, seq: i64, _body: Vec<u8>) -> Result<bool> {
-        self.client.flush_committed_snapshot(&self.account, log.as_deref(), seq).await.map_err(|e| match e.kind {
-            Kind::Invalid => Error::Host(e.detail),
-            _ => remote(e),
-        })
+    async fn flush_committed_snapshot(&self, log: Option<String>, seq: i64, body: Vec<u8>) -> Result<(bool, Option<String>)> {
+        self.client
+            .flush_committed_snapshot_bytes(&self.account, log.as_deref(), seq, &body)
+            .await
+            .map_err(|e| match e.kind {
+                Kind::Invalid => {
+                    if let Some(Committed::Snapshot { log, seq, .. }) = e.committed {
+                        return Error::SnapshotPersistFailed { log, seq, detail: e.detail };
+                    }
+                    Error::Host(e.detail)
+                }
+                _ => remote(e),
+            })
     }
 
     async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
-        Ok(self.client.download_snapshot_bytes().await.map_err(remote)?.map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body }))
+        Ok(self
+            .client
+            .download_snapshot_bytes()
+            .await
+            .map_err(remote)?
+            .map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body, signed: s.signed.is_some() }))
     }
 }
 
