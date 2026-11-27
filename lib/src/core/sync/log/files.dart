@@ -36,17 +36,20 @@ final class WebdavSyncFiles implements SyncFiles {
 
   final String folder;
 
-  WebdavClient get _client => _webdav().client ?? (throw StateError('WebDAV is not set up'));
-
-  String get _dir => '${_webdav().prefix}$folder/';
+  (WebdavClient, String) _resolve() {
+    final w = _webdav();
+    final client = w.client;
+    if (client == null) throw StateError('WebDAV is not set up');
+    return (client, '${w.prefix}$folder/');
+  }
 
   /// The folder made, for the client it was made with.
   (WebdavClient, Future<void>)? _made;
 
   Future<void> _mkdir() {
-    final client = _client;
+    final (client, dir) = _resolve();
     if (_made case (final c, final made) when identical(c, client)) return made;
-    final made = client.mkdirAll(_dir).catchError((Object e, StackTrace s) {
+    final made = client.mkdirAll(dir).catchError((Object e, StackTrace s) {
       _made = null;
       Error.throwWithStackTrace(e, s);
     });
@@ -63,13 +66,15 @@ final class WebdavSyncFiles implements SyncFiles {
   @override
   Future<void> write(String name, Uint8List body) async {
     await _mkdir();
-    await _client.write('$_dir$name', body);
+    final (client, dir) = _resolve();
+    await client.write('$dir$name', body);
   }
 
   @override
   Future<Uint8List?> read(String name) async {
     try {
-      return await _client.read('$_dir$name');
+      final (client, dir) = _resolve();
+      return await client.read('$dir$name');
     } catch (e) {
       if (_status(e) == 404) return null;
       rethrow;
@@ -80,7 +85,8 @@ final class WebdavSyncFiles implements SyncFiles {
   Future<List<({String name, DateTime? at})>> list(String prefix) async {
     final List<WebdavFile> files;
     try {
-      files = await _client.readDir(_dir);
+      final (client, dir) = _resolve();
+      files = await client.readDir(dir);
     } catch (e) {
       if (_status(e) == 404) return const [];
       rethrow;
@@ -94,7 +100,8 @@ final class WebdavSyncFiles implements SyncFiles {
   @override
   Future<void> delete(String name) async {
     try {
-      await _client.remove('$_dir$name');
+      final (client, dir) = _resolve();
+      await client.remove('$dir$name');
     } catch (e) {
       if (_status(e) != 404) rethrow;
     }
@@ -210,6 +217,7 @@ final class FileLogSync {
   /// The store [_opening] is of.
   String? _openedFor;
   Timer? _soon;
+  int _generation = 0;
 
   final tooNew = ValueNotifier(false);
   final lastFailure = ValueNotifier<Object?>(null);
@@ -220,9 +228,12 @@ final class FileLogSync {
   /// When a run last went through.
   final lastSyncAt = ValueNotifier<DateTime?>(null);
 
-  ({String id, SyncFiles files})? _storeOf(RemoteStorage<Object?>? rs) => switch (rs) {
+  ({String id, SyncFiles files})? _storeOf(RemoteStorage<Object?>? rs, {bool requireActive = false}) => switch (rs) {
     final ICloud icloud => (id: 'icloud:${icloud.containerId}', files: ICloudSyncFiles(icloud, folder)),
-    final Webdav webdav when webdav.client != null => (id: _webdavId(webdav), files: _boundTo(_webdavId(webdav), webdav)),
+    final Webdav webdav when webdav.client != null => (
+      id: _webdavId(webdav),
+      files: _boundTo(_webdavId(webdav), webdav, requireActive: requireActive),
+    ),
     _ => null,
   };
 
@@ -231,23 +242,42 @@ final class FileLogSync {
       'webdav:${syncBlobName(secret: folder, data: utf8.encode('${webdav.identity}|${webdavAccount?.call() ?? ''}'))}';
 
   /// The folder on [id]'s server for good: the WebDAV now while it is that
-  /// one (new credentials taken), and a run stopped once it is another, so
-  /// nothing sealed for one server is written to the next.
-  SyncFiles _boundTo(String id, Webdav webdav) => WebdavSyncFiles(() {
-    final now = switch (remote()) {
-      final Webdav now when now.client != null => now,
-      _ => webdav,
-    };
-    if (_webdavId(now) != id) throw StateError('The WebDAV this sync ran on changed');
-    return now;
+  /// one (new credentials taken), and a run stopped once it is removed or
+  /// replaced, so nothing sealed for one server is written after removal or to
+  /// the next.
+  SyncFiles _boundTo(String id, Webdav webdav, {required bool requireActive}) => WebdavSyncFiles(() {
+    final active = on() ? remote() : null;
+    if (active is Webdav && active.client != null) {
+      if (_webdavId(active) != id) throw StateError('The WebDAV this sync ran on changed');
+      return active;
+    }
+    if (requireActive) {
+      throw StateError('The WebDAV this sync ran on was removed');
+    }
+    if (_webdavId(webdav) != id) throw StateError('The WebDAV this sync ran on changed');
+    return webdav;
   }, folder);
+
+  /// The store key id for [rs] under the current account configuration, or null
+  /// when [rs] is not a usable file-backed sync store.
+  String? storeIdOf(RemoteStorage<Object?>? rs) => _storeOf(rs)?.id;
+
+  @visibleForTesting
+  SyncFiles? boundFilesForTest(RemoteStorage<Object?>? rs, {bool requireActive = true}) =>
+      _storeOf(rs, requireActive: requireActive)?.files;
+
+  Future<SyncKeyHandle> _keyOfStore(({String id, SyncFiles files}) store) =>
+      SyncKeyring.ofFiles(FilesKeyFile(store.files, store.id));
 
   /// [rs]'s sync key, opened with the password here: what its segments and
   /// the backup are sealed with.
   Future<SyncKeyHandle> keyOf(RemoteStorage<Object?> rs) {
-    final store = _storeOf(rs);
+    final active = on() ? remote() : null;
+    final requireActive =
+        rs is Webdav && active is Webdav && active.client != null && _webdavId(rs) == _webdavId(active);
+    final store = _storeOf(rs, requireActive: requireActive);
     if (store == null) throw StateError('Not a store of segments: ${rs.runtimeType}');
-    return SyncKeyring.ofFiles(FilesKeyFile(store.files, store.id));
+    return _keyOfStore(store);
   }
 
   void init() {
@@ -283,57 +313,89 @@ final class FileLogSync {
   /// Reads what other devices wrote, then writes what this one has.
   Future<void> sync() async {
     if (!SqliteDb.isOpen) return;
+    var gen = _generation;
     final rs = on() ? remote() : null;
-    final store = _storeOf(rs);
+    final store = _storeOf(rs, requireActive: true);
     if (store?.id != _openedFor) {
+      // Bump generation so any in-flight sync for the previous remote ignores
+      // its aborted outcome rather than recording a stale error.
+      gen = ++_generation;
+      tooNew.value = false;
+      lastFailure.value = null;
       // Off: read again when on. Another store in its place: this one is
       // gone from this device.
       if (_openedFor case final was?) {
         store == null ? SyncKeyring.release(was) : await SyncKeyring.forget(was);
       }
+      if (_generation != gen) return;
       _opening = null;
       _openedFor = store?.id;
     }
     if (rs == null || store == null) return;
+    bool isStillCurrent() => _generation == gen && on() && _storeOf(remote(), requireActive: true)?.id == store.id;
     final SyncSegmentEngine engine;
-    final opening = _opening ??= _open(rs, store);
+    final opening = _opening ??= _open(store);
     try {
       engine = await opening;
       // The password still opens the key: nothing syncs while it does not.
-      await keyOf(rs);
+      await _keyOfStore(store);
     } catch (e, s) {
       // Only this one: another may have taken its place meanwhile.
       if (identical(_opening, opening)) _opening = null;
-      lastFailure.value = e;
-      if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
-        Loggers.app.warning('File log sync: opening', e, s);
+      if (isStillCurrent()) {
+        lastFailure.value = e;
+        if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
+          Loggers.app.warning('File log sync: opening', e, s);
+        }
       }
       return;
     }
+    if (!isStillCurrent()) return;
     running.value = true;
     try {
       await syncCall(engine.run);
-      lastFailure.value = null;
-      lastSyncAt.value = DateTime.now();
+      if (isStillCurrent()) {
+        lastFailure.value = null;
+        lastSyncAt.value = DateTime.now();
+      }
     } catch (e, s) {
-      lastFailure.value = e;
-      if (!(e is SyncError && e.kind == SyncEngineErrorKind.remote)) Loggers.app.warning('File log sync', e, s);
+      if (isStillCurrent()) {
+        lastFailure.value = e;
+        if (!(e is SyncError && e.kind == SyncEngineErrorKind.remote)) Loggers.app.warning('File log sync', e, s);
+      }
     } finally {
-      tooNew.value = engine.tooNew();
+      if (isStillCurrent()) {
+        tooNew.value = engine.tooNew();
+      }
       running.value = false;
     }
   }
 
-  Future<SyncSegmentEngine> _open(RemoteStorage<Object?> rs, ({String id, SyncFiles files}) store) async {
-    final key = await keyOf(rs);
+  Future<SyncSegmentEngine> _open(({String id, SyncFiles files}) store) async {
+    final key = await _keyOfStore(store);
     final host = SyncHost(files: store.files);
     await syncCall(() => SyncSegmentEngine.bind(store: store.id, host: host.call));
     return SyncSegmentEngine(key: key, host: host.call);
   }
 
-  /// The key or the store changed: opened again for the next sync.
+  /// The key or the store changed: opened again for the next sync, and any
+  /// in-flight run's outcome is ignored once it finishes.
   void reset() {
+    _generation++;
     _soon?.cancel();
     _opening = null;
+    tooNew.value = false;
+    lastFailure.value = null;
+  }
+
+  /// Resets cached state and forgets persisted keyring metadata for [id] (plus
+  /// any store previously opened here) when a remote is replaced or removed.
+  Future<void> forgetRemote({String? id}) async {
+    reset();
+    final ids = <String>{?_openedFor, ?id};
+    _openedFor = null;
+    for (final oldId in ids) {
+      await SyncKeyring.forget(oldId);
+    }
   }
 }

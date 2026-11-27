@@ -40,8 +40,62 @@ final class Webdav implements RemoteStorage<String> {
     );
   }
 
-  static Future<void> test(String url, String user, String pwd) async {
-    await WebdavClient.basicAuth(url: url, user: user, pwd: pwd).ping();
+  /// Formats [e] as a concise single-line summary without dumping raw response
+  /// payloads (such as full HTML error pages). Returns null when [e] carries no
+  /// status or message.
+  static String? formatError(WebdavException<Object?> e) {
+    final status = [
+      if (e.statusCode != null) '${e.statusCode}',
+      if (e.statusMessage case final sm? when sm.trim().isNotEmpty) sm.trim(),
+    ].join(' ');
+    final detail = e.message.trim();
+    if (status.isEmpty && detail.isEmpty) return null;
+    if (status.isEmpty) return detail;
+    if (detail.isEmpty) return status;
+    return '$status · $detail';
+  }
+
+  /// Verifies that [url] speaks WebDAV under [prefix] with [user]/[pwd].
+  ///
+  /// Uses `PROPFIND` rather than `OPTIONS` (`ping`), because plain HTTP roots
+  /// commonly answer `OPTIONS` with 200 while rejecting WebDAV methods with
+  /// 405. When [prefix] does not exist yet (404), probes the base collection
+  /// instead.
+  static Future<void> test(
+    String url,
+    String user,
+    String pwd, {
+    String prefix = defaultPrefix,
+    Duration timeout = const Duration(seconds: 15),
+    CancelToken? cancelToken,
+  }) async {
+    final trimmed = url.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      throw FormatException('Invalid WebDAV URL', url);
+    }
+    final client = WebdavClient.basicAuth(
+      url: trimmed,
+      user: user,
+      pwd: pwd,
+      options: WebdavOptions(
+        connectTimeout: timeout,
+        sendTimeout: timeout,
+        receiveTimeout: timeout,
+      ),
+    );
+    WebdavFile? probed;
+    try {
+      probed = await client.readProps(prefix, cancelToken: cancelToken);
+    } on WebdavException catch (e) {
+      if (e.statusCode != 404) rethrow;
+    }
+    probed ??= await client.readProps('/', cancelToken: cancelToken);
+    if (probed == null || !probed.isDir) {
+      throw WebdavException(message: 'Endpoint is not a WebDAV directory');
+    }
   }
 
   /// {@macro webdav_client}

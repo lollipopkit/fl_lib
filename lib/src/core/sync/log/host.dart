@@ -10,6 +10,7 @@ import 'package:webdav_client_plus/webdav_client_plus.dart' show WebdavException
 import 'package:fl_lib/src/core/lkc/client.dart';
 import 'package:fl_lib/src/core/logger.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
+import 'package:fl_lib/src/core/sync/base.dart';
 import 'package:fl_lib/src/core/sync/log/groups.dart';
 import 'package:fl_lib/src/core/sync/log/errors.dart';
 import 'package:fl_lib/src/core/sync/log/recorder.dart';
@@ -35,7 +36,7 @@ abstract interface class SyncFiles {
 bool isRemoteFailure(Object e) => switch (e) {
   SocketException() || TimeoutException() || HttpException() || TlsException() => true,
   DioException(:final response) => (response?.statusCode ?? 500) >= 500,
-  WebdavException(:final statusCode) => statusCode == null || statusCode >= 500,
+  WebdavException() => true,
   // Signed out of iCloud, or its container not reachable now.
   ICloudContainerAccessException() || ICloudCoordinationException() => true,
   _ => false,
@@ -99,7 +100,12 @@ Future<SyncReply> syncReply<T>(
       _ => 'host',
     };
     if (kind == 'host') Loggers.app.warning('Sync host call', e, s);
-    return SyncReply(json: '', error: e is SyncLogFull ? 'sync_log_full' : '$e', errorKind: kind);
+    final error = switch (e) {
+      SyncLogFull() => 'sync_log_full',
+      WebdavException() => Webdav.formatError(e) ?? '$e',
+      _ => '$e',
+    };
+    return SyncReply(json: '', error: error, errorKind: kind);
   }
 }
 
