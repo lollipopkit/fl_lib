@@ -210,6 +210,7 @@ final class FileLogSync {
   /// The store [_opening] is of.
   String? _openedFor;
   Timer? _soon;
+  int _generation = 0;
 
   final tooNew = ValueNotifier(false);
   final lastFailure = ValueNotifier<Object?>(null);
@@ -241,6 +242,10 @@ final class FileLogSync {
     if (_webdavId(now) != id) throw StateError('The WebDAV this sync ran on changed');
     return now;
   }, folder);
+
+  /// The store key id for [rs] under the current account configuration, or null
+  /// when [rs] is not a usable file-backed sync store.
+  String? storeIdOf(RemoteStorage<Object?>? rs) => _storeOf(rs)?.id;
 
   /// [rs]'s sync key, opened with the password here: what its segments and
   /// the backup are sealed with.
@@ -283,6 +288,7 @@ final class FileLogSync {
   /// Reads what other devices wrote, then writes what this one has.
   Future<void> sync() async {
     if (!SqliteDb.isOpen) return;
+    final gen = _generation;
     final rs = on() ? remote() : null;
     final store = _storeOf(rs);
     if (store?.id != _openedFor) {
@@ -291,6 +297,7 @@ final class FileLogSync {
       if (_openedFor case final was?) {
         store == null ? SyncKeyring.release(was) : await SyncKeyring.forget(was);
       }
+      if (_generation != gen) return;
       _opening = null;
       _openedFor = store?.id;
     }
@@ -304,22 +311,31 @@ final class FileLogSync {
     } catch (e, s) {
       // Only this one: another may have taken its place meanwhile.
       if (identical(_opening, opening)) _opening = null;
-      lastFailure.value = e;
+      if (_generation == gen) {
+        lastFailure.value = e;
+      }
       if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing) {
         Loggers.app.warning('File log sync: opening', e, s);
       }
       return;
     }
+    if (_generation != gen) return;
     running.value = true;
     try {
       await syncCall(engine.run);
-      lastFailure.value = null;
-      lastSyncAt.value = DateTime.now();
+      if (_generation == gen) {
+        lastFailure.value = null;
+        lastSyncAt.value = DateTime.now();
+      }
     } catch (e, s) {
-      lastFailure.value = e;
+      if (_generation == gen) {
+        lastFailure.value = e;
+      }
       if (!(e is SyncError && e.kind == SyncEngineErrorKind.remote)) Loggers.app.warning('File log sync', e, s);
     } finally {
-      tooNew.value = engine.tooNew();
+      if (_generation == gen) {
+        tooNew.value = engine.tooNew();
+      }
       running.value = false;
     }
   }
@@ -331,9 +347,24 @@ final class FileLogSync {
     return SyncSegmentEngine(key: key, host: host.call);
   }
 
-  /// The key or the store changed: opened again for the next sync.
+  /// The key or the store changed: opened again for the next sync, and any
+  /// in-flight run's outcome is ignored once it finishes.
   void reset() {
+    _generation++;
     _soon?.cancel();
     _opening = null;
+    tooNew.value = false;
+    lastFailure.value = null;
+  }
+
+  /// Resets cached state and forgets persisted keyring metadata for [id] (plus
+  /// any store previously opened here) when a remote is replaced or removed.
+  Future<void> forgetRemote({String? id}) async {
+    reset();
+    final ids = <String>{?_openedFor, ?id};
+    _openedFor = null;
+    for (final oldId in ids) {
+      await SyncKeyring.forget(oldId);
+    }
   }
 }
