@@ -365,6 +365,41 @@ void main() {
     await SyncKeyring.storeSecretKey(alternateSpelling);
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);
   });
+
+  test('storeSecretKey non-ready path enforces durable intent whether active or staged', () async {
+    final keyA = SyncKeyring.generateSecretKey();
+    final keyB = SyncKeyring.generateSecretKey();
+    final intentJson = '{"intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
+
+    // Case 1: keyA is already ACTIVE (no pending staged key), durable external intent exists.
+    SyncKeyring.resetForTest();
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKey': keyA,
+      'syncKeyPending': intentJson,
+    });
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
+
+    // Same-key import is allowed and keeps the unresolved intent intact.
+    await SyncKeyring.storeSecretKey(keyA);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+
+    // Case 2: keyA is STAGED (no active key), durable external intent exists.
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKeyPending': keyA,
+      'syncKeyPending': intentJson,
+    });
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+
+    // Case 3: once no unresolved intent exists, replacing active keyA with keyB succeeds.
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKey': keyA,
+    });
+    await SyncKeyring.storeSecretKey(keyB);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyB);
+  });
 }
 
 final class _BlockingKeyFile implements SyncKeyFile {

@@ -1078,3 +1078,247 @@ async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_co
     assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e3");
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
 }
+
+#[tokio::test]
+async fn cached_upload_entry_replaced_during_flush_must_not_return_on_earlier_flush() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = puts.clone();
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", p) if p.ends_with(NAME) => {
+            seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written("e1")
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    // save step 0: fail PUT #1 watermark -> caches id1 ("e1", v1).
+    // save step 1: succeed for retry's first flush (v1), notifying the test while
+    //              `file_lock` is held so the test can inject a newer dirty id2 ("e2", v2).
+    // save step 2: fail for injected v2 -> leaves `dirty = true`.
+    // save step 3: fail for retry's re-flush of id2 -> proves retry re-flushed instead of
+    //              returning Ok("e2") on step 1's earlier flush!
+    // save step 4: succeed -> next retry returns Ok("e2") with no extra PUT.
+    struct StepKeeper {
+        step: std::sync::atomic::AtomicUsize,
+        first_flushed: Arc<tokio::sync::Notify>,
+    }
+    impl crate::personal::VersionKeeper for StepKeeper {
+        fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            Box::pin(async move {
+                match self.step.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
+                    0 => Err("save 0 failed".into()),
+                    1 => {
+                        self.first_flushed.notify_one();
+                        Ok(())
+                    }
+                    2 => Err("save 2 failed (v2 dirty)".into()),
+                    3 => Err("save 3 failed (re-flush for id2)".into()),
+                    _ => Ok(()),
+                }
+            })
+        }
+    }
+
+    let first_flushed = Arc::new(tokio::sync::Notify::new());
+    let keeper = Arc::new(StepKeeper { step: std::sync::atomic::AtomicUsize::new(0), first_flushed: first_flushed.clone() });
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper));
+    sync.set_personal(Some(auth.clone()));
+
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // Hold file_lock(NAME) so the retry flushes v1 (step 1) and then waits on file_lock.
+    let lock = sync.file_lock(NAME);
+    let hold = lock.lock().await;
+    let s = sync.clone();
+    let retry = tokio::spawn(async move { s.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await });
+
+    first_flushed.notified().await;
+    // Before releasing file_lock, advance personal watermark to v2 (dirty, step 2 fails)
+    // and replace the cached entry under commit_key with a new entry id2 ("e2", 2).
+    assert!(auth.record_file_version("serverbox", NAME, 2).await.is_err());
+    {
+        let commit_key = (NAME.to_string(), Condition::Absent, *blake3::hash(b"body").as_bytes(), UploadMode::File);
+        let mut guard = sync.pending_commits.lock().unwrap();
+        let next_id = guard.next_id();
+        guard.files.insert(commit_key, (next_id, "e2".into(), 2));
+    }
+    drop(hold);
+
+    // Retry MUST notice entry id changed, refuse to return Ok("e2") based on step 1's flush,
+    // and re-flush (hitting step 3 error with the new Committed::File("e2", 2)).
+    let err = retry.await.unwrap().unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, Some(Committed::File { etag: "e2".into(), version: 2 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // Next retry flushes v2 successfully (step 4) and returns "e2" without resending PUT.
+    assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e2");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn cached_append_and_snapshot_invalidated_when_personal_log_changes() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let active_log: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(Some("log-1".to_string())));
+    let append_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let snap_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let log_c = active_log.clone();
+    let app_c = append_calls.clone();
+    let snp_c = snap_calls.clone();
+
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("POST", p) if p.ends_with("/log") => {
+            let n = app_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let cur_log = log_c.lock().unwrap().clone().unwrap_or_else(|| "log-fresh".into());
+            Response::json(200, json!({ "data": { "log": cur_log, "seq": (n + 1) as i64, "live": { "batches": 1, "bytes": 4 }, "compact": false } }))
+        }
+        ("GET", p) if p.ends_with("/log") => {
+            let cur_log = log_c.lock().unwrap().clone();
+            Response::json(200, json!({ "data": { "log": cur_log, "batches": [], "head": 0, "snapshot_seq": 0, "more": false } }))
+        }
+        ("PUT", p) if p.ends_with("/snapshot") => {
+            let n = snp_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written(if n == 0 { "snap-log1" } else { "snap-log2" })
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth));
+
+    // 1. Append on log-1 fails local persistence -> cached for log-1.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let idem = "idempotency-key-1234";
+    let err = sync.append(idem, b"batch".to_vec()).await.unwrap_err();
+    assert!(matches!(err.committed, Some(Committed::Batch(ref a)) if a.log == "log-1"));
+    assert_eq!(append_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. Server replaces log with log-2; client observes log-2 via read_log.
+    *active_log.lock().unwrap() = Some("log-2".into());
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    let _ = sync.read_log(0, None, None).await.unwrap();
+
+    // 3. Retrying append MUST NOT reuse log-1 cached result; sends a fresh append to log-2.
+    let appended = sync.append(idem, b"batch".to_vec()).await.unwrap();
+    assert_eq!(appended.log, "log-2");
+    assert_eq!(append_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // 4. Snapshot on log-2 fails local persistence -> cached for log-2.
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-log1".into(), seq: 1 }));
+    assert_eq!(snap_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 5. Server resets log to empty (`log: None`); read_log clears stale cached entries.
+    *active_log.lock().unwrap() = None;
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    let _ = sync.read_log(0, None, None).await.unwrap();
+
+    // 6. Retrying put_snapshot_bytes MUST NOT reuse log-2 cached result; sends a fresh snapshot.
+    let snap_etag = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap();
+    assert_eq!(snap_etag, "snap-log2");
+    assert_eq!(snap_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn detaching_personal_auth_during_recovery_flush_never_sends_unsigned_write() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let unsigned_writes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let appends = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let snaps = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let uw = unsigned_writes.clone();
+    let pc = puts.clone();
+    let ac = appends.clone();
+    let sc = snaps.clone();
+
+    let (_fake, sync) = homebase(move |r| {
+        if matches!(r.method.as_str(), "PUT" | "POST") && r.header("x-signature").is_none() {
+            uw.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        match (r.method.as_str(), r.path()) {
+            ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+            ("PUT", p) if p.ends_with(NAME) => {
+                pc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                written("e1")
+            }
+            ("POST", p) if p.ends_with("/log") => {
+                ac.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Response::json(200, json!({ "data": { "log": "log-1", "seq": 1, "live": { "batches": 1, "bytes": 4 }, "compact": false } }))
+            }
+            ("PUT", p) if p.ends_with("/snapshot") => {
+                sc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                written("snap-1")
+            }
+            _ => Response::status(404),
+        }
+    })
+    .await;
+
+    struct DetachOnSecondSave {
+        sync: Arc<SyncClient<Kept>>,
+        mode: std::sync::atomic::AtomicUsize, // 0 = fail, 1 = detach & ok
+    }
+    impl crate::personal::VersionKeeper for DetachOnSecondSave {
+        fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            Box::pin(async move {
+                if self.mode.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                    Err("save failed".into())
+                } else {
+                    self.sync.set_personal(None);
+                    Ok(())
+                }
+            })
+        }
+    }
+
+    let keeper = Arc::new(DetachOnSecondSave { sync: sync.clone(), mode: std::sync::atomic::AtomicUsize::new(0) });
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+
+    // 1. upload_bytes: cache entry, then detach auth during retry flush -> MUST return SignedOut, no unsigned write.
+    sync.set_personal(Some(auth.clone()));
+    assert!(sync.upload_bytes(NAME, b"f".to_vec(), Condition::Absent).await.is_err());
+    keeper.mode.store(1, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.upload_bytes(NAME, b"f".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::SignedOut);
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. append: cache entry, then detach auth during retry flush -> MUST return SignedOut, no unsigned write.
+    keeper.mode.store(0, std::sync::atomic::Ordering::SeqCst);
+    sync.set_personal(Some(auth.clone()));
+    let idem = "idempotency-key-5678";
+    assert!(sync.append(idem, b"b".to_vec()).await.is_err());
+    keeper.mode.store(1, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.append(idem, b"b".to_vec()).await.unwrap_err();
+    assert_eq!(err.kind, Kind::SignedOut);
+    assert_eq!(appends.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 3. put_snapshot_bytes: cache entry, then detach auth during retry flush -> MUST return SignedOut, no unsigned write.
+    keeper.mode.store(0, std::sync::atomic::Ordering::SeqCst);
+    sync.set_personal(Some(auth.clone()));
+    assert!(sync.put_snapshot_bytes(1, b"s".to_vec()).await.is_err());
+    keeper.mode.store(1, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.put_snapshot_bytes(1, b"s".to_vec()).await.unwrap_err();
+    assert_eq!(err.kind, Kind::SignedOut);
+    assert_eq!(snaps.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    assert_eq!(unsigned_writes.load(std::sync::atomic::Ordering::SeqCst), 0, "no unsigned write may be dispatched after personal auth detaches");
+
+    // 4. Calls that BEGIN without personal auth preserve the existing unsigned path.
+    assert_eq!(sync.upload_bytes(NAME, b"u".to_vec(), Condition::Absent).await.unwrap(), "e1");
+    assert_eq!(unsigned_writes.load(std::sync::atomic::Ordering::SeqCst), 1);
+}

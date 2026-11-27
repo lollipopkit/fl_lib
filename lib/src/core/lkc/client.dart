@@ -453,6 +453,46 @@ final class LkcClient {
     return true;
   }
 
+  final List<({String candidate, String stageId})> _pendingExternalCommits = [];
+
+  Future<void> _settleExternalCommit(String candidate, {String? currentStageId}) async {
+    final canonical = SyncKeyring.normalizeSecretKey(candidate) ?? candidate;
+    final ids = <String>[
+      for (final entry in _pendingExternalCommits)
+        if (entry.candidate == canonical) entry.stageId,
+      if (currentStageId != null &&
+          !_pendingExternalCommits.any((e) => e.candidate == canonical && e.stageId == currentStageId))
+        currentStageId,
+    ];
+    if (ids.isEmpty) {
+      await SyncKeyring.commitSecretKey(canonical);
+      return;
+    }
+    for (final id in ids) {
+      await SyncKeyring.commitSecretKey(canonical, stageId: id);
+      _pendingExternalCommits.removeWhere((e) => e.candidate == canonical && e.stageId == id);
+    }
+  }
+
+  Future<void> _clearExternalCommit(String candidate, {String? currentStageId}) async {
+    final canonical = SyncKeyring.normalizeSecretKey(candidate) ?? candidate;
+    final ids = <String>[
+      for (final entry in _pendingExternalCommits)
+        if (entry.candidate == canonical) entry.stageId,
+      if (currentStageId != null &&
+          !_pendingExternalCommits.any((e) => e.candidate == canonical && e.stageId == currentStageId))
+        currentStageId,
+    ];
+    if (ids.isEmpty) {
+      await SyncKeyring.clearExternalSecretKeyCommit(canonical);
+      return;
+    }
+    for (final id in ids) {
+      await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: id);
+      _pendingExternalCommits.removeWhere((e) => e.candidate == canonical && e.stageId == id);
+    }
+  }
+
   /// The account key opened (made if no device has) with [secretKey], kept
   /// as two-factor once its file is.
   Future<LkcAccountKey?> _accountKeyWith(String uid, String pwd, String secretKey, bool Function() stillValid) async {
@@ -469,8 +509,11 @@ final class LkcClient {
       if (!stillValid()) return null;
       rethrow;
     }
+    if (opened.twoFactor()) {
+      if (SyncKeyring.ready) await _settleExternalCommit(secretKey);
+      await markAccountKey2fa(uid);
+    }
     if (!stillValid()) return null;
-    if (opened.twoFactor()) await markAccountKey2fa(uid);
     SyncKeyring.clearAccountKeySealed(uid);
     return opened.key();
   }
@@ -517,9 +560,9 @@ final class LkcClient {
         if (!stagedWrongPassphrase) {
           if (recovered == null) return null;
           if (recovered.twoFactor()) {
-            await SyncKeyring.commitSecretKey(staged);
-            if (!stillValid()) return null;
+            await _settleExternalCommit(staged);
             await markAccountKey2fa(uid);
+            if (!stillValid()) return null;
             SyncKeyring.clearAccountKeySealed(uid);
             final LkcOpenedAccountKey published;
             try {
@@ -535,7 +578,7 @@ final class LkcClient {
             return published.key();
           }
         } else {
-          await SyncKeyring.clearExternalSecretKeyCommit(staged);
+          await _clearExternalCommit(staged);
           if (!stillValid()) return null;
         }
       }
@@ -546,22 +589,32 @@ final class LkcClient {
     if (!stillValid()) return null;
     final candidate = await SyncKeyring.secretKeyCandidate();
     if (candidate == null || !stillValid()) return null;
-    await SyncKeyring.stageExternalSecretKeyCommit(candidate);
+    final allowLegacy = !await isAccountKey2fa(uid);
     if (!stillValid()) return null;
+    final stageId = await SyncKeyring.stageExternalSecretKeyCommit(candidate);
+    _pendingExternalCommits.add((candidate: candidate, stageId: stageId));
+    if (!stillValid()) {
+      await _clearExternalCommit(candidate, currentStageId: stageId);
+      return null;
+    }
     final LkcOpenedAccountKey opened;
     try {
-      opened = await t.accountKey(passphrase: pwd, secretKey: candidate, allowLegacy: !await isAccountKey2fa(uid));
+      opened = await t.accountKey(passphrase: pwd, secretKey: candidate, allowLegacy: allowLegacy);
     } on LkcTeamError catch (e) {
       // Sealed with another device's meanwhile.
       if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
-      await SyncKeyring.clearExternalSecretKeyCommit(candidate);
+      await _clearExternalCommit(candidate, currentStageId: stageId);
       if (!stillValid()) return null;
       SyncKeyring.accountKeySealed(uid);
       return null;
     }
-    if (!opened.twoFactor() || !stillValid()) return null;
-    await SyncKeyring.commitSecretKey(candidate);
+    if (!opened.twoFactor()) {
+      await _clearExternalCommit(candidate, currentStageId: stageId);
+      return null;
+    }
+    await _settleExternalCommit(candidate, currentStageId: stageId);
     await markAccountKey2fa(uid);
+    if (!stillValid()) return null;
     SyncKeyring.clearAccountKeySealed(uid);
     return opened.key();
   }

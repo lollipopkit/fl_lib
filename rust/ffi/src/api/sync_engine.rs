@@ -177,21 +177,22 @@ impl SyncKeys {
         Ok(self.0.sealed_with_secret_key(file).await?)
     }
 
-    /// [candidate] as this device's secret key.
-    pub async fn commit_secret_key(&self, candidate: String) -> R<()> {
-        Ok(self.0.commit_secret_key(&candidate).await?)
+    /// [candidate] as this device's secret key, settling [stage_id] when given.
+    pub async fn commit_secret_key(&self, candidate: String, stage_id: Option<String>) -> R<()> {
+        Ok(self.0.commit_secret_key(&candidate, stage_id.as_deref()).await?)
     }
 
     /// Marks [candidate] as having an in-flight/unconfirmed external remote
-    /// commit (such as LK Cloud's account key).
-    pub async fn stage_external_secret_key_commit(&self, candidate: String) -> R<()> {
+    /// commit (such as LK Cloud's account key), returning its stage identity.
+    pub async fn stage_external_secret_key_commit(&self, candidate: String) -> R<String> {
         Ok(self.0.stage_external_secret_key_commit(&candidate).await?)
     }
 
-    /// Clears the external commit marker for [candidate] when the remote write
-    /// is known not to have committed.
-    pub async fn clear_external_secret_key_commit(&self, candidate: String) -> R<()> {
-        Ok(self.0.clear_external_secret_key_commit(&candidate).await?)
+    /// Clears the staged external commit identified by [stage_id] (or a
+    /// crash-recovered intent when omitted) when the remote write is known not
+    /// to have committed.
+    pub async fn clear_external_secret_key_commit(&self, candidate: String, stage_id: Option<String>) -> R<()> {
+        Ok(self.0.clear_external_secret_key_commit(&candidate, stage_id.as_deref()).await?)
     }
 
     /// Imports [key] as this device's secret key, coordinated with all remote

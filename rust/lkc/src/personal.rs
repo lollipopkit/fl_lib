@@ -391,6 +391,11 @@ impl PersonalAuth {
         self.versions.lock().await.data.requires_signature(app, name)
     }
 
+    /// The last observed log identifier for [app], if any.
+    pub async fn signed_log_id(&self, app: &str) -> Option<String> {
+        self.versions.lock().await.data.signed_log_ids.get(app).cloned()
+    }
+
     /// Retries persisting any committed write whose previous
     /// [`VersionKeeper::save`] failed, without re-sending remote writes.
     pub async fn flush_pending_versions(&self) -> Result<(), Error> {

@@ -139,18 +139,37 @@ abstract final class SyncKeyring {
         await _said(() => _ring.storeSecretKey(key: canonical, expectEmptyBefore: expectEmptyBefore));
         return;
       }
+      final pending = _decoded(await _pendingProp.storage.read(key: _pendingProp.key));
+      final extIntentRaw = pending['intent:lkc-account-key'];
+      if (extIntentRaw != null) {
+        String? protected;
+        if (extIntentRaw is String) {
+          final decoded = _decoded(extIntentRaw);
+          final pwd = decoded['pwd'];
+          if (pwd is String && pwd.isNotEmpty) {
+            protected = normalizeSecretKey(pwd);
+          }
+        }
+        if (protected != canonical) {
+          throw StateError('A secret key has an unresolved external write intent; refusing conflicting import');
+        }
+      }
       final stagedRaw = await _pendingSecretKeyProp.read(limited: false);
       final staged = stagedRaw == null || stagedRaw.trim().isEmpty
           ? null
           : (normalizeSecretKey(stagedRaw) ?? stagedRaw.trim());
-      if (staged != null && staged != canonical) {
+      final replacingDifferentKey =
+          (current != null && current != canonical) ||
+          (staged != null && staged != canonical);
+      final hasOtherIntent = pending.keys.any(
+        (k) => k.startsWith('intent:') && k != 'intent:lkc-account-key',
+      );
+      if (replacingDifferentKey && hasOtherIntent) {
+        throw StateError('A secret key has an unresolved remote write intent; refusing conflicting import');
+      }
+      if (staged != null && staged != canonical && current == null) {
         final epochs = _decoded(_epochsProp.get());
-        final pending = _decoded(await _pendingProp.storage.read(key: _pendingProp.key));
-        final hasDurableCommit =
-            current == null &&
-            (epochs.keys.any((k) => k.startsWith('2fa:')) ||
-                pending.keys.any((k) => k.startsWith('intent:')));
-        if (hasDurableCommit) {
+        if (epochs.keys.any((k) => k.startsWith('2fa:'))) {
           throw StateError('A staged secret key has a committed remote write; refusing conflicting import');
         }
       }
@@ -217,18 +236,22 @@ abstract final class SyncKeyring {
   /// Whether the app syncs keys here ([init] called).
   static bool get ready => _keys != null || _label != null;
 
-  /// [candidate] ([secretKeyCandidate]) as this device's secret key.
-  static Future<void> commitSecretKey(String candidate) => _said(() => _ring.commitSecretKey(candidate: candidate));
+  /// [candidate] ([secretKeyCandidate]) as this device's secret key, settling
+  /// [stageId] when given.
+  static Future<void> commitSecretKey(String candidate, {String? stageId}) =>
+      _said(() => _ring.commitSecretKey(candidate: candidate, stageId: stageId));
 
   /// Marks [candidate] as having an in-flight external remote commit so a
-  /// conflicting import cannot erase it if a post-write step fails.
-  static Future<void> stageExternalSecretKeyCommit(String candidate) =>
+  /// conflicting import cannot erase it if a post-write step fails, returning
+  /// its unique stage identity.
+  static Future<String> stageExternalSecretKeyCommit(String candidate) =>
       _said(() => _ring.stageExternalSecretKeyCommit(candidate: candidate));
 
-  /// Clears the external commit marker for [candidate] when the remote write
-  /// is confirmed not to have committed.
-  static Future<void> clearExternalSecretKeyCommit(String candidate) =>
-      _said(() => _ring.clearExternalSecretKeyCommit(candidate: candidate));
+  /// Clears the external commit marker for [candidate] identified by [stageId]
+  /// (or a crash-recovered intent when omitted) when the remote write is
+  /// confirmed not to have committed.
+  static Future<void> clearExternalSecretKeyCommit(String candidate, {String? stageId}) =>
+      _said(() => _ring.clearExternalSecretKeyCommit(candidate: candidate, stageId: stageId));
 
   /// [id]'s remote is not synced here any more: read again next time.
   static void release(String id) {

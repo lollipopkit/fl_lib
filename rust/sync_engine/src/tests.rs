@@ -2725,26 +2725,33 @@ async fn external_commit_staging_validates_candidate_and_tracks_concurrent_write
     let candidate = d.ring.secret_key_candidate().await.unwrap();
     assert!(d.ring.stage_external_secret_key_commit(&stale).await.is_err());
 
-    // Two unresolved external writes stage the same current candidate.
-    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
-    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    // Two unresolved external writes stage the same current candidate and get distinct identities.
+    let stage1 = d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    let stage2 = d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    assert_ne!(stage1, stage2);
 
-    // Clearing one write MUST keep protection and durable intent intact for the second.
-    d.ring.clear_external_secret_key_commit(&candidate).await.unwrap();
+    // Clearing stage1 (even twice) MUST consume only stage1, keeping stage2 protected.
+    d.ring.clear_external_secret_key_commit(&candidate, Some(&stage1)).await.unwrap();
+    d.ring.clear_external_secret_key_commit(&candidate, Some(&stage1)).await.unwrap();
     let other = fl_lkc::secret_key::SecretKey::generate().format().to_string();
     assert!(d.ring.store_secret_key(&other).await.is_err());
     assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
 
-    // Clearing the second write settles all unresolved writes, permitting import.
-    d.ring.clear_external_secret_key_commit(&candidate).await.unwrap();
+    // An untokened recovery clear must NOT drop active stage2.
+    d.ring.clear_external_secret_key_commit(&candidate, None).await.unwrap();
+    assert!(d.ring.store_secret_key(&other).await.is_err());
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+
+    // Clearing stage2 settles all unresolved writes, permitting import.
+    d.ring.clear_external_secret_key_commit(&candidate, Some(&stage2)).await.unwrap();
     assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
     d.ring.store_secret_key(&other).await.unwrap();
     assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(other.as_str()));
 
     // Once active key is `other`, staging stale `candidate` is rejected while `other` succeeds.
     assert!(d.ring.stage_external_secret_key_commit(&candidate).await.is_err());
-    d.ring.stage_external_secret_key_commit(&other).await.unwrap();
-    d.ring.clear_external_secret_key_commit(&other).await.unwrap();
+    let stage3 = d.ring.stage_external_secret_key_commit(&other).await.unwrap();
+    d.ring.clear_external_secret_key_commit(&other, Some(&stage3)).await.unwrap();
 }
 
 #[tokio::test]
@@ -2756,27 +2763,58 @@ async fn external_commit_settlement_decrements_per_write_and_same_key_import_pre
     let conflicting = fl_lkc::secret_key::SecretKey::generate().format().to_string();
 
     // Stage two concurrent external writes for the same candidate.
-    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
-    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    let stage1 = d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    let stage2 = d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
 
-    // Committing the first write must decrement only its count, keeping the
-    // second write protected and the durable intent intact.
-    d.ring.commit_secret_key(&candidate).await.unwrap();
+    // Committing stage1 settles only stage1, keeping stage2 protected and the durable intent intact.
+    d.ring.commit_secret_key(&candidate, Some(&stage1)).await.unwrap();
     assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(candidate.as_str()));
     assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
     assert!(d.ring.store_secret_key(&conflicting).await.is_err());
 
-    // A same-key import while the second external write is still unsettled must
-    // preserve the remaining count and durable intent so conflicting imports stay rejected.
+    // Duplicate commit of stage1 must NOT consume stage2.
+    d.ring.commit_secret_key(&candidate, Some(&stage1)).await.unwrap();
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(d.ring.store_secret_key(&conflicting).await.is_err());
+
+    // A same-key import while stage2 is still unsettled must preserve the stage and durable intent.
     d.ring.store_secret_key(&candidate).await.unwrap();
     assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
     assert!(d.ring.store_secret_key(&conflicting).await.is_err());
 
-    // Settling the second write clears the durable intent and allows later replacement.
-    d.ring.commit_secret_key(&candidate).await.unwrap();
+    // Settling stage2 clears the durable intent and allows later replacement.
+    d.ring.commit_secret_key(&candidate, Some(&stage2)).await.unwrap();
     assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
     d.ring.store_secret_key(&conflicting).await.unwrap();
     assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(conflicting.as_str()));
+}
+
+#[tokio::test]
+async fn durable_external_intent_blocks_conflicting_import_after_restart_even_when_key_active() {
+    let d1 = Device::new("pw");
+    let active_a = d1.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let other_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    // Stage an external write for active key A, then simulate process restart with a fresh KeyRing
+    // sharing the same durable secrets (in-memory `external_commits` is now empty).
+    let _stage = d1.ring.stage_external_secret_key_commit(&active_a).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+
+    let restarted = KeyRing::new(d1.secrets.clone(), "test");
+    // Conflicting import B MUST be rejected even though `active_a` is active and in-memory stages are empty.
+    assert!(restarted.store_secret_key(&other_b).await.is_err());
+    assert_eq!(d1.secrets.secret_key.lock().unwrap().as_deref(), Some(active_a.as_str()));
+
+    // Same-key import A is allowed and MUST NOT clear the durable external intent.
+    restarted.store_secret_key(&active_a).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(restarted.store_secret_key(&other_b).await.is_err());
+
+    // Only settling the protected write clears the durable intent and allows replacement.
+    restarted.commit_secret_key(&active_a, None).await.unwrap();
+    assert!(!d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    restarted.store_secret_key(&other_b).await.unwrap();
+    assert_eq!(d1.secrets.secret_key.lock().unwrap().as_deref(), Some(other_b.as_str()));
 }
 
 #[tokio::test]
@@ -2787,7 +2825,7 @@ async fn internal_key_commit_does_not_clear_unsettled_external_write_guard() {
 
     let candidate = d.ring.secret_key_candidate().await.unwrap();
     let conflicting = fl_lkc::secret_key::SecretKey::generate().format().to_string();
-    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    let stage = d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
 
     // An internal key-file write promotes the same staged candidate, but must
     // NOT settle the unrelated in-flight external write.
@@ -2797,9 +2835,45 @@ async fn internal_key_commit_does_not_clear_unsettled_external_write_guard() {
     assert!(d.ring.store_secret_key(&conflicting).await.is_err());
 
     // Once the external write settles, the guard and intent clear.
-    d.ring.commit_secret_key(&candidate).await.unwrap();
+    d.ring.commit_secret_key(&candidate, Some(&stage)).await.unwrap();
     assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
     d.ring.store_secret_key(&conflicting).await.unwrap();
+}
+
+#[tokio::test]
+async fn detached_handle_failures_return_errors_without_mutating_replacement_status() {
+    let file_old = Arc::new(MemKeyFile::default());
+    let file_new = Arc::new(MemKeyFile::default());
+    let writer = Device::new("pw-good");
+    let sk = writer.secrets.secret_key.lock().unwrap().clone().unwrap();
+    writer.ring.of(Arc::new(KeyFileOf(file_new.clone(), "remote".into())), true).await.unwrap();
+
+    // Seed file_old with another password/secret key so old_handle fails even while
+    // device credentials remain healthy for replacement (`file_new`).
+    let other_writer = Device::new("pw-other");
+    let other_sk = other_writer.secrets.secret_key.lock().unwrap().clone().unwrap();
+    other_writer.ring.of(Arc::new(KeyFileOf(file_old.clone(), "remote".into())), true).await.unwrap();
+
+    let d = Device::new("pw-other");
+    *d.secrets.secret_key.lock().unwrap() = Some(other_sk);
+    let old_handle = d.ring.of(Arc::new(KeyFileOf(file_old.clone(), "remote".into())), true).await.unwrap();
+
+    // Switch credentials/remote to `file_new`: release old_handle and open healthy replacement.
+    d.ring.release("remote");
+    *d.secrets.password.lock().unwrap() = Some("pw-good".into());
+    *d.secrets.secret_key.lock().unwrap() = Some(sk);
+    let _replacement = d.ring.of(Arc::new(KeyFileOf(file_new.clone(), "remote".into())), true).await.unwrap();
+    assert!(d.ring.mismatch().borrow().is_empty());
+    assert!(d.ring.secret_key_missing().borrow().is_empty());
+
+    // Detached old_handle against `file_old` fails with PasswordMismatch while replacement stays healthy.
+    assert!(matches!(old_handle.check(true, true).await, Err(Error::PasswordMismatch(ref id)) if id == "remote"));
+    assert!(d.ring.mismatch().borrow().is_empty(), "detached handle must not mark replacement mismatched");
+
+    // Detached old_handle with missing secret key fails with SecretKeyMissing without mutating ring status.
+    *d.secrets.secret_key.lock().unwrap() = None;
+    assert!(matches!(old_handle.check(true, true).await, Err(Error::SecretKeyMissing)));
+    assert!(d.ring.secret_key_missing().borrow().is_empty(), "detached handle must not mark replacement missing");
 }
 
 #[tokio::test]

@@ -255,10 +255,14 @@ struct SecretKeyInitState {
     /// `secrets.secret_key()`. While set, conflicting imports are rejected so
     /// the staged key stays recoverable.
     committed_staged: Option<String>,
-    /// Per-candidate active count of unresolved external remote writes (such as
-    /// LK Cloud's account key). Protection and the durable external write
-    /// intent remain intact until every staged write for a candidate settles.
-    external_commits: HashMap<String, usize>,
+    /// Monotonic counter generating unique stage identities for unresolved
+    /// external remote writes (such as LK Cloud's account key).
+    next_external_commit_id: u64,
+    /// Unresolved external remote writes keyed by stage identity
+    /// (`stage_id -> canonical secret key`). Each settlement consumes only its
+    /// matching stage so repeated clears or unrelated commits never drop
+    /// another write's protection.
+    external_commits: HashMap<String, String>,
 }
 
 #[derive(Default)]
@@ -391,29 +395,56 @@ impl RingInner {
         Ok((candidate, true))
     }
 
-    /// Settles one staged external write for [formatted], keeping protection
-    /// and the durable external write intent intact until no staged counts
-    /// remain.
-    async fn settle_external_commit_locked(&self, init: &mut SecretKeyInitState, formatted: &str) -> Result<()> {
-        if let Some(count) = init.external_commits.get_mut(formatted) {
-            if *count > 1 {
-                *count -= 1;
-                return Ok(());
+    /// Settles one staged external write for [formatted]. When [stage_id] is
+    /// `Some`, removes only that exact stage (ignoring missing or mismatched
+    /// stages); when `None` (crash recovery across restart), leaves any active
+    /// in-process stages intact and only clears a durable intent once no
+    /// in-process stages remain.
+    async fn settle_external_commit_locked(
+        &self,
+        init: &mut SecretKeyInitState,
+        formatted: &str,
+        stage_id: Option<&str>,
+    ) -> Result<()> {
+        match stage_id {
+            Some(id) => {
+                if init.external_commits.get(id).map(String::as_str) != Some(formatted) {
+                    return Ok(());
+                }
+                let remaining = init
+                    .external_commits
+                    .iter()
+                    .find(|(k, _)| k.as_str() != id)
+                    .map(|(_, v)| v.clone());
+                // Persist intent update BEFORE removing `id` from `external_commits`
+                // so a transient persistence failure remains retryable with the same `stage_id`.
+                if let Some(rem) = remaining {
+                    self.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &rem).await?;
+                } else {
+                    self.clear_external_commit_intent_for(Some(formatted)).await?;
+                }
+                init.external_commits.remove(id);
+                Ok(())
             }
-            init.external_commits.remove(formatted);
-        }
-        if let Some(remaining) = init.external_commits.keys().next().cloned() {
-            self.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &remaining).await
-        } else {
-            self.clear_external_commit_intent_for(Some(formatted)).await
+            None => {
+                if !init.external_commits.is_empty() {
+                    return Ok(());
+                }
+                self.clear_external_commit_intent_for(Some(formatted)).await
+            }
         }
     }
 
     /// [candidate] as this device's secret key, `secret_key_init` held, now
-    /// that a remote holds what it sealed. When [settle_external] is true,
-    /// settles one staged external write for [candidate] while leaving any
-    /// other unsettled external writes protected.
-    async fn commit_locked(&self, init: &mut SecretKeyInitState, candidate: &SecretKey, settle_external: bool) -> Result<()> {
+    /// that a remote holds what it sealed. When [settle_external] is `Some`,
+    /// settles the matching external write stage (or crash-recovery durable
+    /// intent when `Some(None)`), leaving any other unresolved stages intact.
+    async fn commit_locked(
+        &self,
+        init: &mut SecretKeyInitState,
+        candidate: &SecretKey,
+        settle_external: Option<Option<&str>>,
+    ) -> Result<()> {
         let formatted = candidate.format().to_string();
         match self.secret_key().await? {
             Some(existing) if existing.format().as_str() == formatted.as_str() => {}
@@ -424,8 +455,8 @@ impl RingInner {
             }
         }
         init.committed_staged = None;
-        if settle_external {
-            let _ = self.settle_external_commit_locked(init, &formatted).await;
+        if let Some(stage_id) = settle_external {
+            self.settle_external_commit_locked(init, &formatted, stage_id).await?;
         }
         let _ = self.secrets.set_pending_secret_key(None).await;
         self.bump_recheck_gen();
@@ -597,21 +628,23 @@ impl KeyRing {
     }
 
     /// [candidate] ([Self::secret_key_candidate]) as this device's secret
-    /// key: a remote holds what it sealed.
-    pub async fn commit_secret_key(&self, candidate: &str) -> Result<()> {
+    /// key: a remote holds what it sealed. When [stage_id] is provided, settles
+    /// only that staged external write; `None` settles a crash-recovered
+    /// durable external intent only when no in-process stages remain.
+    pub async fn commit_secret_key(&self, candidate: &str, stage_id: Option<&str>) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let mut init = self.0.secret_key_init.lock().await;
-        self.0.commit_locked(&mut init, &candidate, true).await
+        self.0.commit_locked(&mut init, &candidate, Some(stage_id)).await
     }
 
     /// Records that an external remote write (such as LK Cloud's account key)
-    /// is about to commit using [candidate], so a conflicting import cannot
-    /// clear or replace it if the flow fails after the remote write succeeds.
+    /// is about to commit using [candidate], returning a unique stage identity
+    /// that settles only this write.
     ///
     /// Validates under `secret_key_init` that [candidate] matches the active
     /// secret key (when one exists) or else the current staged key, rejecting
     /// stale candidates before the caller performs the remote write.
-    pub async fn stage_external_secret_key_commit(&self, candidate: &str) -> Result<()> {
+    pub async fn stage_external_secret_key_commit(&self, candidate: &str) -> Result<String> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
@@ -626,18 +659,21 @@ impl KeyRing {
             }
         }
         self.0.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &formatted).await?;
-        *init.external_commits.entry(formatted).or_insert(0) += 1;
-        Ok(())
+        init.next_external_commit_id = init.next_external_commit_id.wrapping_add(1);
+        let stage_id = format!("ext-{}", init.next_external_commit_id);
+        init.external_commits.insert(stage_id.clone(), formatted);
+        Ok(stage_id)
     }
 
-    /// Clears one unresolved external commit marker staged for [candidate] once
-    /// the caller knows that write did not commit. Keeps protection and the
-    /// durable marker intact until every staged write for [candidate] settles.
-    pub async fn clear_external_secret_key_commit(&self, candidate: &str) -> Result<()> {
+    /// Clears the staged external commit identified by [stage_id] (or a
+    /// crash-recovered durable intent when `stage_id` is `None` and no
+    /// in-process stages remain) once the caller knows that write did not
+    /// commit.
+    pub async fn clear_external_secret_key_commit(&self, candidate: &str, stage_id: Option<&str>) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
-        self.0.settle_external_commit_locked(&mut init, &formatted).await
+        self.0.settle_external_commit_locked(&mut init, &formatted, stage_id).await
     }
 
     /// Imports [key] as this device's secret key, serialized with all remote
@@ -670,10 +706,25 @@ impl KeyRing {
         {
             return Err(Error::Host("a staged secret key already committed to a remote; refusing conflicting import".into()));
         }
-        if init.external_commits.keys().any(|c| c.as_str() != formatted.as_str()) {
+        if init.external_commits.values().any(|c| c.as_str() != formatted.as_str()) {
             return Err(Error::Host("a staged secret key has an unresolved external write; refusing conflicting import".into()));
         }
+        let pending = self.0.secrets.pending().await?;
+        let ext_intent_key = write_intent_key(EXTERNAL_COMMIT_ID);
+        if let Some(raw) = pending.get(&ext_intent_key) {
+            let protected = WriteIntent::decode(raw)
+                .and_then(|w| SecretKey::parse(&w.pwd).ok())
+                .map(|k| k.format().to_string());
+            if protected.as_deref() != Some(formatted.as_str()) {
+                return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
+            }
+        }
         let staged = self.0.pending_secret_key().await?;
+        let replacing_different_key = existing.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str())
+            || staged.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str());
+        if replacing_different_key && pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX) && k != &ext_intent_key) {
+            return Err(Error::Host("a secret key has an unresolved remote write intent; refusing conflicting import".into()));
+        }
         if let Some(ref staged_key) = staged
             && staged_key.format().as_str() != formatted.as_str()
         {
@@ -686,19 +737,13 @@ impl KeyRing {
             }
             if existing.is_none() {
                 let epochs = self.0.secrets.epochs().await?;
-                let pending = self.0.secrets.pending().await?;
-                let has_durable_commit = epochs.keys().any(|k| k.starts_with(TWO_FA_PREFIX))
-                    || pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX));
-                if has_durable_commit {
+                if epochs.keys().any(|k| k.starts_with(TWO_FA_PREFIX)) {
                     return Err(Error::Host("a staged secret key has a committed remote write; refusing conflicting import".into()));
                 }
             }
         }
         self.0.secrets.import_secret_key(formatted).await?;
         init.committed_staged = None;
-        if init.external_commits.is_empty() {
-            let _ = self.0.clear_external_commit_intent_for(None).await;
-        }
         let _ = self.0.secrets.set_pending_secret_key(None).await;
         self.0.bump_recheck_gen();
         Ok(())
@@ -1044,7 +1089,7 @@ impl SyncKey {
         // `password_changed` matches `pwd` instead of keeping a stale entry.
         self.ring.record_committed_write(&id, epoch, pwd).await?;
         if generated {
-            self.ring.commit_locked(&mut init, &sk, false).await?;
+            self.ring.commit_locked(&mut init, &sk, None).await?;
         }
         Ok(Some((version, sk, persist_err)))
     }
@@ -1205,7 +1250,7 @@ impl SyncKey {
                         };
                         init.committed_staged = Some(staged.format().to_string());
                         self.ring.record_committed_write(&id, epoch, pwd).await?;
-                        self.ring.commit_locked(&mut init, staged, false).await?;
+                        self.ring.commit_locked(&mut init, staged, None).await?;
                         (written, persist_err)
                     };
                     self.use_identities(identities, true).await?;
@@ -1267,7 +1312,7 @@ impl SyncKey {
                         // `password_changed` matches `pwd` instead of keeping
                         // stale `previous`.
                         self.ring.record_committed_write(&id, epoch, pwd).await?;
-                        self.ring.commit_locked(&mut init, staged, false).await?;
+                        self.ring.commit_locked(&mut init, staged, None).await?;
                         (written, persist_err)
                     };
                     self.use_identities(identities, true).await?;
@@ -1317,11 +1362,19 @@ impl SyncKey {
             }
             let missing_sk = sk.is_none();
             self.lock().refused = Some((tag, missing_sk));
+            {
+                let table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+                if table.is_current(&id, self) {
+                    if missing_sk {
+                        self.ring.said_missing(&id);
+                    } else {
+                        self.ring.said_mismatch(&id);
+                    }
+                }
+            }
             if missing_sk {
-                self.ring.said_missing(&id);
                 return Err(Error::SecretKeyMissing);
             }
-            self.ring.said_mismatch(&id);
             return Err(Error::PasswordMismatch(id));
         }
     }

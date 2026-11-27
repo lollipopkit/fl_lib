@@ -51,12 +51,16 @@ abstract class SyncKeyHandle implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>
 abstract class SyncKeys implements RustOpaqueInterface {
-  /// Clears the external commit marker for [candidate] when the remote write
-  /// is known not to have committed.
-  Future<void> clearExternalSecretKeyCommit({required String candidate});
+  /// Clears the staged external commit identified by [stage_id] (or a
+  /// crash-recovered intent when omitted) when the remote write is known not
+  /// to have committed.
+  Future<void> clearExternalSecretKeyCommit({
+    required String candidate,
+    String? stageId,
+  });
 
-  /// [candidate] as this device's secret key.
-  Future<void> commitSecretKey({required String candidate});
+  /// [candidate] as this device's secret key, settling [stage_id] when given.
+  Future<void> commitSecretKey({required String candidate, String? stageId});
 
   Future<void> forget({required String id});
 
@@ -122,8 +126,8 @@ abstract class SyncKeys implements RustOpaqueInterface {
   List<String> secretKeyMissing();
 
   /// Marks [candidate] as having an in-flight/unconfirmed external remote
-  /// commit (such as LK Cloud's account key).
-  Future<void> stageExternalSecretKeyCommit({required String candidate});
+  /// commit (such as LK Cloud's account key), returning its stage identity.
+  Future<String> stageExternalSecretKeyCommit({required String candidate});
 
   /// Imports [key] as this device's secret key, coordinated with all remote
   /// key-file staging/write/promotion operations on this ring.

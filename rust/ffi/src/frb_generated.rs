@@ -27,9 +27,9 @@
 
 // Section: imports
 
+use crate::api::lkc::*;
 use crate::api::sync_engine::*;
-use crate::api::team::*;
-use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 
@@ -1617,7 +1617,8 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>>::sse_decode(&mut deserializer);
-let api_candidate = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+let api_candidate = <String>::sse_decode(&mut deserializer);
+let api_stage_id = <Option<String>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, crate::api::sync_engine::SyncEngineError>((move || async move {
                         let mut api_that_guard = None;
 let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
@@ -1628,7 +1629,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             }
         }
         let api_that_guard = api_that_guard.unwrap();
- let output_ok = crate::api::sync_engine::SyncKeys::clear_external_secret_key_commit(&*api_that_guard, api_candidate).await?;   std::result::Result::Ok(output_ok)
+ let output_ok = crate::api::sync_engine::SyncKeys::clear_external_secret_key_commit(&*api_that_guard, api_candidate, api_stage_id).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__sync_engine__SyncKeys_commit_secret_key_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -1636,7 +1637,8 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
             let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>>::sse_decode(&mut deserializer);
-let api_candidate = <String>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+let api_candidate = <String>::sse_decode(&mut deserializer);
+let api_stage_id = <Option<String>>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, crate::api::sync_engine::SyncEngineError>((move || async move {
                         let mut api_that_guard = None;
 let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
@@ -1647,7 +1649,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             }
         }
         let api_that_guard = api_that_guard.unwrap();
- let output_ok = crate::api::sync_engine::SyncKeys::commit_secret_key(&*api_that_guard, api_candidate).await?;   std::result::Result::Ok(output_ok)
+ let output_ok = crate::api::sync_engine::SyncKeys::commit_secret_key(&*api_that_guard, api_candidate, api_stage_id).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__sync_engine__SyncKeys_forget_impl(port_: flutter_rust_bridge::for_generated::MessagePort,ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32)  {
@@ -4983,9 +4985,9 @@ crate::api::sync_engine::SyncEngineErrorKind::SignedOut => { 11 }
 
 // Section: imports
 
+use crate::api::lkc::*;
 use crate::api::sync_engine::*;
-use crate::api::team::*;
-use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};use super::*;
 
