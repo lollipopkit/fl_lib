@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dio/dio.dart' show RequestOptions, Response;
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/src/core/sync/log/host.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -272,17 +273,27 @@ void main() {
       );
     });
 
-    test('formatError returns concise text without HTML and null when empty', () {
-      expect(
-        Webdav.formatError(
-          WebdavException<String>(
-            message: 'WebDAV operation failed',
-            statusCode: 405,
-            statusMessage: 'Method Not Allowed',
-          ),
-        ),
-        '405 Method Not Allowed · WebDAV operation failed',
+    test('formatError and syncReply return concise text without HTML body and null when empty', () async {
+      final resp = Response<String>(
+        requestOptions: RequestOptions(path: '/lpkt-apps/'),
+        statusCode: 405,
+        statusMessage: 'Method Not Allowed',
+        data: '<html><body>405 Method Not Allowed</body></html>',
       );
+      final err = WebdavException<String>(
+        message: 'WebDAV operation failed',
+        statusCode: 405,
+        statusMessage: 'Method Not Allowed',
+        response: resp,
+      );
+      expect(Webdav.formatError(err), '405 Method Not Allowed · WebDAV operation failed');
+      expect(Webdav.formatError(err), isNot(contains('<html>')));
+
+      final reply = await syncReply<void>(() => Future<void>.error(err));
+      expect(reply.errorKind, 'remote');
+      expect(reply.error, '405 Method Not Allowed · WebDAV operation failed');
+      expect(reply.error, isNot(contains('<html>')));
+
       expect(Webdav.formatError(WebdavException<Object?>(message: '   ')), isNull);
     });
   });
