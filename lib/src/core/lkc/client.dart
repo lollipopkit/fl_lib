@@ -461,15 +461,15 @@ final class LkcClient {
       for (final entry in _pendingExternalCommits)
         if (entry.uid == uid && entry.candidate == canonical) entry.stageId,
       if (currentStageId != null &&
-          !_pendingExternalCommits.any((e) => e.candidate == canonical && e.stageId == currentStageId))
+          !_pendingExternalCommits.any((e) => e.uid == uid && e.candidate == canonical && e.stageId == currentStageId))
         currentStageId,
     ];
     for (final id in ids) {
-      await SyncKeyring.commitSecretKey(canonical, stageId: id);
-      _pendingExternalCommits.removeWhere((e) => e.candidate == canonical && e.stageId == id);
+      await SyncKeyring.commitSecretKey(canonical, stageId: id, account: uid);
+      _pendingExternalCommits.removeWhere((e) => e.uid == uid && e.candidate == canonical && e.stageId == id);
     }
-    if (!_pendingExternalCommits.any((e) => e.candidate == canonical)) {
-      await SyncKeyring.commitSecretKey(canonical);
+    if (!_pendingExternalCommits.any((e) => e.uid == uid && e.candidate == canonical)) {
+      await SyncKeyring.commitSecretKey(canonical, account: uid);
     }
   }
 
@@ -480,11 +480,11 @@ final class LkcClient {
         if (entry.uid == uid && entry.candidate == canonical) entry.stageId,
     ];
     for (final id in ids) {
-      await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: id);
+      await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: id, account: uid);
       _pendingExternalCommits.removeWhere((e) => e.uid == uid && e.candidate == canonical && e.stageId == id);
     }
-    if (!_pendingExternalCommits.any((e) => e.candidate == canonical)) {
-      await SyncKeyring.clearExternalSecretKeyCommit(canonical);
+    if (!_pendingExternalCommits.any((e) => e.uid == uid && e.candidate == canonical)) {
+      await SyncKeyring.clearExternalSecretKeyCommit(canonical, account: uid);
     }
   }
 
@@ -492,7 +492,7 @@ final class LkcClient {
   /// any earlier unresolved stages for [candidate] tracked for settlement.
   Future<void> _clearExternalStage(String uid, String candidate, String stageId) async {
     final canonical = SyncKeyring.normalizeSecretKey(candidate) ?? candidate;
-    await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: stageId);
+    await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: stageId, account: uid);
     _pendingExternalCommits.removeWhere((e) => e.uid == uid && e.candidate == canonical && e.stageId == stageId);
   }
 
@@ -501,13 +501,65 @@ final class LkcClient {
   Future<LkcAccountKey?> _accountKeyWith(String uid, String pwd, String secretKey, bool Function() stillValid) async {
     final upgraded = await isAccountKey2fa(uid);
     if (!stillValid()) return null;
-    final LkcOpenedAccountKey opened;
+    LkcOpenedAccountKey? opened;
     try {
       final t = await teams();
       if (!stillValid()) return null;
-      opened = await t.accountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: !upgraded);
-    } on LkcTeamError catch (e) {
-      throw _mapTeamError(e, uid);
+      try {
+        opened = await t.accountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: !upgraded);
+      } on LkcTeamError catch (e) {
+        if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
+        if (!stillValid()) return null;
+        final pendingPwd = await _readPendingPassphrase(_pendingAccountKeyPwdProp(uid));
+        if (!stillValid()) return null;
+        if (pendingPwd != null) {
+          final candidates = <String>[
+            ...pendingPwd.sources,
+            if (pendingPwd.target case final prevTarget? when prevTarget != pwd) prevTarget,
+          ];
+          var matchedPending = false;
+          for (final oldPwd in candidates) {
+            if (oldPwd == pwd || oldPwd.isEmpty) continue;
+            if (!stillValid()) return null;
+            try {
+              final candidateOpen = await t.fetchAccountKey(
+                passphrase: oldPwd,
+                secretKey: secretKey,
+                allowLegacy: !upgraded,
+              );
+              if (candidateOpen != null) {
+                matchedPending = true;
+                if (candidateOpen.twoFactor()) {
+                  await markAccountKey2fa(uid);
+                  if (SyncKeyring.ready) await _settleExternalCommit(uid, secretKey);
+                }
+                break;
+              }
+            } on LkcTeamError catch (oldErr) {
+              if (oldErr.kind != LkcTeamErrorKind.wrongPassphrase) {
+                throw _mapTeamError(oldErr, uid);
+              }
+            }
+          }
+          if (matchedPending) {
+            if (!stillValid()) return null;
+            await _flushPendingAccountKeyPassphrase(uid);
+            if (!stillValid()) return null;
+            final allowLegacyNow = !await isAccountKey2fa(uid);
+            if (!stillValid()) return null;
+            try {
+              opened = await t.accountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: allowLegacyNow);
+            } on LkcTeamError catch (reopenErr) {
+              throw _mapTeamError(reopenErr, uid);
+            }
+          }
+        }
+        if (opened == null) {
+          if (!stillValid()) return null;
+          if (SyncKeyring.ready) await _clearExternalCommit(uid, secretKey);
+          throw _mapTeamError(e, uid);
+        }
+      }
     } on StateError {
       if (!stillValid()) return null;
       rethrow;
@@ -632,7 +684,7 @@ final class LkcClient {
     if (candidate == null || !stillValid()) return null;
     final allowLegacy = !await isAccountKey2fa(uid);
     if (!stillValid()) return null;
-    final stageId = await SyncKeyring.stageExternalSecretKeyCommit(candidate);
+    final stageId = await SyncKeyring.stageExternalSecretKeyCommit(candidate, account: uid);
     _pendingExternalCommits.add((uid: uid, candidate: candidate, stageId: stageId));
     if (!stillValid()) {
       await _clearExternalStage(uid, candidate, stageId);

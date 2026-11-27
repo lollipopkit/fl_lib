@@ -638,4 +638,142 @@ void main() {
     await SyncKeyring.storeSecretKey(otherKey);
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), otherKey);
   });
+
+  test('recovered external intent after restart is bound to its creating account', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PrefStore.shared.init();
+    SecureProp.legacyApart = false;
+    addTearDown(() => SecureProp.legacyApart = null);
+
+    final files = <String, (String, List<int>)>{};
+    final userKeys = <String, Map<String, dynamic>>{};
+    var currentUid = 'u1';
+    var failPut = true;
+    var version = 0;
+
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((r) async {
+      final res = r.response;
+      final body = await r.fold<List<int>>([], (a, b) => a..addAll(b));
+      if (r.uri.path == '/v2/keys') {
+        if (r.method == 'GET') {
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode({'data': userKeys[currentUid] ?? {'next_seq': 1}}));
+        } else if (r.method == 'PUT') {
+          final parsed = jsonDecode(utf8.decode(body)) as Map<String, dynamic>;
+          userKeys[currentUid] = {
+            'recipient': parsed['recipient'],
+            'signing_key': parsed['signing_key'],
+            'prev_signing_key': parsed['signing_key'],
+            'next_seq': (parsed['seq'] as int) + 1,
+          };
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode({'data': null}));
+        }
+        await res.close();
+        return;
+      }
+      if (r.uri.pathSegments.length == 4 && r.uri.pathSegments[0] == 'v2' && r.uri.pathSegments[1] == 'sync') {
+        final key = '$currentUid:${r.uri.pathSegments[2]}/${r.uri.pathSegments[3]}';
+        final entry = files[key];
+        switch (r.method) {
+          case 'GET':
+            if (entry == null) {
+              res.statusCode = 404;
+            } else {
+              res.headers.set('ETag', '"${entry.$1}"');
+              res.add(entry.$2);
+            }
+          case 'PUT':
+            if (failPut) {
+              res.statusCode = 500;
+            } else {
+              final etag = 'e${++version}';
+              files[key] = (etag, body);
+              res
+                ..statusCode = 204
+                ..headers.set('ETag', '"$etag"');
+            }
+          default:
+            res.statusCode = 404;
+        }
+        await res.close();
+        return;
+      }
+      res.statusCode = 404;
+      await res.close();
+    });
+
+    final base = Uri.parse('http://127.0.0.1:${server.port}');
+    final tokenJson = jsonEncode({
+      'access': 'a1',
+      'refresh': 'r1',
+      'expires_at': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    });
+    final conflictingKey = SyncKeyring.generateSecretKey();
+    FlutterSecureStorage.setMockInitialValues({'lkcToken': tokenJson, 'bakPwd': 'pw'});
+    SecureProp.resetRateLimits();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    LkcClient clientFor(String uid) => LkcClient(
+      oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://auth/callback', issuer: base.resolve('/auth/v1/')),
+      baseUrl: base,
+      cache: LkcMemoryCache(),
+    )..user.value = LkcUser(id: uid, name: uid, group: 'user', createdAt: now, updatedAt: now);
+
+    // 1. Account u1 stages an external commit and fails with 500 before restart.
+    currentUid = 'u1';
+    failPut = true;
+    final c1 = clientFor('u1');
+    await expectLater(c1.ensurePersonalAuth('test'), throwsA(isA<LkcException>()));
+    final staged = await SyncKeyring.pendingSecretKey();
+    expect(staged, isNotNull);
+
+    // Promote `staged` to active `syncSecretKey` (simulating internal sync promotion before crash)
+    // and simulate process restart (`SyncKeyring.resetForTest` + fresh LkcClient with empty stage list).
+    await SecureStoreProps.syncSecretKey.write(staged, limited: false);
+    final persistedPending = await const SecureProp('syncKeyPending').storage.read(key: 'syncKeyPending');
+    expect(persistedPending, isNotNull);
+    final pendingMap = jsonDecode(persistedPending!) as Map<String, dynamic>;
+    final intent = jsonDecode(pendingMap['intent:lkc-account-key'] as String) as Map<String, dynamic>;
+    expect(intent['owners'], ['u1']);
+
+    FlutterSecureStorage.setMockInitialValues({
+      'lkcToken': tokenJson,
+      'bakPwd': 'pw',
+      'syncSecretKey': staged!,
+      'syncKeyPending': persistedPending,
+    });
+    SecureProp.resetRateLimits();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+
+    // 2. After restart, account u2 opens its 2FA account key with the same `staged` key
+    //    (stage-less `_settleExternalCommit` for u2): u1's unresolved intent MUST remain intact!
+    currentUid = 'u2';
+    failPut = false;
+    final c2AfterRestart = clientFor('u2');
+    expect(await c2AfterRestart.ensurePersonalAuth('test'), isTrue);
+    await expectLater(SyncKeyring.storeSecretKey(conflictingKey), throwsA(anything));
+
+    // 3. If u1's remote `lkc/identity.age` was meanwhile sealed by another device with
+    //    `conflictingKey`, u1 enters `_accountKeyWith` (since `staged` is already in `syncSecretKey`),
+    //    receives `wrongPassphrase`, clears u1's unresolved external intent, and unblocks importing
+    //    `conflictingKey`!
+    currentUid = 'u1';
+    final u1OtherDeviceClient = clientFor('u1');
+    await SecureStoreProps.syncSecretKey.write(conflictingKey, limited: false);
+    expect(await u1OtherDeviceClient.ensurePersonalAuth('test'), isTrue);
+    await SecureStoreProps.syncSecretKey.write(staged, limited: false);
+    await const SecureProp('lkcAccountKey.u1').write(null, limited: false);
+
+    final c1AfterRestart = clientFor('u1');
+    await expectLater(c1AfterRestart.ensurePersonalAuth('test'), throwsA(isA<SyncPasswordMismatch>()));
+    await SyncKeyring.storeSecretKey(conflictingKey);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), conflictingKey);
+    expect(await c1AfterRestart.ensurePersonalAuth('test'), isTrue);
+  });
 }

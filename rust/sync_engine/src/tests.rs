@@ -1664,7 +1664,7 @@ async fn snapshot_persist_failure_retries_without_resending_and_sweeps_blobs() {
     let key = d.key(&file).await.unwrap();
     d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
 
-    let transport = Arc::new(crate::lkc::LkcLog(sync_client));
+    let transport = Arc::new(crate::lkc::LkcLog { client: sync_client, account: "u1".into() });
     let log_sync = LogSync::new(d.host.clone(), transport, key);
 
     // 1. Append commits seq 1 (compact=true) -> snapshot PUT commits remotely,
@@ -2096,7 +2096,7 @@ async fn snapshot_recovery_defers_sweep_when_new_batches_follow_pending_seq() {
     sync_client.set_personal(Some(auth));
 
     d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
-    let transport = Arc::new(crate::lkc::LkcLog(sync_client));
+    let transport = Arc::new(crate::lkc::LkcLog { client: sync_client, account: "u1".into() });
     let log_sync = LogSync::new(d.host.clone(), transport, key);
 
     // 1. Snapshot at seq 1 commits remotely, local save fails -> deferred.
@@ -3372,4 +3372,256 @@ async fn cas_miss_during_default_flush_committed_write_retains_pending_write() {
     kf.mode.store(2, Ordering::SeqCst);
     d.ring.of(kf, true).await.unwrap();
     d.ring.store_secret_key(&other).await.unwrap();
+}
+
+#[tokio::test]
+async fn account_scoped_external_intents_isolate_accounts_and_treat_legacy_unowned_as_unmatched() {
+    let d1 = Device::new("pw");
+    let key_a = d1.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let key_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    // 1. Account "u1" stages an external commit before process restart.
+    let _s1 = d1.ring.stage_external_secret_key_commit_for(&key_a, Some("u1")).await.unwrap();
+    let restarted = KeyRing::new(d1.secrets.clone(), "test");
+
+    // Account "u2" attempting stage-less commit or clear with the same key MUST NOT clear "u1"'s intent!
+    restarted.commit_secret_key_for(&key_a, None, Some("u2")).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    restarted.clear_external_secret_key_commit_for(&key_a, None, Some("u2")).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(restarted.store_secret_key(&key_b).await.is_err());
+
+    // Account "u1" settling its own recovered intent clears it and unblocks replacement.
+    restarted.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
+    assert!(!d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+
+    // 2. Legacy pre-owner record (`{"epoch":0,"pwd":"..."}` with no `owners` field) MUST be
+    //    treated as unmatched by any named account's stage-less commit or clear.
+    d1.secrets.pending.lock().unwrap().insert(
+        "intent:lkc-account-key".into(),
+        serde_json::json!({ "epoch": 0, "pwd": key_a }).to_string(),
+    );
+    let legacy_ring = KeyRing::new(d1.secrets.clone(), "test");
+    legacy_ring.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    legacy_ring.clear_external_secret_key_commit_for(&key_a, None, Some("u1")).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(legacy_ring.store_secret_key(&key_b).await.is_err());
+}
+
+#[tokio::test]
+async fn released_handle_late_ok_preserves_replacement_pending_write_and_forget_blocks_reinsert() {
+    let d = Device::new("pw");
+    let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+    let other_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    let slow_started = Arc::new(tokio::sync::Notify::new());
+    let release_slow = Arc::new(tokio::sync::Notify::new());
+    struct SlowRotateKeyFile {
+        inner: Arc<MemKeyFile>,
+        block_write: AtomicBool,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+    impl KeyFile for SlowRotateKeyFile {
+        fn id(&self) -> String {
+            "remote-1".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                if self.block_write.load(Ordering::SeqCst) {
+                    self.started.notify_one();
+                    self.release.notified().await;
+                    return Ok(Some("v-old".into()));
+                }
+                *self.inner.file.lock().unwrap() = Some((body, "v0".into()));
+                Ok(Some("v0".into()))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    struct PersistFailThenOkKeyFile {
+        inner: Arc<MemKeyFile>,
+        fail: AtomicBool,
+    }
+    impl KeyFile for PersistFailThenOkKeyFile {
+        fn id(&self) -> String {
+            "remote-1".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                *self.inner.file.lock().unwrap() = Some((body, "v-new".into()));
+                if self.fail.load(Ordering::SeqCst) {
+                    return Err(Error::KeyFilePersistFailed {
+                        version: "v-new".into(),
+                        sync_version: Some(2),
+                        detail: "watermark save failed".into(),
+                    });
+                }
+                Ok(Some("v-new".into()))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    // Part A: Released handle H1 finishes `Ok(Some)` AFTER replacement handle H2 recorded a pending write.
+    let slow_kf = Arc::new(SlowRotateKeyFile {
+        inner: Arc::new(MemKeyFile::default()),
+        block_write: AtomicBool::new(false),
+        started: slow_started.clone(),
+        release: release_slow.clone(),
+    });
+    let h1 = d.ring.of(slow_kf.clone(), true).await.unwrap();
+    slow_kf.block_write.store(true, Ordering::SeqCst);
+    let h1_task = tokio::spawn(async move { h1.rotate().await });
+    slow_started.notified().await;
+
+    d.ring.release("remote-1");
+    let mem = Arc::new(MemKeyFile::default());
+    let replacement_kf = Arc::new(PersistFailThenOkKeyFile { inner: mem, fail: AtomicBool::new(true) });
+    assert!(matches!(d.ring.of(replacement_kf.clone(), true).await, Err(Error::Host(_))));
+    assert!(d.ring.store_secret_key(&other_b).await.is_err());
+
+    // Now let released H1 complete `Ok(Some("v-old"))`: H2's pending write MUST remain intact!
+    release_slow.notify_one();
+    h1_task.await.unwrap().unwrap();
+    assert!(d.ring.store_secret_key(&other_b).await.is_err(), "released handle's late Ok must not clear replacement pending_write");
+
+    replacement_kf.fail.store(false, Ordering::SeqCst);
+    d.ring.of(replacement_kf, true).await.unwrap();
+
+    // Part B: `forget(id)` during an in-flight write that later fails watermark persistence MUST NOT
+    // re-insert into `pending_writes` or block importing `other_b`.
+    let fail_started = Arc::new(tokio::sync::Notify::new());
+    let release_fail = Arc::new(tokio::sync::Notify::new());
+    struct SlowPersistFailKeyFile {
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+    impl KeyFile for SlowPersistFailKeyFile {
+        fn id(&self) -> String {
+            "remote-forgotten".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn write(&self, _body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                self.started.notify_one();
+                self.release.notified().await;
+                Err(Error::KeyFilePersistFailed {
+                    version: "v1".into(),
+                    sync_version: Some(1),
+                    detail: "late fail after forget".into(),
+                })
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    let ring2 = d.ring.clone();
+    let slow_fail_kf = Arc::new(SlowPersistFailKeyFile { started: fail_started.clone(), release: release_fail.clone() });
+    let forgotten_task = tokio::spawn(async move { ring2.of(slow_fail_kf, true).await });
+    fail_started.notified().await;
+
+    d.ring.forget("remote-forgotten").await.unwrap();
+    release_fail.notify_one();
+    assert!(matches!(forgotten_task.await.unwrap(), Err(Error::SignedOut)));
+
+    // Forgotten handle MUST NOT resurrect `epochs` (`2fa:`), `pending` (`intent:`), or `pending_writes`.
+    assert!(!d.secrets.epochs.lock().unwrap().contains_key("remote-forgotten"));
+    assert!(!d.secrets.epochs.lock().unwrap().contains_key("2fa:remote-forgotten"));
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:remote-forgotten"));
+    let _ = sk;
+    d.ring.store_secret_key(&other_b).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(other_b.as_str()));
+
+    // Part C: Released handle H_old finishing `Err(KeyFilePersistFailed)` late AFTER replacement
+    // handle H_new already succeeded (`Ok(Some)`) MUST NOT re-insert a stale `pending_writes` entry.
+    let late_fail_started = Arc::new(tokio::sync::Notify::new());
+    let release_late_fail = Arc::new(tokio::sync::Notify::new());
+    struct SlowRotatePersistFailKeyFile {
+        inner: Arc<MemKeyFile>,
+        block_write: AtomicBool,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+    impl KeyFile for SlowRotatePersistFailKeyFile {
+        fn id(&self) -> String {
+            "remote-2".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                if self.block_write.load(Ordering::SeqCst) {
+                    self.started.notify_one();
+                    self.release.notified().await;
+                    return Err(Error::KeyFilePersistFailed {
+                        version: "v-stale".into(),
+                        sync_version: Some(1),
+                        detail: "late stale persist failure".into(),
+                    });
+                }
+                *self.inner.file.lock().unwrap() = Some((body, "v0".into()));
+                Ok(Some("v0".into()))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    let h_old_kf = Arc::new(SlowRotatePersistFailKeyFile {
+        inner: Arc::new(MemKeyFile::default()),
+        block_write: AtomicBool::new(false),
+        started: late_fail_started.clone(),
+        release: release_late_fail.clone(),
+    });
+    let h_old = d.ring.of(h_old_kf.clone(), true).await.unwrap();
+    h_old_kf.block_write.store(true, Ordering::SeqCst);
+    let h_old_task = tokio::spawn(async move { h_old.rotate().await });
+    late_fail_started.notified().await;
+
+    d.ring.release("remote-2");
+    let h_new_kf = Arc::new(PersistFailThenOkKeyFile {
+        inner: Arc::new(MemKeyFile::default()),
+        fail: AtomicBool::new(false),
+    });
+    struct RenamedKeyFile(Arc<PersistFailThenOkKeyFile>);
+    impl KeyFile for RenamedKeyFile {
+        fn id(&self) -> String {
+            "remote-2".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            self.0.read()
+        }
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            self.0.write(body, if_version)
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            self.0.can_create()
+        }
+    }
+    d.ring.of(Arc::new(RenamedKeyFile(h_new_kf)), true).await.unwrap();
+
+    // Let H_old fail watermark persistence late: MUST NOT insert stale `PendingKeyWrite` over H_new!
+    release_late_fail.notify_one();
+    assert!(h_old_task.await.unwrap().is_err());
+    let other_c = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    d.ring.store_secret_key(&other_c).await.unwrap();
 }

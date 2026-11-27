@@ -502,12 +502,14 @@ abstract class RustLibApi extends BaseApi {
     required SyncKeys that,
     required String candidate,
     String? stageId,
+    String? account,
   });
 
   Future<void> crateApiSyncEngineSyncKeysCommitSecretKey({
     required SyncKeys that,
     required String candidate,
     String? stageId,
+    String? account,
   });
 
   Future<void> crateApiSyncEngineSyncKeysForget({
@@ -579,6 +581,7 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit({
     required SyncKeys that,
     required String candidate,
+    String? account,
   });
 
   Future<void> crateApiSyncEngineSyncKeysStoreSecretKey({
@@ -3900,6 +3903,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required SyncKeys that,
     required String candidate,
     String? stageId,
+    String? account,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -3911,6 +3915,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(candidate, serializer);
           sse_encode_opt_String(stageId, serializer);
+          sse_encode_opt_String(account, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -3924,7 +3929,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         ),
         constMeta:
             kCrateApiSyncEngineSyncKeysClearExternalSecretKeyCommitConstMeta,
-        argValues: [that, candidate, stageId],
+        argValues: [that, candidate, stageId, account],
         apiImpl: this,
       ),
     );
@@ -3934,7 +3939,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   get kCrateApiSyncEngineSyncKeysClearExternalSecretKeyCommitConstMeta =>
       const TaskConstMeta(
         debugName: "SyncKeys_clear_external_secret_key_commit",
-        argNames: ["that", "candidate", "stageId"],
+        argNames: ["that", "candidate", "stageId", "account"],
       );
 
   @override
@@ -3942,6 +3947,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required SyncKeys that,
     required String candidate,
     String? stageId,
+    String? account,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -3953,6 +3959,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(candidate, serializer);
           sse_encode_opt_String(stageId, serializer);
+          sse_encode_opt_String(account, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -3965,7 +3972,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_sync_engine_error,
         ),
         constMeta: kCrateApiSyncEngineSyncKeysCommitSecretKeyConstMeta,
-        argValues: [that, candidate, stageId],
+        argValues: [that, candidate, stageId, account],
         apiImpl: this,
       ),
     );
@@ -3974,7 +3981,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSyncEngineSyncKeysCommitSecretKeyConstMeta =>
       const TaskConstMeta(
         debugName: "SyncKeys_commit_secret_key",
-        argNames: ["that", "candidate", "stageId"],
+        argNames: ["that", "candidate", "stageId", "account"],
       );
 
   @override
@@ -4496,6 +4503,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<String> crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit({
     required SyncKeys that,
     required String candidate,
+    String? account,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -4506,6 +4514,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(candidate, serializer);
+          sse_encode_opt_String(account, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -4519,7 +4528,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         ),
         constMeta:
             kCrateApiSyncEngineSyncKeysStageExternalSecretKeyCommitConstMeta,
-        argValues: [that, candidate],
+        argValues: [that, candidate, account],
         apiImpl: this,
       ),
     );
@@ -4529,7 +4538,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   get kCrateApiSyncEngineSyncKeysStageExternalSecretKeyCommitConstMeta =>
       const TaskConstMeta(
         debugName: "SyncKeys_stage_external_secret_key_commit",
-        argNames: ["that", "candidate"],
+        argNames: ["that", "candidate", "account"],
       );
 
   @override
@@ -10495,25 +10504,32 @@ class SyncKeysImpl extends RustOpaque implements SyncKeys {
   );
 
   /// Clears the staged external commit identified by [stage_id] (or a
-  /// crash-recovered intent when omitted) when the remote write is known not
-  /// to have committed.
+  /// crash-recovered intent for [account] when omitted) when the remote write
+  /// is known not to have committed.
   Future<void> clearExternalSecretKeyCommit({
     required String candidate,
     String? stageId,
+    String? account,
   }) => RustLib.instance.api
       .crateApiSyncEngineSyncKeysClearExternalSecretKeyCommit(
         that: this,
         candidate: candidate,
         stageId: stageId,
+        account: account,
       );
 
-  /// [candidate] as this device's secret key, settling [stage_id] when given.
-  Future<void> commitSecretKey({required String candidate, String? stageId}) =>
-      RustLib.instance.api.crateApiSyncEngineSyncKeysCommitSecretKey(
-        that: this,
-        candidate: candidate,
-        stageId: stageId,
-      );
+  /// [candidate] as this device's secret key, settling [stage_id] when given
+  /// (or a crash-recovered external intent for [account] when [stage_id] is `None`).
+  Future<void> commitSecretKey({
+    required String candidate,
+    String? stageId,
+    String? account,
+  }) => RustLib.instance.api.crateApiSyncEngineSyncKeysCommitSecretKey(
+    that: this,
+    candidate: candidate,
+    stageId: stageId,
+    account: account,
+  );
 
   Future<void> forget({required String id}) =>
       RustLib.instance.api.crateApiSyncEngineSyncKeysForget(that: this, id: id);
@@ -10598,13 +10614,17 @@ class SyncKeysImpl extends RustOpaque implements SyncKeys {
       .crateApiSyncEngineSyncKeysSecretKeyMissing(that: this);
 
   /// Marks [candidate] as having an in-flight/unconfirmed external remote
-  /// commit (such as LK Cloud's account key), returning its stage identity.
-  Future<String> stageExternalSecretKeyCommit({required String candidate}) =>
-      RustLib.instance.api
-          .crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit(
-            that: this,
-            candidate: candidate,
-          );
+  /// commit (such as LK Cloud's account key for [account]), returning its
+  /// stage identity.
+  Future<String> stageExternalSecretKeyCommit({
+    required String candidate,
+    String? account,
+  }) => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit(
+        that: this,
+        candidate: candidate,
+        account: account,
+      );
 
   /// Imports [key] as this device's secret key, coordinated with all remote
   /// key-file staging/write/promotion operations on this ring.

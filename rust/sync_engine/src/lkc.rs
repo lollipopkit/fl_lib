@@ -27,11 +27,15 @@ fn remote(e: LkcError) -> Error {
 }
 
 /// [LogTransport] on an app's LK Cloud sync.
-pub struct LkcLog<S: Store>(pub Arc<SyncClient<S>>);
+pub struct LkcLog<S: Store> {
+    pub client: Arc<SyncClient<S>>,
+    /// The account's id.
+    pub account: String,
+}
 
 impl<S: Store> BlobStore for LkcLog<S> {
     async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
-        match self.0.upload_blob_bytes(&name, body).await {
+        match self.client.upload_blob_bytes(&name, body).await {
             Ok(_) => Ok(()),
             // Named by its content: the one there is this one.
             Err(e) if e.kind == Kind::Changed => Ok(()),
@@ -40,21 +44,21 @@ impl<S: Store> BlobStore for LkcLog<S> {
     }
 
     async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
-        Ok(self.0.download_blob_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
+        Ok(self.client.download_blob_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
     }
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
-        Ok(self.0.list().await.map_err(remote)?.into_iter().filter(|f| f.name.starts_with(&prefix)).map(|f| Listed { at: rfc3339_ms(&f.updated_at), name: f.name }).collect())
+        Ok(self.client.list().await.map_err(remote)?.into_iter().filter(|f| f.name.starts_with(&prefix)).map(|f| Listed { at: rfc3339_ms(&f.updated_at), name: f.name }).collect())
     }
 
     async fn delete_blob(&self, name: String) -> Result<()> {
-        self.0.delete(&name, None).await.map(|_| ()).map_err(remote)
+        self.client.delete(&name, None).await.map(|_| ()).map_err(remote)
     }
 }
 
 impl<S: Store> LogTransport for LkcLog<S> {
     async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
-        match self.0.append(&key, body).await {
+        match self.client.append(&key, body).await {
             Ok(a) => Ok(Appended { log: a.log, seq: a.seq, compact: a.compact }),
             Err(e) => {
                 if let Some(Committed::Batch(a)) = e.committed {
@@ -69,14 +73,14 @@ impl<S: Store> LogTransport for LkcLog<S> {
     }
 
     async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
-        Ok(match self.0.read_log(after, log.as_deref(), None).await.map_err(remote)? {
+        Ok(match self.client.read_log(after, log.as_deref(), None).await.map_err(remote)? {
             LogRead::Compacted { log, .. } => Page::Compacted { log },
             LogRead::Page { log, batches, more, .. } => Page::Batches { log, batches: batches.into_iter().map(|b| (b.seq, b.body)).collect(), more },
         })
     }
 
     async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
-        match self.0.put_snapshot_bytes(seq, body).await {
+        match self.client.put_snapshot_bytes(seq, body).await {
             Ok(_) => Ok(true),
             Err(LkcError { kind: Kind::Refused(reason), .. }) if reason == "sync_snapshot_stale" => Ok(false),
             Err(e) => {
@@ -89,14 +93,14 @@ impl<S: Store> LogTransport for LkcLog<S> {
     }
 
     async fn flush_committed_snapshot(&self, log: Option<String>, seq: i64, _body: Vec<u8>) -> Result<bool> {
-        self.0.flush_committed_snapshot(log.as_deref(), seq).await.map_err(|e| match e.kind {
+        self.client.flush_committed_snapshot(&self.account, log.as_deref(), seq).await.map_err(|e| match e.kind {
             Kind::Invalid => Error::Host(e.detail),
             _ => remote(e),
         })
     }
 
     async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
-        Ok(self.0.download_snapshot_bytes().await.map_err(remote)?.map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body }))
+        Ok(self.client.download_snapshot_bytes().await.map_err(remote)?.map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body }))
     }
 }
 

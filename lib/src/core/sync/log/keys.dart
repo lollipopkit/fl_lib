@@ -237,29 +237,30 @@ abstract final class SyncKeyring {
   static bool get ready => _keys != null || _label != null;
 
   /// [candidate] ([secretKeyCandidate]) as this device's secret key, settling
-  /// [stageId] when given.
-  static Future<void> commitSecretKey(String candidate, {String? stageId}) =>
-      _said(() => _ring.commitSecretKey(candidate: candidate, stageId: stageId));
+  /// [stageId] when given (or a crash-recovered intent for [account] when
+  /// [stageId] is omitted).
+  static Future<void> commitSecretKey(String candidate, {String? stageId, String? account}) =>
+      _said(() => _ring.commitSecretKey(candidate: candidate, stageId: stageId, account: account));
 
   /// Optional test hook invoked right after [stageExternalSecretKeyCommit]
   /// records a new external stage.
   @visibleForTesting
   static void Function(String stageId)? debugOnExternalStage;
 
-  /// Marks [candidate] as having an in-flight external remote commit so a
-  /// conflicting import cannot erase it if a post-write step fails, returning
-  /// its unique stage identity.
-  static Future<String> stageExternalSecretKeyCommit(String candidate) async {
-    final stageId = await _said(() => _ring.stageExternalSecretKeyCommit(candidate: candidate));
+  /// Marks [candidate] as having an in-flight external remote commit for
+  /// [account] so a conflicting import cannot erase it if a post-write step
+  /// fails, returning its unique stage identity.
+  static Future<String> stageExternalSecretKeyCommit(String candidate, {String? account}) async {
+    final stageId = await _said(() => _ring.stageExternalSecretKeyCommit(candidate: candidate, account: account));
     debugOnExternalStage?.call(stageId);
     return stageId;
   }
 
   /// Clears the external commit marker for [candidate] identified by [stageId]
-  /// (or a crash-recovered intent when omitted) when the remote write is
-  /// confirmed not to have committed.
-  static Future<void> clearExternalSecretKeyCommit(String candidate, {String? stageId}) =>
-      _said(() => _ring.clearExternalSecretKeyCommit(candidate: candidate, stageId: stageId));
+  /// (or a crash-recovered intent for [account] when omitted) when the remote
+  /// write is confirmed not to have committed.
+  static Future<void> clearExternalSecretKeyCommit(String candidate, {String? stageId, String? account}) =>
+      _said(() => _ring.clearExternalSecretKeyCommit(candidate: candidate, stageId: stageId, account: account));
 
   /// [id]'s remote is not synced here any more: read again next time.
   static void release(String id) {

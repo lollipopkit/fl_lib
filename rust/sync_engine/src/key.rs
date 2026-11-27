@@ -196,6 +196,29 @@ impl WriteIntent {
     }
 }
 
+fn decode_external_intent(raw: &str) -> Option<RecoveredExternal> {
+    let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let _epoch = v["epoch"].as_i64()?;
+    let pwd = v["pwd"].as_str()?;
+    let key = SecretKey::parse(pwd).ok()?.format().to_string();
+    match v.get("owners").and_then(serde_json::Value::as_array) {
+        Some(arr) => {
+            let owners: BTreeSet<String> = arr
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+            let unowned = v.get("unowned").and_then(serde_json::Value::as_bool).unwrap_or(false);
+            let rec = RecoveredExternal { key, owners, unowned };
+            (!rec.is_empty()).then_some(rec)
+        }
+        // Legacy pre-owner record (`{"epoch": 0, "pwd": "..."}`): treated as
+        // unowned so no named account may claim or clear it via stage-less calls.
+        None => Some(RecoveredExternal { key, owners: BTreeSet::new(), unowned: true }),
+    }
+}
+
 /// Process-salted BLAKE3 digest of `(pwd, sk)` so plaintext credentials are
 /// never retained in memory across checks.
 fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
@@ -224,6 +247,7 @@ fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
 #[derive(Clone)]
 struct PendingKeyWrite {
     seq: u64,
+    handle_id: u64,
     body: Vec<u8>,
     if_version: Option<String>,
     version: String,
@@ -260,11 +284,29 @@ struct PendingState {
 }
 
 pub struct SyncKey {
+    handle_id: u64,
+    forget_gen: u64,
     /// The file's store as last given: another object once signed in again.
     file: StdMutex<Arc<dyn KeyFile>>,
     ring: Arc<RingInner>,
     state: StdMutex<State>,
     checking: Mutex<()>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct RecoveredExternal {
+    key: String,
+    owners: BTreeSet<String>,
+    /// True when a pre-restart record carried no owner (legacy record or
+    /// ownerless stage): treated as unmatched by account-scoped stage-less
+    /// settlement/clear so another account cannot clear an unattributed intent.
+    unowned: bool,
+}
+
+impl RecoveredExternal {
+    fn is_empty(&self) -> bool {
+        self.owners.is_empty() && !self.unowned
+    }
 }
 
 #[derive(Default)]
@@ -278,26 +320,36 @@ struct SecretKeyInitState {
     /// external remote writes (such as LK Cloud's account key).
     next_external_commit_id: u64,
     /// Unresolved external remote writes keyed by stage identity
-    /// (`stage_id -> canonical secret key`). Each settlement consumes only its
-    /// matching stage so repeated clears or unrelated commits never drop
-    /// another write's protection.
-    external_commits: HashMap<String, String>,
+    /// (`stage_id -> (creating_account, canonical_secret_key)`). Each settlement
+    /// consumes only its matching stage so repeated clears or unrelated commits
+    /// never drop another write's protection.
+    external_commits: HashMap<String, (Option<String>, String)>,
     /// Lazy-hydrated pre-restart external write intent from durable
     /// `pending["intent:lkc-account-key"]`:
     /// - `None`: durable map not yet inspected on this `KeyRing` instance.
     /// - `Some(None)`: no unresolved pre-restart external write remains.
-    /// - `Some(Some(key))`: a pre-restart external write for `key` is still
-    ///   unresolved and remains protected until settled via `stage_id == None`.
-    recovered_external_commit: Option<Option<String>>,
+    /// - `Some(Some(rec))`: pre-restart external write(s) for `rec.key` remain
+    ///   unresolved and stay protected per owner until settled via `stage_id == None`.
+    recovered_external_commit: Option<Option<RecoveredExternal>>,
 }
 
 #[derive(Default)]
 struct KeyTable {
+    next_handle_id: u64,
     keys: HashMap<String, Arc<SyncKey>>,
     /// Per-remote generation bumped whenever that remote's registered handle
     /// opens or is released, so a stale probe for one remote cannot be
     /// invalidated by unrelated activity on another remote.
     gens: HashMap<String, u64>,
+    /// Per-remote forget generation bumped ONLY by [`KeyRing::forget`], so an
+    /// in-flight write whose handle was forgotten never re-inserts a stale
+    /// recovery entry into [`Self::pending_writes`], while ordinary
+    /// [`KeyRing::release`] preserves recovery.
+    forget_gens: HashMap<String, u64>,
+    /// Highest `handle_id` that has already committed a remote key-file write
+    /// per remote, preventing an earlier released handle's late completion from
+    /// overwriting or re-inserting stale [`Self::pending_writes`].
+    committed_handle_ids: HashMap<String, u64>,
     next_pending_write_seq: u64,
     /// Committed remote key-file writes whose local signing watermark save has
     /// not yet completed, retained across [`KeyRing::release`] until flushed or
@@ -313,6 +365,24 @@ impl KeyTable {
     fn bump_id(&mut self, id: &str) {
         let entry = self.gens.entry(id.to_string()).or_insert(0);
         *entry = entry.wrapping_add(1);
+    }
+
+    fn forget_gen_of(&self, id: &str) -> u64 {
+        self.forget_gens.get(id).copied().unwrap_or(0)
+    }
+
+    fn bump_forget_gen(&mut self, id: &str) {
+        let entry = self.forget_gens.entry(id.to_string()).or_insert(0);
+        *entry = entry.wrapping_add(1);
+    }
+
+    fn committed_handle_id(&self, id: &str) -> u64 {
+        self.committed_handle_ids.get(id).copied().unwrap_or(0)
+    }
+
+    fn record_committed_handle(&mut self, id: &str, handle_id: u64) {
+        let entry = self.committed_handle_ids.entry(id.to_string()).or_insert(0);
+        *entry = (*entry).max(handle_id);
     }
 
     fn is_current(&self, id: &str, handle: &SyncKey) -> bool {
@@ -350,11 +420,57 @@ impl RingInner {
         let pending = self.secrets.pending().await?;
         let recovered = pending
             .get(&write_intent_key(EXTERNAL_COMMIT_ID))
-            .and_then(|raw| WriteIntent::decode(raw))
-            .and_then(|w| SecretKey::parse(&w.pwd).ok())
-            .map(|k| k.format().to_string());
+            .and_then(|raw| decode_external_intent(raw));
         init.recovered_external_commit = Some(recovered);
         Ok(())
+    }
+
+    async fn persist_external_intent_locked(
+        &self,
+        recovered: Option<&RecoveredExternal>,
+        in_process: impl Iterator<Item = (Option<&str>, &str)>,
+    ) -> Result<()> {
+        let mut key: Option<String> = None;
+        let mut owners = BTreeSet::new();
+        let mut unowned = false;
+        if let Some(rec) = recovered
+            && !rec.is_empty()
+        {
+            key = Some(rec.key.clone());
+            owners.extend(rec.owners.iter().cloned());
+            unowned |= rec.unowned;
+        }
+        for (owner, cand) in in_process {
+            if key.is_none() {
+                key = Some(cand.to_string());
+            }
+            match owner {
+                Some(uid) if !uid.is_empty() => {
+                    owners.insert(uid.to_string());
+                }
+                _ => {
+                    unowned = true;
+                }
+            }
+        }
+        let Some(key) = key else {
+            return self.clear_external_commit_intent_for(None).await;
+        };
+        let encoded = serde_json::json!({
+            "epoch": 0,
+            "pwd": key,
+            "owners": owners,
+            "unowned": unowned,
+        })
+        .to_string();
+        let _st = self.pending_lock.lock().await;
+        let mut all = self.secrets.pending().await?;
+        let map_key = write_intent_key(EXTERNAL_COMMIT_ID);
+        if all.get(&map_key) == Some(&encoded) {
+            return Ok(());
+        }
+        all.insert(map_key, encoded);
+        self.secrets.set_pending(all).await
     }
 
     async fn clear_external_commit_intent_for(&self, expected: Option<&str>) -> Result<()> {
@@ -445,52 +561,73 @@ impl RingInner {
     /// Settles one staged external write for [formatted]. When [stage_id] is
     /// `Some`, removes only that exact stage (ignoring missing or mismatched
     /// stages) while preserving any recovered pre-restart write intent until
-    /// that recovered write settles via `None`; when `None`, settles the
-    /// recovered pre-restart intent while preserving any active in-process stages.
+    /// that recovered write settles via `None`; when `None`, settles only the
+    /// recovered pre-restart intent whose persisted owner matches [account]
+    /// (records without an owner are never attributed to a named account).
     async fn settle_external_commit_locked(
         &self,
         init: &mut SecretKeyInitState,
         formatted: &str,
         stage_id: Option<&str>,
+        account: Option<&str>,
     ) -> Result<()> {
         self.hydrate_recovered_external_locked(init).await?;
         match stage_id {
             Some(id) => {
-                if init.external_commits.get(id).map(String::as_str) != Some(formatted) {
+                let Some((entry_owner, entry_key)) = init.external_commits.get(id) else {
+                    return Ok(());
+                };
+                if entry_key != formatted || entry_owner.as_deref() != account {
                     return Ok(());
                 }
-                let remaining = init
-                    .recovered_external_commit
-                    .as_ref()
-                    .and_then(Option::as_ref)
-                    .cloned()
-                    .or_else(|| {
-                        init.external_commits
-                            .iter()
-                            .find(|(k, _)| k.as_str() != id)
-                            .map(|(_, v)| v.clone())
-                    });
+                let recovered = init.recovered_external_commit.as_ref().and_then(Option::as_ref);
                 // Persist intent update BEFORE removing `id` from `external_commits`
                 // so a transient persistence failure remains retryable with the same `stage_id`.
-                if let Some(rem) = remaining {
-                    self.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &rem).await?;
-                } else {
-                    self.clear_external_commit_intent_for(Some(formatted)).await?;
-                }
+                self.persist_external_intent_locked(
+                    recovered,
+                    init.external_commits
+                        .iter()
+                        .filter(|(k, _)| k.as_str() != id)
+                        .map(|(_, (o, c))| (o.as_deref(), c.as_str())),
+                )
+                .await?;
                 init.external_commits.remove(id);
                 Ok(())
             }
             None => {
-                if matches!(&init.recovered_external_commit, Some(Some(rec)) if rec.as_str() != formatted) {
+                let Some(Some(cur)) = init.recovered_external_commit.as_ref() else {
+                    if init.external_commits.is_empty() {
+                        // Clean up any corrupt/unreadable legacy entry when idle.
+                        self.clear_external_commit_intent_for(Some(formatted)).await?;
+                    }
+                    return Ok(());
+                };
+                if cur.key != formatted {
                     return Ok(());
                 }
-                let remaining = init.external_commits.values().next().cloned();
-                if let Some(rem) = remaining {
-                    self.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &rem).await?;
-                } else {
-                    self.clear_external_commit_intent_for(Some(formatted)).await?;
+                let mut next = cur.clone();
+                match account {
+                    Some(uid) => {
+                        if uid.is_empty() || !next.owners.remove(uid) {
+                            return Ok(());
+                        }
+                    }
+                    None => {
+                        if !next.unowned {
+                            return Ok(());
+                        }
+                        next.unowned = false;
+                    }
                 }
-                init.recovered_external_commit = Some(None);
+                let next_opt = (!next.is_empty()).then_some(next);
+                self.persist_external_intent_locked(
+                    next_opt.as_ref(),
+                    init.external_commits
+                        .values()
+                        .map(|(o, c)| (o.as_deref(), c.as_str())),
+                )
+                .await?;
+                init.recovered_external_commit = Some(next_opt);
                 Ok(())
             }
         }
@@ -499,12 +636,13 @@ impl RingInner {
     /// [candidate] as this device's secret key, `secret_key_init` held, now
     /// that a remote holds what it sealed. When [settle_external] is `Some`,
     /// settles the matching external write stage (or crash-recovery durable
-    /// intent when `Some(None)`), leaving any other unresolved stages intact.
+    /// intent when `Some((None, account))`), leaving any other unresolved
+    /// stages or other accounts' intents intact.
     async fn commit_locked(
         &self,
         init: &mut SecretKeyInitState,
         candidate: &SecretKey,
-        settle_external: Option<Option<&str>>,
+        settle_external: Option<(Option<&str>, Option<&str>)>,
     ) -> Result<()> {
         let formatted = candidate.format().to_string();
         match self.secret_key().await? {
@@ -516,16 +654,25 @@ impl RingInner {
             }
         }
         init.committed_staged = None;
-        if let Some(stage_id) = settle_external {
-            self.settle_external_commit_locked(init, &formatted, stage_id).await?;
+        if let Some((stage_id, account)) = settle_external {
+            self.settle_external_commit_locked(init, &formatted, stage_id, account).await?;
         }
         let _ = self.secrets.set_pending_secret_key(None).await;
         self.bump_recheck_gen();
         Ok(())
     }
 
-    async fn set_epoch_2fa(&self, id: &str, epoch: i64) -> Result<()> {
+    fn ensure_not_forgotten(&self, id: &str, expected_forget_gen: u64) -> Result<()> {
+        let table = self.keys.lock().unwrap_or_else(|e| e.into_inner());
+        if table.forget_gen_of(id) != expected_forget_gen {
+            return Err(Error::SignedOut);
+        }
+        Ok(())
+    }
+
+    async fn set_epoch_2fa(&self, id: &str, expected_forget_gen: u64, epoch: i64) -> Result<()> {
         let _guard = self.epochs_lock.lock().await;
+        self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.epochs().await?;
         if let Some(floor) = all.get(id).copied()
             && epoch < floor
@@ -564,8 +711,22 @@ impl RingInner {
         Ok(())
     }
 
-    async fn stage_write_intent(&self, id: &str, epoch: i64, pwd: &str) -> Result<()> {
+    async fn clear_all_pending_for(&self, id: &str, expected_forget_gen: u64) -> Result<()> {
+        let mut st = self.pending_lock.lock().await;
+        self.ensure_not_forgotten(id, expected_forget_gen)?;
+        let mut all = self.secrets.pending().await?;
+        let removed_pwd = all.remove(id).is_some();
+        let removed_intent = all.remove(&write_intent_key(id)).is_some();
+        if removed_pwd || removed_intent {
+            self.secrets.set_pending(all).await?;
+        }
+        st.notified.remove(id);
+        Ok(())
+    }
+
+    async fn stage_write_intent(&self, id: &str, expected_forget_gen: u64, epoch: i64, pwd: &str) -> Result<()> {
         let _st = self.pending_lock.lock().await;
+        self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.pending().await?;
         let key = write_intent_key(id);
         let encoded = WriteIntent { epoch, pwd: pwd.to_string() }.encode();
@@ -576,8 +737,9 @@ impl RingInner {
         self.secrets.set_pending(all).await
     }
 
-    async fn clear_write_intent(&self, id: &str) -> Result<()> {
+    async fn clear_write_intent(&self, id: &str, expected_forget_gen: u64) -> Result<()> {
         let _st = self.pending_lock.lock().await;
+        self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.pending().await?;
         if all.remove(&write_intent_key(id)).is_some() {
             self.secrets.set_pending(all).await?;
@@ -625,17 +787,19 @@ impl RingInner {
     /// `(committed_pwd, sk)`, persisting the 2FA epoch and reconciling
     /// `pending[id]` + clearing the pre-CAS write intent only once both are
     /// durable, without losing a concurrent `password_changed`.
-    async fn record_committed_write(&self, id: &str, epoch: i64, committed_pwd: &str) -> Result<()> {
-        self.set_epoch_2fa(id, epoch).await?;
+    async fn record_committed_write(&self, id: &str, expected_forget_gen: u64, epoch: i64, committed_pwd: &str) -> Result<()> {
+        self.set_epoch_2fa(id, expected_forget_gen, epoch).await?;
         let mut st = self.pending_lock.lock().await;
+        self.ensure_not_forgotten(id, expected_forget_gen)?;
         self.reconcile_pending_locked(&mut st, id, committed_pwd, true).await
     }
 
     /// Clears the pre-CAS write intent and `pending[id]` after [id] opened
     /// cleanly under [opened_pwd], unless a `password_changed` notification for
     /// [opened_pwd] or a newer stored password is already outstanding.
-    async fn clear_pending_if_settled(&self, id: &str, opened_pwd: &str) -> Result<()> {
+    async fn clear_pending_if_settled(&self, id: &str, expected_forget_gen: u64, opened_pwd: &str) -> Result<()> {
         let mut st = self.pending_lock.lock().await;
+        self.ensure_not_forgotten(id, expected_forget_gen)?;
         self.reconcile_pending_locked(&mut st, id, opened_pwd, false).await
     }
 }
@@ -689,29 +853,40 @@ impl KeyRing {
     }
 
     /// [candidate] ([Self::secret_key_candidate]) as this device's secret
-    /// key: a remote holds what it sealed. When [stage_id] is provided, settles
-    /// only that staged external write; `None` settles a crash-recovered
-    /// durable external intent only when no in-process stages remain.
+    /// key: a remote holds what it sealed.
     pub async fn commit_secret_key(&self, candidate: &str, stage_id: Option<&str>) -> Result<()> {
+        self.commit_secret_key_for(candidate, stage_id, None).await
+    }
+
+    /// Account-scoped variant of [`Self::commit_secret_key`]: when `stage_id`
+    /// is `None`, settles only a crash-recovered intent recorded for [account]
+    /// (treating legacy ownerless records as unmatched when [account] is `Some`).
+    pub async fn commit_secret_key_for(&self, candidate: &str, stage_id: Option<&str>, account: Option<&str>) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let mut init = self.0.secret_key_init.lock().await;
-        self.0.commit_locked(&mut init, &candidate, Some(stage_id)).await
+        self.0.commit_locked(&mut init, &candidate, Some((stage_id, account))).await
     }
 
     /// Records that an external remote write (such as LK Cloud's account key)
     /// is about to commit using [candidate], returning a unique stage identity
     /// that settles only this write.
-    ///
-    /// Validates under `secret_key_init` that [candidate] matches the active
-    /// secret key (when one exists) or else the current staged key, rejecting
-    /// stale candidates before the caller performs the remote write.
     pub async fn stage_external_secret_key_commit(&self, candidate: &str) -> Result<String> {
+        self.stage_external_secret_key_commit_for(candidate, None).await
+    }
+
+    /// Account-scoped variant of [`Self::stage_external_secret_key_commit`],
+    /// persisting [account] alongside the external write intent so crash
+    /// recovery never attributes one account's unresolved write to another.
+    pub async fn stage_external_secret_key_commit_for(&self, candidate: &str, account: Option<&str>) -> Result<String> {
+        if matches!(account, Some(uid) if uid.is_empty()) {
+            return Err(Error::Host("external secret key commit account cannot be empty".into()));
+        }
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
         self.0.hydrate_recovered_external_locked(&mut init).await?;
-        if matches!(&init.recovered_external_commit, Some(Some(rec)) if rec != &formatted)
-            || init.external_commits.values().any(|c| c != &formatted)
+        if matches!(&init.recovered_external_commit, Some(Some(rec)) if !rec.is_empty() && rec.key != formatted)
+            || init.external_commits.values().any(|(_, c)| c != &formatted)
         {
             return Err(Error::Host("another secret key has an unresolved external write intent".into()));
         }
@@ -725,22 +900,32 @@ impl KeyRing {
                 return Err(Error::Host("stale secret key candidate does not match staged secret key".into()));
             }
         }
-        self.0.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &formatted).await?;
+        let recovered = init.recovered_external_commit.as_ref().and_then(Option::as_ref);
+        let existing_in_proc = init
+            .external_commits
+            .values()
+            .map(|(o, c)| (o.as_deref(), c.as_str()));
+        self.0
+            .persist_external_intent_locked(recovered, existing_in_proc.chain(std::iter::once((account, formatted.as_str()))))
+            .await?;
         init.next_external_commit_id = init.next_external_commit_id.wrapping_add(1);
         let stage_id = format!("ext-{}", init.next_external_commit_id);
-        init.external_commits.insert(stage_id.clone(), formatted);
+        init.external_commits.insert(stage_id.clone(), (account.map(str::to_string), formatted));
         Ok(stage_id)
     }
 
-    /// Clears the staged external commit identified by [stage_id] (or a
-    /// crash-recovered durable intent when `stage_id` is `None` and no
-    /// in-process stages remain) once the caller knows that write did not
-    /// commit.
+    /// Clears the staged external commit identified by [stage_id] (or an
+    /// ownerless crash-recovered durable intent when `stage_id` is `None`).
     pub async fn clear_external_secret_key_commit(&self, candidate: &str, stage_id: Option<&str>) -> Result<()> {
+        self.clear_external_secret_key_commit_for(candidate, stage_id, None).await
+    }
+
+    /// Account-scoped variant of [`Self::clear_external_secret_key_commit`].
+    pub async fn clear_external_secret_key_commit_for(&self, candidate: &str, stage_id: Option<&str>, account: Option<&str>) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
-        self.0.settle_external_commit_locked(&mut init, &formatted, stage_id).await
+        self.0.settle_external_commit_locked(&mut init, &formatted, stage_id, account).await
     }
 
     /// Imports [key] as this device's secret key, serialized with all remote
@@ -773,7 +958,7 @@ impl KeyRing {
         {
             return Err(Error::Host("a staged secret key already committed to a remote; refusing conflicting import".into()));
         }
-        if init.external_commits.values().any(|c| c.as_str() != formatted.as_str()) {
+        if init.external_commits.values().any(|(_, c)| c.as_str() != formatted.as_str()) {
             return Err(Error::Host("a staged secret key has an unresolved external write; refusing conflicting import".into()));
         }
         let pending = self.0.secrets.pending().await?;
@@ -835,7 +1020,17 @@ impl KeyRing {
                     (k.clone(), false)
                 }
                 None => {
-                    let key = Arc::new(SyncKey { file: StdMutex::new(file), ring: self.0.clone(), state: StdMutex::new(State::default()), checking: Mutex::new(()) });
+                    table.next_handle_id = table.next_handle_id.wrapping_add(1);
+                    let handle_id = table.next_handle_id;
+                    let forget_gen = table.forget_gen_of(&id);
+                    let key = Arc::new(SyncKey {
+                        handle_id,
+                        forget_gen,
+                        file: StdMutex::new(file),
+                        ring: self.0.clone(),
+                        state: StdMutex::new(State::default()),
+                        checking: Mutex::new(()),
+                    });
                     table.keys.insert(id.clone(), key.clone());
                     (key, true)
                 }
@@ -872,7 +1067,9 @@ impl KeyRing {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
             table.keys.remove(id);
             table.pending_writes.remove(id);
+            table.committed_handle_ids.remove(id);
             table.bump_id(id);
+            table.bump_forget_gen(id);
             self.0.said_ok(id);
         }
         self.0.clear_epoch(id).await?;
@@ -1081,7 +1278,7 @@ impl SyncKey {
             // Reconcile pending immediately for the password that just opened
             // the remote so a concurrent password change before the next loop
             // iteration never sees a stale older pending entry.
-            self.ring.clear_pending_if_settled(&self.id(), &pwd).await?;
+            self.ring.clear_pending_if_settled(&self.id(), self.forget_gen, &pwd).await?;
             let now = self.ring.password().await?;
             if *now == *pwd {
                 break sk;
@@ -1115,33 +1312,83 @@ impl SyncKey {
     /// whose local signing watermark save failed (`Ok(Some((version, Some(detail))))`)
     /// from a CAS miss (`Ok(None)` -> HTTP 412) and uncommitted transport errors.
     async fn commit_key_file(&self, body: Vec<u8>, if_version: Option<String>) -> Result<Option<(String, Option<String>)>> {
+        let id = self.id();
+        let superseded_seq = {
+            let table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+            if table.forget_gen_of(&id) != self.forget_gen {
+                return Err(Error::SignedOut);
+            }
+            table
+                .pending_writes
+                .get(&id)
+                .filter(|pw| pw.handle_id <= self.handle_id)
+                .map(|pw| pw.seq)
+        };
         match self.file().write(body.clone(), if_version.clone()).await {
             Ok(Some(version)) => {
-                let id = self.id();
-                self.ring.keys.lock().unwrap_or_else(|e| e.into_inner()).pending_writes.remove(&id);
+                let forgotten = {
+                    let mut table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+                    if table.forget_gen_of(&id) != self.forget_gen {
+                        true
+                    } else {
+                        table.record_committed_handle(&id, self.handle_id);
+                        if table.pending_writes.get(&id).is_some_and(|cur| {
+                            cur.handle_id < self.handle_id || Some(cur.seq) == superseded_seq
+                        }) {
+                            table.pending_writes.remove(&id);
+                        }
+                        false
+                    }
+                };
+                if forgotten {
+                    return Err(Error::SignedOut);
+                }
                 Ok(Some((version, None)))
             }
-            Ok(None) => Ok(None),
+            Ok(None) => {
+                self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
+                Ok(None)
+            }
             Err(Error::KeyFilePersistFailed { version, sync_version, detail }) => {
-                let id = self.id();
-                {
+                let forgotten = {
                     let mut table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
-                    table.next_pending_write_seq = table.next_pending_write_seq.wrapping_add(1);
-                    let seq = table.next_pending_write_seq;
-                    table.pending_writes.insert(
-                        id,
-                        PendingKeyWrite {
-                            seq,
-                            body,
-                            if_version,
-                            version: version.clone(),
-                            sync_version,
-                        },
-                    );
-                }
+                    if table.forget_gen_of(&id) != self.forget_gen {
+                        true
+                    } else {
+                        let superseded_by_newer_handle = table.committed_handle_id(&id) > self.handle_id
+                            || table.pending_writes.get(&id).is_some_and(|cur| {
+                                cur.handle_id > self.handle_id
+                                    || match (cur.sync_version, sync_version) {
+                                        (Some(cur_v), Some(new_v)) => cur_v > new_v,
+                                        _ => false,
+                                    }
+                            });
+                        if !superseded_by_newer_handle {
+                            table.record_committed_handle(&id, self.handle_id);
+                            table.next_pending_write_seq = table.next_pending_write_seq.wrapping_add(1);
+                            let seq = table.next_pending_write_seq;
+                            table.pending_writes.insert(
+                                id,
+                                PendingKeyWrite {
+                                    seq,
+                                    handle_id: self.handle_id,
+                                    body,
+                                    if_version,
+                                    version: version.clone(),
+                                    sync_version,
+                                },
+                            );
+                        }
+                        false
+                    }
+                };
                 let mut s = self.lock();
                 s.opened = None;
                 s.checked_at = None;
+                drop(s);
+                if forgotten {
+                    return Err(Error::SignedOut);
+                }
                 Ok(Some((version, Some(detail))))
             }
             Err(e) => Err(e),
@@ -1161,6 +1408,7 @@ impl SyncKey {
     ) -> Result<Option<(String, SecretKey, Option<String>)>> {
         let mut init = self.ring.secret_key_init.lock().await;
         let id = self.id();
+        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
         let (sk, generated) = match self.ring.candidate_locked().await {
             Err(Error::SecretKeyMissing) => {
                 // None may be made here: one is to be made or imported by
@@ -1172,9 +1420,9 @@ impl SyncKey {
             other => other?,
         };
         let body = self.sealed(identities, epoch, pwd, &sk)?;
-        self.ring.stage_write_intent(&id, epoch, pwd).await?;
+        self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
         let Some((version, persist_err)) = self.commit_key_file(body, if_version).await? else {
-            let _ = self.ring.clear_write_intent(&id).await;
+            let _ = self.ring.clear_write_intent(&id, self.forget_gen).await;
             return Ok(None);
         };
         if generated {
@@ -1184,7 +1432,10 @@ impl SyncKey {
         // persist the epoch, reconcile `pending`, and clear the write intent
         // BEFORE `set_secret_key` or `set_kept`, so a later or concurrent
         // `password_changed` matches `pwd` instead of keeping a stale entry.
-        self.ring.record_committed_write(&id, epoch, pwd).await?;
+        if let Err(e) = self.ring.record_committed_write(&id, self.forget_gen, epoch, pwd).await {
+            init.committed_staged = None;
+            return Err(e);
+        }
         if generated {
             self.ring.commit_locked(&mut init, &sk, None).await?;
         }
@@ -1265,6 +1516,7 @@ impl SyncKey {
                     }
                     let use_staged = {
                         let mut init = self.ring.secret_key_init.lock().await;
+                        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
                         init.committed_staged = Some(staged.format().to_string());
                         if let Some(existing) = self.ring.secret_key().await? {
                             if existing.format().as_str() == staged.format().as_str() {
@@ -1329,24 +1581,28 @@ impl SyncKey {
                     // Persist the confirmed previous commit FIRST before staging
                     // the next write intent, so a CAS miss or network error on
                     // the new write cannot lose `(old_epoch, intent.pwd)`.
-                    self.ring.record_committed_write(&id, old_epoch, &intent.pwd).await?;
+                    self.ring.record_committed_write(&id, self.forget_gen, old_epoch, &intent.pwd).await?;
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
                     let (written, persist_err) = {
                         let mut init = self.ring.secret_key_init.lock().await;
+                        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
                             continue;
                         }
                         let sealed = self.sealed(&identities, epoch, pwd, staged)?;
-                        self.ring.stage_write_intent(&id, epoch, pwd).await?;
+                        self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
                         let Some((written, persist_err)) = self.commit_key_file(sealed, Some(version)).await? else {
-                            let _ = self.ring.clear_write_intent(&id).await;
+                            let _ = self.ring.clear_write_intent(&id, self.forget_gen).await;
                             continue;
                         };
                         init.committed_staged = Some(staged.format().to_string());
-                        self.ring.record_committed_write(&id, epoch, pwd).await?;
+                        if let Err(e) = self.ring.record_committed_write(&id, self.forget_gen, epoch, pwd).await {
+                            init.committed_staged = None;
+                            return Err(e);
+                        }
                         self.ring.commit_locked(&mut init, staged, None).await?;
                         (written, persist_err)
                     };
@@ -1365,7 +1621,7 @@ impl SyncKey {
                     // Persist the confirmed previous commit FIRST before staging
                     // the next write intent, so a CAS miss or network error on
                     // the new write cannot lose `(old_epoch, intent.pwd)`.
-                    self.ring.record_committed_write(&id, old_epoch, &intent.pwd).await?;
+                    self.ring.record_committed_write(&id, self.forget_gen, old_epoch, &intent.pwd).await?;
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
                     let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
@@ -1391,15 +1647,16 @@ impl SyncKey {
                     let epoch = old_epoch + 1;
                     let (written, persist_err) = {
                         let mut init = self.ring.secret_key_init.lock().await;
+                        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
                             continue;
                         }
                         let sealed = self.sealed(&identities, epoch, pwd, staged)?;
-                        self.ring.stage_write_intent(&id, epoch, pwd).await?;
+                        self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
                         let Some((written, persist_err)) = self.commit_key_file(sealed, Some(version)).await? else {
-                            let _ = self.ring.clear_write_intent(&id).await;
+                            let _ = self.ring.clear_write_intent(&id, self.forget_gen).await;
                             continue;
                         };
                         init.committed_staged = Some(staged.format().to_string());
@@ -1408,7 +1665,10 @@ impl SyncKey {
                         // BEFORE `set_secret_key` so a later or concurrent
                         // `password_changed` matches `pwd` instead of keeping
                         // stale `previous`.
-                        self.ring.record_committed_write(&id, epoch, pwd).await?;
+                        if let Err(e) = self.ring.record_committed_write(&id, self.forget_gen, epoch, pwd).await {
+                            init.committed_staged = None;
+                            return Err(e);
+                        }
                         self.ring.commit_locked(&mut init, staged, None).await?;
                         (written, persist_err)
                     };
@@ -1450,7 +1710,7 @@ impl SyncKey {
             if sk.is_some()
                 && (pending_map.contains_key(&id) || pending_map.contains_key(&write_intent_key(&id)))
             {
-                self.ring.clear_all_pending(&id).await?;
+                self.ring.clear_all_pending_for(&id, self.forget_gen).await?;
             }
             if sk.is_none() && self.ring.secret_key().await?.is_some() {
                 // Another remote or caller stored an active secret key while we
@@ -1492,7 +1752,7 @@ impl SyncKey {
                 let Some((written, persist_err)) = self.commit_key_file(self.sealed(&identities, epoch, pwd, sk)?, Some(version)).await? else { return Ok(false) };
                 self.use_identities(identities, true).await?;
                 if let Some(detail) = persist_err {
-                    self.ring.record_committed_write(&self.id(), epoch, pwd).await?;
+                    self.ring.record_committed_write(&self.id(), self.forget_gen, epoch, pwd).await?;
                     return Err(Error::Host(detail));
                 }
                 self.opened_at(epoch, written, pwd, sk).await?;
@@ -1511,7 +1771,7 @@ impl SyncKey {
         // Persist the 2FA epoch and marker BEFORE caching `s.opened`, so a
         // metadata persistence failure leaves the opening state uncached and
         // retryable.
-        if let Err(e) = self.ring.set_epoch_2fa(&id, epoch).await {
+        if let Err(e) = self.ring.set_epoch_2fa(&id, self.forget_gen, epoch).await {
             self.lock().opened = None;
             return Err(e);
         }
@@ -1604,7 +1864,9 @@ impl SyncKey {
             changed
         };
         if save && changed {
-            self.ring.secrets.set_kept(self.id(), identities.join("\n")).await?;
+            let id = self.id();
+            self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
+            self.ring.secrets.set_kept(id, identities.join("\n")).await?;
         }
         Ok(())
     }

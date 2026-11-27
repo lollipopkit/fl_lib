@@ -177,22 +177,24 @@ impl SyncKeys {
         Ok(self.0.sealed_with_secret_key(file).await?)
     }
 
-    /// [candidate] as this device's secret key, settling [stage_id] when given.
-    pub async fn commit_secret_key(&self, candidate: String, stage_id: Option<String>) -> R<()> {
-        Ok(self.0.commit_secret_key(&candidate, stage_id.as_deref()).await?)
+    /// [candidate] as this device's secret key, settling [stage_id] when given
+    /// (or a crash-recovered external intent for [account] when [stage_id] is `None`).
+    pub async fn commit_secret_key(&self, candidate: String, stage_id: Option<String>, account: Option<String>) -> R<()> {
+        Ok(self.0.commit_secret_key_for(&candidate, stage_id.as_deref(), account.as_deref()).await?)
     }
 
     /// Marks [candidate] as having an in-flight/unconfirmed external remote
-    /// commit (such as LK Cloud's account key), returning its stage identity.
-    pub async fn stage_external_secret_key_commit(&self, candidate: String) -> R<String> {
-        Ok(self.0.stage_external_secret_key_commit(&candidate).await?)
+    /// commit (such as LK Cloud's account key for [account]), returning its
+    /// stage identity.
+    pub async fn stage_external_secret_key_commit(&self, candidate: String, account: Option<String>) -> R<String> {
+        Ok(self.0.stage_external_secret_key_commit_for(&candidate, account.as_deref()).await?)
     }
 
     /// Clears the staged external commit identified by [stage_id] (or a
-    /// crash-recovered intent when omitted) when the remote write is known not
-    /// to have committed.
-    pub async fn clear_external_secret_key_commit(&self, candidate: String, stage_id: Option<String>) -> R<()> {
-        Ok(self.0.clear_external_secret_key_commit(&candidate, stage_id.as_deref()).await?)
+    /// crash-recovered intent for [account] when omitted) when the remote write
+    /// is known not to have committed.
+    pub async fn clear_external_secret_key_commit(&self, candidate: String, stage_id: Option<String>, account: Option<String>) -> R<()> {
+        Ok(self.0.clear_external_secret_key_commit_for(&candidate, stage_id.as_deref(), account.as_deref()).await?)
     }
 
     /// Imports [key] as this device's secret key, coordinated with all remote
@@ -289,7 +291,8 @@ impl SyncLogEngine {
     /// [key] its account's.
     #[frb(sync)]
     pub fn new(lkc: &LkcSync, key: &SyncKeyHandle, host: impl Fn(String, String, Option<Vec<u8>>) -> DartFnFuture<SyncReply> + Send + Sync + 'static) -> SyncLogEngine {
-        Self(Log::Lkc(LogSync::new(Arc::new(DartHost(bridge(host))), Arc::new(LkcLog(lkc.client())), key.0.clone())))
+        let log = LkcLog { client: lkc.client(), account: key.0.id() };
+        Self(Log::Lkc(LogSync::new(Arc::new(DartHost(bridge(host))), Arc::new(log), key.0.clone())))
     }
 
     /// On a log [host] keeps too (`log.*`, its blobs `files.*`).
