@@ -48,6 +48,26 @@ pub trait KeyFile: Send + Sync + 'static {
     /// order writes checks just before writing.
     fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>>;
 
+    /// Persists the local watermark for a key-file write that already
+    /// committed remotely at [version] (and optional signed [sync_version]).
+    /// Never treats a CAS miss (`Ok(None)`) as a completed flush.
+    fn flush_committed_write(
+        &self,
+        body: Vec<u8>,
+        if_version: Option<String>,
+        _version: String,
+        _sync_version: Option<i64>,
+    ) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            match self.write(body, if_version).await {
+                Ok(Some(_)) => Ok(()),
+                Ok(None) => Err(Error::Host("committed key-file write watermark remains unpersisted after CAS miss".into())),
+                Err(Error::KeyFilePersistFailed { detail, .. }) => Err(Error::Host(detail)),
+                Err(e) => Err(e),
+            }
+        })
+    }
+
     /// Whether a file may be made where none is read: false where one may only
     /// not have arrived yet (a store that does not order writes, holding what
     /// was synced with one).
@@ -203,8 +223,11 @@ fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
 
 #[derive(Clone)]
 struct PendingKeyWrite {
+    seq: u64,
     body: Vec<u8>,
     if_version: Option<String>,
+    version: String,
+    sync_version: Option<i64>,
 }
 
 #[derive(Default)]
@@ -225,10 +248,6 @@ struct State {
     /// a remote that does not need one imported (none there, or sealed with
     /// the password alone).
     awaiting_secret_key: bool,
-    /// A committed remote key-file PUT whose local signing watermark save
-    /// failed: retried with the exact same bytes and precondition so the
-    /// transport flushes local state without resending PUT.
-    pending_write: Option<PendingKeyWrite>,
 }
 
 #[derive(Default)]
@@ -263,6 +282,13 @@ struct SecretKeyInitState {
     /// matching stage so repeated clears or unrelated commits never drop
     /// another write's protection.
     external_commits: HashMap<String, String>,
+    /// Lazy-hydrated pre-restart external write intent from durable
+    /// `pending["intent:lkc-account-key"]`:
+    /// - `None`: durable map not yet inspected on this `KeyRing` instance.
+    /// - `Some(None)`: no unresolved pre-restart external write remains.
+    /// - `Some(Some(key))`: a pre-restart external write for `key` is still
+    ///   unresolved and remains protected until settled via `stage_id == None`.
+    recovered_external_commit: Option<Option<String>>,
 }
 
 #[derive(Default)]
@@ -272,6 +298,11 @@ struct KeyTable {
     /// opens or is released, so a stale probe for one remote cannot be
     /// invalidated by unrelated activity on another remote.
     gens: HashMap<String, u64>,
+    next_pending_write_seq: u64,
+    /// Committed remote key-file writes whose local signing watermark save has
+    /// not yet completed, retained across [`KeyRing::release`] until flushed or
+    /// [`KeyRing::forget`].
+    pending_writes: HashMap<String, PendingKeyWrite>,
 }
 
 impl KeyTable {
@@ -312,6 +343,20 @@ struct RingInner {
 const EXTERNAL_COMMIT_ID: &str = "lkc-account-key";
 
 impl RingInner {
+    async fn hydrate_recovered_external_locked(&self, init: &mut SecretKeyInitState) -> Result<()> {
+        if init.recovered_external_commit.is_some() {
+            return Ok(());
+        }
+        let pending = self.secrets.pending().await?;
+        let recovered = pending
+            .get(&write_intent_key(EXTERNAL_COMMIT_ID))
+            .and_then(|raw| WriteIntent::decode(raw))
+            .and_then(|w| SecretKey::parse(&w.pwd).ok())
+            .map(|k| k.format().to_string());
+        init.recovered_external_commit = Some(recovered);
+        Ok(())
+    }
+
     async fn clear_external_commit_intent_for(&self, expected: Option<&str>) -> Result<()> {
         let _st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
@@ -319,7 +364,9 @@ impl RingInner {
         let should_remove = match (all.get(&key), expected) {
             (None, _) => false,
             (Some(_), None) => true,
-            (Some(raw), Some(cand)) => WriteIntent::decode(raw).is_none_or(|w| w.pwd == cand),
+            (Some(raw), Some(cand)) => WriteIntent::decode(raw)
+                .and_then(|w| SecretKey::parse(&w.pwd).ok())
+                .is_none_or(|k| k.format().as_str() == cand),
         };
         if should_remove {
             all.remove(&key);
@@ -397,25 +444,32 @@ impl RingInner {
 
     /// Settles one staged external write for [formatted]. When [stage_id] is
     /// `Some`, removes only that exact stage (ignoring missing or mismatched
-    /// stages); when `None` (crash recovery across restart), leaves any active
-    /// in-process stages intact and only clears a durable intent once no
-    /// in-process stages remain.
+    /// stages) while preserving any recovered pre-restart write intent until
+    /// that recovered write settles via `None`; when `None`, settles the
+    /// recovered pre-restart intent while preserving any active in-process stages.
     async fn settle_external_commit_locked(
         &self,
         init: &mut SecretKeyInitState,
         formatted: &str,
         stage_id: Option<&str>,
     ) -> Result<()> {
+        self.hydrate_recovered_external_locked(init).await?;
         match stage_id {
             Some(id) => {
                 if init.external_commits.get(id).map(String::as_str) != Some(formatted) {
                     return Ok(());
                 }
                 let remaining = init
-                    .external_commits
-                    .iter()
-                    .find(|(k, _)| k.as_str() != id)
-                    .map(|(_, v)| v.clone());
+                    .recovered_external_commit
+                    .as_ref()
+                    .and_then(Option::as_ref)
+                    .cloned()
+                    .or_else(|| {
+                        init.external_commits
+                            .iter()
+                            .find(|(k, _)| k.as_str() != id)
+                            .map(|(_, v)| v.clone())
+                    });
                 // Persist intent update BEFORE removing `id` from `external_commits`
                 // so a transient persistence failure remains retryable with the same `stage_id`.
                 if let Some(rem) = remaining {
@@ -427,10 +481,17 @@ impl RingInner {
                 Ok(())
             }
             None => {
-                if !init.external_commits.is_empty() {
+                if matches!(&init.recovered_external_commit, Some(Some(rec)) if rec.as_str() != formatted) {
                     return Ok(());
                 }
-                self.clear_external_commit_intent_for(Some(formatted)).await
+                let remaining = init.external_commits.values().next().cloned();
+                if let Some(rem) = remaining {
+                    self.stage_write_intent(EXTERNAL_COMMIT_ID, 0, &rem).await?;
+                } else {
+                    self.clear_external_commit_intent_for(Some(formatted)).await?;
+                }
+                init.recovered_external_commit = Some(None);
+                Ok(())
             }
         }
     }
@@ -648,6 +709,12 @@ impl KeyRing {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
+        self.0.hydrate_recovered_external_locked(&mut init).await?;
+        if matches!(&init.recovered_external_commit, Some(Some(rec)) if rec != &formatted)
+            || init.external_commits.values().any(|c| c != &formatted)
+        {
+            return Err(Error::Host("another secret key has an unresolved external write intent".into()));
+        }
         if let Some(active) = self.0.secret_key().await? {
             if active.format().as_str() != formatted.as_str() {
                 return Err(Error::Host("stale secret key candidate does not match active secret key".into()));
@@ -722,24 +789,25 @@ impl KeyRing {
         let staged = self.0.pending_secret_key().await?;
         let replacing_different_key = existing.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str())
             || staged.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str());
-        if replacing_different_key && pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX) && k != &ext_intent_key) {
-            return Err(Error::Host("a secret key has an unresolved remote write intent; refusing conflicting import".into()));
+        if replacing_different_key {
+            if pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX) && k != &ext_intent_key) {
+                return Err(Error::Host("a secret key has an unresolved remote write intent; refusing conflicting import".into()));
+            }
+            let has_pending_write = {
+                let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+                !table.pending_writes.is_empty()
+            };
+            if has_pending_write {
+                return Err(Error::Host("a secret key has a pending remote commit; refusing conflicting import".into()));
+            }
         }
         if let Some(ref staged_key) = staged
             && staged_key.format().as_str() != formatted.as_str()
+            && existing.is_none()
         {
-            let has_pending_write = {
-                let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                table.keys.values().any(|k| k.lock().pending_write.is_some())
-            };
-            if has_pending_write {
-                return Err(Error::Host("a staged secret key has a pending remote commit; refusing conflicting import".into()));
-            }
-            if existing.is_none() {
-                let epochs = self.0.secrets.epochs().await?;
-                if epochs.keys().any(|k| k.starts_with(TWO_FA_PREFIX)) {
-                    return Err(Error::Host("a staged secret key has a committed remote write; refusing conflicting import".into()));
-                }
+            let epochs = self.0.secrets.epochs().await?;
+            if epochs.keys().any(|k| k.starts_with(TWO_FA_PREFIX)) {
+                return Err(Error::Host("a staged secret key has a committed remote write; refusing conflicting import".into()));
             }
         }
         self.0.secrets.import_secret_key(formatted).await?;
@@ -775,11 +843,11 @@ impl KeyRing {
         };
         if let Err(e) = key.check(false, create).await {
             // A restore's lookup leaves nothing behind for a remote nothing
-            // syncs to; retain the handle if a committed remote write still has
-            // a pending local watermark flush so the next restore can retry it.
+            // syncs to; any committed write awaiting watermark flush stays in
+            // `KeyTable::pending_writes` across lookups and releases.
             if !create && fresh {
                 let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) && key.lock().pending_write.is_none() {
+                if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) && !table.pending_writes.contains_key(&id) {
                     table.keys.remove(&id);
                 }
             }
@@ -800,7 +868,13 @@ impl KeyRing {
     /// [id]'s remote is gone from this device (signed out, another server): as
     /// [release], and what this device knew of its file goes too.
     pub async fn forget(&self, id: &str) -> Result<()> {
-        self.release(id);
+        {
+            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            table.keys.remove(id);
+            table.pending_writes.remove(id);
+            table.bump_id(id);
+            self.0.said_ok(id);
+        }
         self.0.clear_epoch(id).await?;
         self.0.clear_all_pending(id).await
     }
@@ -962,10 +1036,9 @@ impl SyncKey {
         if force {
             self.lock().checked_at = None;
         }
-        if self.lock().checked_at.is_some_and(|at| at.elapsed() < RECHECK_AFTER)
-            && self.lock().pending_write.is_none()
-        {
-            let id = self.id();
+        let id = self.id();
+        let has_pending_write = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner()).pending_writes.contains_key(&id);
+        if self.lock().checked_at.is_some_and(|at| at.elapsed() < RECHECK_AFTER) && !has_pending_write {
             let awaiting = self.lock().awaiting_secret_key;
             // Waiting for a secret key: one stored since (no recheck asked)
             // opens the file again at once.
@@ -1020,17 +1093,22 @@ impl SyncKey {
     }
 
     async fn flush_pending_write(&self) -> Result<()> {
-        let Some(pw) = self.lock().pending_write.clone() else {
+        let id = self.id();
+        let pw = {
+            let table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+            table.pending_writes.get(&id).cloned()
+        };
+        let Some(pw) = pw else {
             return Ok(());
         };
-        match self.file().write(pw.body, pw.if_version).await {
-            Ok(_) => {
-                self.lock().pending_write = None;
-                Ok(())
-            }
-            Err(Error::KeyFilePersistFailed { detail, .. }) => Err(Error::Host(detail)),
-            Err(e) => Err(e),
+        self.file()
+            .flush_committed_write(pw.body, pw.if_version, pw.version, pw.sync_version)
+            .await?;
+        let mut table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+        if table.pending_writes.get(&id).is_some_and(|cur| cur.seq == pw.seq) {
+            table.pending_writes.remove(&id);
         }
+        Ok(())
     }
 
     /// Performs a conditional key-file write, separating a committed remote PUT
@@ -1038,11 +1116,30 @@ impl SyncKey {
     /// from a CAS miss (`Ok(None)` -> HTTP 412) and uncommitted transport errors.
     async fn commit_key_file(&self, body: Vec<u8>, if_version: Option<String>) -> Result<Option<(String, Option<String>)>> {
         match self.file().write(body.clone(), if_version.clone()).await {
-            Ok(Some(version)) => Ok(Some((version, None))),
+            Ok(Some(version)) => {
+                let id = self.id();
+                self.ring.keys.lock().unwrap_or_else(|e| e.into_inner()).pending_writes.remove(&id);
+                Ok(Some((version, None)))
+            }
             Ok(None) => Ok(None),
-            Err(Error::KeyFilePersistFailed { version, detail }) => {
+            Err(Error::KeyFilePersistFailed { version, sync_version, detail }) => {
+                let id = self.id();
+                {
+                    let mut table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
+                    table.next_pending_write_seq = table.next_pending_write_seq.wrapping_add(1);
+                    let seq = table.next_pending_write_seq;
+                    table.pending_writes.insert(
+                        id,
+                        PendingKeyWrite {
+                            seq,
+                            body,
+                            if_version,
+                            version: version.clone(),
+                            sync_version,
+                        },
+                    );
+                }
                 let mut s = self.lock();
-                s.pending_write = Some(PendingKeyWrite { body, if_version });
                 s.opened = None;
                 s.checked_at = None;
                 Ok(Some((version, Some(detail))))

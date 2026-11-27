@@ -484,7 +484,30 @@ impl PersonalAuth {
     }
 
     pub async fn record_snapshot_written(&self, app: &str, seq: i64) -> Result<(), Error> {
-        self.record_committed(|v| v.saw_snapshot(app, None, seq)).await
+        self.record_snapshot_written_on(app, None, seq).await
+    }
+
+    pub async fn record_snapshot_written_on(&self, app: &str, log: Option<&str>, seq: i64) -> Result<(), Error> {
+        self.record_committed(|v| v.saw_snapshot(app, log, seq)).await
+    }
+
+    /// Records a previously committed signed snapshot without rewinding
+    /// `signed_log_ids[app]` if a newer log identifier has already been
+    /// observed concurrently. Returns `false` when `log` was already superseded
+    /// by a different observed log.
+    pub async fn record_snapshot_if_log_compatible(&self, app: &str, log: Option<&str>, seq: i64) -> Result<bool, Error> {
+        let mut same_log = true;
+        self.record_committed(|v| match (log, v.signed_log_ids.get(app)) {
+            (Some(target), Some(known)) if known != target => {
+                v.signed_snapshots.insert(app.to_string());
+                same_log = false;
+            }
+            _ => {
+                v.saw_snapshot(app, log, seq);
+            }
+        })
+        .await?;
+        Ok(same_log)
     }
 
     /// Verifies a downloaded file's signature and monotonic version.

@@ -26,6 +26,19 @@ pub trait LogTransport: BlobStore {
     /// there already.
     fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> impl Future<Output = Result<bool>> + Send;
 
+    /// Persists the local watermark for a snapshot that already committed
+    /// remotely at [seq] (on [log], when known), without resending [body] when
+    /// the transport supports direct watermark flushing.
+    fn flush_committed_snapshot(&self, _log: Option<String>, seq: i64, body: Vec<u8>) -> impl Future<Output = Result<bool>> + Send {
+        async move {
+            match self.put_snapshot(seq, body).await {
+                Ok(written) => Ok(written),
+                Err(Error::SnapshotPersistFailed { detail, .. }) => Err(Error::Host(detail)),
+                Err(e) => Err(e),
+            }
+        }
+    }
+
     /// The snapshot, `None` before there is one.
     fn snapshot(&self) -> impl Future<Output = Result<Option<SnapshotBody>>> + Send;
 }
@@ -458,14 +471,12 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         let Some(pending) = self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
             return Ok(None);
         };
-        match self.transport.put_snapshot(pending.seq, pending.body.clone()).await {
-            Ok(written) => {
-                *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                Ok(written.then_some(pending))
-            }
-            Err(Error::SnapshotPersistFailed { detail, .. }) => Err(Error::Host(detail)),
-            Err(e) => Err(e),
-        }
+        let written = self
+            .transport
+            .flush_committed_snapshot(pending.log.clone(), pending.seq, pending.body.clone())
+            .await?;
+        *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(written.then_some(pending))
     }
 
     /// Writes a snapshot at the cursor; whether one is there now.

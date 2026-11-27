@@ -1165,30 +1165,55 @@ async fn cached_upload_entry_replaced_during_flush_must_not_return_on_earlier_fl
 
 #[tokio::test]
 async fn cached_append_and_snapshot_invalidated_when_personal_log_changes() {
+    struct LogState {
+        log: Option<String>,
+        head: i64,
+        snapshot_seq: i64,
+    }
     let key = crate::team::identity::AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let active_log: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(Some("log-1".to_string())));
+    let state = Arc::new(StdMutex::new(LogState {
+        log: Some("log-1".to_string()),
+        head: 0,
+        snapshot_seq: 0,
+    }));
     let append_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let snap_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let log_c = active_log.clone();
+    let st_c = state.clone();
     let app_c = append_calls.clone();
     let snp_c = snap_calls.clone();
 
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("POST", p) if p.ends_with("/log") => {
-            let n = app_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let cur_log = log_c.lock().unwrap().clone().unwrap_or_else(|| "log-fresh".into());
-            Response::json(200, json!({ "data": { "log": cur_log, "seq": (n + 1) as i64, "live": { "batches": 1, "bytes": 4 }, "compact": false } }))
+            app_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut st = st_c.lock().unwrap();
+            let cur_log = st.log.get_or_insert_with(|| "log-fresh".into()).clone();
+            st.head += 1;
+            let seq = st.head;
+            Response::json(200, json!({ "data": { "log": cur_log, "seq": seq, "live": { "batches": 1, "bytes": 4 }, "compact": false } }))
         }
         ("GET", p) if p.ends_with("/log") => {
-            let cur_log = log_c.lock().unwrap().clone();
-            Response::json(200, json!({ "data": { "log": cur_log, "batches": [], "head": 0, "snapshot_seq": 0, "more": false } }))
+            let st = st_c.lock().unwrap();
+            Response::json(
+                200,
+                json!({ "data": { "log": st.log, "batches": [], "head": st.head, "snapshot_seq": st.snapshot_seq, "more": false } }),
+            )
         }
         ("PUT", p) if p.ends_with("/snapshot") => {
             let n = snp_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            written(if n == 0 { "snap-log1" } else { "snap-log2" })
+            let seq = r
+                .target
+                .split_once("seq=")
+                .and_then(|(_, v)| v.split('&').next()?.parse::<i64>().ok())
+                .unwrap_or(0);
+            let mut st = st_c.lock().unwrap();
+            if st.log.is_none() || seq <= st.snapshot_seq || seq > st.head {
+                return Response::json(409, json!({ "code": 4, "reason": "sync_snapshot_stale", "data": "" }));
+            }
+            st.snapshot_seq = seq;
+            written(if n == 0 { "snap-log2" } else { "snap-other" })
         }
         _ => Response::status(404),
     })
@@ -1198,37 +1223,39 @@ async fn cached_append_and_snapshot_invalidated_when_personal_log_changes() {
     let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
     sync.set_personal(Some(auth));
 
-    // 1. Append on log-1 fails local persistence -> cached for log-1.
+    // 1. Append on log-1 fails local persistence -> cached for log-1 at seq 1 (head = 1).
     keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let idem = "idempotency-key-1234";
     let err = sync.append(idem, b"batch".to_vec()).await.unwrap_err();
-    assert!(matches!(err.committed, Some(Committed::Batch(ref a)) if a.log == "log-1"));
+    assert!(matches!(err.committed, Some(Committed::Batch(ref a)) if a.log == "log-1" && a.seq == 1));
     assert_eq!(append_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
-    // 2. Server replaces log with log-2; client observes log-2 via read_log.
-    *active_log.lock().unwrap() = Some("log-2".into());
+    // 2. Server replaces log with log-2 (head = 0); client observes log-2 via read_log.
+    *state.lock().unwrap() = LogState { log: Some("log-2".into()), head: 0, snapshot_seq: 0 };
     keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
     let _ = sync.read_log(0, None, None).await.unwrap();
 
-    // 3. Retrying append MUST NOT reuse log-1 cached result; sends a fresh append to log-2.
+    // 3. Retrying append MUST NOT reuse log-1 cached result; sends a fresh append to log-2 (head = 1).
     let appended = sync.append(idem, b"batch".to_vec()).await.unwrap();
     assert_eq!(appended.log, "log-2");
+    assert_eq!(appended.seq, 1);
     assert_eq!(append_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
 
-    // 4. Snapshot on log-2 fails local persistence -> cached for log-2.
+    // 4. Snapshot at seq 1 (<= head 1) on log-2 fails local persistence -> cached for log-2.
     keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
-    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-log1".into(), seq: 1 }));
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-log2".into(), seq: 1 }));
     assert_eq!(snap_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
-    // 5. Server resets log to empty (`log: None`); read_log clears stale cached entries.
-    *active_log.lock().unwrap() = None;
+    // 5. Server resets log to empty (`log: None`, `head: 0`); read_log clears stale cached entries.
+    *state.lock().unwrap() = LogState { log: None, head: 0, snapshot_seq: 0 };
     keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
     let _ = sync.read_log(0, None, None).await.unwrap();
 
-    // 6. Retrying put_snapshot_bytes MUST NOT reuse log-2 cached result; sends a fresh snapshot.
-    let snap_etag = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap();
-    assert_eq!(snap_etag, "snap-log2");
+    // 6. Retrying put_snapshot_bytes MUST NOT reuse log-2 cached result; it sends PUT #2,
+    //    which the server rejects because seq 1 exceeds empty head 0.
+    let snap_err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
+    assert_eq!(snap_err.kind, Kind::Refused("sync_snapshot_stale".into()));
     assert_eq!(snap_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
@@ -1241,10 +1268,12 @@ async fn detaching_personal_auth_during_recovery_flush_never_sends_unsigned_writ
     let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let appends = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let snaps = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let file_etag: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(None));
     let uw = unsigned_writes.clone();
     let pc = puts.clone();
     let ac = appends.clone();
     let sc = snaps.clone();
+    let fe = file_etag.clone();
 
     let (_fake, sync) = homebase(move |r| {
         if matches!(r.method.as_str(), "PUT" | "POST") && r.header("x-signature").is_none() {
@@ -1254,7 +1283,20 @@ async fn detaching_personal_auth_during_recovery_flush_never_sends_unsigned_writ
             ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
             ("PUT", p) if p.ends_with(NAME) => {
                 pc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                written("e1")
+                let mut cur = fe.lock().unwrap();
+                let ok = if r.header("if-none-match") == Some("*") {
+                    cur.is_none()
+                } else if let Some(im) = r.header("if-match") {
+                    cur.as_ref().is_some_and(|e| format!("\"{e}\"") == im)
+                } else {
+                    false
+                };
+                if !ok {
+                    return Response::status(412);
+                }
+                let next = if cur.is_none() { "e1" } else { "e2" };
+                *cur = Some(next.to_string());
+                written(next)
             }
             ("POST", p) if p.ends_with("/log") => {
                 ac.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -1318,7 +1360,187 @@ async fn detaching_personal_auth_during_recovery_flush_never_sends_unsigned_writ
 
     assert_eq!(unsigned_writes.load(std::sync::atomic::Ordering::SeqCst), 0, "no unsigned write may be dispatched after personal auth detaches");
 
-    // 4. Calls that BEGIN without personal auth preserve the existing unsigned path.
-    assert_eq!(sync.upload_bytes(NAME, b"u".to_vec(), Condition::Absent).await.unwrap(), "e1");
+    // 4. Calls that BEGIN without personal auth preserve the existing unsigned path
+    //    against the committed `e1` version of NAME.
+    assert_eq!(sync.upload_bytes(NAME, b"u".to_vec(), Condition::Match("e1".into())).await.unwrap(), "e2");
     assert_eq!(unsigned_writes.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn switching_personal_auth_during_recovery_flush_rejects_in_flight_write() {
+    let key1 = crate::team::identity::AccountKey::generate("u1");
+    let pub1 = key1.signing_public();
+    let rec1 = key1.recipient();
+    let key2 = crate::team::identity::AccountKey::generate("u2");
+    let auth2 = Arc::new(PersonalAuth::new(key2, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let appends = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let snaps = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let pc = puts.clone();
+    let ac = appends.clone();
+    let sc = snaps.clone();
+
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": rec1, "signing_key": pub1, "next_seq": 2, "prev_signing_key": pub1 } })),
+        ("PUT", p) if p.ends_with(NAME) => {
+            pc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written("e1")
+        }
+        ("POST", p) if p.ends_with("/log") => {
+            ac.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Response::json(200, json!({ "data": { "log": "log-1", "seq": 1, "live": { "batches": 1, "bytes": 4 }, "compact": false } }))
+        }
+        ("PUT", p) if p.ends_with("/snapshot") => {
+            sc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            written("snap-1")
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    struct SwitchOnSecondSave {
+        sync: Arc<SyncClient<Kept>>,
+        replacement: Arc<PersonalAuth>,
+        mode: std::sync::atomic::AtomicUsize,
+    }
+    impl crate::personal::VersionKeeper for SwitchOnSecondSave {
+        fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            Box::pin(async move {
+                if self.mode.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                    Err("save failed".into())
+                } else {
+                    self.sync.set_personal(Some(self.replacement.clone()));
+                    Ok(())
+                }
+            })
+        }
+    }
+
+    let keeper1 = Arc::new(SwitchOnSecondSave {
+        sync: sync.clone(),
+        replacement: auth2,
+        mode: std::sync::atomic::AtomicUsize::new(0),
+    });
+    let auth1 = Arc::new(PersonalAuth::new(key1, crate::personal::PersonalVersions::default(), keeper1.clone()));
+
+    // 1. upload_bytes MUST NOT adopt auth2 for u1's in-flight write.
+    sync.set_personal(Some(auth1.clone()));
+    assert!(sync.upload_bytes(NAME, b"f".to_vec(), Condition::Absent).await.is_err());
+    keeper1.mode.store(1, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.upload_bytes(NAME, b"f".to_vec(), Condition::Absent).await.unwrap_err().kind, Kind::SignedOut);
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. append MUST NOT adopt auth2 for u1's in-flight write.
+    keeper1.mode.store(0, std::sync::atomic::Ordering::SeqCst);
+    sync.set_personal(Some(auth1.clone()));
+    let idem = "idempotency-key-9012";
+    assert!(sync.append(idem, b"b".to_vec()).await.is_err());
+    keeper1.mode.store(1, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.append(idem, b"b".to_vec()).await.unwrap_err().kind, Kind::SignedOut);
+    assert_eq!(appends.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 3. put_snapshot_bytes MUST NOT adopt auth2 for u1's in-flight write.
+    keeper1.mode.store(0, std::sync::atomic::Ordering::SeqCst);
+    sync.set_personal(Some(auth1));
+    assert!(sync.put_snapshot_bytes(1, b"s".to_vec()).await.is_err());
+    keeper1.mode.store(1, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.put_snapshot_bytes(1, b"s".to_vec()).await.unwrap_err().kind, Kind::SignedOut);
+    assert_eq!(snaps.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn fresh_auth_snapshot_recovery_reconciles_unknown_log_without_dropping_or_blind_matching() {
+    type RemoteSnapshot = (String, String, i64, Vec<u8>, Option<String>);
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let remote_snap: Arc<StdMutex<Option<RemoteSnapshot>>> = Arc::new(StdMutex::new(None));
+    let put_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let rs = remote_snap.clone();
+    let pc = put_calls.clone();
+    let pk_srv = pub_key.clone();
+
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("GET", p) if p.ends_with("/log") => {
+            Response::json(200, json!({ "data": { "log": "log-1", "batches": [], "head": 5, "snapshot_seq": 5, "more": false } }))
+        }
+        ("PUT", p) if p.ends_with("/snapshot") => {
+            let n = pc.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let seq = r
+                .target
+                .split_once("seq=")
+                .and_then(|(_, v)| v.split('&').next()?.parse::<i64>().ok())
+                .unwrap_or(0);
+            let mut cur = rs.lock().unwrap();
+            if cur.as_ref().is_some_and(|(_, l, s, _, _)| l == "log-1" && seq <= *s) {
+                return Response::json(409, json!({ "code": 4, "reason": "sync_snapshot_stale", "data": "" }));
+            }
+            let etag = format!("snap-{}", n + 1);
+            let sig = r.header("x-signature").map(str::to_string);
+            let log_id = if n == 0 { "log-1" } else { "log-2" };
+            *cur = Some((etag.clone(), log_id.to_string(), seq, r.body.clone(), sig));
+            // 204 carries ETag only (no Sync-Log header).
+            written(&etag)
+        }
+        ("GET", p) if p.ends_with("/snapshot") => {
+            let cur = rs.lock().unwrap();
+            match cur.as_ref() {
+                None => Response::status(404),
+                Some((etag, log_id, seq, body, sig)) => {
+                    let mut resp = Response::status(200)
+                        .header("ETag", &format!("\"{etag}\""))
+                        .header("Sync-Log", log_id)
+                        .header("Sync-Seq", &seq.to_string());
+                    if let Some(sig) = sig {
+                        resp = resp
+                            .header("X-Signer", "u1")
+                            .header("X-Signing-Key", &pk_srv)
+                            .header("X-Signature", sig);
+                    }
+                    resp.body(std::str::from_utf8(body).unwrap())
+                }
+            }
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), keeper.clone()));
+    sync.set_personal(Some(auth.clone()));
+
+    // Case A: Fresh auth (`signed_log_id == None`) commits snapshot on existing `log-1`,
+    // keeper fails -> subsequent `read_log` observes `log-1` -> retry MUST reconcile and
+    // recover `"snap-1"` without resending PUT (which would fail with `sync_snapshot_stale`).
+    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.put_snapshot_bytes(5, b"snap-body".to_vec()).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-1".into(), seq: 5 }));
+    assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    let _ = sync.read_log(0, None, None).await.unwrap();
+    assert_eq!(sync.put_snapshot_bytes(5, b"snap-body".to_vec()).await.unwrap(), "snap-1");
+    assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("log-1"));
+
+    // Case B: Fresh auth (`signed_log_id == None`) commits snapshot, keeper fails ->
+    // remote snapshot is wiped before retry WITHOUT any `read_log` -> retry MUST NOT treat
+    // `Unknown == None` as a blind cache hit; it reconciles (404) and sends PUT #2.
+    let keeper_b = TestKeeper::new();
+    let auth_b = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper_b.clone()));
+    sync.set_personal(Some(auth_b));
+    *remote_snap.lock().unwrap() = None;
+
+    keeper_b.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    let err = sync.put_snapshot_bytes(5, b"snap-body".to_vec()).await.unwrap_err();
+    assert_eq!(err.committed, Some(Committed::Snapshot { etag: "snap-2".into(), seq: 5 }));
+    assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // Wipe remote snapshot (simulating log reset while local `signed_log_id` is still None).
+    *remote_snap.lock().unwrap() = None;
+    keeper_b.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(sync.put_snapshot_bytes(5, b"snap-body".to_vec()).await.unwrap(), "snap-3");
+    assert_eq!(put_calls.load(std::sync::atomic::Ordering::SeqCst), 3);
 }

@@ -2420,11 +2420,12 @@ async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
     let legacy_body = crate::key::seal_with_password(format!("# test, epoch 0\n{legacy_id}").as_bytes(), "pw").unwrap();
     *inner.file.lock().unwrap() = Some((legacy_body, "v1".into()));
 
+    type CommittedKeyWrite = (Vec<u8>, Option<String>, String);
     struct FailFirstPersistKeyFile {
         inner: Arc<MemKeyFile>,
         writes: AtomicUsize,
         fail_persist: AtomicBool,
-        committed_body: Mutex<Option<(Vec<u8>, Option<String>, String)>>,
+        committed_body: Mutex<Option<CommittedKeyWrite>>,
     }
     impl KeyFile for FailFirstPersistKeyFile {
         fn id(&self) -> String {
@@ -2441,7 +2442,11 @@ async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
                     && prev_if == &if_version
                 {
                     if self.fail_persist.load(Ordering::SeqCst) {
-                        return Err(Error::KeyFilePersistFailed { version: ver.clone(), detail: "still failing".into() });
+                        return Err(Error::KeyFilePersistFailed {
+                            version: ver.clone(),
+                            sync_version: None,
+                            detail: "still failing".into(),
+                        });
                     }
                     return Ok(Some(ver.clone()));
                 }
@@ -2454,7 +2459,11 @@ async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
                 *f = Some((body.clone(), ver.clone()));
                 *self.committed_body.lock().unwrap() = Some((body, if_version, ver.clone()));
                 if self.fail_persist.load(Ordering::SeqCst) {
-                    return Err(Error::KeyFilePersistFailed { version: ver, detail: "watermark save failed".into() });
+                    return Err(Error::KeyFilePersistFailed {
+                        version: ver,
+                        sync_version: None,
+                        detail: "watermark save failed".into(),
+                    });
                 }
                 Ok(Some(ver))
             })
@@ -3098,4 +3107,269 @@ async fn rotate_checkpoints_pending_accepted_join_before_rekey_and_aborts_on_fai
     assert_eq!(d.host.state(vec!["log.joined".into()]).await.unwrap()[0].as_deref(), Some("log-1"));
     assert_eq!(log.append_calls.load(Ordering::SeqCst), 2, "only the rotation append should be sent after checkpointing");
     assert!(log.lock().snapshot.is_some());
+}
+
+#[tokio::test]
+async fn recovered_external_intent_survives_new_stage_settlement_until_recovered_settles() {
+    let d1 = Device::new("pw");
+    let active_a = d1.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let other_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    // Stage an external write for active key A before a simulated process restart.
+    let _pre_restart = d1.ring.stage_external_secret_key_commit(&active_a).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+
+    // Fresh KeyRing after restart (`external_commits` starts empty while durable intent remains).
+    let restarted = KeyRing::new(d1.secrets.clone(), "test");
+
+    // Stage a new in-process write for the same candidate A, then clear that new stage:
+    // the recovered pre-restart durable intent MUST remain protected!
+    let new_stage1 = restarted.stage_external_secret_key_commit(&active_a).await.unwrap();
+    restarted.clear_external_secret_key_commit(&active_a, Some(&new_stage1)).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(restarted.store_secret_key(&other_b).await.is_err());
+
+    // Even settling a second in-process stage via `commit_secret_key(..., Some)` MUST NOT
+    // clear the recovered pre-restart write's durable protection.
+    let new_stage2 = restarted.stage_external_secret_key_commit(&active_a).await.unwrap();
+    restarted.commit_secret_key(&active_a, Some(&new_stage2)).await.unwrap();
+    assert!(d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(restarted.store_secret_key(&other_b).await.is_err());
+
+    // Only settling the recovered write (`stage_id == None`) removes its durable intent
+    // once no in-process stages remain.
+    restarted.clear_external_secret_key_commit(&active_a, None).await.unwrap();
+    assert!(!d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    restarted.store_secret_key(&other_b).await.unwrap();
+    assert_eq!(d1.secrets.secret_key.lock().unwrap().as_deref(), Some(other_b.as_str()));
+}
+
+#[tokio::test]
+async fn active_key_pending_write_blocks_conflicting_import_and_flushes_across_auth_rebind() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    struct MemSessionStore;
+    impl fl_lkc::Store for MemSessionStore {
+        async fn save(&self, _state: Option<fl_lkc::Stored>) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+    struct ToggleKeeper {
+        saved: Mutex<String>,
+        fail: AtomicBool,
+    }
+    impl fl_lkc::personal::VersionKeeper for ToggleKeeper {
+        fn save(&self, json: String) -> fl_lkc::personal::BoxFuture<'_, std::result::Result<(), String>> {
+            if self.fail.load(Ordering::SeqCst) {
+                return Box::pin(async { Err("keeper unavailable".into()) });
+            }
+            *self.saved.lock().unwrap() = json;
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    let account_key = fl_lkc::team::identity::AccountKey::generate("u1");
+    let pub_key = account_key.signing_public();
+    let recipient = account_key.recipient();
+    type StoredKeyFile = (Vec<u8>, String, String, String);
+    let stored_file: Arc<Mutex<Option<StoredKeyFile>>> = Arc::new(Mutex::new(None));
+    let puts = Arc::new(AtomicU64::new(0));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let file_srv = stored_file.clone();
+    let puts_srv = puts.clone();
+    let pub_srv = pub_key.clone();
+    let rec_srv = recipient.clone();
+    let server = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 4096];
+            let header_end = loop {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break None,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break Some(pos + 4);
+                }
+            };
+            let Some(header_end) = header_end else { continue };
+            let head_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
+            let mut parts = head_str.lines().next().unwrap_or("").split_whitespace();
+            let method = parts.next().unwrap_or("");
+            let path = parts.next().unwrap_or("").split('?').next().unwrap_or("");
+            let hdr = |name: &str| {
+                head_str.lines().find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.eq_ignore_ascii_case(name).then(|| v.trim().to_string())
+                })
+            };
+            let content_len: usize = hdr("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+            while buf.len() < header_end + content_len {
+                let n = match stream.read(&mut tmp).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&tmp[..n]);
+            }
+            let body = buf[header_end..header_end + content_len].to_vec();
+
+            let (status, extra_headers, resp_body): (&str, String, Vec<u8>) = match (method, path) {
+                ("GET", "/v2/keys") => (
+                    "200 OK",
+                    "Content-Type: application/json\r\n".into(),
+                    json!({ "data": { "recipient": rec_srv, "signing_key": pub_srv, "next_seq": 2, "prev_signing_key": pub_srv } })
+                        .to_string()
+                        .into_bytes(),
+                ),
+                ("GET", "/v2/sync/serverbox/identity.age") => {
+                    let guard = file_srv.lock().unwrap();
+                    match guard.as_ref() {
+                        Some((bytes, etag, ver, sig)) => (
+                            "200 OK",
+                            format!("ETag: \"{etag}\"\r\nX-Signer: u1\r\nX-Signing-Key: {pub_srv}\r\nX-Signature: {sig}\r\nX-Sync-Version: {ver}\r\n"),
+                            bytes.clone(),
+                        ),
+                        None => ("404 Not Found", String::new(), Vec::new()),
+                    }
+                }
+                ("PUT", "/v2/sync/serverbox/identity.age") => {
+                    let n = puts_srv.fetch_add(1, Ordering::SeqCst) + 1;
+                    let mut guard = file_srv.lock().unwrap();
+                    let ok = if hdr("if-none-match").as_deref() == Some("*") {
+                        guard.is_none()
+                    } else if let Some(im) = hdr("if-match") {
+                        guard.as_ref().is_some_and(|(_, e, _, _)| format!("\"{e}\"") == im)
+                    } else {
+                        false
+                    };
+                    if !ok {
+                        ("412 Precondition Failed", String::new(), Vec::new())
+                    } else {
+                        let etag = format!("kf-e{n}");
+                        let ver = hdr("x-sync-version").unwrap_or_else(|| "1".into());
+                        let sig = hdr("x-signature").unwrap_or_default();
+                        *guard = Some((body, etag.clone(), ver, sig));
+                        ("204 No Content", format!("ETag: \"{etag}\"\r\n"), Vec::new())
+                    }
+                }
+                _ => ("404 Not Found", String::new(), Vec::new()),
+            };
+            let head_out = format!("HTTP/1.1 {status}\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n", resp_body.len());
+            let _ = stream.write_all(head_out.as_bytes()).await;
+            let _ = stream.write_all(&resp_body).await;
+        }
+    });
+
+    let base = format!("http://{addr}");
+    let client = Arc::new(fl_lkc::Client::with(&format!("{base}/auth/v1/"), "app", &base).unwrap());
+    let stored = fl_lkc::Stored { access: "tok".into(), refresh: Some("r".into()), expires_at: now_ms() + 3_600_000, refreshing: false };
+    let session = Arc::new(fl_lkc::Session::restore(client, MemSessionStore, Some(stored)).await);
+    let sync_client = Arc::new(fl_lkc::sync::SyncClient::new(session, "serverbox"));
+    let keeper1 = Arc::new(ToggleKeeper { saved: Mutex::new(String::new()), fail: AtomicBool::new(true) });
+    let auth1 = Arc::new(fl_lkc::personal::PersonalAuth::new(
+        account_key.clone(),
+        fl_lkc::personal::PersonalVersions::default(),
+        keeper1,
+    ));
+    sync_client.set_personal(Some(auth1));
+
+    let kf = Arc::new(crate::lkc::LkcKeyFile { client: sync_client.clone(), account: "u1".into() });
+    let d = Device::new("pw1");
+    let active_a = d.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let other_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    // 1. PUT commits under active key A (no staged key), local watermark save fails -> retains `pending_write`.
+    assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
+    assert!(d.secrets.pending_secret_key.lock().unwrap().is_none());
+
+    // 2. Replacing active key A with B while `pending_write` is outstanding MUST be rejected,
+    //    while same-key import A succeeds.
+    assert!(d.ring.store_secret_key(&other_b).await.is_err());
+    d.ring.store_secret_key(&active_a).await.unwrap();
+
+    // 3. Detaching personal auth AND releasing `"u1"` clears `SyncClient::pending_commits`
+    //    and drops the registered `SyncKey` handle, yet `KeyTable::pending_writes` MUST retain
+    //    the unpersisted watermark and keep blocking conflicting secret-key replacement.
+    d.ring.release("u1");
+    assert!(d.ring.store_secret_key(&other_b).await.is_err());
+    sync_client.set_personal(None);
+    assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::SignedOut)));
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
+    assert!(d.ring.store_secret_key(&other_b).await.is_err());
+
+    // 4. Rebinding a fresh `PersonalAuth` for the same user `u1` flushes the committed
+    //    watermark directly without resending PUT, then clears `pending_write`.
+    let keeper2 = Arc::new(ToggleKeeper { saved: Mutex::new(String::new()), fail: AtomicBool::new(false) });
+    let auth2 = Arc::new(fl_lkc::personal::PersonalAuth::new(
+        account_key,
+        fl_lkc::personal::PersonalVersions::default(),
+        keeper2.clone(),
+    ));
+    sync_client.set_personal(Some(auth2));
+    let opened = d.ring.of(kf, true).await.unwrap();
+    assert_eq!(puts.load(Ordering::SeqCst), 1, "watermark flush after auth rebind must not resend PUT");
+    let saved: Value = serde_json::from_str(&keeper2.saved.lock().unwrap()).unwrap();
+    assert_eq!(saved["files"]["serverbox/identity.age"], json!(1));
+    assert_eq!(opened.open(&opened.seal(b"ok").unwrap()).unwrap(), b"ok");
+
+    // Once `pending_write` has settled, replacing active key A with B is allowed.
+    d.ring.store_secret_key(&other_b).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(other_b.as_str()));
+
+    server.abort();
+}
+
+#[tokio::test]
+async fn cas_miss_during_default_flush_committed_write_retains_pending_write() {
+    struct CasMissOnRetryKeyFile {
+        inner: Arc<MemKeyFile>,
+        mode: AtomicUsize, // 0 = commit + persist fail, 1 = CAS miss Ok(None), 2 = succeed Ok(Some)
+    }
+    impl KeyFile for CasMissOnRetryKeyFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
+        }
+        fn write(&self, body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                match self.mode.load(Ordering::SeqCst) {
+                    0 => {
+                        *self.inner.file.lock().unwrap() = Some((body, "v1".into()));
+                        Err(Error::KeyFilePersistFailed {
+                            version: "v1".into(),
+                            sync_version: None,
+                            detail: "save failed".into(),
+                        })
+                    }
+                    1 => Ok(None),
+                    _ => Ok(Some("v1".into())),
+                }
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+
+    let inner = Arc::new(MemKeyFile::default());
+    let kf = Arc::new(CasMissOnRetryKeyFile { inner, mode: AtomicUsize::new(0) });
+    let d = Device::new("pw");
+    let other = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
+    // Next flush receives `Ok(None)` (CAS miss): MUST fail and retain `pending_write`.
+    kf.mode.store(1, Ordering::SeqCst);
+    assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
+    assert!(d.ring.store_secret_key(&other).await.is_err(), "pending_write must remain retained after Ok(None)");
+
+    // Once flush completes (`Ok(Some)`), `pending_write` clears.
+    kf.mode.store(2, Ordering::SeqCst);
+    d.ring.of(kf, true).await.unwrap();
+    d.ring.store_secret_key(&other).await.unwrap();
 }

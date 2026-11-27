@@ -485,4 +485,157 @@ void main() {
     await logSync.sync();
     expect(logSync.lastFailure.value, isNotNull);
   });
+
+  test('aborting or failing a later external stage on the same client preserves an earlier unresolved stage', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PrefStore.shared.init();
+    SecureProp.legacyApart = false;
+    addTearDown(() => SecureProp.legacyApart = null);
+
+    final files = <String, (String, List<int>)>{};
+    Map<String, dynamic> userKey = {'next_seq': 1};
+    var version = 0;
+    var mode = 'seed'; // 'seed' | 'fail500' | 'raceWrongPwd' | 'abortBeforeCall'
+    var raceGets = 0;
+    (String, List<int>)? otherSealed;
+    LkcClient? targetClient;
+
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((r) async {
+      final res = r.response;
+      final body = await r.fold<List<int>>([], (a, b) => a..addAll(b));
+      final path = r.uri.path;
+      if (path == '/v2/keys') {
+        if (r.method == 'GET') {
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode({'data': userKey}));
+        } else if (r.method == 'PUT') {
+          final parsed = jsonDecode(utf8.decode(body)) as Map<String, dynamic>;
+          userKey = {
+            'recipient': parsed['recipient'],
+            'signing_key': parsed['signing_key'],
+            'prev_signing_key': parsed['signing_key'],
+            'next_seq': (parsed['seq'] as int) + 1,
+          };
+          res.headers.contentType = ContentType.json;
+          res.write(jsonEncode({'data': null}));
+        }
+        await res.close();
+        return;
+      }
+      if (r.uri.pathSegments.length == 4 && r.uri.pathSegments[0] == 'v2' && r.uri.pathSegments[1] == 'sync') {
+        final key = '${r.uri.pathSegments[2]}/${r.uri.pathSegments[3]}';
+        switch (r.method) {
+          case 'GET':
+            if (key == 'lkc/identity.age' && mode == 'raceWrongPwd') {
+              raceGets++;
+              if (raceGets == 1) {
+                res.statusCode = 404;
+              } else {
+                res.headers.set('ETag', '"${otherSealed!.$1}"');
+                res.add(otherSealed.$2);
+              }
+            } else {
+              final entry = files[key];
+              if (entry == null) {
+                res.statusCode = 404;
+              } else {
+                res.headers.set('ETag', '"${entry.$1}"');
+                res.add(entry.$2);
+              }
+            }
+          case 'PUT':
+            if (key == 'lkc/identity.age' && mode == 'fail500') {
+              res.statusCode = 500;
+            } else {
+              final etag = 'e${++version}';
+              files[key] = (etag, body);
+              res
+                ..statusCode = 204
+                ..headers.set('ETag', '"$etag"');
+            }
+          default:
+            res.statusCode = 404;
+        }
+        await res.close();
+        return;
+      }
+      res.statusCode = 404;
+      await res.close();
+    });
+
+    final base = Uri.parse('http://127.0.0.1:${server.port}');
+    final tokenJson = jsonEncode({
+      'access': 'a1',
+      'refresh': 'r1',
+      'expires_at': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    });
+    FlutterSecureStorage.setMockInitialValues({'lkcToken': tokenJson, 'bakPwd': 'pw'});
+    SecureProp.resetRateLimits();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    final userU1 = LkcUser(id: 'u1', name: 'u1', group: 'user', createdAt: now, updatedAt: now);
+
+    // Pre-build a 2FA account key sealed with `otherKey` for the race simulation, then clear server files.
+    final otherKey = SyncKeyring.generateSecretKey();
+    final seedClient = LkcClient(
+      oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://auth/callback', issuer: base.resolve('/auth/v1/')),
+      baseUrl: base,
+      cache: LkcMemoryCache(),
+    )..user.value = userU1;
+    await (await seedClient.teams()).accountKey(passphrase: 'pw', secretKey: otherKey, allowLegacy: false);
+    otherSealed = files.remove('lkc/identity.age');
+    userKey = {'next_seq': 1};
+    expect(otherSealed, isNotNull);
+
+    final client = LkcClient(
+      oidc: LkcOidc(clientId: 'test', redirectUrl: 'test://auth/callback', issuer: base.resolve('/auth/v1/')),
+      baseUrl: base,
+      cache: LkcMemoryCache(),
+    )..user.value = userU1;
+    targetClient = client;
+
+    final stagedIds = <String>[];
+    SyncKeyring.debugOnExternalStage = (id) {
+      stagedIds.add(id);
+      if (mode == 'abortAfterStage') {
+        targetClient?.user.value = null;
+      }
+    };
+
+    // 1. Attempt #1 on `client` fails with HTTP 500 -> leaves stage #1 unresolved in `client` and keyring.
+    mode = 'fail500';
+    await expectLater(client.ensurePersonalAuth('test'), throwsA(isA<LkcException>()));
+    final staged = await SyncKeyring.pendingSecretKey();
+    expect(staged, isNotNull);
+    expect(stagedIds, hasLength(1));
+
+    // 2. Attempt #2 on the SAME `client` hits `wrongPassphrase` on `t.accountKey`:
+    //    must clear ONLY stage #2, keeping stage #1 protected against conflicting imports.
+    mode = 'raceWrongPwd';
+    raceGets = 0;
+    expect(await client.ensurePersonalAuth('test'), isFalse);
+    expect(stagedIds, hasLength(2));
+    await expectLater(SyncKeyring.storeSecretKey(otherKey), throwsA(anything));
+
+    // 3. Attempt #3 on the SAME `client` invalidates `stillValid()` right after
+    //    `stageExternalSecretKeyCommit` returns (deterministically hitting line 596):
+    //    must clear ONLY stage #3, keeping stage #1 protected.
+    mode = 'abortAfterStage';
+    expect(await client.ensurePersonalAuth('test'), isFalse);
+    expect(stagedIds, hasLength(3));
+    await expectLater(SyncKeyring.storeSecretKey(otherKey), throwsA(anything));
+
+    // 4. Restoring `client.user` and completing `ensurePersonalAuth` settles stage #1
+    //    and promotes `staged`, after which replacing with `otherKey` succeeds.
+    mode = 'ok';
+    client.user.value = userU1;
+    expect(await client.ensurePersonalAuth('test'), isTrue);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), staged);
+    await SyncKeyring.storeSecretKey(otherKey);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), otherKey);
+  });
 }

@@ -241,11 +241,19 @@ abstract final class SyncKeyring {
   static Future<void> commitSecretKey(String candidate, {String? stageId}) =>
       _said(() => _ring.commitSecretKey(candidate: candidate, stageId: stageId));
 
+  /// Optional test hook invoked right after [stageExternalSecretKeyCommit]
+  /// records a new external stage.
+  @visibleForTesting
+  static void Function(String stageId)? debugOnExternalStage;
+
   /// Marks [candidate] as having an in-flight external remote commit so a
   /// conflicting import cannot erase it if a post-write step fails, returning
   /// its unique stage identity.
-  static Future<String> stageExternalSecretKeyCommit(String candidate) =>
-      _said(() => _ring.stageExternalSecretKeyCommit(candidate: candidate));
+  static Future<String> stageExternalSecretKeyCommit(String candidate) async {
+    final stageId = await _said(() => _ring.stageExternalSecretKeyCommit(candidate: candidate));
+    debugOnExternalStage?.call(stageId);
+    return stageId;
+  }
 
   /// Clears the external commit marker for [candidate] identified by [stageId]
   /// (or a crash-recovered intent when omitted) when the remote write is
@@ -389,6 +397,7 @@ abstract final class SyncKeyring {
     secretKeyMissing.value = false;
     secretKeyGenerated.value = null;
     allowAutoGenerateSecretKey = null;
+    debugOnExternalStage = null;
     _accountKeySealedFor = null;
     _secretKeyLock = Future.value();
   }

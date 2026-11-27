@@ -79,7 +79,7 @@ pub enum Error {
     /// The remote key file already committed at [version], but local signing
     /// watermark persistence failed ([detail]); the key engine reconciles the
     /// committed write and retries watermark flush without resending the PUT.
-    KeyFilePersistFailed { version: String, detail: String },
+    KeyFilePersistFailed { version: String, sync_version: Option<i64>, detail: String },
 }
 
 impl std::fmt::Display for Error {
