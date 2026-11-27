@@ -3466,19 +3466,64 @@ async fn account_scoped_external_intents_isolate_accounts_and_treat_legacy_unown
     restarted.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
     assert!(!d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
 
-    // 2. Legacy pre-owner record (`intent:lkc-account-key` with `{"epoch":0,"pwd":"..."}`) MUST be
-    //    migrated to `ext-intent:lkc-account-key` and treated as unmatched by named accounts.
+    // 2. A legacy record with explicit provenance (`owners`) migrates to
+    //    `ext-intent:lkc-account-key` and stays scoped to its owner.
     d1.secrets.pending.lock().unwrap().insert(
         "intent:lkc-account-key".into(),
-        serde_json::json!({ "epoch": 0, "pwd": key_a }).to_string(),
+        serde_json::json!({ "epoch": 0, "pwd": key_a, "owners": ["u1"], "unowned": false }).to_string(),
     );
     let legacy_ring = KeyRing::new(d1.secrets.clone(), "test");
-    legacy_ring.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
+    legacy_ring.commit_secret_key_for(&key_a, None, Some("u2")).await.unwrap();
     assert!(d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
     assert!(!d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
-    legacy_ring.clear_external_secret_key_commit_for(&key_a, None, Some("u1")).await.unwrap();
-    assert!(d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
     assert!(legacy_ring.store_secret_key(&key_b).await.is_err());
+    legacy_ring.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
+    assert!(!d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
+}
+
+#[tokio::test]
+async fn legacy_lkc_account_key_record_without_provenance_is_never_external_by_shape() {
+    let legacy = || serde_json::json!({ "epoch": 0, "pwd": fl_lkc::secret_key::SecretKey::generate().format().to_string() }).to_string();
+
+    // A folder remote named `lkc-account-key` whose password parses as a
+    // Secret Key: its write intent stays under the ordinary replacement guard.
+    let d = Device::new("pw");
+    let active = d.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let other = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    let folder_raw = legacy();
+    d.secrets.pending.lock().unwrap().insert("intent:lkc-account-key".into(), folder_raw.clone());
+    d.secrets.epochs.lock().unwrap().insert("lkc-account-key".into(), 0);
+    let ring = KeyRing::new(d.secrets.clone(), "test");
+    let folder_pwd = serde_json::from_str::<serde_json::Value>(&folder_raw).unwrap()["pwd"].as_str().unwrap().to_string();
+    let stage = ring.stage_external_secret_key_commit(&active).await.expect("a folder record protects no external key");
+    ring.clear_external_secret_key_commit(&active, Some(&stage)).await.unwrap();
+    assert!(ring.store_secret_key(&folder_pwd).await.is_err(), "ordinary guard: no replacement while a folder intent is open");
+    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:lkc-account-key"), Some(&folder_raw));
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
+    ring.store_secret_key(&active).await.unwrap();
+
+    // No folder evidence: the owner is unknown. The record stays for folder
+    // recovery, both slots stay, and only the active key imports (a no-op).
+    let d = Device::new("pw");
+    let active = d.secrets.secret_key.lock().unwrap().clone().unwrap();
+    let ambiguous_raw = legacy();
+    let candidate = serde_json::from_str::<serde_json::Value>(&ambiguous_raw).unwrap()["pwd"].as_str().unwrap().to_string();
+    d.secrets.pending.lock().unwrap().insert("intent:lkc-account-key".into(), ambiguous_raw.clone());
+    *d.secrets.pending_secret_key.lock().unwrap() = Some(candidate.clone());
+    let ring = KeyRing::new(d.secrets.clone(), "test");
+    ring.store_secret_key(&active).await.unwrap();
+    assert_eq!(d.secrets.pending_secret_key.lock().unwrap().as_deref(), Some(candidate.as_str()));
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(active.as_str()));
+    assert!(ring.store_secret_key(&other).await.is_err());
+    assert!(ring.store_secret_key(&candidate).await.is_err());
+    assert!(ring.stage_external_secret_key_commit(&active).await.is_err(), "the candidate stays protected");
+    ring.commit_secret_key_for(&active, None, Some("u1")).await.unwrap();
+    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:lkc-account-key"), Some(&ambiguous_raw));
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
+
+    // An ownerless external settlement of that key establishes the owner.
+    ring.clear_external_secret_key_commit(&candidate, None).await.unwrap();
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
 }
 
 #[tokio::test]
@@ -4155,23 +4200,41 @@ async fn lkc_retained_pre_signing_blob_remains_readable_while_stripped_signed_bl
     assert_eq!(client_b.download_blob_bytes("op-def.age").await.unwrap_err().kind, fl_lkc::sync::Kind::Untrusted);
     let log_b = LogSync::new(dev_b.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_b, account: "u1".into() }), sync_key_b);
     log_b.sync().await.unwrap();
-    assert_eq!(dev_b.host.value("servers", "pre"), Some(pre_val));
+    assert_eq!(dev_b.host.value("servers", "pre"), Some(pre_val.clone()));
     assert_eq!(dev_b.host.value("servers", "post"), Some(post_val));
 
-    // 3b. Device B2 with `signed_apps` active (ordinary files locked to signed-only) MUST reject
-    //     even retained unsigned blobs!
+    // 3b. Device B2 with `signed_apps` active (ordinary files locked to signed-only) still reads
+    //     the retained pre-signing blob the signed snapshot binds by digest, and its own join
+    //     re-binds (migrates) it into the batches and snapshot it writes.
     let dev_b2 = Device::new("pw");
     *dev_b2.secrets.secret_key.lock().unwrap() = sk_a.clone();
     let sync_key_b2 = dev_b2.key(&key_file).await.unwrap();
+    let seal_b2 = sync_key_b2.clone();
+    let signed_apps_auth = || {
+        let init = fl_lkc::personal::PersonalVersions::from_json(r#"{"v":2,"signed_apps":["serverbox"],"signed_blobs":["serverbox"]}"#).unwrap();
+        Arc::new(fl_lkc::personal::PersonalAuth::new(account_key.clone(), init, Arc::new(SimpleKeeper(Mutex::new(String::new())))))
+    };
     let client_b2 = make_client().await;
-    let init_b2 = fl_lkc::personal::PersonalVersions::from_json(r#"{"v":2,"signed_apps":["serverbox"],"signed_blobs":["serverbox"]}"#).unwrap();
-    client_b2.set_personal(Some(Arc::new(fl_lkc::personal::PersonalAuth::new(
-        account_key.clone(),
-        init_b2,
-        Arc::new(SimpleKeeper(Mutex::new(String::new()))),
-    ))));
+    client_b2.set_personal(Some(signed_apps_auth()));
     let log_b2 = LogSync::new(dev_b2.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_b2, account: "u1".into() }), sync_key_b2);
-    assert!(matches!(log_b2.sync().await, Err(Error::Untrusted(_))));
+    log_b2.sync().await.unwrap();
+    assert_eq!(dev_b2.host.value("servers", "pre"), Some(pre_val));
+    assert!(dev_b2.host.lock().state.get("log.legacy_blobs").is_some_and(|raw| raw.contains(&pre_blob_name)));
+
+    // 3c. A validly sealed but different unsigned ciphertext under the retained name fails the
+    //     signed snapshot's digest binding, under `signed_apps` too.
+    let original_pre = blobs.lock().unwrap().get(&pre_blob_name).cloned().unwrap();
+    let resealed = seal_b2.seal(&seal_b2.open(&original_pre.0).unwrap()).unwrap();
+    assert_ne!(resealed, original_pre.0);
+    blobs.lock().unwrap().insert(pre_blob_name.clone(), (resealed, None));
+    let dev_b3 = Device::new("pw");
+    *dev_b3.secrets.secret_key.lock().unwrap() = sk_a.clone();
+    let sync_key_b3 = dev_b3.key(&key_file).await.unwrap();
+    let client_b3 = make_client().await;
+    client_b3.set_personal(Some(signed_apps_auth()));
+    let log_b3 = LogSync::new(dev_b3.host.clone(), Arc::new(crate::lkc::LkcLog { client: client_b3, account: "u1".into() }), sync_key_b3);
+    assert!(matches!(log_b3.sync().await, Err(Error::Untrusted(_))));
+    blobs.lock().unwrap().insert(pre_blob_name.clone(), original_pre);
 
     // 4. Stripping signature from `post_blob_name` (previously signed!) MUST be rejected as `Untrusted`!
     *strip_blob.lock().unwrap() = Some(post_blob_name);
@@ -4263,6 +4326,8 @@ async fn lkc_first_account_selection_probe_release_and_pending_legacy_password()
         started: u2_started.clone(),
         release: u2_release.clone(),
     });
+    let kf1_inner = kf1.inner.clone();
+    let kf2_inner = kf2.inner.clone();
     let ring1 = d.ring.clone();
     let ring2 = d.ring.clone();
     let t1 = tokio::spawn(async move { ring1.of_lkc(kf1, true).await });
@@ -4276,6 +4341,12 @@ async fn lkc_first_account_selection_probe_release_and_pending_legacy_password()
     u2_release.notify_one();
     assert!(t1.await.unwrap().is_ok(), "selected account u1 must be preserved on first selection");
     assert!(matches!(t2.await.unwrap(), Err(Error::SignedOut)), "stale account u2 must be invalidated on first selection");
+    assert!(kf1_inner.file.lock().unwrap().is_some(), "u1 must still create its key file");
+    assert!(kf2_inner.file.lock().unwrap().is_none(), "invalidated u2 must not write its key file");
+    assert!(
+        !d.secrets.pending.lock().unwrap().contains_key("intent:u2"),
+        "invalidated u2 must not stage a write intent"
+    );
 
     // Part 2: `register_lkc_probe` captures per-ID gen so `release` before polling invalidates
     // the probe while a probe registered AFTER `release` remains eligible.
@@ -4482,4 +4553,95 @@ async fn engine_blob_hardening_unbound_legacy_lying_listing_and_local_refresh() 
         .await
         .unwrap_err();
     assert!(matches!(err, Error::Untrusted(_)));
+}
+
+// Recovered snapshot: the transport's resolved log binding wins over the one
+// captured when the watermark save failed.
+
+struct ResolvingLog {
+    inner: Arc<MemLog>,
+    /// The `log` the next `put_snapshot` reports in its persist failure,
+    /// after committing remotely.
+    fail_put: Mutex<Option<Option<String>>>,
+    resolved: Option<String>,
+    puts: AtomicU64,
+}
+
+impl BlobStore for ResolvingLog {
+    async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
+        self.inner.put_blob(name, body).await
+    }
+
+    async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
+        self.inner.get_blob(name).await
+    }
+
+    async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
+        self.inner.blobs(prefix).await
+    }
+
+    async fn delete_blob(&self, name: String) -> Result<()> {
+        self.inner.delete_blob(name).await
+    }
+}
+
+impl LogTransport for ResolvingLog {
+    async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
+        self.inner.append(key, body).await
+    }
+
+    async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
+        self.inner.read(after, log).await
+    }
+
+    async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
+        self.puts.fetch_add(1, Ordering::SeqCst);
+        let written = self.inner.put_snapshot(seq, body).await?;
+        match self.fail_put.lock().unwrap().take() {
+            Some(log) => Err(Error::SnapshotPersistFailed { log, seq, detail: "watermark save failed".into() }),
+            None => Ok(written),
+        }
+    }
+
+    async fn flush_committed_snapshot(&self, _log: Option<String>, _seq: i64, _body: Vec<u8>) -> Result<(bool, Option<String>)> {
+        Ok((true, self.resolved.clone()))
+    }
+
+    async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
+        self.inner.snapshot().await
+    }
+}
+
+/// Snapshot puts after recovery, and whether the stale blob was swept by the
+/// recovered snapshot (without writing a fresh one).
+async fn recover_snapshot(captured: Option<&str>, resolved: Option<&str>) -> (u64, bool) {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let inner = MemLog::new();
+    inner.lock().compact_after = 1;
+    let transport = Arc::new(ResolvingLog {
+        inner: inner.clone(),
+        fail_put: Mutex::new(Some(captured.map(str::to_string))),
+        resolved: resolved.map(str::to_string),
+        puts: AtomicU64::new(0),
+    });
+    let sync = LogSync::new(d.host.clone(), transport.clone(), d.key(&file).await.unwrap());
+    d.host.edit("servers", "s1", Some(json!({ "name": "box1" })));
+    assert!(matches!(sync.sync().await, Err(Error::Host(_))));
+    assert_eq!(transport.puts.load(Ordering::SeqCst), 1);
+    inner.lock().blobs.insert("op-dead.age".into(), (b"x".to_vec(), 0));
+    sync.sync().await.unwrap();
+    (transport.puts.load(Ordering::SeqCst), !inner.lock().blobs.contains_key("op-dead.age"))
+}
+
+#[tokio::test]
+async fn recovered_snapshot_prefers_resolved_log_over_captured() {
+    // Captured binding stale, resolved one matches the local cursor's log:
+    // the recovered snapshot covers it, so it sweeps without a fresh write.
+    assert_eq!(recover_snapshot(Some("log-stale"), Some("log-1")).await, (1, true));
+    // Captured binding matches, resolved one is another log: no sweep on the
+    // recovered binding; a fresh snapshot is attempted instead.
+    assert_eq!(recover_snapshot(Some("log-1"), Some("log-recreated")).await, (2, false));
+    // No resolved binding: the captured one is kept.
+    assert_eq!(recover_snapshot(Some("log-1"), None).await, (1, true));
 }

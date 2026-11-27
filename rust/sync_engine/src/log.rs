@@ -28,7 +28,10 @@ pub trait LogTransport: BlobStore {
 
     /// Persists the local watermark for a snapshot that already committed
     /// remotely at [seq] (on [log], when known), without resending [body] when
-    /// the transport supports direct watermark flushing. Returns `(written, resolved_log)`.
+    /// the transport supports direct watermark flushing. Returns `(written, resolved_log)`
+    /// once the outcome is settled: `written` false when another log was
+    /// observed meanwhile (final, nothing to retry); an error leaves the
+    /// snapshot pending.
     fn flush_committed_snapshot(&self, log: Option<String>, seq: i64, body: Vec<u8>) -> impl Future<Output = Result<(bool, Option<String>)>> + Send {
         async move {
             match self.put_snapshot(seq, body).await {
@@ -499,9 +502,9 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             Err(Error::SnapshotPersistFailed { detail, .. }) => return Err(Error::Host(detail)),
             Err(e) => return Err(e),
         };
-        if pending.log.is_none() {
-            pending.log = resolved_log;
-        }
+        // The transport's binding is authoritative: `sync` gates the sweep on
+        // the local cursor still being on the log this snapshot committed to.
+        pending.log = resolved_log.or(pending.log);
         *self.pending_snapshot.lock().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(written.then_some(pending))
     }

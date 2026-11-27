@@ -49,6 +49,15 @@ pub trait KeySource: Send + Sync + 'static {
     fn fetch(&self) -> BoxFuture<'_, Option<AccountKey>>;
 }
 
+/// Live log observations a snapshot's log binding is ordered against, called
+/// synchronously while the versions lock is held.
+pub trait LogObserver {
+    /// Records [log] as the one observed; `false` when a different log already is.
+    fn commit(&self, log: &str) -> Result<bool, Error>;
+    /// Whether [log] is still the one observed.
+    fn confirm(&self, log: &str) -> Result<bool, Error>;
+}
+
 /// What this device has seen signed in one personal LK Cloud account, kept
 /// on-device: what an unsigned answer is refused for, and each file's
 /// highest version.
@@ -535,29 +544,14 @@ impl PersonalAuth {
     }
 
     /// Records a previously committed signed snapshot without rewinding
-    /// `signed_log_ids[app]` if a newer log identifier has already been
-    /// observed concurrently. Returns `false` when `log` was already superseded
-    /// by a different observed log.
-    pub async fn record_snapshot_if_log_compatible(&self, app: &str, log: Option<&str>, seq: i64) -> Result<bool, Error> {
+    /// `signed_log_ids[app]` to [log] once a different log was recorded or
+    /// [observer] saw one. Returns `false` (recording only
+    /// `signed_snapshots[app]`) when [log] is superseded, also by an
+    /// observation arriving while its binding is saved.
+    pub async fn record_snapshot_if_log_compatible(&self, app: &str, log: Option<&str>, seq: i64, observer: &impl LogObserver) -> Result<bool, Error> {
         let mut held = self.versions.lock().await;
-        let mut same_log = true;
-        let res = Self::record_committed_held(&self.keeper, &mut held, |v| match (log, v.signed_log_ids.get(app)) {
-            (Some(target), Some(known)) if known != target => {
-                v.signed_snapshots.insert(app.to_string());
-                same_log = false;
-            }
-            _ => {
-                v.saw_snapshot(app, log, seq);
-            }
-        })
-        .await;
-        if same_log
-            && let Some(l) = log
-        {
-            held.recorded_log_ids.insert(app.to_string(), l.to_string());
-        }
-        res?;
-        Ok(same_log)
+        let superseded = log.is_some_and(|target| held.data.signed_log_ids.get(app).is_some_and(|known| known != target));
+        Self::record_snapshot_ordered(&self.keeper, &mut held, app, log, seq, superseded, observer).await
     }
 
     /// Verifies a downloaded file's signature and monotonic version.
@@ -578,8 +572,9 @@ impl PersonalAuth {
 
     /// Verifies a downloaded write-once log blob bound to a pre-signing
     /// reference retained by a batch or snapshot: permits an unsigned response
-    /// only when [name] has never been seen or written signed and [app] has not
-    /// locked ordinary files to signed-only.
+    /// only when [name] has never been seen or written signed, whatever
+    /// [app]'s `signed_apps` / `signed_blobs` policy; the caller binds the
+    /// bytes (a signed container's digest, or its own content).
     pub async fn verify_retained_blob(&self, app: &str, name: &str, body: &[u8], signed: Option<&Signed>) -> Result<(), Error> {
         self.verify_blob_digest_inner(app, name, &digest(body), signed, true).await
     }
@@ -602,9 +597,13 @@ impl PersonalAuth {
             // TODO(migration): reject unsigned personal blobs unconditionally
             // once pre-signing uploads are no longer present.
             let mut held = self.versions.lock().await;
+            // A retained reference is bound by its signed container (or the
+            // caller's own content), so only a name seen signed refuses an
+            // unsigned answer there; `signed_apps` must not strand pre-signing
+            // blobs before they are migrated.
             let must_be_signed = held.seen_signed_blobs.contains(&key)
-                || held.data.requires_signature(app, Some(name))
-                || (!allow_retained_unsigned && held.data.signed_blobs.contains(app));
+                || held.data.files.contains_key(&key)
+                || (!allow_retained_unsigned && held.data.blob_requires_signature(app));
             if must_be_signed {
                 return Err(untrusted(format!("{app}/{name}: server stripped signature")));
             }
@@ -718,62 +717,22 @@ impl PersonalAuth {
         verify_sig(s, &msg, &what)
     }
 
-    /// Verifies a signed snapshot for detached recovery and persists its log
-    /// binding only if no different log binding has already been recorded under
-    /// this [`PersonalAuth`] instance or external observer ([check_external] /
-    /// [commit_external], both invoked synchronously while `self.versions` is
-    /// locked). Returns `false` when a conflicting log binding was observed
-    /// (persisting only `signed_snapshots[app]`).
+    /// Verifies a signed snapshot for detached recovery and records its log
+    /// binding unless a different log was recorded under this
+    /// [`PersonalAuth`] instance or [observer] saw one, also while the binding
+    /// is saved. Returns `false` in that case, recording only
+    /// `signed_snapshots[app]`.
     pub async fn verify_snapshot_digest_for_detached(
         &self,
         app: &str,
         snapshot: &Snapshot,
         body_digest: &[u8; KEY_LEN],
-        check_external: impl FnOnce() -> Result<bool, Error>,
-        commit_external: impl FnOnce() -> Result<bool, Error>,
+        observer: &impl LogObserver,
     ) -> Result<bool, Error> {
         self.verify_snapshot_signature_only(app, snapshot, body_digest).await?;
         let mut held = self.versions.lock().await;
-        let external_ok = check_external()?;
-        let conflicting = !external_ok
-            || held
-                .recorded_log_ids
-                .get(app)
-                .is_some_and(|existing| existing != &snapshot.log);
-        if conflicting {
-            let mut next = held.data.clone();
-            next.signed_snapshots.insert(app.to_string());
-            if next != held.data || held.dirty {
-                self.keeper.save(next.to_json()).await.map_err(not_saved)?;
-                held.data = next;
-                held.dirty = false;
-            }
-            return Ok(false);
-        }
-        let mut next = held.data.clone();
-        next.saw_snapshot(app, Some(&snapshot.log), snapshot.seq);
-        let saved_candidate = next != held.data || held.dirty;
-        if saved_candidate {
-            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
-        }
-        if !commit_external()? {
-            // Another task observed a conflicting log while `keeper.save` was
-            // awaiting: do not commit `snapshot.log` into `held.data` or
-            // `recorded_log_ids`, and rewrite persisted state with only
-            // `signed_snapshots[app]` added.
-            let mut fallback = held.data.clone();
-            fallback.signed_snapshots.insert(app.to_string());
-            if saved_candidate || fallback != held.data || held.dirty {
-                self.keeper.save(fallback.to_json()).await.map_err(not_saved)?;
-                held.data = fallback;
-                held.dirty = false;
-            }
-            return Ok(false);
-        }
-        held.data = next;
-        held.dirty = false;
-        held.recorded_log_ids.insert(app.to_string(), snapshot.log.clone());
-        Ok(true)
+        let superseded = held.recorded_log_ids.get(app).is_some_and(|existing| existing != &snapshot.log);
+        Self::record_snapshot_ordered(&self.keeper, &mut held, app, Some(&snapshot.log), snapshot.seq, superseded, observer).await
     }
 
     /// Streaming variant of [`Self::verify_snapshot`] taking a precomputed blake3 digest.
@@ -863,6 +822,43 @@ impl PersonalAuth {
         }
         Self::flush(keeper, held).await
     }
+
+    /// Records a signed snapshot at [seq] of [log] in order with [observer].
+    /// Only `signed_snapshots[app]` is persisted before [observer] accepts
+    /// [log], so a log observed meanwhile never finds a binding to [log]
+    /// persisted, even across a restart; once accepted, the binding is
+    /// persisted before `true` is returned for a [log] still observed, and
+    /// reverted when another log was observed meanwhile. Every save is marked
+    /// dirty first, so a failed one is retried by
+    /// [`Self::flush_pending_versions`].
+    async fn record_snapshot_ordered(
+        keeper: &Arc<dyn VersionKeeper>,
+        held: &mut VersionState,
+        app: &str,
+        log: Option<&str>,
+        seq: i64,
+        superseded: bool,
+        observer: &impl LogObserver,
+    ) -> Result<bool, Error> {
+        Self::record_committed_held(keeper, held, |v| {
+            v.signed_snapshots.insert(app.to_string());
+        })
+        .await?;
+        if superseded || !log.map_or(Ok(true), |l| observer.commit(l))? {
+            return Ok(false);
+        }
+        let prior = held.data.clone();
+        Self::record_committed_held(keeper, held, |v| v.saw_snapshot(app, log, seq)).await?;
+        if !log.map_or(Ok(true), |l| observer.confirm(l))? {
+            // Superseded while saved: nothing stays bound to [log].
+            Self::record_committed_held(keeper, held, |v| *v = prior).await?;
+            return Ok(false);
+        }
+        if let Some(l) = log {
+            held.recorded_log_ids.insert(app.to_string(), l.to_string());
+        }
+        Ok(true)
+    }
 }
 
 fn verify_sig(s: &Signed, msg: &[u8], what: &str) -> Result<(), Error> {
@@ -929,6 +925,99 @@ mod tests {
     async fn signed_snapshot(auth: &PersonalAuth, key: &AccountKey, log: &str, seq: i64, body: &[u8]) -> Snapshot {
         let sig = auth.sign_snapshot("serverbox", seq, body).await;
         Snapshot { log: log.into(), seq, signed: Some(signed(key, sig.signature, None)) }
+    }
+
+    /// Accepts or refuses every log, remembering what was persisted when asked.
+    struct TestObserver {
+        accept: bool,
+        keeper: Arc<MemKeeper>,
+        observed: Mutex<Option<String>>,
+        saved_at_commit: Mutex<Option<String>>,
+    }
+
+    impl TestObserver {
+        fn new(accept: bool, keeper: &Arc<MemKeeper>) -> Self {
+            Self { accept, keeper: keeper.clone(), observed: Mutex::new(None), saved_at_commit: Mutex::new(None) }
+        }
+    }
+
+    impl LogObserver for TestObserver {
+        fn commit(&self, log: &str) -> Result<bool, Error> {
+            *self.saved_at_commit.lock().unwrap() = Some(self.keeper.saved.lock().unwrap().clone());
+            if self.accept {
+                *self.observed.lock().unwrap() = Some(log.into());
+            }
+            Ok(self.accept)
+        }
+
+        fn confirm(&self, log: &str) -> Result<bool, Error> {
+            Ok(self.observed.lock().unwrap().as_deref() == Some(log))
+        }
+    }
+
+    #[tokio::test]
+    async fn detached_snapshot_binding_is_persisted_only_once_accepted() {
+        let key = AccountKey::generate("u1");
+        let saved = |keeper: &MemKeeper| PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
+
+        // Refused: only the marker is persisted, never the binding.
+        let (auth, keeper) = auth_for(key.clone());
+        let snap = signed_snapshot(&auth, &key, "log-a", 5, b"snap").await;
+        let observer = TestObserver::new(false, &keeper);
+        assert!(!auth.verify_snapshot_digest_for_detached("serverbox", &snap, &digest(b"snap"), &observer).await.unwrap());
+        let v = saved(&keeper);
+        assert!(v.signed_snapshots.contains("serverbox"));
+        assert!(v.signed_log_ids.is_empty() && v.signed_log_from.is_empty(), "{v:?}");
+        assert_eq!(auth.signed_log_id("serverbox").await, None);
+
+        // A failed marker save stays dirty and is retried by `flush_pending_versions`.
+        let (auth, keeper) = auth_for(key.clone());
+        let observer = TestObserver::new(true, &keeper);
+        keeper.fail.store(true, Ordering::SeqCst);
+        assert_eq!(auth.verify_snapshot_digest_for_detached("serverbox", &snap, &digest(b"snap"), &observer).await.unwrap_err().kind, Kind::Invalid);
+        assert!(observer.saved_at_commit.lock().unwrap().is_none(), "observer asked before the marker was saved");
+        keeper.fail.store(false, Ordering::SeqCst);
+        auth.flush_pending_versions().await.unwrap();
+        assert!(saved(&keeper).signed_snapshots.contains("serverbox"));
+
+        // Accepted: nothing bound to the log is on disk when the observer
+        // decides, and a failed binding save stays dirty instead of succeeding.
+        keeper.fail.store(true, Ordering::SeqCst);
+        assert_eq!(auth.verify_snapshot_digest_for_detached("serverbox", &snap, &digest(b"snap"), &observer).await.unwrap_err().kind, Kind::Invalid);
+        let at_commit = observer.saved_at_commit.lock().unwrap().clone().unwrap();
+        assert!(!at_commit.contains("log-a"), "{at_commit}");
+        keeper.fail.store(false, Ordering::SeqCst);
+        auth.flush_pending_versions().await.unwrap();
+        let v = saved(&keeper);
+        assert_eq!(v.signed_log_ids.get("serverbox").map(String::as_str), Some("log-a"));
+        assert_eq!(v.log_signed_from("serverbox"), Some(5));
+        assert!(auth.verify_snapshot_digest_for_detached("serverbox", &snap, &digest(b"snap"), &observer).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn snapshot_binding_yields_to_a_log_observed_while_saved() {
+        let key = AccountKey::generate("u1");
+        let (auth, keeper) = auth_for(key);
+        // Observed something else by the time the binding is saved.
+        struct Moved;
+        impl LogObserver for Moved {
+            fn commit(&self, _: &str) -> Result<bool, Error> {
+                Ok(true)
+            }
+            fn confirm(&self, _: &str) -> Result<bool, Error> {
+                Ok(false)
+            }
+        }
+        assert!(!auth.record_snapshot_if_log_compatible("serverbox", Some("log-a"), 5, &Moved).await.unwrap());
+        let v = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
+        assert!(v.signed_snapshots.contains("serverbox"));
+        assert_eq!(v.signed_log_ids.get("serverbox"), None, "nothing stays bound to a log superseded while saved");
+        assert!(auth.record_snapshot_if_log_compatible("serverbox", Some("log-a"), 5, &TestObserver::new(true, &keeper)).await.unwrap());
+        // A known different log records only the marker, leaving its floor.
+        assert!(!auth.record_snapshot_if_log_compatible("serverbox", Some("log-b"), 1, &TestObserver::new(true, &keeper)).await.unwrap());
+        let v = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
+        assert_eq!(v.signed_log_ids.get("serverbox").map(String::as_str), Some("log-a"));
+        assert_eq!(v.log_signed_from("serverbox"), Some(5));
     }
 
     #[tokio::test]
@@ -1228,7 +1317,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retained_blob_enforces_signed_apps_while_allowing_signed_blobs_legacy() {
+    async fn retained_blob_survives_signed_apps_but_not_a_name_seen_signed() {
         let key = AccountKey::generate("u1");
 
         // When only `signed_blobs` is set (ordinary files not locked to signed-only),
@@ -1241,12 +1330,20 @@ mod tests {
             Kind::Untrusted
         );
 
-        // Once `signed_apps` locks ordinary files to signed-only, `verify_retained_blob`
-        // MUST also reject unsigned responses.
+        // `signed_apps` locks ordinary files and strict blob reads, but a retained
+        // pre-signing blob stays readable so it can still be migrated.
         let apps_locked = PersonalVersions::from_json(r#"{"v":2,"signed_apps":["serverbox"],"signed_blobs":["serverbox"]}"#).unwrap();
         let auth_locked = PersonalAuth::new(key, apps_locked, MemKeeper::new());
+        auth_locked.verify_retained_blob("serverbox", "op-legacy.age", b"legacy", None).await.unwrap();
         assert_eq!(
-            auth_locked.verify_retained_blob("serverbox", "op-legacy.age", b"legacy", None).await.unwrap_err().kind,
+            auth_locked.verify_blob("serverbox", "op-legacy.age", b"legacy", None).await.unwrap_err().kind,
+            Kind::Untrusted
+        );
+
+        // A name seen signed refuses an unsigned answer on the retained path too.
+        auth_locked.record_named_blob_written("serverbox", "op-signed.age").await.unwrap();
+        assert_eq!(
+            auth_locked.verify_retained_blob("serverbox", "op-signed.age", b"stripped", None).await.unwrap_err().kind,
             Kind::Untrusted
         );
     }

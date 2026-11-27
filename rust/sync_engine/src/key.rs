@@ -218,26 +218,58 @@ impl WriteIntent {
     }
 }
 
+/// An external account-key intent: only one carrying explicit provenance
+/// (`owners`) counts, whatever its `pwd` parses as.
 fn decode_external_intent(raw: &str) -> Option<RecoveredExternal> {
     let v: serde_json::Value = serde_json::from_str(raw).ok()?;
     let _epoch = v["epoch"].as_i64()?;
-    let pwd = v["pwd"].as_str()?;
-    let key = SecretKey::parse(pwd).ok()?.format().to_string();
-    match v.get("owners").and_then(serde_json::Value::as_array) {
-        Some(arr) => {
-            let owners: BTreeSet<String> = arr
-                .iter()
-                .filter_map(serde_json::Value::as_str)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect();
-            let unowned = v.get("unowned").and_then(serde_json::Value::as_bool).unwrap_or(false);
-            let rec = RecoveredExternal { key, owners, unowned };
-            (!rec.is_empty()).then_some(rec)
-        }
-        // Legacy pre-owner record (`{"epoch": 0, "pwd": "..."}`): treated as
-        // unowned so no named account may claim or clear it via stage-less calls.
-        None => Some(RecoveredExternal { key, owners: BTreeSet::new(), unowned: true }),
+    let key = SecretKey::parse(v["pwd"].as_str()?).ok()?.format().to_string();
+    let owners: BTreeSet<String> = v
+        .get("owners")?
+        .as_array()?
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let unowned = v.get("unowned").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let rec = RecoveredExternal { key, owners, unowned };
+    (!rec.is_empty()).then_some(rec)
+}
+
+fn encode_external_intent(key: &str, owners: &BTreeSet<String>, unowned: bool) -> String {
+    serde_json::json!({ "epoch": 0, "pwd": key, "owners": owners, "unowned": unowned }).to_string()
+}
+
+// TODO(migration): remove with the pre-namespace `intent:lkc-account-key`
+// record once no device still holds one.
+/// What a pre-namespace `intent:lkc-account-key` record is: the write intent
+/// of a folder remote with that id and an external account-key intent share
+/// the key and, without `owners`, the shape.
+enum LegacyExternal {
+    /// A folder remote's write intent: left under the ordinary guard.
+    Folder,
+    /// An external intent with explicit provenance: migrated to `ext-intent:`.
+    External(RecoveredExternal),
+    /// Either one: kept in place for folder recovery, its key protected
+    /// until an external settlement establishes the owner.
+    Ambiguous(String),
+}
+
+/// [folder_known]: this device knows a folder remote named
+/// [EXTERNAL_COMMIT_ID] (an epoch, a pending password, or a handle).
+fn classify_legacy_external(raw: &str, folder_known: bool) -> LegacyExternal {
+    let has_owners = serde_json::from_str::<serde_json::Value>(raw).is_ok_and(|v| v.get("owners").is_some());
+    if has_owners {
+        return decode_external_intent(raw).map_or(LegacyExternal::Folder, LegacyExternal::External);
+    }
+    match WriteIntent::decode(raw) {
+        // External intents were always written at epoch 0.
+        Some(w) if !folder_known && w.epoch == 0 => match SecretKey::parse(&w.pwd) {
+            Ok(k) => LegacyExternal::Ambiguous(k.format().to_string()),
+            Err(_) => LegacyExternal::Folder,
+        },
+        _ => LegacyExternal::Folder,
     }
 }
 
@@ -311,6 +343,10 @@ type TestTakeMergeHook = Arc<dyn Fn() -> BoxFuture<'static, ()> + Send + Sync>;
 pub struct SyncKey {
     handle_id: u64,
     forget_gen: u64,
+    /// `(lkc_switch_gen, lkc_account_gen)` captured when an LK Cloud account
+    /// handle was made: an account switch or stale-account invalidation since
+    /// then stops any new key-file write through it.
+    lkc_tokens: Option<(u64, u64)>,
     /// The file's store as last given: another object once signed in again.
     file: StdMutex<Arc<dyn KeyFile>>,
     ring: Arc<RingInner>,
@@ -434,6 +470,14 @@ impl KeyTable {
     fn is_current(&self, id: &str, handle: &SyncKey) -> bool {
         self.keys.get(id).is_some_and(|registered| std::ptr::eq(Arc::as_ptr(registered), handle))
     }
+
+    /// Whether LK Cloud account tokens captured for [id] still name the
+    /// active (or not yet selected) account.
+    fn lkc_tokens_live(&self, id: &str, (switch_gen, account_gen): (u64, u64)) -> bool {
+        self.lkc_switch_gen == switch_gen
+            && self.lkc_account_gen_of(id) == account_gen
+            && self.lkc_active.as_ref().is_none_or(|a| a.as_deref() == Some(id))
+    }
 }
 
 struct RingInner {
@@ -459,6 +503,23 @@ struct RingInner {
 const EXTERNAL_COMMIT_ID: &str = "lkc-account-key";
 
 impl RingInner {
+    // TODO(migration): remove with the pre-namespace record.
+    /// The pre-namespace `intent:lkc-account-key` record, classified.
+    async fn legacy_external(&self, pending: &HashMap<String, String>) -> Result<Option<LegacyExternal>> {
+        let Some(raw) = pending.get(&write_intent_key(EXTERNAL_COMMIT_ID)) else {
+            return Ok(None);
+        };
+        let mut folder_known = pending.contains_key(EXTERNAL_COMMIT_ID) || {
+            let table = self.keys.lock().unwrap_or_else(|e| e.into_inner());
+            table.keys.contains_key(EXTERNAL_COMMIT_ID) || table.pending_writes.contains_key(EXTERNAL_COMMIT_ID)
+        };
+        if !folder_known {
+            let epochs = self.secrets.epochs().await?;
+            folder_known = epochs.contains_key(EXTERNAL_COMMIT_ID) || epochs.contains_key(&two_fa_key(EXTERNAL_COMMIT_ID));
+        }
+        Ok(Some(classify_legacy_external(raw, folder_known)))
+    }
+
     async fn hydrate_recovered_external_locked(&self, init: &mut SecretKeyInitState) -> Result<()> {
         if init.recovered_external_commit.is_some() {
             return Ok(());
@@ -466,23 +527,20 @@ impl RingInner {
         let _st = self.pending_lock.lock().await;
         let mut pending = self.secrets.pending().await?;
         let ext_key = external_intent_key(EXTERNAL_COMMIT_ID);
-        let recovered = if let Some(raw) = pending.get(&ext_key) {
-            decode_external_intent(raw)
-        } else {
-            // TODO(migration): remove legacy `intent:lkc-account-key` fallback
-            // once pre-namespace external intent records are migrated or settled.
-            let legacy_key = write_intent_key(EXTERNAL_COMMIT_ID);
-            if let Some(raw) = pending.get(&legacy_key).cloned()
-                && let Some(rec) = decode_external_intent(&raw)
-            {
-                pending.insert(ext_key, raw);
-                pending.remove(&legacy_key);
-                self.secrets.set_pending(pending).await?;
-                Some(rec)
-            } else {
-                None
-            }
-        };
+        let mut recovered = pending.get(&ext_key).and_then(|raw| decode_external_intent(raw));
+        // TODO(migration): remove with the pre-namespace record. Only one with
+        // explicit provenance moves; a folder or ambiguous record stays put.
+        if let Some(LegacyExternal::External(rec)) = self.legacy_external(&pending).await?
+            && recovered.as_ref().is_none_or(|cur| cur.key == rec.key)
+        {
+            let mut merged = recovered.unwrap_or_else(|| RecoveredExternal { key: rec.key.clone(), owners: BTreeSet::new(), unowned: false });
+            merged.owners.extend(rec.owners);
+            merged.unowned |= rec.unowned;
+            pending.insert(ext_key, encode_external_intent(&merged.key, &merged.owners, merged.unowned));
+            pending.remove(&write_intent_key(EXTERNAL_COMMIT_ID));
+            self.secrets.set_pending(pending).await?;
+            recovered = Some(merged);
+        }
         init.recovered_external_commit = Some(recovered);
         Ok(())
     }
@@ -518,23 +576,11 @@ impl RingInner {
         let Some(key) = key else {
             return self.clear_external_commit_intent_for(None).await;
         };
-        let encoded = serde_json::json!({
-            "epoch": 0,
-            "pwd": key,
-            "owners": owners,
-            "unowned": unowned,
-        })
-        .to_string();
+        let encoded = encode_external_intent(&key, &owners, unowned);
         let _st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
         let map_key = external_intent_key(EXTERNAL_COMMIT_ID);
-        // TODO(migration): remove legacy key cleanup once pre-namespace records are gone.
-        let legacy_key = write_intent_key(EXTERNAL_COMMIT_ID);
-        let removed_legacy = all
-            .get(&legacy_key)
-            .is_some_and(|raw| decode_external_intent(raw).is_some())
-            && all.remove(&legacy_key).is_some();
-        if all.get(&map_key) == Some(&encoded) && !removed_legacy {
+        if all.get(&map_key) == Some(&encoded) {
             return Ok(());
         }
         all.insert(map_key, encoded);
@@ -545,7 +591,6 @@ impl RingInner {
         let _st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
         let key = external_intent_key(EXTERNAL_COMMIT_ID);
-        let mut changed = false;
         let should_remove = match (all.get(&key), expected) {
             (None, _) => false,
             (Some(_), None) => true,
@@ -555,19 +600,19 @@ impl RingInner {
         };
         if should_remove {
             all.remove(&key);
-            changed = true;
+            self.secrets.set_pending(all).await?;
         }
-        // TODO(migration): remove legacy key cleanup once pre-namespace records are gone.
-        let legacy_key = write_intent_key(EXTERNAL_COMMIT_ID);
-        let should_remove_legacy = all
-            .get(&legacy_key)
-            .and_then(|raw| decode_external_intent(raw))
-            .is_some_and(|rec| expected.is_none_or(|cand| rec.key.as_str() == cand));
-        if should_remove_legacy {
-            all.remove(&legacy_key);
-            changed = true;
-        }
-        if changed {
+        Ok(())
+    }
+
+    // TODO(migration): remove with the pre-namespace record.
+    /// An ownerless external settlement for [formatted] establishes an
+    /// ambiguous legacy record for that key as the external intent: it goes.
+    async fn settle_ambiguous_legacy_external(&self, formatted: &str) -> Result<()> {
+        let _st = self.pending_lock.lock().await;
+        let mut all = self.secrets.pending().await?;
+        if matches!(self.legacy_external(&all).await?, Some(LegacyExternal::Ambiguous(k)) if k == formatted) {
+            all.remove(&write_intent_key(EXTERNAL_COMMIT_ID));
             self.secrets.set_pending(all).await?;
         }
         Ok(())
@@ -673,6 +718,10 @@ impl RingInner {
                 Ok(())
             }
             None => {
+                // TODO(migration): drop with the pre-namespace record.
+                if account.is_none() {
+                    self.settle_ambiguous_legacy_external(formatted).await?;
+                }
                 let Some(Some(cur)) = init.recovered_external_commit.as_ref() else {
                     if init.external_commits.is_empty() {
                         // Clean up any corrupt/unreadable legacy entry when idle.
@@ -965,7 +1014,14 @@ impl KeyRing {
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
         self.0.hydrate_recovered_external_locked(&mut init).await?;
-        if matches!(&init.recovered_external_commit, Some(Some(rec)) if !rec.is_empty() && rec.key != formatted)
+        // TODO(migration): drop with the pre-namespace record.
+        let legacy_conflict = match self.0.legacy_external(&self.0.secrets.pending().await?).await? {
+            Some(LegacyExternal::External(rec)) => rec.key != formatted,
+            Some(LegacyExternal::Ambiguous(k)) => k != formatted,
+            Some(LegacyExternal::Folder) | None => false,
+        };
+        if legacy_conflict
+            || matches!(&init.recovered_external_commit, Some(Some(rec)) if !rec.is_empty() && rec.key != formatted)
             || init.external_commits.values().any(|(_, c)| c != &formatted)
         {
             return Err(Error::Host("another secret key has an unresolved external write intent".into()));
@@ -1051,22 +1107,33 @@ impl KeyRing {
                 return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
             }
         }
-        // TODO(migration): remove legacy `intent:lkc-account-key` check once
-        // pre-namespace external intent records are migrated or settled.
+        // TODO(migration): remove the legacy `intent:lkc-account-key` handling
+        // once pre-namespace external intent records are migrated or settled.
         let legacy_ext_key = write_intent_key(EXTERNAL_COMMIT_ID);
-        let legacy_ext = pending.get(&legacy_ext_key).and_then(|raw| decode_external_intent(raw));
-        if let Some(ref rec) = legacy_ext
-            && rec.key.as_str() != formatted.as_str()
-        {
-            return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
+        let legacy_ext = self.0.legacy_external(&pending).await?;
+        match &legacy_ext {
+            Some(LegacyExternal::External(rec)) if rec.key != formatted => {
+                return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
+            }
+            // Its owner unknown, the record and both slots stay as they are:
+            // only the key already active here imports, as a no-op.
+            Some(LegacyExternal::Ambiguous(_)) => {
+                return if existing.as_ref().is_some_and(|k| k.format().as_str() == formatted.as_str()) {
+                    Ok(())
+                } else {
+                    Err(Error::Host("a legacy key write intent has no known owner; refusing import".into()))
+                };
+            }
+            _ => {}
         }
         let staged = self.0.pending_secret_key().await?;
         let replacing_different_key = existing.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str())
             || staged.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str());
         if replacing_different_key {
+            let external_legacy = matches!(legacy_ext, Some(LegacyExternal::External(_)));
             if pending
                 .keys()
-                .any(|k| k.starts_with(WRITE_INTENT_PREFIX) && !(k == &legacy_ext_key && legacy_ext.is_some()))
+                .any(|k| k.starts_with(WRITE_INTENT_PREFIX) && !(k == &legacy_ext_key && external_legacy))
             {
                 return Err(Error::Host("a secret key has an unresolved remote write intent; refusing conflicting import".into()));
             }
@@ -1130,7 +1197,9 @@ impl KeyRing {
             } else {
                 None
             };
-            match table.keys.get(&id) {
+            // A handle made under other LK Cloud account tokens (or none) is
+            // replaced, so every write through the returned one checks these.
+            match table.keys.get(&id).filter(|k| k.lkc_tokens == tokens) {
                 Some(k) => {
                     *k.file.lock().unwrap_or_else(|e| e.into_inner()) = file;
                     (k.clone(), false, tokens)
@@ -1142,6 +1211,7 @@ impl KeyRing {
                     let key = Arc::new(SyncKey {
                         handle_id,
                         forget_gen,
+                        lkc_tokens: tokens,
                         file: StdMutex::new(file),
                         ring: self.0.clone(),
                         state: StdMutex::new(State::default()),
@@ -1166,27 +1236,14 @@ impl KeyRing {
             {
                 table.keys.remove(&id);
             }
-            if start_lkc_tokens.is_some_and(|(g, acct_g)| {
-                table.lkc_switch_gen != g
-                    || table.lkc_account_gen_of(&id) != acct_g
-                    || table
-                        .lkc_active
-                        .as_ref()
-                        .is_some_and(|a| a.as_deref() != Some(id.as_str()))
-            }) {
+            if start_lkc_tokens.is_some_and(|t| !table.lkc_tokens_live(&id, t)) {
                 return Err(Error::SignedOut);
             }
             return Err(e);
         }
-        if let Some((g, acct_g)) = start_lkc_tokens {
+        if let Some(t) = start_lkc_tokens {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-            if table.lkc_switch_gen != g
-                || table.lkc_account_gen_of(&id) != acct_g
-                || table
-                    .lkc_active
-                    .as_ref()
-                    .is_some_and(|a| a.as_deref() != Some(id.as_str()))
-            {
+            if !table.lkc_tokens_live(&id, t) {
                 if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) {
                     table.keys.remove(&id);
                     table.bump_id(&id);
@@ -1587,6 +1644,21 @@ impl SyncKey {
         Ok(())
     }
 
+    /// Whether a new key-file write may start through this handle: its remote
+    /// is not forgotten and, for an LK Cloud account, still the selected one.
+    /// Recovery of an already committed write checks only the forget
+    /// generation.
+    fn writable_in(&self, table: &KeyTable, id: &str) -> Result<()> {
+        if table.forget_gen_of(id) != self.forget_gen || self.lkc_tokens.is_some_and(|t| !table.lkc_tokens_live(id, t)) {
+            return Err(Error::SignedOut);
+        }
+        Ok(())
+    }
+
+    fn ensure_writable(&self, id: &str) -> Result<()> {
+        self.writable_in(&self.ring.keys.lock().unwrap_or_else(|e| e.into_inner()), id)
+    }
+
     /// Performs a conditional key-file write, separating a committed remote PUT
     /// whose local signing watermark save failed (`Ok(Some((version, Some(detail))))`)
     /// from a CAS miss (`Ok(None)` -> HTTP 412) and uncommitted transport errors.
@@ -1594,9 +1666,7 @@ impl SyncKey {
         let id = self.id();
         let superseded_seq = {
             let table = self.ring.keys.lock().unwrap_or_else(|e| e.into_inner());
-            if table.forget_gen_of(&id) != self.forget_gen {
-                return Err(Error::SignedOut);
-            }
+            self.writable_in(&table, &id)?;
             table
                 .pending_writes
                 .get(&id)
@@ -1687,7 +1757,7 @@ impl SyncKey {
     ) -> Result<Option<(String, SecretKey, Option<String>)>> {
         let mut init = self.ring.secret_key_init.lock().await;
         let id = self.id();
-        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
+        self.ensure_writable(&id)?;
         let (sk, generated) = match self.ring.candidate_locked().await {
             Err(Error::SecretKeyMissing) => {
                 // None may be made here: one is to be made or imported by
@@ -1865,7 +1935,7 @@ impl SyncKey {
                     let epoch = old_epoch + 1;
                     let (written, persist_err) = {
                         let mut init = self.ring.secret_key_init.lock().await;
-                        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
+                        self.ensure_writable(&id)?;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
@@ -1926,7 +1996,7 @@ impl SyncKey {
                     let epoch = old_epoch + 1;
                     let (written, persist_err) = {
                         let mut init = self.ring.secret_key_init.lock().await;
-                        self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
+                        self.ensure_writable(&id)?;
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
@@ -2037,7 +2107,7 @@ impl SyncKey {
                 }
                 let (written, persist_err) = {
                     let _init = self.ring.secret_key_init.lock().await;
-                    self.ring.ensure_not_forgotten(&self.id(), self.forget_gen)?;
+                    self.ensure_writable(&self.id())?;
                     let cur_sk = self.ring.secret_key().await?;
                     if cur_sk.as_ref().map(|k| k.format()) != Some(sk.format()) {
                         return Ok(false);
@@ -2132,7 +2202,7 @@ impl SyncKey {
         };
         let (version, persist_err) = {
             let _init = self.ring.secret_key_init.lock().await;
-            self.ring.ensure_not_forgotten(&self.id(), self.forget_gen)?;
+            self.ensure_writable(&self.id())?;
             let cur_sk = self.ring.secret_key().await?;
             if cur_sk.as_ref().map(|k| k.format()) != Some(sk.format()) {
                 return Err(Error::Host("the secret key changed during rotation".into()));
