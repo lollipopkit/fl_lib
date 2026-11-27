@@ -372,7 +372,6 @@ void main() {
     final keyA = SyncKeyring.generateSecretKey();
     final keyB = SyncKeyring.generateSecretKey();
     final intentJson = '{"ext-intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
-    final legacyIntentJson = '{"intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
 
     // Case 1: keyA is already ACTIVE (no pending staged key), durable external intent exists.
     SyncKeyring.resetForTest();
@@ -395,41 +394,6 @@ void main() {
     });
     await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
-
-    // Case 2b: a legacy `intent:lkc-account-key` record without provenance has
-    // no known owner: only the active key imports, without touching either slot.
-    FlutterSecureStorage.setMockInitialValues({
-      'syncSecretKey': keyA,
-      'syncSecretKeyPending': keyB,
-      'syncKeyPending': legacyIntentJson,
-    });
-    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
-    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
-    await SyncKeyring.storeSecretKey(keyA);
-    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
-    expect(await const SecureProp('syncSecretKeyPending').read(limited: false), keyB);
-
-    // Case 2c: with explicit provenance it is an external intent for keyA.
-    final ownedLegacyJson = jsonEncode({
-      'intent:lkc-account-key': jsonEncode({'epoch': 0, 'pwd': keyA, 'owners': ['u1'], 'unowned': false}),
-    });
-    FlutterSecureStorage.setMockInitialValues({'syncKeyPending': ownedLegacyJson});
-    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
-    await SyncKeyring.storeSecretKey(keyA);
-    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
-
-    // Case 2d: a folder remote named `lkc-account-key` whose password parses as
-    // a Secret Key keeps the ordinary replacement guard, not an external one.
-    final folderJson = jsonEncode({
-      'lkc-account-key': 'old-folder-password',
-      'intent:lkc-account-key': jsonEncode({'epoch': 0, 'pwd': keyB}),
-    });
-    FlutterSecureStorage.setMockInitialValues({'syncSecretKey': keyA, 'syncKeyPending': folderJson});
-    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
-    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
-    FlutterSecureStorage.setMockInitialValues({'syncKeyPending': folderJson});
-    await SyncKeyring.storeSecretKey(keyA);
-    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
 
     // Case 3: once no unresolved intent exists, replacing active keyA with keyB succeeds.
     FlutterSecureStorage.setMockInitialValues({

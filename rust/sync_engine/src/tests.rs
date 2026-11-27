@@ -3446,7 +3446,7 @@ async fn cas_miss_during_default_flush_committed_write_retains_pending_write() {
 }
 
 #[tokio::test]
-async fn account_scoped_external_intents_isolate_accounts_and_treat_legacy_unowned_as_unmatched() {
+async fn account_scoped_external_intents_isolate_accounts() {
     let d1 = Device::new("pw");
     let key_a = d1.secrets.secret_key.lock().unwrap().clone().unwrap();
     let key_b = fl_lkc::secret_key::SecretKey::generate().format().to_string();
@@ -3466,64 +3466,6 @@ async fn account_scoped_external_intents_isolate_accounts_and_treat_legacy_unown
     restarted.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
     assert!(!d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
 
-    // 2. A legacy record with explicit provenance (`owners`) migrates to
-    //    `ext-intent:lkc-account-key` and stays scoped to its owner.
-    d1.secrets.pending.lock().unwrap().insert(
-        "intent:lkc-account-key".into(),
-        serde_json::json!({ "epoch": 0, "pwd": key_a, "owners": ["u1"], "unowned": false }).to_string(),
-    );
-    let legacy_ring = KeyRing::new(d1.secrets.clone(), "test");
-    legacy_ring.commit_secret_key_for(&key_a, None, Some("u2")).await.unwrap();
-    assert!(d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
-    assert!(!d1.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
-    assert!(legacy_ring.store_secret_key(&key_b).await.is_err());
-    legacy_ring.commit_secret_key_for(&key_a, None, Some("u1")).await.unwrap();
-    assert!(!d1.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
-}
-
-#[tokio::test]
-async fn legacy_lkc_account_key_record_without_provenance_is_never_external_by_shape() {
-    let legacy = || serde_json::json!({ "epoch": 0, "pwd": fl_lkc::secret_key::SecretKey::generate().format().to_string() }).to_string();
-
-    // A folder remote named `lkc-account-key` whose password parses as a
-    // Secret Key: its write intent stays under the ordinary replacement guard.
-    let d = Device::new("pw");
-    let active = d.secrets.secret_key.lock().unwrap().clone().unwrap();
-    let other = fl_lkc::secret_key::SecretKey::generate().format().to_string();
-    let folder_raw = legacy();
-    d.secrets.pending.lock().unwrap().insert("intent:lkc-account-key".into(), folder_raw.clone());
-    d.secrets.epochs.lock().unwrap().insert("lkc-account-key".into(), 0);
-    let ring = KeyRing::new(d.secrets.clone(), "test");
-    let folder_pwd = serde_json::from_str::<serde_json::Value>(&folder_raw).unwrap()["pwd"].as_str().unwrap().to_string();
-    let stage = ring.stage_external_secret_key_commit(&active).await.expect("a folder record protects no external key");
-    ring.clear_external_secret_key_commit(&active, Some(&stage)).await.unwrap();
-    assert!(ring.store_secret_key(&folder_pwd).await.is_err(), "ordinary guard: no replacement while a folder intent is open");
-    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:lkc-account-key"), Some(&folder_raw));
-    assert!(!d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
-    ring.store_secret_key(&active).await.unwrap();
-
-    // No folder evidence: the owner is unknown. The record stays for folder
-    // recovery, both slots stay, and only the active key imports (a no-op).
-    let d = Device::new("pw");
-    let active = d.secrets.secret_key.lock().unwrap().clone().unwrap();
-    let ambiguous_raw = legacy();
-    let candidate = serde_json::from_str::<serde_json::Value>(&ambiguous_raw).unwrap()["pwd"].as_str().unwrap().to_string();
-    d.secrets.pending.lock().unwrap().insert("intent:lkc-account-key".into(), ambiguous_raw.clone());
-    *d.secrets.pending_secret_key.lock().unwrap() = Some(candidate.clone());
-    let ring = KeyRing::new(d.secrets.clone(), "test");
-    ring.store_secret_key(&active).await.unwrap();
-    assert_eq!(d.secrets.pending_secret_key.lock().unwrap().as_deref(), Some(candidate.as_str()));
-    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(active.as_str()));
-    assert!(ring.store_secret_key(&other).await.is_err());
-    assert!(ring.store_secret_key(&candidate).await.is_err());
-    assert!(ring.stage_external_secret_key_commit(&active).await.is_err(), "the candidate stays protected");
-    ring.commit_secret_key_for(&active, None, Some("u1")).await.unwrap();
-    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:lkc-account-key"), Some(&ambiguous_raw));
-    assert!(!d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
-
-    // An ownerless external settlement of that key establishes the owner.
-    ring.clear_external_secret_key_commit(&candidate, None).await.unwrap();
-    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
 }
 
 #[tokio::test]

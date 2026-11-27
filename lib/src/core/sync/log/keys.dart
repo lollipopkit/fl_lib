@@ -165,21 +165,6 @@ abstract final class SyncKeyring {
           throw StateError('A secret key has an unresolved external write intent; refusing conflicting import');
         }
       }
-      // TODO(migration): remove the legacy `intent:lkc-account-key` handling
-      // once pre-namespace external intent records are migrated or settled.
-      final epochs = _decoded(_epochsProp.get());
-      final legacyExt = _legacyExternal(pending, epochs);
-      switch (legacyExt) {
-        case (external: true, :final key) when key != canonical:
-          throw StateError('A secret key has an unresolved external write intent; refusing conflicting import');
-        // Its owner unknown, the record and both slots stay as they are: only
-        // the key already active here imports, as a no-op.
-        case (external: false, key: _):
-          if (current == canonical) return;
-          throw StateError('A legacy key write intent has no known owner; refusing import');
-        default:
-          break;
-      }
       final stagedRaw = await _pendingSecretKeyProp.read(limited: false);
       final staged = stagedRaw == null || stagedRaw.trim().isEmpty
           ? null
@@ -187,13 +172,11 @@ abstract final class SyncKeyring {
       final replacingDifferentKey =
           (current != null && current != canonical) ||
           (staged != null && staged != canonical);
-      final hasOtherIntent = pending.keys.any(
-        (k) => k.startsWith('intent:') && !(k == _legacyExternalKey && legacyExt?.external == true),
-      );
-      if (replacingDifferentKey && hasOtherIntent) {
+      if (replacingDifferentKey && pending.keys.any((k) => k.startsWith('intent:'))) {
         throw StateError('A secret key has an unresolved remote write intent; refusing conflicting import');
       }
       if (staged != null && staged != canonical && current == null) {
+        final epochs = _decoded(_epochsProp.get());
         if (epochs.keys.any((k) => k.startsWith('2fa:'))) {
           throw StateError('A staged secret key has a committed remote write; refusing conflicting import');
         }
@@ -420,34 +403,6 @@ abstract final class SyncKeyring {
       }),
       _ => Future.value(SyncReply(json: '', error: 'no such call: $method', errorKind: 'host')),
     };
-  }
-
-  // TODO(migration): remove with the pre-namespace `intent:lkc-account-key`
-  // record once no device still holds one.
-  static const _legacyExternalId = 'lkc-account-key';
-  static const _legacyExternalKey = 'intent:$_legacyExternalId';
-
-  /// The pre-namespace record as `fl_sync_engine::key` classifies it: null
-  /// for none or a folder remote's write intent; `external` when it carries
-  /// explicit provenance (`owners`); otherwise its owner is unknown.
-  static ({bool external, String key})? _legacyExternal(Map<String, Object?> pending, Map<String, Object?> epochs) {
-    final raw = pending[_legacyExternalKey];
-    if (raw is! String) return null;
-    final record = _decoded(raw);
-    final pwd = record['pwd'];
-    final key = pwd is String && pwd.isNotEmpty ? normalizeSecretKey(pwd) : null;
-    if (key == null || record['epoch'] is! int) return null;
-    if (record.containsKey('owners')) {
-      final owners = record['owners'];
-      if (owners is! List) return null;
-      final owned = owners.any((o) => o is String && o.isNotEmpty);
-      return owned || record['unowned'] == true ? (external: true, key: key) : null;
-    }
-    final folderKnown = pending.containsKey(_legacyExternalId) ||
-        epochs.containsKey(_legacyExternalId) ||
-        epochs.containsKey('2fa:$_legacyExternalId');
-    // External intents were always written at epoch 0.
-    return folderKnown || record['epoch'] != 0 ? null : (external: false, key: key);
   }
 
   static Map<String, Object?> _decoded(String? raw) {

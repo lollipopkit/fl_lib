@@ -241,38 +241,6 @@ fn encode_external_intent(key: &str, owners: &BTreeSet<String>, unowned: bool) -
     serde_json::json!({ "epoch": 0, "pwd": key, "owners": owners, "unowned": unowned }).to_string()
 }
 
-// TODO(migration): remove with the pre-namespace `intent:lkc-account-key`
-// record once no device still holds one.
-/// What a pre-namespace `intent:lkc-account-key` record is: the write intent
-/// of a folder remote with that id and an external account-key intent share
-/// the key and, without `owners`, the shape.
-enum LegacyExternal {
-    /// A folder remote's write intent: left under the ordinary guard.
-    Folder,
-    /// An external intent with explicit provenance: migrated to `ext-intent:`.
-    External(RecoveredExternal),
-    /// Either one: kept in place for folder recovery, its key protected
-    /// until an external settlement establishes the owner.
-    Ambiguous(String),
-}
-
-/// [folder_known]: this device knows a folder remote named
-/// [EXTERNAL_COMMIT_ID] (an epoch, a pending password, or a handle).
-fn classify_legacy_external(raw: &str, folder_known: bool) -> LegacyExternal {
-    let has_owners = serde_json::from_str::<serde_json::Value>(raw).is_ok_and(|v| v.get("owners").is_some());
-    if has_owners {
-        return decode_external_intent(raw).map_or(LegacyExternal::Folder, LegacyExternal::External);
-    }
-    match WriteIntent::decode(raw) {
-        // External intents were always written at epoch 0.
-        Some(w) if !folder_known && w.epoch == 0 => match SecretKey::parse(&w.pwd) {
-            Ok(k) => LegacyExternal::Ambiguous(k.format().to_string()),
-            Err(_) => LegacyExternal::Folder,
-        },
-        _ => LegacyExternal::Folder,
-    }
-}
-
 /// Process-salted BLAKE3 digest of `(pwd, sk)` so plaintext credentials are
 /// never retained in memory across checks.
 fn cred_tag(pwd: &str, sk: Option<&SecretKey>) -> [u8; 32] {
@@ -360,8 +328,7 @@ pub struct SyncKey {
 struct RecoveredExternal {
     key: String,
     owners: BTreeSet<String>,
-    /// True when a pre-restart record carried no owner (legacy record or
-    /// ownerless stage): treated as unmatched by account-scoped stage-less
+    /// True when a pre-restart record carried an ownerless stage: treated as unmatched by account-scoped stage-less
     /// settlement/clear so another account cannot clear an unattributed intent.
     unowned: bool,
 }
@@ -388,8 +355,7 @@ struct SecretKeyInitState {
     /// never drop another write's protection.
     external_commits: HashMap<String, (Option<String>, String)>,
     /// Lazy-hydrated pre-restart external write intent from durable
-    /// `pending["ext-intent:lkc-account-key"]` (or migrated legacy
-    /// `pending["intent:lkc-account-key"]`):
+    /// `pending["ext-intent:lkc-account-key"]`:
     /// - `None`: durable map not yet inspected on this `KeyRing` instance.
     /// - `Some(None)`: no unresolved pre-restart external write remains.
     /// - `Some(Some(rec))`: pre-restart external write(s) for `rec.key` remain
@@ -503,44 +469,13 @@ struct RingInner {
 const EXTERNAL_COMMIT_ID: &str = "lkc-account-key";
 
 impl RingInner {
-    // TODO(migration): remove with the pre-namespace record.
-    /// The pre-namespace `intent:lkc-account-key` record, classified.
-    async fn legacy_external(&self, pending: &HashMap<String, String>) -> Result<Option<LegacyExternal>> {
-        let Some(raw) = pending.get(&write_intent_key(EXTERNAL_COMMIT_ID)) else {
-            return Ok(None);
-        };
-        let mut folder_known = pending.contains_key(EXTERNAL_COMMIT_ID) || {
-            let table = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-            table.keys.contains_key(EXTERNAL_COMMIT_ID) || table.pending_writes.contains_key(EXTERNAL_COMMIT_ID)
-        };
-        if !folder_known {
-            let epochs = self.secrets.epochs().await?;
-            folder_known = epochs.contains_key(EXTERNAL_COMMIT_ID) || epochs.contains_key(&two_fa_key(EXTERNAL_COMMIT_ID));
-        }
-        Ok(Some(classify_legacy_external(raw, folder_known)))
-    }
-
     async fn hydrate_recovered_external_locked(&self, init: &mut SecretKeyInitState) -> Result<()> {
         if init.recovered_external_commit.is_some() {
             return Ok(());
         }
         let _st = self.pending_lock.lock().await;
-        let mut pending = self.secrets.pending().await?;
-        let ext_key = external_intent_key(EXTERNAL_COMMIT_ID);
-        let mut recovered = pending.get(&ext_key).and_then(|raw| decode_external_intent(raw));
-        // TODO(migration): remove with the pre-namespace record. Only one with
-        // explicit provenance moves; a folder or ambiguous record stays put.
-        if let Some(LegacyExternal::External(rec)) = self.legacy_external(&pending).await?
-            && recovered.as_ref().is_none_or(|cur| cur.key == rec.key)
-        {
-            let mut merged = recovered.unwrap_or_else(|| RecoveredExternal { key: rec.key.clone(), owners: BTreeSet::new(), unowned: false });
-            merged.owners.extend(rec.owners);
-            merged.unowned |= rec.unowned;
-            pending.insert(ext_key, encode_external_intent(&merged.key, &merged.owners, merged.unowned));
-            pending.remove(&write_intent_key(EXTERNAL_COMMIT_ID));
-            self.secrets.set_pending(pending).await?;
-            recovered = Some(merged);
-        }
+        let pending = self.secrets.pending().await?;
+        let recovered = pending.get(&external_intent_key(EXTERNAL_COMMIT_ID)).and_then(|raw| decode_external_intent(raw));
         init.recovered_external_commit = Some(recovered);
         Ok(())
     }
@@ -600,19 +535,6 @@ impl RingInner {
         };
         if should_remove {
             all.remove(&key);
-            self.secrets.set_pending(all).await?;
-        }
-        Ok(())
-    }
-
-    // TODO(migration): remove with the pre-namespace record.
-    /// An ownerless external settlement for [formatted] establishes an
-    /// ambiguous legacy record for that key as the external intent: it goes.
-    async fn settle_ambiguous_legacy_external(&self, formatted: &str) -> Result<()> {
-        let _st = self.pending_lock.lock().await;
-        let mut all = self.secrets.pending().await?;
-        if matches!(self.legacy_external(&all).await?, Some(LegacyExternal::Ambiguous(k)) if k == formatted) {
-            all.remove(&write_intent_key(EXTERNAL_COMMIT_ID));
             self.secrets.set_pending(all).await?;
         }
         Ok(())
@@ -718,13 +640,9 @@ impl RingInner {
                 Ok(())
             }
             None => {
-                // TODO(migration): drop with the pre-namespace record.
-                if account.is_none() {
-                    self.settle_ambiguous_legacy_external(formatted).await?;
-                }
                 let Some(Some(cur)) = init.recovered_external_commit.as_ref() else {
                     if init.external_commits.is_empty() {
-                        // Clean up any corrupt/unreadable legacy entry when idle.
+                        // Clean up any corrupt/unreadable entry when idle.
                         self.clear_external_commit_intent_for(Some(formatted)).await?;
                     }
                     return Ok(());
@@ -989,7 +907,7 @@ impl KeyRing {
 
     /// Account-scoped variant of [`Self::commit_secret_key`]: when `stage_id`
     /// is `None`, settles only a crash-recovered intent recorded for [account]
-    /// (treating legacy ownerless records as unmatched when [account] is `Some`).
+    /// (treating ownerless records as unmatched when [account] is `Some`).
     pub async fn commit_secret_key_for(&self, candidate: &str, stage_id: Option<&str>, account: Option<&str>) -> Result<()> {
         let candidate = SecretKey::parse(candidate).map_err(|e| Error::Unreadable(e.to_string()))?;
         let mut init = self.0.secret_key_init.lock().await;
@@ -1014,14 +932,7 @@ impl KeyRing {
         let formatted = candidate.format().to_string();
         let mut init = self.0.secret_key_init.lock().await;
         self.0.hydrate_recovered_external_locked(&mut init).await?;
-        // TODO(migration): drop with the pre-namespace record.
-        let legacy_conflict = match self.0.legacy_external(&self.0.secrets.pending().await?).await? {
-            Some(LegacyExternal::External(rec)) => rec.key != formatted,
-            Some(LegacyExternal::Ambiguous(k)) => k != formatted,
-            Some(LegacyExternal::Folder) | None => false,
-        };
-        if legacy_conflict
-            || matches!(&init.recovered_external_commit, Some(Some(rec)) if !rec.is_empty() && rec.key != formatted)
+        if matches!(&init.recovered_external_commit, Some(Some(rec)) if !rec.is_empty() && rec.key != formatted)
             || init.external_commits.values().any(|(_, c)| c != &formatted)
         {
             return Err(Error::Host("another secret key has an unresolved external write intent".into()));
@@ -1107,34 +1018,11 @@ impl KeyRing {
                 return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
             }
         }
-        // TODO(migration): remove the legacy `intent:lkc-account-key` handling
-        // once pre-namespace external intent records are migrated or settled.
-        let legacy_ext_key = write_intent_key(EXTERNAL_COMMIT_ID);
-        let legacy_ext = self.0.legacy_external(&pending).await?;
-        match &legacy_ext {
-            Some(LegacyExternal::External(rec)) if rec.key != formatted => {
-                return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
-            }
-            // Its owner unknown, the record and both slots stay as they are:
-            // only the key already active here imports, as a no-op.
-            Some(LegacyExternal::Ambiguous(_)) => {
-                return if existing.as_ref().is_some_and(|k| k.format().as_str() == formatted.as_str()) {
-                    Ok(())
-                } else {
-                    Err(Error::Host("a legacy key write intent has no known owner; refusing import".into()))
-                };
-            }
-            _ => {}
-        }
         let staged = self.0.pending_secret_key().await?;
         let replacing_different_key = existing.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str())
             || staged.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str());
         if replacing_different_key {
-            let external_legacy = matches!(legacy_ext, Some(LegacyExternal::External(_)));
-            if pending
-                .keys()
-                .any(|k| k.starts_with(WRITE_INTENT_PREFIX) && !(k == &legacy_ext_key && external_legacy))
-            {
+            if pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX)) {
                 return Err(Error::Host("a secret key has an unresolved remote write intent; refusing conflicting import".into()));
             }
             let has_pending_write = {
