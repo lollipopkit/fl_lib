@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:computer/computer.dart';
 import 'package:fl_lib/fl_lib.dart';
 import 'package:fl_lib/generated/l10n/lib_l10n.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,10 +8,6 @@ import 'package:re_editor/re_editor.dart';
 
 /// Markdown opens rendered; the source is one tap away.
 void main() {
-  // The editor reads a file in a worker.
-  setUpAll(() => Computer.shared.turnOn(workersCount: 1));
-  tearDownAll(() => Computer.shared.turnOff());
-
   Future<void> pumpEditor(WidgetTester tester, EditorPageArgs args) async {
     await tester.pumpWidget(_app(args));
     await pumpFrames(tester);

@@ -5,8 +5,8 @@ homepage: https://github.com/lppcg/fl_lib
 publish_to: none
 
 environment:
-  sdk: ">=3.13.0 <4.0.0"
-  flutter: ">=3.47.0"
+  sdk: ">=3.14.0 <4.0.0"
+  flutter: ">=3.50.0"
 
 dependencies:
   # Theme packages (`package:fl_lib/theme.dart`): `.fsbt` archives, their
@@ -18,7 +18,7 @@ dependencies:
   # The platform's accent color, for a theme that follows it.
   dynamic_color: ^2.1.0
   extended_image: ^10.0.0
-  file_picker: ^12.0.0
+  file_picker: ^13.4.1
   flutter:
     sdk: flutter
   flutter_highlight: ^0.7.0
@@ -72,22 +72,15 @@ dependencies:
   responsive_framework: ^1.5.1
   riverpod_annotation: ^4.0.2
   webdav_client_plus: ^3.0.0
-  window_manager: ^0.5.0
-  screen_retriever: ^0.2.2
-  computer:
-    git:
-      url: https://github.com/lollipopkit/dart_computer
-      ref: v1.0.88
+  window_manager: ^0.7.1
+  screen_retriever: ^0.4.1
   flutter_staggered_grid_view: ^0.7.0
   material_ui: ^1.5.0
   # Theme packages and the store are read in Rust (`rust/`, `hook/build.dart`).
   flutter_rust_bridge: 2.13.0
   flutter_rust_bridge_hooks: 2.13.0
   hooks: ^2.0.2
-  flutter_appauth: ^12.1.0
-
-dependency_overrides:
-  flutter_math_fork: ^0.7.4
+  flutter_appauth: ^13.0.0
 
 dev_dependencies:
   toml: ^0.18.0

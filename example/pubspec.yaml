@@ -4,13 +4,13 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.8.1
+  sdk: ">=3.14.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.9
 
   fl_lib:
     path: ../.
@@ -20,10 +20,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 dependency_overrides:
-  flutter_math_fork: ^0.7.4
   gtk: # TODO: remove it after fixed in upstream
     git:
       url: https://github.com/lollipopkit/gtk.dart
