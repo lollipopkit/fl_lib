@@ -658,31 +658,70 @@ impl<S: Store> SyncClient<S> {
     }
 
     async fn upload_bytes_inner(&self, name: &str, body: Vec<u8>, condition: Condition, write_once_blob: bool) -> Result<String, Error> {
-        let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
+        let Some((mut auth_gen, mut auth)) = self.personal_auth_with_gen() else {
             return self.upload_signed(name, body, condition, None).await;
         };
         let body = bytes::Bytes::from(body);
         let mode = if write_once_blob { UploadMode::Blob } else { UploadMode::File };
         let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes(), mode);
-        let pending = {
+        let has_pending = {
             let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-            (guard.generation == auth_gen).then(|| guard.files.get(&commit_key).cloned()).flatten()
+            guard.generation == auth_gen && guard.files.contains_key(&commit_key)
         };
-        if let Some((etag, version)) = pending {
-            if let Err(e) = auth.flush_pending_versions().await {
-                if e.kind == Kind::Invalid {
-                    return Err(e.with_committed(Committed::File { etag, version }));
+        if has_pending {
+            let flushed = auth.flush_pending_versions().await;
+            let lock = self.file_lock(name);
+            let _file_guard = lock.lock().await;
+            match flushed {
+                Ok(()) => {
+                    let cached = {
+                        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                        if slot.generation == auth_gen {
+                            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                            if guard.generation == auth_gen {
+                                guard.files.remove(&commit_key)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some((etag, _)) = cached {
+                        return Ok(etag);
+                    }
+                    // Entry was invalidated or consumed while flushing; fall
+                    // through to the normal conditional upload path using the
+                    // current auth state.
+                    drop(_file_guard);
+                    match self.personal_auth_with_gen() {
+                        Some((cur_gen, cur_auth)) => {
+                            auth_gen = cur_gen;
+                            auth = cur_auth;
+                        }
+                        None => return self.upload_signed(name, body.to_vec(), condition, None).await,
+                    }
                 }
-                return Err(e);
-            }
-            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-            if slot.generation == auth_gen {
-                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                if guard.generation == auth_gen {
-                    guard.files.remove(&commit_key);
+                Err(e) => {
+                    if e.kind == Kind::Invalid {
+                        let still_valid = {
+                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                            if slot.generation == auth_gen {
+                                let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                (guard.generation == auth_gen)
+                                    .then(|| guard.files.get(&commit_key).cloned())
+                                    .flatten()
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some((etag, version)) = still_valid {
+                            return Err(e.with_committed(Committed::File { etag, version }));
+                        }
+                    }
+                    return Err(e);
                 }
             }
-            return Ok(etag);
         }
         auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
@@ -901,30 +940,62 @@ impl<S: Store> SyncClient<S> {
     /// Appends [body] (an age file, up to [`BATCH_MAX`]) to the log, once per
     /// [key] (16 to 64 of `[A-Za-z0-9_-]`): a retry is answered the seq given.
     pub async fn append(&self, key: &str, body: Vec<u8>) -> Result<Appended, Error> {
-        let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
+        let Some((mut auth_gen, mut auth)) = self.personal_auth_with_gen() else {
             return self.append_signed(key, body, None).await;
         };
         let body = bytes::Bytes::from(body);
         let commit_key = (key.to_string(), *blake3::hash(&body).as_bytes());
-        let pending = {
+        let has_pending = {
             let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-            (guard.generation == auth_gen).then(|| guard.batches.get(&commit_key).cloned()).flatten()
+            guard.generation == auth_gen && guard.batches.contains_key(&commit_key)
         };
-        if let Some(appended) = pending {
-            if let Err(e) = auth.flush_pending_versions().await {
-                if e.kind == Kind::Invalid {
-                    return Err(e.with_committed(Committed::Batch(appended)));
+        if has_pending {
+            match auth.flush_pending_versions().await {
+                Ok(()) => {
+                    let cached = {
+                        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                        if slot.generation == auth_gen {
+                            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                            if guard.generation == auth_gen {
+                                guard.batches.remove(&commit_key)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some(appended) = cached {
+                        return Ok(appended);
+                    }
+                    match self.personal_auth_with_gen() {
+                        Some((cur_gen, cur_auth)) => {
+                            auth_gen = cur_gen;
+                            auth = cur_auth;
+                        }
+                        None => return self.append_signed(key, body.to_vec(), None).await,
+                    }
                 }
-                return Err(e);
-            }
-            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-            if slot.generation == auth_gen {
-                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                if guard.generation == auth_gen {
-                    guard.batches.remove(&commit_key);
+                Err(e) => {
+                    if e.kind == Kind::Invalid {
+                        let still_valid = {
+                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                            if slot.generation == auth_gen {
+                                let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                (guard.generation == auth_gen)
+                                    .then(|| guard.batches.get(&commit_key).cloned())
+                                    .flatten()
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(appended) = still_valid {
+                            return Err(e.with_committed(Committed::Batch(appended)));
+                        }
+                    }
+                    return Err(e);
                 }
             }
-            return Ok(appended);
         }
         auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
@@ -939,9 +1010,12 @@ impl<S: Store> SyncClient<S> {
         };
         if let Err(e) = auth.record_batch_written(&self.app, &res.log, res.seq).await {
             if e.kind == Kind::Invalid {
-                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                if guard.generation == auth_gen {
-                    guard.batches.insert(commit_key, res.clone());
+                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                if slot.generation == auth_gen {
+                    let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                    if guard.generation == auth_gen {
+                        guard.batches.insert(commit_key, res.clone());
+                    }
                 }
                 return Err(e.with_committed(Committed::Batch(res)));
             }
@@ -1021,30 +1095,62 @@ impl<S: Store> SyncClient<S> {
 
     /// [body] as the log's snapshot up to [seq].
     pub async fn put_snapshot_bytes(&self, seq: i64, body: Vec<u8>) -> Result<String, Error> {
-        let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
+        let Some((mut auth_gen, mut auth)) = self.personal_auth_with_gen() else {
             return self.put_snapshot_signed(seq, body, None).await;
         };
         let body = bytes::Bytes::from(body);
         let commit_key = (seq, *blake3::hash(&body).as_bytes());
-        let pending = {
+        let has_pending = {
             let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-            (guard.generation == auth_gen).then(|| guard.snapshots.get(&commit_key).cloned()).flatten()
+            guard.generation == auth_gen && guard.snapshots.contains_key(&commit_key)
         };
-        if let Some(etag) = pending {
-            if let Err(e) = auth.flush_pending_versions().await {
-                if e.kind == Kind::Invalid {
-                    return Err(e.with_committed(Committed::Snapshot { etag, seq }));
+        if has_pending {
+            match auth.flush_pending_versions().await {
+                Ok(()) => {
+                    let cached = {
+                        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                        if slot.generation == auth_gen {
+                            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                            if guard.generation == auth_gen {
+                                guard.snapshots.remove(&commit_key)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some(etag) = cached {
+                        return Ok(etag);
+                    }
+                    match self.personal_auth_with_gen() {
+                        Some((cur_gen, cur_auth)) => {
+                            auth_gen = cur_gen;
+                            auth = cur_auth;
+                        }
+                        None => return self.put_snapshot_signed(seq, body.to_vec(), None).await,
+                    }
                 }
-                return Err(e);
-            }
-            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-            if slot.generation == auth_gen {
-                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                if guard.generation == auth_gen {
-                    guard.snapshots.remove(&commit_key);
+                Err(e) => {
+                    if e.kind == Kind::Invalid {
+                        let still_valid = {
+                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                            if slot.generation == auth_gen {
+                                let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                (guard.generation == auth_gen)
+                                    .then(|| guard.snapshots.get(&commit_key).cloned())
+                                    .flatten()
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(etag) = still_valid {
+                            return Err(e.with_committed(Committed::Snapshot { etag, seq }));
+                        }
+                    }
+                    return Err(e);
                 }
             }
-            return Ok(etag);
         }
         auth.flush_pending_versions().await?;
         auth.ensure_published(&self.session, false).await?;
@@ -1059,9 +1165,12 @@ impl<S: Store> SyncClient<S> {
         };
         if let Err(e) = auth.record_snapshot_written(&self.app, seq).await {
             if e.kind == Kind::Invalid {
-                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                if guard.generation == auth_gen {
-                    guard.snapshots.insert(commit_key, etag.clone());
+                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                if slot.generation == auth_gen {
+                    let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                    if guard.generation == auth_gen {
+                        guard.snapshots.insert(commit_key, etag.clone());
+                    }
                 }
                 return Err(e.with_committed(Committed::Snapshot { etag, seq }));
             }

@@ -327,19 +327,40 @@ void main() {
   test('storeSecretKey validates and normalizes input consistently across both paths', () async {
     final canonical = SyncKeyring.generateSecretKey();
     final alternateSpelling = '  ${canonical.toLowerCase().replaceAll('-', ' ')}  ';
+    const invalidReady = 'S1-NOT-A-VALID-READY-KEY-9999';
+    const invalidNotReady = 'S1-NOT-A-VALID-UNREADY-KEY-8888';
 
-    // Invalid secret key is rejected before modifying secure storage.
-    await expectLater(SyncKeyring.storeSecretKey('not-a-valid-key'), throwsArgumentError);
+    // Invalid secret key is rejected before modifying secure storage and never
+    // retains or displays the supplied key value in ArgumentError.
+    await expectLater(
+      SyncKeyring.storeSecretKey(invalidReady),
+      throwsA(
+        isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'key')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => e.message, 'message', 'Invalid sync secret key')
+            .having((e) => e.toString(), 'toString', isNot(contains(invalidReady))),
+      ),
+    );
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
 
     // Ready path stores canonical spelling.
     await SyncKeyring.storeSecretKey(alternateSpelling);
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);
 
-    // Non-ready path also validates and stores canonical spelling.
+    // Non-ready path also validates and stores canonical spelling without leaking input.
     SyncKeyring.resetForTest();
     FlutterSecureStorage.setMockInitialValues({});
-    await expectLater(SyncKeyring.storeSecretKey('bad-key'), throwsArgumentError);
+    await expectLater(
+      SyncKeyring.storeSecretKey(invalidNotReady),
+      throwsA(
+        isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'key')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => e.message, 'message', 'Invalid sync secret key')
+            .having((e) => e.toString(), 'toString', isNot(contains(invalidNotReady))),
+      ),
+    );
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
     await SyncKeyring.storeSecretKey(alternateSpelling);
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);

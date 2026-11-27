@@ -1,10 +1,12 @@
 /// [LkcRemoteStorage] through fl_lkc, against a homebase on loopback.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -411,5 +413,76 @@ void main() {
     final otherDevice = newClient();
     expect(await otherDevice.ensurePersonalAuth('test'), isFalse);
     expect(SyncKeyring.secretKeyMissing.value, isTrue);
+  });
+
+  test('LkcLogSync suppresses stale opening failures and publishes current opening failures', () async {
+    SharedPreferences.setMockInitialValues({});
+    await PrefStore.shared.init();
+    SecureProp.legacyApart = false;
+    addTearDown(() => SecureProp.legacyApart = null);
+
+    final firstReqArrived = Completer<void>();
+    final releaseFirstReq = Completer<void>();
+    var reqCount = 0;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((r) async {
+      await r.drain<void>();
+      final n = ++reqCount;
+      if (n == 1) {
+        if (!firstReqArrived.isCompleted) firstReqArrived.complete();
+        await releaseFirstReq.future;
+      }
+      r.response.statusCode = 500;
+      await r.response.close();
+    });
+
+    final base = Uri.parse('http://127.0.0.1:${server.port}');
+    final tokenJson = jsonEncode({
+      'access': 'a1',
+      'refresh': 'r1',
+      'expires_at': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    });
+    FlutterSecureStorage.setMockInitialValues({
+      'lkcToken': tokenJson,
+      'bakPwd': 'pw',
+    });
+    SecureProp.resetRateLimits();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+
+    final client = LkcClient(
+      oidc: LkcOidc(
+        clientId: 'test',
+        redirectUrl: 'test://auth/callback',
+        issuer: base.resolve('/auth/v1/'),
+      ),
+      baseUrl: base,
+      cache: LkcMemoryCache(),
+    );
+    final now = DateTime.fromMillisecondsSinceEpoch(0);
+    client.user.value = LkcUser(id: 'u1', name: 'u1', group: 'user', createdAt: now, updatedAt: now);
+    // Initialize the session so client.signedIn is true.
+    await client.sync('test');
+    expect(client.signedIn, isTrue);
+
+    final enabled = ValueNotifier(true);
+    addTearDown(enabled.dispose);
+    final logSync = LkcLogSync(client: client, app: 'test', enabled: enabled);
+
+    // 1. Start opening #1, wait until it reaches the server, then reset() so
+    //    opening #1 is no longer the current opening.
+    final staleRun = logSync.sync();
+    await firstReqArrived.future;
+    logSync.reset();
+    releaseFirstReq.complete();
+    await staleRun;
+
+    // Stale opening failure must NOT be published to lastFailure.
+    expect(logSync.lastFailure.value, isNull);
+
+    // 2. Start opening #2 as the current opening: its failure MUST be published.
+    await logSync.sync();
+    expect(logSync.lastFailure.value, isNotNull);
   });
 }

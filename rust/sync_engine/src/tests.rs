@@ -2748,6 +2748,115 @@ async fn external_commit_staging_validates_candidate_and_tracks_concurrent_write
 }
 
 #[tokio::test]
+async fn external_commit_settlement_decrements_per_write_and_same_key_import_preserves_guard() {
+    let d = Device::new("pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+
+    let candidate = d.ring.secret_key_candidate().await.unwrap();
+    let conflicting = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+
+    // Stage two concurrent external writes for the same candidate.
+    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+
+    // Committing the first write must decrement only its count, keeping the
+    // second write protected and the durable intent intact.
+    d.ring.commit_secret_key(&candidate).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(candidate.as_str()));
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(d.ring.store_secret_key(&conflicting).await.is_err());
+
+    // A same-key import while the second external write is still unsettled must
+    // preserve the remaining count and durable intent so conflicting imports stay rejected.
+    d.ring.store_secret_key(&candidate).await.unwrap();
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(d.ring.store_secret_key(&conflicting).await.is_err());
+
+    // Settling the second write clears the durable intent and allows later replacement.
+    d.ring.commit_secret_key(&candidate).await.unwrap();
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    d.ring.store_secret_key(&conflicting).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(conflicting.as_str()));
+}
+
+#[tokio::test]
+async fn internal_key_commit_does_not_clear_unsettled_external_write_guard() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    *d.secrets.secret_key.lock().unwrap() = None;
+
+    let candidate = d.ring.secret_key_candidate().await.unwrap();
+    let conflicting = fl_lkc::secret_key::SecretKey::generate().format().to_string();
+    d.ring.stage_external_secret_key_commit(&candidate).await.unwrap();
+
+    // An internal key-file write promotes the same staged candidate, but must
+    // NOT settle the unrelated in-flight external write.
+    d.key(&file).await.unwrap();
+    assert_eq!(d.secrets.secret_key.lock().unwrap().as_deref(), Some(candidate.as_str()));
+    assert!(d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    assert!(d.ring.store_secret_key(&conflicting).await.is_err());
+
+    // Once the external write settles, the guard and intent clear.
+    d.ring.commit_secret_key(&candidate).await.unwrap();
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("intent:lkc-account-key"));
+    d.ring.store_secret_key(&conflicting).await.unwrap();
+}
+
+#[tokio::test]
+async fn set_epoch_2fa_enforces_epoch_floor_under_lock_and_forget_clears_it() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw1");
+    let key = d.key(&file).await.unwrap();
+
+    // Advance remote and stored floor to epoch 1 via password change.
+    d.ring.password_changed(Some("pw1".into())).await.unwrap();
+    *d.secrets.password.lock().unwrap() = Some("pw2".into());
+    key.check(true, true).await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&1));
+
+    // Equal epoch (1) remains valid during rotate.
+    key.rotate().await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&1));
+
+    // If stored floor advances to 2 while rotate is in flight at epoch 1,
+    // persisting epoch 1 under `epochs_lock` must be rejected with Untrusted
+    // and must NOT rewind the stored floor.
+    let secrets = d.secrets.clone();
+    let err = key
+        .rotate_after_check(move || {
+            Box::pin(async move {
+                secrets.epochs.lock().unwrap().insert("account".into(), 2);
+                Ok(())
+            })
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Untrusted(_)), "expected Untrusted on epoch floor rollback, got {err:?}");
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&2));
+
+    // Higher epoch (3) remains valid when sealed above the floor.
+    d.ring.password_changed(Some("pw2".into())).await.unwrap();
+    *d.secrets.password.lock().unwrap() = Some("pw3".into());
+    let sk = fl_lkc::secret_key::SecretKey::parse(d.secrets.secret_key.lock().unwrap().as_deref().unwrap()).unwrap();
+    let new_id = {
+        use age::secrecy::ExposeSecret;
+        age::x25519::Identity::generate().to_string().expose_secret().to_string()
+    };
+    let epoch3_body = crate::key::seal_with_password(format!("# test, epoch 3\n{new_id}").as_bytes(), &sk.combine_passphrase("pw3")).unwrap();
+    *file.file.lock().unwrap() = Some((epoch3_body, "v-epoch3".into()));
+    key.check(true, true).await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&3));
+
+    // `forget` clears the stored floor, allowing a fresh epoch-0 file.
+    d.ring.forget("account").await.unwrap();
+    assert!(!d.secrets.epochs.lock().unwrap().contains_key("account"));
+    *file.file.lock().unwrap() = None;
+    let fresh = d.key(&file).await.unwrap();
+    assert_eq!(d.secrets.epochs.lock().unwrap().get("account"), Some(&0));
+    assert_eq!(fresh.open(&fresh.seal(b"fresh").unwrap()).unwrap(), b"fresh");
+}
+
+#[tokio::test]
 async fn probe_invalidation_is_scoped_per_remote_and_stale_handle_cannot_clear_missing() {
     let file_a = Arc::new(MemKeyFile::default());
     let file_b = Arc::new(MemKeyFile::default());

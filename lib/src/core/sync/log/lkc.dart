@@ -48,6 +48,7 @@ final class LkcLogSync {
 
   /// A run is going on.
   final running = ValueNotifier(false);
+  var _activeRuns = 0;
 
   /// When a run last went through.
   final lastSyncAt = ValueNotifier<DateTime?>(null);
@@ -123,6 +124,7 @@ final class LkcLogSync {
     final opening = _opening ??= _open();
     try {
       final (engineAccount, opened) = await opening;
+      if (!identical(_opening, opening)) return;
       engine = opened;
       // The password still opens the key: nothing syncs while it does not.
       final k = await key();
@@ -130,26 +132,36 @@ final class LkcLogSync {
     } catch (e, s) {
       // Opened again next time: the key, the password or the network may be
       // there by then. Only this one: another may have taken its place meanwhile.
-      if (identical(_opening, opening)) _opening = null;
+      if (!identical(_opening, opening)) return;
+      _opening = null;
       lastFailure.value = e;
       if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
         Loggers.app.warning('LK Cloud log sync: opening', e, s);
       }
       return;
     }
+    if (!identical(_opening, opening)) return;
+    _activeRuns++;
     running.value = true;
     try {
       await syncCall(() => run(engine));
-      lastFailure.value = null;
-      lastSyncAt.value = DateTime.now();
+      if (identical(_opening, opening)) {
+        lastFailure.value = null;
+        lastSyncAt.value = DateTime.now();
+      }
     } catch (e, s) {
-      lastFailure.value = e;
-      if (e is! SyncRefused && !(e is SyncError && e.kind == SyncEngineErrorKind.remote)) {
-        Loggers.app.warning('LK Cloud log sync', e, s);
+      if (identical(_opening, opening)) {
+        lastFailure.value = e;
+        if (e is! SyncRefused && !(e is SyncError && e.kind == SyncEngineErrorKind.remote)) {
+          Loggers.app.warning('LK Cloud log sync', e, s);
+        }
       }
     } finally {
-      tooNew.value = engine.tooNew();
-      running.value = false;
+      if (identical(_opening, opening)) {
+        tooNew.value = engine.tooNew();
+      }
+      _activeRuns--;
+      if (_activeRuns == 0) running.value = false;
     }
   }
 

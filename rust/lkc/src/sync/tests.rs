@@ -995,3 +995,86 @@ async fn upload_recovery_key_separates_blob_and_file_modes_and_invalidates_both_
     assert_eq!(sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap(), "e-new");
     assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
 }
+
+#[tokio::test]
+async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_committed_error() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = puts.clone();
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("PUT", p) if p.ends_with(NAME) => {
+            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            match n {
+                0 => written("e1"),
+                1 => written("e2"),
+                _ => written("e3"),
+            }
+        }
+        ("DELETE", p) if p.ends_with(NAME) => Response::status(204),
+        _ => Response::status(404),
+    })
+    .await;
+
+    // Modes for keeper.save:
+    // 0 -> fail save (caches e1)
+    // 1 -> delete NAME while flushing, then succeed (must fall through and send PUT #2 -> e2)
+    // 2 -> fail save again (caches e2)
+    // 3 -> delete NAME while flushing, then fail save (must return Kind::Invalid WITHOUT Committed::File)
+    struct ScriptedKeeper {
+        sync: Arc<SyncClient<Kept>>,
+        step: std::sync::atomic::AtomicUsize,
+    }
+    impl crate::personal::VersionKeeper for ScriptedKeeper {
+        fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            Box::pin(async move {
+                match self.step.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
+                    0 => Err("initial save failed".into()),
+                    1 => {
+                        assert!(self.sync.delete(NAME, Some("e1")).await.unwrap());
+                        Ok(())
+                    }
+                    2 => Err("second upload save failed".into()),
+                    3 => {
+                        assert!(self.sync.delete(NAME, Some("e2")).await.unwrap());
+                        Err("flush failed after delete".into())
+                    }
+                    _ => Ok(()),
+                }
+            })
+        }
+    }
+
+    let keeper = Arc::new(ScriptedKeeper { sync: sync.clone(), step: std::sync::atomic::AtomicUsize::new(0) });
+    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper));
+    sync.set_personal(Some(auth));
+
+    // 1. PUT #1 commits "e1", local save fails (step 0) -> caches ("e1", 1).
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // 2. Retry enters cached-commit branch, flushes versions (step 1 deletes NAME and
+    //    succeeds). Recheck under file_lock -> personal -> pending_commits sees the
+    //    cached entry is gone and continues to PUT #2 ("e2"). Step 2 fails save on PUT #2
+    //    so ("e2", 2) is now cached.
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, Some(Committed::File { etag: "e2".into(), version: 2 }));
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // 3. Retry enters cached-commit branch for ("e2", 2); step 3 deletes NAME during
+    //    flush and fails with Kind::Invalid. Because the cached entry was invalidated,
+    //    the Kind::Invalid error MUST NOT attach stale Committed::File("e2").
+    let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Invalid);
+    assert_eq!(err.committed, None, "stale Committed::File must not be attached after invalidation");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+    // 4. Subsequent upload succeeds via PUT #3 ("e3").
+    assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e3");
+    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
+}

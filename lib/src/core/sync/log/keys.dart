@@ -123,7 +123,7 @@ abstract final class SyncKeyring {
   static Future<void> storeSecretKey(String key) async {
     final canonical = normalizeSecretKey(key);
     if (canonical == null) {
-      throw ArgumentError.value(key, 'key', 'Invalid sync secret key');
+      throw ArgumentError('Invalid sync secret key', 'key');
     }
     final beforeRaw = await SecureStoreProps.syncSecretKey.read(limited: false);
     final expectEmptyBefore = beforeRaw == null || beforeRaw.trim().isEmpty;
