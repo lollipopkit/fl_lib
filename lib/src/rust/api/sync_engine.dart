@@ -76,6 +76,7 @@ abstract class SyncKeys implements RustOpaqueInterface {
     required LkcSync lkc,
     required String account,
     required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
   });
 
   /// The key files the password here does not open.
@@ -122,9 +123,9 @@ abstract class SyncKeys implements RustOpaqueInterface {
   /// Every key in use checked again: the password here changed.
   Future<void> recheck();
 
-  /// Captures the LK Cloud account-switch generation synchronously before
-  /// starting an async missing-key probe.
-  BigInt registerLkcProbe({required String account});
+  /// Captures the LK Cloud account-switch generation and per-ID generation
+  /// synchronously before starting an async missing-key probe.
+  (BigInt, BigInt) registerLkcProbe({required String account});
 
   void release({required String id});
 

@@ -371,7 +371,8 @@ void main() {
   test('storeSecretKey non-ready path enforces durable intent whether active or staged', () async {
     final keyA = SyncKeyring.generateSecretKey();
     final keyB = SyncKeyring.generateSecretKey();
-    final intentJson = '{"intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
+    final intentJson = '{"ext-intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
+    final legacyIntentJson = '{"intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
 
     // Case 1: keyA is already ACTIVE (no pending staged key), durable external intent exists.
     SyncKeyring.resetForTest();
@@ -394,6 +395,15 @@ void main() {
     });
     await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
     expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+
+    // Case 2b: legacy `intent:lkc-account-key` record is still enforced during migration.
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKey': keyA,
+      'syncKeyPending': legacyIntentJson,
+    });
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
+    await SyncKeyring.storeSecretKey(keyA);
 
     // Case 3: once no unresolved intent exists, replacing active keyA with keyB succeeds.
     FlutterSecureStorage.setMockInitialValues({

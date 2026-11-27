@@ -738,7 +738,7 @@ void main() {
     final persistedPending = await const SecureProp('syncKeyPending').storage.read(key: 'syncKeyPending');
     expect(persistedPending, isNotNull);
     final pendingMap = jsonDecode(persistedPending!) as Map<String, dynamic>;
-    final intent = jsonDecode(pendingMap['intent:lkc-account-key'] as String) as Map<String, dynamic>;
+    final intent = jsonDecode(pendingMap['ext-intent:lkc-account-key'] as String) as Map<String, dynamic>;
     expect(intent['owners'], ['u1']);
 
     FlutterSecureStorage.setMockInitialValues({
@@ -912,6 +912,24 @@ void main() {
     final retainedPending = await const SecureProp('lkcAccountKeyPendingPwd.u1').read(limited: false);
     expect(retainedPending, isNotNull, reason: 'ambiguous wrongPassphrase must not drop pending passphrase record');
 
+    // 2a. Queued `changePersonalAuthPassphrase` whose account switches away before its
+    //     serialized callback starts MUST still persist `u1`'s recovery record rather than
+    //     silently dropping it!
+    final firstChange = c1.changePersonalAuthPassphrase(old: 'newPw', newPassphrase: 'queuedPw');
+    final secondChange = c1.changePersonalAuthPassphrase(old: 'queuedPw', newPassphrase: 'finalPw');
+    // Allow both calls to finish `_ensureSession()` and enqueue under `u1` before switching.
+    await Future<void>.delayed(Duration.zero);
+    c1.user.value = LkcUser(id: 'u2', name: 'u2', group: 'user', createdAt: now, updatedAt: now);
+    await Future.wait([firstChange, secondChange]);
+    final afterSwitchPending = await const SecureProp('lkcAccountKeyPendingPwd.u1').read(limited: false);
+    expect(afterSwitchPending, isNotNull);
+    final decodedPending = jsonDecode(afterSwitchPending!) as Map<String, dynamic>;
+    expect(decodedPending['target'], 'finalPw');
+    expect(decodedPending['sources'], containsAll(['oldPw', 'newPw', 'queuedPw']));
+    // Restore u1 and target `newPw` for subsequent assertions.
+    c1.user.value = LkcUser(id: 'u1', name: 'u1', group: 'user', createdAt: now, updatedAt: now);
+    await const SecureProp('lkcAccountKeyPendingPwd.u1').write(retainedPending, limited: false);
+
     // Once the user imports `realKey`, `ensurePersonalAuth` flushes `oldPw -> newPw` and clears `lkcAccountKeyPendingPwd.u1`!
     await SyncKeyring.storeSecretKey(realKey);
     expect(await c1.ensurePersonalAuth('test'), isTrue);
@@ -944,10 +962,13 @@ void main() {
     await rotatorSync.upload(name: 'rotated.age', from: srcFile.path);
 
     final syncU1 = await c1.sync('test');
-    LkcClient.debugOnAccountKeyHeldRead = (_) {
+    final heldReadUids = <String>[];
+    LkcClient.debugOnAccountKeyHeldRead = (uid) {
+      heldReadUids.add(uid);
       c1.user.value = null;
     };
     await expectLater(syncU1.download(name: 'rotated.age', to: dstFile.path), throwsA(anything));
+    expect(heldReadUids, ['u1'], reason: 'download must reach the account-key invalidation hook for u1');
     expect(
       await const SecureProp('lkcAccountKey.u1').read(limited: false),
       initialCachedKey,

@@ -522,6 +522,7 @@ abstract class RustLibApi extends BaseApi {
     required LkcSync lkc,
     required String account,
     required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
   });
 
   List<String> crateApiSyncEngineSyncKeysMismatch({required SyncKeys that});
@@ -566,7 +567,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSyncEngineSyncKeysRecheck({required SyncKeys that});
 
-  BigInt crateApiSyncEngineSyncKeysRegisterLkcProbe({
+  (BigInt, BigInt) crateApiSyncEngineSyncKeysRegisterLkcProbe({
     required SyncKeys that,
     required String account,
   });
@@ -4039,6 +4040,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required LkcSync lkc,
     required String account,
     required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -4054,6 +4056,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(account, serializer);
           sse_encode_u_64(expectedSwitchGen, serializer);
+          sse_encode_u_64(expectedIdGen, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -4066,7 +4069,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_sync_engine_error,
         ),
         constMeta: kCrateApiSyncEngineSyncKeysLkcSealedWithSecretKeyConstMeta,
-        argValues: [that, lkc, account, expectedSwitchGen],
+        argValues: [that, lkc, account, expectedSwitchGen, expectedIdGen],
         apiImpl: this,
       ),
     );
@@ -4076,7 +4079,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   get kCrateApiSyncEngineSyncKeysLkcSealedWithSecretKeyConstMeta =>
       const TaskConstMeta(
         debugName: "SyncKeys_lkc_sealed_with_secret_key",
-        argNames: ["that", "lkc", "account", "expectedSwitchGen"],
+        argNames: [
+          "that",
+          "lkc",
+          "account",
+          "expectedSwitchGen",
+          "expectedIdGen",
+        ],
       );
 
   @override
@@ -4413,7 +4422,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "SyncKeys_recheck", argNames: ["that"]);
 
   @override
-  BigInt crateApiSyncEngineSyncKeysRegisterLkcProbe({
+  (BigInt, BigInt) crateApiSyncEngineSyncKeysRegisterLkcProbe({
     required SyncKeys that,
     required String account,
   }) {
@@ -4429,7 +4438,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_u_64,
+          decodeSuccessData: sse_decode_record_u_64_u_64,
           decodeErrorData: sse_decode_sync_engine_error,
         ),
         constMeta: kCrateApiSyncEngineSyncKeysRegisterLkcProbeConstMeta,
@@ -7170,6 +7179,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  (BigInt, BigInt) dco_decode_record_u_64_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (dco_decode_u_64(arr[0]), dco_decode_u_64(arr[1]));
+  }
+
+  @protected
   SyncEngineError dco_decode_sync_engine_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -8456,6 +8475,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       iconPack: var_iconPack,
       files: var_files,
     );
+  }
+
+  @protected
+  (BigInt, BigInt) sse_decode_record_u_64_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_field0 = sse_decode_u_64(deserializer);
+    final var_field1 = sse_decode_u_64(deserializer);
+    return (var_field0, var_field1);
   }
 
   @protected
@@ -9754,6 +9781,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_record_u_64_u_64(
+    (BigInt, BigInt) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.$1, serializer);
+    sse_encode_u_64(self.$2, serializer);
+  }
+
+  @protected
   void sse_encode_sync_engine_error(
     SyncEngineError self,
     SseSerializer serializer,
@@ -10623,11 +10660,13 @@ class SyncKeysImpl extends RustOpaque implements SyncKeys {
     required LkcSync lkc,
     required String account,
     required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
   }) => RustLib.instance.api.crateApiSyncEngineSyncKeysLkcSealedWithSecretKey(
     that: this,
     lkc: lkc,
     account: account,
     expectedSwitchGen: expectedSwitchGen,
+    expectedIdGen: expectedIdGen,
   );
 
   /// The key files the password here does not open.
@@ -10685,9 +10724,11 @@ class SyncKeysImpl extends RustOpaque implements SyncKeys {
   Future<void> recheck() =>
       RustLib.instance.api.crateApiSyncEngineSyncKeysRecheck(that: this);
 
-  /// Captures the LK Cloud account-switch generation synchronously before
-  /// starting an async missing-key probe.
-  BigInt registerLkcProbe({required String account}) => RustLib.instance.api
+  /// Captures the LK Cloud account-switch generation and per-ID generation
+  /// synchronously before starting an async missing-key probe.
+  (BigInt, BigInt) registerLkcProbe({required String account}) => RustLib
+      .instance
+      .api
       .crateApiSyncEngineSyncKeysRegisterLkcProbe(that: this, account: account);
 
   void release({required String id}) => RustLib.instance.api

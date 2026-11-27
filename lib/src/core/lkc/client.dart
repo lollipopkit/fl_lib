@@ -860,12 +860,10 @@ final class LkcClient {
             : null);
     if (uid == null || (_session != null && !signedIn)) return;
     await _serializePassphrase(uid, () async {
-      final activeUid =
-          user.value?.id ??
-          (_session == null || signedIn
-              ? _cached(_kUser, (d) => LkcUser.fromJson(d as Map<String, dynamic>))?.id
-              : null);
-      if ((_session != null && !signedIn) || activeUid != uid) return;
+      // Always persist the recovery state for the account that initiated the
+      // change so a sign-out or account switch while queued never silently
+      // drops `old -> newPassphrase`. Flush immediately only if that account is
+      // still active and signed in.
       final pendingProp = _pendingAccountKeyPwdProp(uid);
       final existing = await _readPendingPassphrase(pendingProp);
       final sources = <String>[];

@@ -173,15 +173,27 @@ fn two_fa_key(id: &str) -> String {
 /// distinguish a committed write from an uncommitted attempt or lost CAS.
 const WRITE_INTENT_PREFIX: &str = "intent:";
 
+/// Distinct namespace prefix for external account-key write intents
+/// (`ext-intent:<id>`), isolated from per-remote folder write intents
+/// (`intent:<remote_id>`) so folder writes and `forget` cannot remove it.
+const EXTERNAL_INTENT_PREFIX: &str = "ext-intent:";
+
 fn write_intent_key(id: &str) -> String {
     format!("{WRITE_INTENT_PREFIX}{id}")
+}
+
+fn external_intent_key(id: &str) -> String {
+    format!("{EXTERNAL_INTENT_PREFIX}{id}")
 }
 
 fn validate_remote_id(id: &str) -> Result<()> {
     if id.is_empty() {
         return Err(Error::Host("remote key id cannot be empty".into()));
     }
-    if id.starts_with(TWO_FA_PREFIX) || id.starts_with(WRITE_INTENT_PREFIX) {
+    if id.starts_with(TWO_FA_PREFIX)
+        || id.starts_with(WRITE_INTENT_PREFIX)
+        || id.starts_with(EXTERNAL_INTENT_PREFIX)
+    {
         return Err(Error::Host(format!("reserved remote key id prefix: {id}")));
     }
     Ok(())
@@ -293,6 +305,9 @@ struct PendingState {
     notified: HashMap<String, Vec<String>>,
 }
 
+#[cfg(test)]
+type TestTakeMergeHook = Arc<dyn Fn() -> BoxFuture<'static, ()> + Send + Sync>;
+
 pub struct SyncKey {
     handle_id: u64,
     forget_gen: u64,
@@ -301,6 +316,8 @@ pub struct SyncKey {
     ring: Arc<RingInner>,
     state: StdMutex<State>,
     checking: Mutex<()>,
+    #[cfg(test)]
+    before_take_merge: StdMutex<Option<TestTakeMergeHook>>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -335,7 +352,8 @@ struct SecretKeyInitState {
     /// never drop another write's protection.
     external_commits: HashMap<String, (Option<String>, String)>,
     /// Lazy-hydrated pre-restart external write intent from durable
-    /// `pending["intent:lkc-account-key"]`:
+    /// `pending["ext-intent:lkc-account-key"]` (or migrated legacy
+    /// `pending["intent:lkc-account-key"]`):
     /// - `None`: durable map not yet inspected on this `KeyRing` instance.
     /// - `Some(None)`: no unresolved pre-restart external write remains.
     /// - `Some(Some(rec))`: pre-restart external write(s) for `rec.key` remain
@@ -366,13 +384,14 @@ struct KeyTable {
     /// [`KeyRing::forget`].
     pending_writes: HashMap<String, PendingKeyWrite>,
     /// Active LK Cloud account as last synchronized via [`KeyRing::sync_lkc_account`],
-    /// alongside all LK Cloud account IDs touched here and a monotonic switch
-    /// counter so switching accounts or signing out invalidates in-flight LK
-    /// Cloud probes and clears only that previous account's status without
-    /// disturbing folder remotes.
+    /// alongside all LK Cloud account IDs touched here, a monotonic switch
+    /// counter for account switches / sign-outs, and per-account generations so
+    /// first selecting an account invalidates stale other accounts without
+    /// invalidating in-flight operations for the selected account.
     lkc_active: Option<Option<String>>,
     lkc_known: BTreeSet<String>,
     lkc_switch_gen: u64,
+    lkc_account_gens: HashMap<String, u64>,
 }
 
 impl KeyTable {
@@ -382,6 +401,15 @@ impl KeyTable {
 
     fn bump_id(&mut self, id: &str) {
         let entry = self.gens.entry(id.to_string()).or_insert(0);
+        *entry = entry.wrapping_add(1);
+    }
+
+    fn lkc_account_gen_of(&self, id: &str) -> u64 {
+        self.lkc_account_gens.get(id).copied().unwrap_or(0)
+    }
+
+    fn bump_lkc_account_gen(&mut self, id: &str) {
+        let entry = self.lkc_account_gens.entry(id.to_string()).or_insert(0);
         *entry = entry.wrapping_add(1);
     }
 
@@ -435,10 +463,26 @@ impl RingInner {
         if init.recovered_external_commit.is_some() {
             return Ok(());
         }
-        let pending = self.secrets.pending().await?;
-        let recovered = pending
-            .get(&write_intent_key(EXTERNAL_COMMIT_ID))
-            .and_then(|raw| decode_external_intent(raw));
+        let _st = self.pending_lock.lock().await;
+        let mut pending = self.secrets.pending().await?;
+        let ext_key = external_intent_key(EXTERNAL_COMMIT_ID);
+        let recovered = if let Some(raw) = pending.get(&ext_key) {
+            decode_external_intent(raw)
+        } else {
+            // TODO(migration): remove legacy `intent:lkc-account-key` fallback
+            // once pre-namespace external intent records are migrated or settled.
+            let legacy_key = write_intent_key(EXTERNAL_COMMIT_ID);
+            if let Some(raw) = pending.get(&legacy_key).cloned()
+                && let Some(rec) = decode_external_intent(&raw)
+            {
+                pending.insert(ext_key, raw);
+                pending.remove(&legacy_key);
+                self.secrets.set_pending(pending).await?;
+                Some(rec)
+            } else {
+                None
+            }
+        };
         init.recovered_external_commit = Some(recovered);
         Ok(())
     }
@@ -483,8 +527,14 @@ impl RingInner {
         .to_string();
         let _st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
-        let map_key = write_intent_key(EXTERNAL_COMMIT_ID);
-        if all.get(&map_key) == Some(&encoded) {
+        let map_key = external_intent_key(EXTERNAL_COMMIT_ID);
+        // TODO(migration): remove legacy key cleanup once pre-namespace records are gone.
+        let legacy_key = write_intent_key(EXTERNAL_COMMIT_ID);
+        let removed_legacy = all
+            .get(&legacy_key)
+            .is_some_and(|raw| decode_external_intent(raw).is_some())
+            && all.remove(&legacy_key).is_some();
+        if all.get(&map_key) == Some(&encoded) && !removed_legacy {
             return Ok(());
         }
         all.insert(map_key, encoded);
@@ -494,7 +544,8 @@ impl RingInner {
     async fn clear_external_commit_intent_for(&self, expected: Option<&str>) -> Result<()> {
         let _st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
-        let key = write_intent_key(EXTERNAL_COMMIT_ID);
+        let key = external_intent_key(EXTERNAL_COMMIT_ID);
+        let mut changed = false;
         let should_remove = match (all.get(&key), expected) {
             (None, _) => false,
             (Some(_), None) => true,
@@ -504,6 +555,19 @@ impl RingInner {
         };
         if should_remove {
             all.remove(&key);
+            changed = true;
+        }
+        // TODO(migration): remove legacy key cleanup once pre-namespace records are gone.
+        let legacy_key = write_intent_key(EXTERNAL_COMMIT_ID);
+        let should_remove_legacy = all
+            .get(&legacy_key)
+            .and_then(|raw| decode_external_intent(raw))
+            .is_some_and(|rec| expected.is_none_or(|cand| rec.key.as_str() == cand));
+        if should_remove_legacy {
+            all.remove(&legacy_key);
+            changed = true;
+        }
+        if changed {
             self.secrets.set_pending(all).await?;
         }
         Ok(())
@@ -978,7 +1042,7 @@ impl KeyRing {
             return Err(Error::Host("a staged secret key has an unresolved external write; refusing conflicting import".into()));
         }
         let pending = self.0.secrets.pending().await?;
-        let ext_intent_key = write_intent_key(EXTERNAL_COMMIT_ID);
+        let ext_intent_key = external_intent_key(EXTERNAL_COMMIT_ID);
         if let Some(raw) = pending.get(&ext_intent_key) {
             let protected = WriteIntent::decode(raw)
                 .and_then(|w| SecretKey::parse(&w.pwd).ok())
@@ -987,11 +1051,23 @@ impl KeyRing {
                 return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
             }
         }
+        // TODO(migration): remove legacy `intent:lkc-account-key` check once
+        // pre-namespace external intent records are migrated or settled.
+        let legacy_ext_key = write_intent_key(EXTERNAL_COMMIT_ID);
+        let legacy_ext = pending.get(&legacy_ext_key).and_then(|raw| decode_external_intent(raw));
+        if let Some(ref rec) = legacy_ext
+            && rec.key.as_str() != formatted.as_str()
+        {
+            return Err(Error::Host("a secret key has an unresolved external write intent; refusing conflicting import".into()));
+        }
         let staged = self.0.pending_secret_key().await?;
         let replacing_different_key = existing.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str())
             || staged.as_ref().is_some_and(|k| k.format().as_str() != formatted.as_str());
         if replacing_different_key {
-            if pending.keys().any(|k| k.starts_with(WRITE_INTENT_PREFIX) && k != &ext_intent_key) {
+            if pending
+                .keys()
+                .any(|k| k.starts_with(WRITE_INTENT_PREFIX) && !(k == &legacy_ext_key && legacy_ext.is_some()))
+            {
                 return Err(Error::Host("a secret key has an unresolved remote write intent; refusing conflicting import".into()));
             }
             let has_pending_write = {
@@ -1039,9 +1115,9 @@ impl KeyRing {
     async fn of_inner(&self, file: Arc<dyn KeyFile>, create: bool, lkc: bool) -> Result<Arc<SyncKey>> {
         let id = file.id();
         validate_remote_id(&id)?;
-        let (key, fresh, start_switch_gen) = {
+        let (key, fresh, start_lkc_tokens) = {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-            let switch_gen = if lkc {
+            let tokens = if lkc {
                 if table
                     .lkc_active
                     .as_ref()
@@ -1050,14 +1126,14 @@ impl KeyRing {
                     return Err(Error::SignedOut);
                 }
                 table.lkc_known.insert(id.clone());
-                Some(table.lkc_switch_gen)
+                Some((table.lkc_switch_gen, table.lkc_account_gen_of(&id)))
             } else {
                 None
             };
             match table.keys.get(&id) {
                 Some(k) => {
                     *k.file.lock().unwrap_or_else(|e| e.into_inner()) = file;
-                    (k.clone(), false, switch_gen)
+                    (k.clone(), false, tokens)
                 }
                 None => {
                     table.next_handle_id = table.next_handle_id.wrapping_add(1);
@@ -1070,9 +1146,11 @@ impl KeyRing {
                         ring: self.0.clone(),
                         state: StdMutex::new(State::default()),
                         checking: Mutex::new(()),
+                        #[cfg(test)]
+                        before_take_merge: StdMutex::new(None),
                     });
                     table.keys.insert(id.clone(), key.clone());
-                    (key, true, switch_gen)
+                    (key, true, tokens)
                 }
             }
         };
@@ -1088,8 +1166,9 @@ impl KeyRing {
             {
                 table.keys.remove(&id);
             }
-            if start_switch_gen.is_some_and(|g| {
+            if start_lkc_tokens.is_some_and(|(g, acct_g)| {
                 table.lkc_switch_gen != g
+                    || table.lkc_account_gen_of(&id) != acct_g
                     || table
                         .lkc_active
                         .as_ref()
@@ -1099,9 +1178,10 @@ impl KeyRing {
             }
             return Err(e);
         }
-        if let Some(g) = start_switch_gen {
+        if let Some((g, acct_g)) = start_lkc_tokens {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
             if table.lkc_switch_gen != g
+                || table.lkc_account_gen_of(&id) != acct_g
                 || table
                     .lkc_active
                     .as_ref()
@@ -1140,10 +1220,14 @@ impl KeyRing {
         {
             stale.push(prev.clone());
         }
+        // First selecting an account (`was_unset && active.is_some()`) preserves
+        // in-flight tokens for that selected account while per-account
+        // generations below invalidate any stale other accounts. Sign-out or
+        // replacing an active account bumps `lkc_switch_gen` too.
         let switched = if was_unset {
-            active.is_none() || !stale.is_empty()
+            active.is_none()
         } else {
-            prev_active != next_active || !stale.is_empty()
+            prev_active != next_active
         };
         if switched {
             table.lkc_switch_gen = table.lkc_switch_gen.wrapping_add(1);
@@ -1151,6 +1235,7 @@ impl KeyRing {
         for id in stale {
             table.lkc_known.remove(&id);
             table.keys.remove(&id);
+            table.bump_lkc_account_gen(&id);
             table.bump_id(&id);
             self.0.said_ok(&id);
         }
@@ -1159,10 +1244,11 @@ impl KeyRing {
         }
     }
 
-    /// Captures the current LK Cloud account-switch generation synchronously at
-    /// probe creation time so an account switch or sign-out before Tokio polls
-    /// the probe future still invalidates it.
-    pub fn register_lkc_probe(&self, account: &str) -> Result<u64> {
+    /// Captures the current LK Cloud account-switch generation and per-ID
+    /// generation synchronously at probe creation time so an account switch,
+    /// sign-out, or `release` before Tokio polls the probe future still
+    /// invalidates it.
+    pub fn register_lkc_probe(&self, account: &str) -> Result<(u64, u64)> {
         validate_remote_id(account)?;
         let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
         if table
@@ -1172,7 +1258,7 @@ impl KeyRing {
         {
             table.lkc_known.insert(account.to_string());
         }
-        Ok(table.lkc_switch_gen)
+        Ok((table.lkc_switch_gen, table.gen_of(account)))
     }
 
     /// [id]'s remote is not synced here any more (turned off): its key is read
@@ -1290,44 +1376,76 @@ impl KeyRing {
     }
 
     /// LK Cloud account variant of [`Self::sealed_with_secret_key`] bound to
-    /// [expected_switch_gen] from [`Self::register_lkc_probe`].
-    pub async fn lkc_sealed_with_secret_key(&self, file: Arc<dyn KeyFile>, expected_switch_gen: u64) -> Result<bool> {
-        self.sealed_with_secret_key_inner(file, Some(expected_switch_gen)).await
+    /// `(expected_switch_gen, expected_id_gen)` from [`Self::register_lkc_probe`].
+    pub async fn lkc_sealed_with_secret_key(
+        &self,
+        file: Arc<dyn KeyFile>,
+        expected_switch_gen: u64,
+        expected_id_gen: u64,
+    ) -> Result<bool> {
+        self.sealed_with_secret_key_inner(file, Some((expected_switch_gen, expected_id_gen)))
+            .await
     }
 
-    async fn sealed_with_secret_key_inner(&self, file: Arc<dyn KeyFile>, lkc_switch_gen: Option<u64>) -> Result<bool> {
+    async fn sealed_with_secret_key_inner(&self, file: Arc<dyn KeyFile>, lkc_probe: Option<(u64, u64)>) -> Result<bool> {
         let id = file.id();
         validate_remote_id(&id)?;
         let (recheck_before, id_gen_before, lkc_allowed_before) = {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-            let allowed = match lkc_switch_gen {
-                None => true,
-                Some(expected) => {
-                    let ok = table.lkc_switch_gen == expected
+            let (id_gen, allowed) = match lkc_probe {
+                None => (table.gen_of(&id), true),
+                Some((expected_switch_gen, expected_id_gen)) => {
+                    let ok = table.lkc_switch_gen == expected_switch_gen
+                        && table.gen_of(&id) == expected_id_gen
                         && table.lkc_active.as_ref().is_none_or(|a| a.as_deref() == Some(id.as_str()));
                     if ok {
                         table.lkc_known.insert(id.clone());
                     }
-                    ok
+                    (expected_id_gen, ok)
                 }
             };
-            (self.0.recheck_gen(), table.gen_of(&id), allowed)
+            (self.0.recheck_gen(), id_gen, allowed)
         };
         let sk_before = self.0.secret_key().await?;
         let pwd = self.0.password().await?;
+        let pending_before = self.0.secrets.pending().await?;
         let sealed = match file.read().await? {
-            Some((body, _)) => open_with_password(&body, &pwd)?.is_none(),
+            Some((body, _)) => {
+                let epochs = self.0.secrets.epochs().await?;
+                let upgraded_2fa = epochs.contains_key(&two_fa_key(&id));
+                let verified = epochs.get(&id).copied();
+                if upgraded_2fa {
+                    true
+                } else if let Some((old_epoch, _)) = read(&body, &pwd)?
+                    && verified.is_none_or(|v| old_epoch >= v)
+                {
+                    false
+                } else if let Some(previous) = pending_before.get(&id)
+                    && previous.as_str() != pwd.as_str()
+                    && let Some((old_epoch, _)) = read(&body, previous)?
+                    && verified.is_none_or(|v| v == old_epoch)
+                {
+                    false
+                } else {
+                    true
+                }
+            }
             None => false,
         };
         if sealed && sk_before.is_none() && lkc_allowed_before {
             let sk_now = self.0.secret_key().await?;
             let pwd_now = self.0.secrets.password().await?;
-            if sk_now.is_none() && pwd_now.as_deref() == Some(pwd.as_str()) {
+            let pending_now = self.0.secrets.pending().await?;
+            if sk_now.is_none()
+                && pwd_now.as_deref() == Some(pwd.as_str())
+                && pending_now.get(&id) == pending_before.get(&id)
+            {
                 let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-                let lkc_still_allowed = match lkc_switch_gen {
+                let lkc_still_allowed = match lkc_probe {
                     None => true,
-                    Some(expected) => {
-                        table.lkc_switch_gen == expected
+                    Some((expected_switch_gen, expected_id_gen)) => {
+                        table.lkc_switch_gen == expected_switch_gen
+                            && table.gen_of(&id) == expected_id_gen
                             && table.lkc_active.as_ref().is_none_or(|a| a.as_deref() == Some(id.as_str()))
                     }
                 };
@@ -1344,10 +1462,9 @@ impl KeyRing {
     /// here changed.
     pub async fn recheck(&self) {
         let keys = {
-            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
             self.0.bump_recheck_gen();
             let held: BTreeSet<String> = table.keys.keys().cloned().collect();
-            table.gens.retain(|id, _| held.contains(id));
             // What only [Self::sealed_with_secret_key] said is said again when
             // asked again.
             self.0.secret_key_missing.send_if_modified(|now| {
@@ -1911,6 +2028,13 @@ impl SyncKey {
                 let mut order = vec![remote[0].clone(), current];
                 order.extend(remote.iter().skip(1).cloned());
                 let identities = self.merged(order);
+                #[cfg(test)]
+                {
+                    let hook = self.before_take_merge.lock().unwrap_or_else(|e| e.into_inner()).take();
+                    if let Some(h) = hook {
+                        h().await;
+                    }
+                }
                 let (written, persist_err) = {
                     let _init = self.ring.secret_key_init.lock().await;
                     self.ring.ensure_not_forgotten(&self.id(), self.forget_gen)?;
@@ -1968,6 +2092,14 @@ impl SyncKey {
     /// here, when another device changed the file meanwhile.
     pub async fn rotate(&self) -> Result<()> {
         self.rotate_with_hook(|| Box::pin(async { Ok(()) })).await
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_before_take_merge<F>(&self, hook: F)
+    where
+        F: Fn() -> BoxFuture<'static, ()> + Send + Sync + 'static,
+    {
+        *self.before_take_merge.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(hook));
     }
 
     #[cfg(test)]

@@ -1793,51 +1793,54 @@ async fn snapshot_reconcile_save_failure_keeps_entry_retryable_across_log_mismat
 
 #[tokio::test]
 async fn delete_binds_session_identity_across_lock_and_retry_while_waiting_on_same_account_put() {
-    let put_started = Arc::new(tokio::sync::Notify::new());
-    let release_put = Arc::new(tokio::sync::Notify::new());
     let delete_503 = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let retry_received = Arc::new(tokio::sync::Notify::new());
+    let (release_503_tx, release_503_rx) = tokio::sync::oneshot::channel::<()>();
+    let hold_503 = Arc::new(StdMutex::new(Some(release_503_rx)));
     let delete_tokens = Arc::new(StdMutex::new(Vec::<String>::new()));
 
-    let ps = put_started.clone();
-    let rp = release_put.clone();
     let d503 = delete_503.clone();
+    let rr = retry_received.clone();
+    let h503 = hold_503.clone();
     let dt = delete_tokens.clone();
 
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
-        ("PUT", p) if p.ends_with(NAME) => {
-            ps.notify_one();
-            Response::status(204).header("ETag", "\"e-put\"")
-        }
         ("DELETE", p) if p.ends_with(NAME) => {
             let auth_hdr = r.header("authorization").unwrap_or("").to_string();
             dt.lock().unwrap().push(auth_hdr);
             if d503.swap(false, std::sync::atomic::Ordering::SeqCst) {
-                return Response::status(503).header("Retry-After", "1");
+                rr.notify_one();
+                let rx = h503.lock().unwrap().take().expect("hold receiver");
+                return Response::status(503).header("Retry-After", "0").hold(rx);
             }
             Response::status(204)
         }
         _ => Response::status(404),
     })
     .await;
-    let _ = rp;
 
     // 1. Same-account DELETE waits on per-name lock behind an in-flight lock holder, then dispatches.
+    let before_lock = Arc::new(tokio::sync::Notify::new());
+    *sync.before_file_lock.lock().unwrap() = Some(before_lock.clone());
     let lock = sync.file_lock(NAME);
     let guard = lock.lock().await;
     let sync_same = sync.clone();
     let mut del_same = tokio::spawn(async move { sync_same.delete(NAME, None).await });
-    assert!(tokio::time::timeout(Duration::from_millis(30), &mut del_same).await.is_err());
+    before_lock.notified().await;
+    tokio::task::yield_now().await;
+    assert!(tokio::time::timeout(Duration::from_millis(20), &mut del_same).await.is_err());
     assert!(delete_tokens.lock().unwrap().is_empty());
     drop(guard);
     assert!(del_same.await.unwrap().unwrap());
     assert_eq!(delete_tokens.lock().unwrap().len(), 1);
 
-    // 2. Session switch while DELETE waits on `_file_guard` MUST reject BEFORE dispatch!
+    // 2. Session switch while DELETE is held at `_file_guard` MUST reject BEFORE dispatch!
     delete_tokens.lock().unwrap().clear();
     let guard2 = lock.lock().await;
     let sync_switch = sync.clone();
     let del_switch = tokio::spawn(async move { sync_switch.delete(NAME, None).await });
-    tokio::time::sleep(Duration::from_millis(20)).await;
+    before_lock.notified().await;
+    tokio::task::yield_now().await;
     sync.session()
         .sign_in(crate::Tokens::stored("tok-u2".into(), Some("ref-u2".into()), crate::now_ms() + 3_600_000))
         .await
@@ -1845,17 +1848,255 @@ async fn delete_binds_session_identity_across_lock_and_retry_while_waiting_on_sa
     drop(guard2);
     assert_eq!(del_switch.await.unwrap().unwrap_err().kind, Kind::SignedOut);
     assert!(delete_tokens.lock().unwrap().is_empty(), "stale session DELETE must not dispatch after session switch");
+    *sync.before_file_lock.lock().unwrap() = None;
 
-    // 3. Session switch during `503 Retry-After` backoff MUST abort the retry before sending with u3's token!
+    // 3. Session switch while fixture holds the `503 Retry-After` response MUST abort the retry before sending with u3's token!
     delete_503.store(true, std::sync::atomic::Ordering::SeqCst);
     let sync_retry = sync.clone();
     let del_retry = tokio::spawn(async move { sync_retry.delete(NAME, None).await });
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    retry_received.notified().await;
     assert_eq!(delete_tokens.lock().unwrap().as_slice(), &["Bearer tok-u2".to_string()]);
     sync.session()
         .sign_in(crate::Tokens::stored("tok-u3".into(), Some("ref-u3".into()), crate::now_ms() + 3_600_000))
         .await
         .unwrap();
+    let _ = release_503_tx.send(());
     assert_eq!(del_retry.await.unwrap().unwrap_err().kind, Kind::SignedOut);
     assert_eq!(delete_tokens.lock().unwrap().as_slice(), &["Bearer tok-u2".to_string()], "retry must not send under u3 token");
+}
+
+#[tokio::test]
+async fn upload_binds_session_identity_across_lock_and_multipart() {
+    let put_tokens = Arc::new(StdMutex::new(Vec::<String>::new()));
+    let multipart_tokens = Arc::new(StdMutex::new(Vec::<(String, String)>::new()));
+    let store_started = Arc::new(tokio::sync::Notify::new());
+    let (release_store_tx, release_store_rx) = tokio::sync::oneshot::channel::<()>();
+    let hold_store = Arc::new(StdMutex::new(Some(release_store_rx)));
+
+    let pt = put_tokens.clone();
+    let mt = multipart_tokens.clone();
+    let ss = store_started.clone();
+    let hs = hold_store.clone();
+
+    let (_fake, sync) = homebase(move |r| {
+        let base = format!("http://{}", r.header("host").unwrap());
+        let auth_hdr = r.header("authorization").unwrap_or("").to_string();
+        match (r.method.as_str(), r.path()) {
+            ("PUT", p) if p.ends_with(NAME) => {
+                pt.lock().unwrap().push(auth_hdr);
+                written("e-put")
+            }
+            ("POST", p) if p.ends_with("/uploads") => {
+                mt.lock().unwrap().push(("init".into(), auth_hdr));
+                Response::json(200, json!({ "data": { "id": "mp1", "url": format!("{base}/store/mp1"), "expires_at": "x", "etag": "e-mp" } }))
+            }
+            ("PUT", "/store/mp1") => {
+                ss.notify_one();
+                if let Some(rx) = hs.lock().unwrap().take() {
+                    Response::status(200).hold(rx)
+                } else {
+                    Response::status(200)
+                }
+            }
+            ("POST", p) if p.ends_with("/uploads/mp1/complete") => {
+                mt.lock().unwrap().push(("complete".into(), auth_hdr));
+                written("e-mp")
+            }
+            _ => Response::status(404),
+        }
+    })
+    .await;
+
+    // 1. Direct PUT held on per-name lock MUST reject before dispatch when session switches!
+    let before_lock = Arc::new(tokio::sync::Notify::new());
+    *sync.before_file_lock.lock().unwrap() = Some(before_lock.clone());
+    let lock = sync.file_lock(NAME);
+    let guard = lock.lock().await;
+    let sync_put = sync.clone();
+    let put_task = tokio::spawn(async move { sync_put.upload_bytes(NAME, b"small".to_vec(), Condition::Absent).await });
+    before_lock.notified().await;
+    tokio::task::yield_now().await;
+    sync.session()
+        .sign_in(crate::Tokens::stored("tok-u2".into(), Some("ref-u2".into()), crate::now_ms() + 3_600_000))
+        .await
+        .unwrap();
+    drop(guard);
+    assert_eq!(put_task.await.unwrap().unwrap_err().kind, Kind::SignedOut);
+    assert!(put_tokens.lock().unwrap().is_empty(), "queued PUT must not send under replacement session");
+    *sync.before_file_lock.lock().unwrap() = None;
+
+    // 2. Direct PUT with unchanged session succeeds with tok-u2.
+    assert_eq!(sync.upload_bytes(NAME, b"small".to_vec(), Condition::Absent).await.unwrap(), "e-put");
+    assert_eq!(put_tokens.lock().unwrap().as_slice(), &["Bearer tok-u2".to_string()]);
+
+    // 3. Multipart upload where session switches during store upload MUST reject completion under tok-u3!
+    let big = vec![9u8; (DIRECT_MAX + 1) as usize];
+    let sync_mp = sync.clone();
+    let big_c = big.clone();
+    let mp_task = tokio::spawn(async move { sync_mp.upload_bytes(NAME, big_c, Condition::Absent).await });
+    store_started.notified().await;
+    sync.session()
+        .sign_in(crate::Tokens::stored("tok-u3".into(), Some("ref-u3".into()), crate::now_ms() + 3_600_000))
+        .await
+        .unwrap();
+    let _ = release_store_tx.send(());
+    assert_eq!(mp_task.await.unwrap().unwrap_err().kind, Kind::SignedOut);
+    assert_eq!(
+        multipart_tokens.lock().unwrap().as_slice(),
+        &[("init".to_string(), "Bearer tok-u2".to_string())],
+        "multipart completion must not dispatch under replacement session"
+    );
+
+    // 4. Multipart upload with unchanged session completes normally under tok-u3.
+    multipart_tokens.lock().unwrap().clear();
+    assert_eq!(sync.upload_bytes(NAME, big, Condition::Absent).await.unwrap(), "e-mp");
+    assert_eq!(
+        multipart_tokens.lock().unwrap().as_slice(),
+        &[
+            ("init".to_string(), "Bearer tok-u3".to_string()),
+            ("complete".to_string(), "Bearer tok-u3".to_string()),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn detached_snapshot_recovery_requires_signature_and_preserves_recorded_log_binding() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let recipient = key.recipient();
+    let snap_body = b"snap-recovery-body".to_vec();
+    let snap_sig = {
+        let auth_tmp = PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), TestKeeper::new());
+        auth_tmp.sign_snapshot("serverbox", 5, &snap_body).await.signature
+    };
+
+    // (log_id, seq, signed)
+    let served: Arc<StdMutex<(String, i64, bool)>> = Arc::new(StdMutex::new(("a1".into(), 5, false)));
+    let served_srv = served.clone();
+    let body_srv = snap_body.clone();
+    let sig_srv = snap_sig.clone();
+    let pk_srv = pub_key.clone();
+
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
+        ("GET", p) if p.ends_with("/log") => {
+            Response::json(410, json!({ "code": 4, "reason": "sync_compacted", "data": "" }))
+                .header("Sync-Log", "a2")
+                .header("Sync-Snapshot-Seq", "1")
+        }
+        ("GET", p) if p.ends_with("/snapshot") => {
+            let (log_id, seq, signed) = served_srv.lock().unwrap().clone();
+            let mut resp = Response::status(200)
+                .header("ETag", "\"snap-e\"")
+                .header("Sync-Log", &log_id)
+                .header("Sync-Seq", &seq.to_string());
+            if signed {
+                resp = resp
+                    .header("X-Signer", "u1")
+                    .header("X-Signing-Key", &pk_srv)
+                    .header("X-Signature", &sig_srv);
+            }
+            resp.body(body_srv.clone())
+        }
+        _ => Response::status(404),
+    })
+    .await;
+
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), keeper));
+    sync.set_personal(Some(auth.clone()));
+
+    // 1. Ordinary download path still accepts an unsigned legacy snapshot.
+    let (legacy_snap, legacy_bytes) = sync.download_snapshot_bytes().await.unwrap().unwrap();
+    assert_eq!(legacy_snap.log, "a1");
+    assert!(legacy_snap.signed.is_none());
+    assert_eq!(legacy_bytes, snap_body);
+
+    // 2. Detached snapshot recovery MUST reject a matching unsigned snapshot as Untrusted!
+    let err = sync.flush_committed_snapshot_bytes("u1", None, 5, &snap_body).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Untrusted);
+
+    // 3. Matching signed snapshot completes detached recovery without another PUT when no conflicting binding exists.
+    *served.lock().unwrap() = ("a1".into(), 5, true);
+    let (recovered, resolved) = sync.flush_committed_snapshot_bytes("u1", None, 5, &snap_body).await.unwrap();
+    assert!(recovered);
+    assert_eq!(resolved.as_deref(), Some("a1"));
+    assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("a1"));
+
+    // 4. Once a different log binding (`a2`) is recorded under the same auth generation,
+    //    detached recovery observing a verified signed snapshot for `a1` MUST NOT replace `a2`
+    //    or evict pending commits for `a2`!
+    let auth2 = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    sync.set_personal(Some(auth2.clone()));
+    auth2.record_batch_written("serverbox", "a2", 1).await.unwrap();
+    let _ = sync.read_log(0, Some("a2"), None).await.unwrap();
+    let batch_key = ("idem-a2-12345678".to_string(), [7u8; 32]);
+    {
+        let mut guard = sync.pending_commits.lock().unwrap();
+        let id = guard.next_id();
+        guard.batches.insert(
+            batch_key.clone(),
+            (id, Appended { log: "a2".into(), seq: 2, live: Live { batches: 1, bytes: 10 }, compact: false }),
+        );
+    }
+
+    let (recovered2, resolved2) = sync.flush_committed_snapshot_bytes("u1", None, 5, &snap_body).await.unwrap();
+    assert!(!recovered2);
+    assert!(resolved2.is_none());
+    assert_eq!(auth2.signed_log_id("serverbox").await.as_deref(), Some("a2"));
+    assert!(sync.pending_commits.lock().unwrap().batches.contains_key(&batch_key));
+
+    // 5. When `observed_log` is `Some("a2")` (from 410) while `PersonalAuth.signed_log_ids` is still
+    //    `None`, and `/snapshot` returns 404 (`Gone`), calling `flush_committed_snapshot_bytes` with
+    //    conflicting `log = Some("a1")` MUST NOT bind `PersonalAuth` to `"a1"`!
+    let auth3 = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    sync.set_personal(Some(auth3.clone()));
+    let _ = sync.read_log(0, None, None).await.unwrap(); // 410 Sync-Log: a2 -> sets observed_log = Some("a2")
+    *served.lock().unwrap() = ("a1".into(), 0, false); // trigger missing / mismatch check below
+    assert!(!sync.flush_committed_snapshot("u1", Some("a1"), 5).await.unwrap());
+    assert_eq!(auth3.signed_log_id("serverbox").await, None, "conflicting flush must not pollute signed_log_ids");
+    assert!(sync.flush_committed_snapshot("u1", Some("a2"), 6).await.unwrap());
+    assert_eq!(auth3.signed_log_id("serverbox").await.as_deref(), Some("a2"));
+
+    // 6. Concurrent `read_log` 410 setting `observed_log = Some("a2")` DURING `keeper.save` of
+    //    `reconcile_detached_snapshot` (for `"a1"`) MUST NOT leave `PersonalAuth` bound to `"a1"`!
+    *served.lock().unwrap() = ("a1".into(), 5, true);
+    struct RaceOnSaveKeeper {
+        sync: Arc<SyncClient<Kept>>,
+        raced: std::sync::atomic::AtomicBool,
+        saved: StdMutex<String>,
+    }
+    impl crate::personal::VersionKeeper for RaceOnSaveKeeper {
+        fn save(&self, json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
+            *self.saved.lock().unwrap() = json;
+            let should_race = !self.raced.swap(true, std::sync::atomic::Ordering::SeqCst);
+            let sync = self.sync.clone();
+            Box::pin(async move {
+                if should_race {
+                    // Simulate concurrent `read_log` 410 observing `"a2"` while `keeper.save` awaits!
+                    let auth_gen = sync.personal_generation();
+                    sync.retain_log_commits(auth_gen, Some("a2"));
+                }
+                Ok(())
+            })
+        }
+    }
+    let race_keeper = Arc::new(RaceOnSaveKeeper {
+        sync: sync.clone(),
+        raced: std::sync::atomic::AtomicBool::new(false),
+        saved: StdMutex::new(String::new()),
+    });
+    let auth4 = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), race_keeper.clone()));
+    sync.set_personal(Some(auth4.clone()));
+    let (recovered4, resolved4) = sync.flush_committed_snapshot_bytes("u1", None, 5, &snap_body).await.unwrap();
+    assert!(!recovered4);
+    assert!(resolved4.is_none());
+    assert_eq!(auth4.signed_log_id("serverbox").await, None, "raced detached save must not commit a1");
+    let reloaded = crate::personal::PersonalVersions::from_json(&race_keeper.saved.lock().unwrap()).unwrap();
+    let auth4_reloaded = PersonalAuth::new(
+        crate::team::identity::AccountKey::generate("u1"),
+        reloaded,
+        TestKeeper::new(),
+    );
+    assert_eq!(auth4_reloaded.signed_log_id("serverbox").await, None, "persisted fallback must not contain a1");
 }

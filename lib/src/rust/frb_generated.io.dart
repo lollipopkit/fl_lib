@@ -506,6 +506,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PreparedTheme dco_decode_prepared_theme(dynamic raw);
 
   @protected
+  (BigInt, BigInt) dco_decode_record_u_64_u_64(dynamic raw);
+
+  @protected
   SyncEngineError dco_decode_sync_engine_error(dynamic raw);
 
   @protected
@@ -974,6 +977,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PreparedTheme sse_decode_prepared_theme(SseDeserializer deserializer);
+
+  @protected
+  (BigInt, BigInt) sse_decode_record_u_64_u_64(SseDeserializer deserializer);
 
   @protected
   SyncEngineError sse_decode_sync_engine_error(SseDeserializer deserializer);
@@ -1576,6 +1582,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_prepared_theme(PreparedTheme self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_u_64_u_64(
+    (BigInt, BigInt) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_sync_engine_error(

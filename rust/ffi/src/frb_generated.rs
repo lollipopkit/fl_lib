@@ -27,9 +27,9 @@
 
 // Section: imports
 
-use crate::api::team::*;
+use crate::api::lkc::*;
 use crate::api::sync_engine::*;
-use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 
@@ -1680,7 +1680,8 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
             let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>>::sse_decode(&mut deserializer);
 let api_lkc = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSync>>>::sse_decode(&mut deserializer);
 let api_account = <String>::sse_decode(&mut deserializer);
-let api_expected_switch_gen = <u64>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
+let api_expected_switch_gen = <u64>::sse_decode(&mut deserializer);
+let api_expected_id_gen = <u64>::sse_decode(&mut deserializer);deserializer.end(); move |context| async move {
                     transform_result_sse::<_, crate::api::sync_engine::SyncEngineError>((move || async move {
                         let mut api_that_guard = None;
 let mut api_lkc_guard = None;
@@ -1694,7 +1695,7 @@ let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decod
         }
         let api_that_guard = api_that_guard.unwrap();
 let api_lkc_guard = api_lkc_guard.unwrap();
- let output_ok = crate::api::sync_engine::SyncKeys::lkc_sealed_with_secret_key(&*api_that_guard, &*api_lkc_guard, api_account, api_expected_switch_gen).await?;   std::result::Result::Ok(output_ok)
+ let output_ok = crate::api::sync_engine::SyncKeys::lkc_sealed_with_secret_key(&*api_that_guard, &*api_lkc_guard, api_account, api_expected_switch_gen, api_expected_id_gen).await?;   std::result::Result::Ok(output_ok)
                     })().await)
                 } })
             }fn wire__crate__api__sync_engine__SyncKeys_mismatch_impl(ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,rust_vec_len_: i32,data_len_: i32) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
@@ -3239,6 +3240,13 @@ let mut var_name = <String>::sse_decode(deserializer);
 let mut var_iconPack = <bool>::sse_decode(deserializer);
 let mut var_files = <Vec<crate::api::theme::ThemeFile>>::sse_decode(deserializer);
 return crate::api::theme::PreparedTheme{installation_id: var_installationId, id: var_id, name: var_name, icon_pack: var_iconPack, files: var_files};}
+                }
+                
+                impl SseDecode for (u64,u64,) {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {let mut var_field0 = <u64>::sse_decode(deserializer);
+let mut var_field1 = <u64>::sse_decode(deserializer);
+return (var_field0, var_field1);}
                 }
                 
                 impl SseDecode for crate::api::sync_engine::SyncEngineError {
@@ -4923,6 +4931,12 @@ crate::api::team::LkcTeamErrorKind::Sync => { 17 }
 <Vec<crate::api::theme::ThemeFile>>::sse_encode(self.files, serializer);}
                 }
                 
+                impl SseEncode for (u64,u64,) {
+                    // Codec=Sse (Serialization based), see doc to use other codecs
+                    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<u64>::sse_encode(self.0, serializer);
+<u64>::sse_encode(self.1, serializer);}
+                }
+                
                 impl SseEncode for crate::api::sync_engine::SyncEngineError {
                     // Codec=Sse (Serialization based), see doc to use other codecs
                     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {<crate::api::sync_engine::SyncEngineErrorKind>::sse_encode(self.kind, serializer);
@@ -5027,9 +5041,9 @@ crate::api::sync_engine::SyncEngineErrorKind::SignedOut => { 11 }
 
 // Section: imports
 
-use crate::api::team::*;
+use crate::api::lkc::*;
 use crate::api::sync_engine::*;
-use crate::api::lkc::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
+use crate::api::team::*;use flutter_rust_bridge::{Handler, IntoIntoDart};
 use flutter_rust_bridge::for_generated::{Lockable, transform_result_dco, Lifetimeable};
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};use super::*;
 

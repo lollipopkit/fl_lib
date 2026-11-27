@@ -414,6 +414,9 @@ struct PendingCommits {
     /// `(entry_id, log_binding, etag)` so a confirmed log replacement invalidates
     /// stale entries while an unknown log is reconciled before reuse or removal.
     snapshots: HashMap<SnapshotCommitKey, SnapshotCommitEntry>,
+    /// Log identifier already observed and recorded under this `generation`,
+    /// used to order live observations ahead of detached snapshot recovery.
+    observed_log: Option<String>,
 }
 
 impl PendingCommits {
@@ -490,6 +493,8 @@ pub struct SyncClient<S: Store> {
     pending_commits: Mutex<PendingCommits>,
     #[cfg(test)]
     after_verify_before_rename: Mutex<Option<TestPostVerifyHook>>,
+    #[cfg(test)]
+    before_file_lock: Mutex<Option<Arc<tokio::sync::Notify>>>,
 }
 
 #[cfg(test)]
@@ -512,6 +517,8 @@ impl<S: Store> SyncClient<S> {
             pending_commits: Mutex::new(PendingCommits::default()),
             #[cfg(test)]
             after_verify_before_rename: Mutex::new(None),
+            #[cfg(test)]
+            before_file_lock: Mutex::new(None),
         }
     }
 
@@ -542,6 +549,7 @@ impl<S: Store> SyncClient<S> {
                 pending.file_mutations.clear();
                 pending.batches.clear();
                 pending.snapshots.clear();
+                pending.observed_log = None;
                 drop(pending);
                 self.written.lock().unwrap_or_else(|e| e.into_inner()).clear();
             }
@@ -665,19 +673,35 @@ impl<S: Store> SyncClient<S> {
                         }
                     }
                 }
-                FlushAction::Missing => match log {
-                    Some(target_log) if current_log.is_none() || current_log.as_deref() == Some(target_log) => {
-                        let compatible = self.flush_committed_snapshot(expected_user, Some(target_log), seq).await?;
-                        return Ok((compatible, compatible.then(|| target_log.to_string())));
-                    }
-                    _ => match self.reconcile_detached_snapshot(&auth, auth_gen, commit_key).await? {
-                        Some(resolved_log) => return Ok((true, Some(resolved_log))),
-                        None => {
-                            let _ = self.flush_committed_snapshot(expected_user, log, seq).await?;
-                            return Ok((false, None));
+                FlushAction::Missing => {
+                    let observed_conflicts = log.is_some_and(|target_log| {
+                        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                        if slot.generation != auth_gen {
+                            return false;
                         }
-                    },
-                },
+                        let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                        guard.generation == auth_gen
+                            && guard.observed_log.as_deref().is_some_and(|obs| obs != target_log)
+                    });
+                    match log {
+                        Some(target_log)
+                            if !observed_conflicts
+                                && (current_log.is_none() || current_log.as_deref() == Some(target_log)) =>
+                        {
+                            let compatible = self.flush_committed_snapshot(expected_user, Some(target_log), seq).await?;
+                            return Ok((compatible, compatible.then(|| target_log.to_string())));
+                        }
+                        _ => match self.reconcile_detached_snapshot(&auth, auth_gen, commit_key).await? {
+                            DetachedReconcile::Recovered(resolved_log) => return Ok((true, Some(resolved_log))),
+                            DetachedReconcile::Conflicted => return Ok((false, None)),
+                            DetachedReconcile::Gone => {
+                                let flush_log = (!observed_conflicts).then_some(log).flatten();
+                                let _ = self.flush_committed_snapshot(expected_user, flush_log, seq).await?;
+                                return Ok((false, None));
+                            }
+                        },
+                    }
+                }
             }
         }
         Err(Error::new(Kind::Invalid, "personal signing auth changed during snapshot watermark flush"))
@@ -688,7 +712,7 @@ impl<S: Store> SyncClient<S> {
         auth: &PersonalAuth,
         auth_gen: u64,
         commit_key: (i64, [u8; 32]),
-    ) -> Result<Option<String>, Error> {
+    ) -> Result<DetachedReconcile, Error> {
         let (seq, ref expected_digest) = commit_key;
         let mut digest = [0u8; 32];
         let mut found = None;
@@ -701,16 +725,73 @@ impl<S: Store> SyncClient<S> {
             .await?;
         self.ensure_personal_gen(auth_gen)?;
         match fetched {
-            Fetched::Missing => Ok(None),
+            Fetched::Missing => Ok(DetachedReconcile::Gone),
             Fetched::Saved(_) => {
                 let Some(snap) = found else {
                     return Err(Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq"));
                 };
                 let same_snapshot = snap.seq == seq && &digest == expected_digest;
-                auth.verify_snapshot_digest(&self.app, &snap, &digest).await?;
+                if snap.signed.is_none() {
+                    if same_snapshot {
+                        return Err(Error::new(
+                            Kind::Untrusted,
+                            format!("{}/snapshot seq {}: server stripped signature", self.app, snap.seq),
+                        ));
+                    }
+                    auth.verify_snapshot_digest(&self.app, &snap, &digest).await?;
+                    self.ensure_personal_gen(auth_gen)?;
+                    return Ok(DetachedReconcile::Gone);
+                }
+                // Ordering rule: any log binding already recorded under this
+                // `auth_gen` (either in `PendingCommits::observed_log` or on
+                // this `PersonalAuth` instance) takes precedence over a
+                // detached recovery probe for a different log. Checked and
+                // committed atomically under `auth.versions -> personal ->
+                // pending_commits` lock order.
+                let snap_log = snap.log.clone();
+                let recorded = auth
+                    .verify_snapshot_digest_for_detached(
+                        &self.app,
+                        &snap,
+                        &digest,
+                        || {
+                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                            if slot.generation != auth_gen || slot.auth.is_none() {
+                                return Err(Error::new(Kind::SignedOut, "personal signing auth changed during write"));
+                            }
+                            let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                            if guard.generation != auth_gen {
+                                return Err(Error::new(Kind::SignedOut, "personal signing auth changed during write"));
+                            }
+                            Ok(guard.observed_log.as_deref().is_none_or(|obs| obs == snap_log))
+                        },
+                        || {
+                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                            if slot.generation != auth_gen || slot.auth.is_none() {
+                                return Err(Error::new(Kind::SignedOut, "personal signing auth changed during write"));
+                            }
+                            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                            if guard.generation != auth_gen {
+                                return Err(Error::new(Kind::SignedOut, "personal signing auth changed during write"));
+                            }
+                            if guard.observed_log.as_deref().is_some_and(|obs| obs != snap_log) {
+                                return Ok(false);
+                            }
+                            guard.observed_log = Some(snap_log.clone());
+                            guard.retain_for_log(&snap_log);
+                            Ok(true)
+                        },
+                    )
+                    .await?;
                 self.ensure_personal_gen(auth_gen)?;
-                self.retain_log_commits(auth_gen, Some(&snap.log));
-                Ok(same_snapshot.then_some(snap.log))
+                if !recorded {
+                    return Ok(DetachedReconcile::Conflicted);
+                }
+                Ok(if same_snapshot {
+                    DetachedReconcile::Recovered(snap.log)
+                } else {
+                    DetachedReconcile::Gone
+                })
             }
             Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a snapshot answered 304")),
         }
@@ -731,11 +812,31 @@ impl<S: Store> SyncClient<S> {
             if auth.user_id().await != expected_user {
                 return Err(Error::new(Kind::SignedOut, "personal signing auth belongs to a different user"));
             }
-            let compatible = auth.record_snapshot_if_log_compatible(&self.app, log, seq).await?;
+            let observed_conflicts = log.is_some_and(|target_log| {
+                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                if slot.generation != auth_gen || slot.auth.is_none() {
+                    return false;
+                }
+                let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                guard.generation == auth_gen
+                    && guard.observed_log.as_deref().is_some_and(|obs| obs != target_log)
+            });
+            let compatible = if observed_conflicts {
+                auth.record_snapshot_seen(&self.app).await?;
+                false
+            } else {
+                auth.record_snapshot_if_log_compatible(&self.app, log, seq).await?
+            };
             let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
             if slot.generation == auth_gen && slot.auth.is_some() {
                 let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                 if guard.generation == auth_gen {
+                    if compatible
+                        && let Some(l) = log
+                        && guard.observed_log.as_deref().is_none_or(|obs| obs == l)
+                    {
+                        guard.observed_log = Some(l.to_string());
+                    }
                     guard.snapshots.retain(|(entry_seq, _), (_, binding, _)| {
                         if *entry_seq > seq {
                             return true;
@@ -760,7 +861,10 @@ impl<S: Store> SyncClient<S> {
             let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
             if guard.generation == auth_gen {
                 match observed_log {
-                    Some(log_id) => guard.retain_for_log(log_id),
+                    Some(log_id) => {
+                        guard.observed_log = Some(log_id.to_string());
+                        guard.retain_for_log(log_id);
+                    }
                     None => {
                         guard.batches.clear();
                         guard.snapshots.clear();
@@ -814,6 +918,8 @@ impl<S: Store> SyncClient<S> {
             pending_commits: Mutex::new(PendingCommits::default()),
             #[cfg(test)]
             after_verify_before_rename: Mutex::new(None),
+            #[cfg(test)]
+            before_file_lock: Mutex::new(None),
         }
     }
 
@@ -865,12 +971,18 @@ impl<S: Store> SyncClient<S> {
     /// [name]'s bytes, version and its writer's signature (when signed);
     /// `None` when there is no such file.
     pub async fn download_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
-        self.download_bytes_inner(name, DownloadVerify::File).await
+        self.download_bytes_inner(name, DownloadVerify::File).await.0
     }
 
     /// Write-once log blob variant of [`Self::download_bytes`]: verifies the
     /// signature without recording a per-file version watermark.
     pub async fn download_blob_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
+        self.download_bytes_inner(name, DownloadVerify::BlobStrict).await.0
+    }
+
+    /// Like [`Self::download_blob_bytes`], also returning whether personal auth
+    /// was attached and verified this download.
+    pub async fn download_blob_bytes_checked(&self, name: &str) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
         self.download_bytes_inner(name, DownloadVerify::BlobStrict).await
     }
 
@@ -878,34 +990,45 @@ impl<S: Store> SyncClient<S> {
     /// reference retained by a batch or snapshot: allows an unsigned response
     /// only when [name] was never previously seen or written signed.
     pub async fn download_retained_blob_bytes(&self, name: &str) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
+        self.download_bytes_inner(name, DownloadVerify::BlobRetained).await.0
+    }
+
+    /// Like [`Self::download_retained_blob_bytes`], also returning whether
+    /// personal auth was attached and verified this download.
+    pub async fn download_retained_blob_bytes_checked(&self, name: &str) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
         self.download_bytes_inner(name, DownloadVerify::BlobRetained).await
     }
 
-    async fn download_bytes_inner(&self, name: &str, verify: DownloadVerify) -> Result<Option<(Vec<u8>, String, Option<Signed>)>, Error> {
+    async fn download_bytes_inner(&self, name: &str, verify: DownloadVerify) -> (Result<Option<(Vec<u8>, String, Option<Signed>)>, Error>, bool) {
         let auth = self.personal_auth_with_gen();
-        let mut body = Vec::new();
-        let mut signed = None;
-        match self.fetch_with(&self.file_path(name)?, Target::Memory(&mut body), None, |r| signed = Signed::of(r)).await? {
-            Fetched::Saved(etag) => {
-                if let Some((auth_gen, auth)) = auth {
-                    self.ensure_personal_gen(auth_gen)?;
-                    match verify {
-                        DownloadVerify::File => auth.verify_file(&self.app, name, &body, signed.as_ref(), true).await?,
-                        DownloadVerify::BlobStrict => auth.verify_blob(&self.app, name, &body, signed.as_ref()).await?,
-                        DownloadVerify::BlobRetained => auth.verify_retained_blob(&self.app, name, &body, signed.as_ref()).await?,
+        let has_auth = auth.is_some();
+        let res = async {
+            let mut body = Vec::new();
+            let mut signed = None;
+            match self.fetch_with(&self.file_path(name)?, Target::Memory(&mut body), None, |r| signed = Signed::of(r)).await? {
+                Fetched::Saved(etag) => {
+                    if let Some((auth_gen, auth)) = auth {
+                        self.ensure_personal_gen(auth_gen)?;
+                        match verify {
+                            DownloadVerify::File => auth.verify_file(&self.app, name, &body, signed.as_ref(), true).await?,
+                            DownloadVerify::BlobStrict => auth.verify_blob(&self.app, name, &body, signed.as_ref()).await?,
+                            DownloadVerify::BlobRetained => auth.verify_retained_blob(&self.app, name, &body, signed.as_ref()).await?,
+                        }
+                        self.ensure_personal_gen(auth_gen)?;
                     }
-                    self.ensure_personal_gen(auth_gen)?;
+                    Ok(Some((body, etag, signed)))
                 }
-                Ok(Some((body, etag, signed)))
-            }
-            Fetched::Missing => {
-                if let Some((auth_gen, _)) = auth {
-                    self.ensure_personal_gen(auth_gen)?;
+                Fetched::Missing => {
+                    if let Some((auth_gen, _)) = auth {
+                        self.ensure_personal_gen(auth_gen)?;
+                    }
+                    Ok(None)
                 }
-                Ok(None)
+                Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a file answered 304")),
             }
-            Fetched::Unchanged => Err(Error::new(Kind::Invalid, "a file answered 304")),
         }
+        .await;
+        (res, has_auth)
     }
 
     /// A kept version of [name] ([`SyncClient::versions`]) written to [to].
@@ -926,152 +1049,162 @@ impl<S: Store> SyncClient<S> {
     /// When personal signing is attached, signs the write and advances the
     /// monotonic file version automatically.
     pub async fn upload_bytes(&self, name: &str, body: Vec<u8>, condition: Condition) -> Result<String, Error> {
-        self.upload_bytes_inner(name, body, condition, false).await
+        self.upload_bytes_inner(name, body, condition, false).await.0
     }
 
     /// Write-once log blob upload (`Condition::Absent`): signs the write when
     /// personal signing is attached, and records blob signing without adding a
     /// per-file version watermark.
     pub async fn upload_blob_bytes(&self, name: &str, body: Vec<u8>) -> Result<String, Error> {
+        self.upload_bytes_inner(name, body, Condition::Absent, true).await.0
+    }
+
+    /// Like [`Self::upload_blob_bytes`], also returning whether personal
+    /// signing was attached for this upload attempt.
+    pub async fn upload_blob_bytes_checked(&self, name: &str, body: Vec<u8>) -> (Result<String, Error>, bool) {
         self.upload_bytes_inner(name, body, Condition::Absent, true).await
     }
 
-    async fn upload_bytes_inner(&self, name: &str, body: Vec<u8>, condition: Condition, write_once_blob: bool) -> Result<String, Error> {
+    async fn upload_bytes_inner(&self, name: &str, body: Vec<u8>, condition: Condition, write_once_blob: bool) -> (Result<String, Error>, bool) {
         const MAX_CACHE_FLUSH_RETRIES: usize = 4;
         let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
-            return self.upload_signed(name, body, condition, None).await;
+            return (self.upload_signed(name, body, condition, None).await, false);
         };
-        let body = bytes::Bytes::from(body);
-        let mode = if write_once_blob { UploadMode::Blob } else { UploadMode::File };
-        let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes(), mode);
-        let mut expected_id = {
-            let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-            (guard.generation == auth_gen)
-                .then(|| guard.files.get(&commit_key).map(|(id, _, _)| *id))
-                .flatten()
-        };
-        if expected_id.is_some() {
-            for _ in 0..MAX_CACHE_FLUSH_RETRIES {
-                let Some(entry_id) = expected_id else { break };
-                let flushed = auth.flush_pending_versions().await;
-                let lock = self.file_lock(name);
-                let _file_guard = lock.lock().await;
-                match flushed {
-                    Ok(()) => {
-                        enum CacheCheck {
-                            Hit(String),
-                            Replaced(u64),
-                            Gone,
-                        }
-                        let check = {
-                            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-                            if slot.generation == auth_gen {
-                                let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                                if guard.generation == auth_gen {
-                                    match guard.files.get(&commit_key) {
-                                        Some((cur_id, _, _)) if *cur_id == entry_id => {
-                                            let (_, etag, _) = guard.files.remove(&commit_key).expect("entry present");
-                                            CacheCheck::Hit(etag)
+        let res = async {
+            let body = bytes::Bytes::from(body);
+            let mode = if write_once_blob { UploadMode::Blob } else { UploadMode::File };
+            let commit_key = (name.to_string(), condition.clone(), *blake3::hash(&body).as_bytes(), mode);
+            let mut expected_id = {
+                let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                (guard.generation == auth_gen)
+                    .then(|| guard.files.get(&commit_key).map(|(id, _, _)| *id))
+                    .flatten()
+            };
+            if expected_id.is_some() {
+                for _ in 0..MAX_CACHE_FLUSH_RETRIES {
+                    let Some(entry_id) = expected_id else { break };
+                    let flushed = auth.flush_pending_versions().await;
+                    let lock = self.file_lock(name);
+                    let _file_guard = lock.lock().await;
+                    match flushed {
+                        Ok(()) => {
+                            enum CacheCheck {
+                                Hit(String),
+                                Replaced(u64),
+                                Gone,
+                            }
+                            let check = {
+                                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                                if slot.generation == auth_gen {
+                                    let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                    if guard.generation == auth_gen {
+                                        match guard.files.get(&commit_key) {
+                                            Some((cur_id, _, _)) if *cur_id == entry_id => {
+                                                let (_, etag, _) = guard.files.remove(&commit_key).expect("entry present");
+                                                CacheCheck::Hit(etag)
+                                            }
+                                            Some((cur_id, _, _)) => CacheCheck::Replaced(*cur_id),
+                                            None => CacheCheck::Gone,
                                         }
-                                        Some((cur_id, _, _)) => CacheCheck::Replaced(*cur_id),
-                                        None => CacheCheck::Gone,
+                                    } else {
+                                        CacheCheck::Gone
                                     }
                                 } else {
                                     CacheCheck::Gone
                                 }
-                            } else {
-                                CacheCheck::Gone
-                            }
-                        };
-                        match check {
-                            CacheCheck::Hit(etag) => return Ok(etag),
-                            CacheCheck::Replaced(next_id) => {
-                                expected_id = Some(next_id);
-                                continue;
-                            }
-                            CacheCheck::Gone => break,
-                        }
-                    }
-                    Err(e) => {
-                        if e.kind == Kind::Invalid {
-                            let still_valid = {
-                                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-                                if slot.generation == auth_gen {
-                                    let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                                    (guard.generation == auth_gen)
-                                        .then(|| {
-                                            guard.files.get(&commit_key).and_then(|(cur_id, etag, version)| {
-                                                (*cur_id == entry_id).then(|| (etag.clone(), *version))
-                                            })
-                                        })
-                                        .flatten()
-                                } else {
-                                    None
-                                }
                             };
-                            if let Some((etag, version)) = still_valid {
-                                return Err(e.with_committed(Committed::File { etag, version }));
+                            match check {
+                                CacheCheck::Hit(etag) => return Ok(etag),
+                                CacheCheck::Replaced(next_id) => {
+                                    expected_id = Some(next_id);
+                                    continue;
+                                }
+                                CacheCheck::Gone => break,
                             }
                         }
-                        return Err(e);
+                        Err(e) => {
+                            if e.kind == Kind::Invalid {
+                                let still_valid = {
+                                    let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                                    if slot.generation == auth_gen {
+                                        let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                        (guard.generation == auth_gen)
+                                            .then(|| {
+                                                guard.files.get(&commit_key).and_then(|(cur_id, etag, version)| {
+                                                    (*cur_id == entry_id).then(|| (etag.clone(), *version))
+                                                })
+                                            })
+                                            .flatten()
+                                    } else {
+                                        None
+                                    }
+                                };
+                                if let Some((etag, version)) = still_valid {
+                                    return Err(e.with_committed(Committed::File { etag, version }));
+                                }
+                            }
+                            return Err(e);
+                        }
                     }
                 }
+                self.ensure_personal_gen(auth_gen)?;
             }
+            auth.flush_pending_versions().await?;
             self.ensure_personal_gen(auth_gen)?;
-        }
-        auth.flush_pending_versions().await?;
-        self.ensure_personal_gen(auth_gen)?;
-        auth.ensure_published(&self.session, false).await?;
-        self.ensure_personal_gen(auth_gen)?;
-        let mut version = if write_once_blob { 1 } else { auth.next_file_version(&self.app, name).await? };
-        let mut republished = false;
-        let mut version_retried = false;
-        loop {
+            auth.ensure_published(&self.session, false).await?;
             self.ensure_personal_gen(auth_gen)?;
-            let sig = auth.sign_file(&self.app, name, version, &body).await;
-            match self.upload_signed_bytes(name, body.clone(), condition.clone(), Some(&sig), auth_gen, true).await {
-                Ok((etag, recovery)) => {
-                    let recorded = if write_once_blob {
-                        auth.record_named_blob_written(&self.app, name).await
-                    } else {
-                        auth.record_file_version(&self.app, name, version).await
-                    };
-                    if let Err(e) = recorded {
-                        if e.kind == Kind::Invalid {
-                            if let Some(ref token) = recovery {
-                                let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-                                if slot.generation == auth_gen {
-                                    let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                                    if guard.generation == auth_gen
-                                        && guard.file_mutations.get(name).map(|m| m.seq) == Some(token.seq)
-                                    {
-                                        let id = guard.next_id();
-                                        guard.files.insert(commit_key, (id, etag.clone(), version));
+            let mut version = if write_once_blob { 1 } else { auth.next_file_version(&self.app, name).await? };
+            let mut republished = false;
+            let mut version_retried = false;
+            loop {
+                self.ensure_personal_gen(auth_gen)?;
+                let sig = auth.sign_file(&self.app, name, version, &body).await;
+                match self.upload_signed_bytes(name, body.clone(), condition.clone(), Some(&sig), auth_gen, true).await {
+                    Ok((etag, recovery)) => {
+                        let recorded = if write_once_blob {
+                            auth.record_named_blob_written(&self.app, name).await
+                        } else {
+                            auth.record_file_version(&self.app, name, version).await
+                        };
+                        if let Err(e) = recorded {
+                            if e.kind == Kind::Invalid {
+                                if let Some(ref token) = recovery {
+                                    let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+                                    if slot.generation == auth_gen {
+                                        let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+                                        if guard.generation == auth_gen
+                                            && guard.file_mutations.get(name).map(|m| m.seq) == Some(token.seq)
+                                        {
+                                            let id = guard.next_id();
+                                            guard.files.insert(commit_key, (id, etag.clone(), version));
+                                        }
                                     }
                                 }
+                                return Err(e.with_committed(Committed::File { etag, version }));
                             }
-                            return Err(e.with_committed(Committed::File { etag, version }));
+                            return Err(e);
                         }
-                        return Err(e);
+                        return Ok(etag);
                     }
-                    return Ok(etag);
-                }
-                Err(e) if !version_retried && matches!(e.kind, Kind::Version(_)) => {
-                    let Kind::Version(highest) = e.kind else { unreachable!() };
-                    if highest < version {
-                        return Err(Error::new(Kind::Untrusted, format!("server sync_version {highest} is below attempted {version}")));
+                    Err(e) if !version_retried && matches!(e.kind, Kind::Version(_)) => {
+                        let Kind::Version(highest) = e.kind else { unreachable!() };
+                        if highest < version {
+                            return Err(Error::new(Kind::Untrusted, format!("server sync_version {highest} is below attempted {version}")));
+                        }
+                        version = highest.checked_add(1).ok_or_else(|| Error::new(Kind::Untrusted, "server sync_version overflow"))?;
+                        version_retried = true;
                     }
-                    version = highest.checked_add(1).ok_or_else(|| Error::new(Kind::Untrusted, "server sync_version overflow"))?;
-                    version_retried = true;
+                    Err(e) if !republished && matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
+                        self.ensure_personal_gen(auth_gen)?;
+                        auth.ensure_published(&self.session, true).await?;
+                        republished = true;
+                    }
+                    Err(e) => return Err(e),
                 }
-                Err(e) if !republished && matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
-                    self.ensure_personal_gen(auth_gen)?;
-                    auth.ensure_published(&self.session, true).await?;
-                    republished = true;
-                }
-                Err(e) => return Err(e),
             }
         }
+        .await;
+        (res, true)
     }
 
     /// [upload_bytes], signed by its writer ([sig]): a team's every write is.
@@ -1094,31 +1227,63 @@ impl<S: Store> SyncClient<S> {
         if size > MAX_BYTES {
             return Err(Error::new(Kind::TooLarge, format!("{size} bytes")));
         }
+        let start_session = self
+            .session
+            .identity()
+            .ok_or_else(|| Error::new(Kind::SignedOut, "signed out"))?;
+        let (start_gen, start_personal_attached) = if track_recovery {
+            (expected_gen, true)
+        } else {
+            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+            (slot.generation, slot.auth.is_some())
+        };
+        #[cfg(test)]
+        if let Some(notify) = self.before_file_lock.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            notify.notify_one();
+        }
         let lock = self.file_lock(name);
         let _file_guard = lock.lock().await;
+        if self.session.identity() != Some(start_session) {
+            return Err(Error::new(Kind::SignedOut, "session changed before upload"));
+        }
+        let (active_gen, active_personal_attached) = {
+            let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+            if start_personal_attached && (slot.generation != start_gen || slot.auth.is_none()) {
+                return Err(Error::new(Kind::SignedOut, "personal signing auth changed before upload"));
+            }
+            (slot.generation, slot.auth.is_some())
+        };
+        let bound = Some((start_session, active_gen, active_personal_attached));
         let etag = if size <= DIRECT_MAX {
             let response = self
-                .send(Method::PUT, &path, |r| {
+                .send_for(bound, Method::PUT, &path, |r| {
                     signed_by(condition_on(r, &condition), sig)
                         .header(header::CONTENT_TYPE, "application/octet-stream")
                         .header(header::CONTENT_LENGTH, size)
                         .body(bytes.clone())
                 })
                 .await?;
-            self.written_version(response).await?
+            self.written_version_for(Some(start_session), response).await?
         } else {
             let response = self
-                .send(Method::POST, &format!("{path}/uploads"), |r| signed_by(condition_on(r, &condition), sig).json(&serde_json::json!({ "size": size })))
+                .send_for(bound, Method::POST, &format!("{path}/uploads"), |r| {
+                    signed_by(condition_on(r, &condition), sig).json(&serde_json::json!({ "size": size }))
+                })
                 .await?;
-            let begun: Begun = self.json(response).await?;
+            let begun: Begun = self.json_for(Some(start_session), response, MAX_JSON).await?;
+            if self.session.identity() != Some(start_session)
+                || (active_personal_attached && self.personal_generation() != active_gen)
+            {
+                return Err(Error::new(Kind::SignedOut, "session changed during multipart upload"));
+            }
             self.store_upload(&begun.url, bytes).await?;
-            self.complete(&path, &begun.id).await?
+            self.complete_for(bound, &path, &begun.id).await?
         };
-        let recovery = {
+        let recovery = if self.session.identity() == Some(start_session) {
             let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-            if slot.generation == expected_gen {
+            if slot.generation == active_gen {
                 let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                let token = if guard.generation == expected_gen {
+                let token = if guard.generation == active_gen {
                     guard.files.retain(|(file_name, _, _, _), _| file_name != name);
                     if track_recovery {
                         guard.next_mutation_seq = guard.next_mutation_seq.wrapping_add(1);
@@ -1126,7 +1291,7 @@ impl<S: Store> SyncClient<S> {
                         let entry = guard.file_mutations.entry(name.to_string()).or_insert(FileMutationTracker { seq: 0, active: 0 });
                         entry.seq = seq;
                         entry.active += 1;
-                        Some(FileRecoveryToken { pending: &self.pending_commits, name: name.to_string(), auth_gen: expected_gen, seq })
+                        Some(FileRecoveryToken { pending: &self.pending_commits, name: name.to_string(), auth_gen: active_gen, seq })
                     } else {
                         guard.bump_if_tracked(name);
                         None
@@ -1140,6 +1305,8 @@ impl<S: Store> SyncClient<S> {
             } else {
                 None
             }
+        } else {
+            None
         };
         Ok((etag, recovery))
     }
@@ -1166,14 +1333,18 @@ impl<S: Store> SyncClient<S> {
     /// Records an upload, asked again while the store has not seen it.
     /// Completing twice is answered alike, so a completion whose answer was
     /// lost is simply asked again.
-    async fn complete(&self, path: &str, id: &str) -> Result<String, Error> {
-        self.complete_with_log(path, id).await.map(|(etag, _)| etag)
+    async fn complete_for(&self, bound: Option<(u64, u64, bool)>, path: &str, id: &str) -> Result<String, Error> {
+        self.complete_with_log_for(bound, path, id).await.map(|(etag, _)| etag)
     }
 
     async fn complete_with_log(&self, path: &str, id: &str) -> Result<(String, Option<String>), Error> {
+        self.complete_with_log_for(None, path, id).await
+    }
+
+    async fn complete_with_log_for(&self, bound: Option<(u64, u64, bool)>, path: &str, id: &str) -> Result<(String, Option<String>), Error> {
         let mut wait = Duration::from_millis(500);
         for _ in 0..COMPLETE_TRIES {
-            let response = self.send(Method::POST, &format!("{path}/uploads/{id}/complete"), |r| r).await?;
+            let response = self.send_for(bound, Method::POST, &format!("{path}/uploads/{id}/complete"), |r| r).await?;
             // A bare `409` is the store not showing the upload yet; one with a
             // reason (a snapshot gone stale) is a refusal.
             if response.status() == StatusCode::CONFLICT {
@@ -1195,7 +1366,7 @@ impl<S: Store> SyncClient<S> {
                 continue;
             }
             let sync_log = header_non_empty(&response, "sync-log");
-            return self.written_version(response).await.map(|etag| (etag, sync_log));
+            return self.written_version_for(bound.map(|(s, _, _)| s), response).await.map(|etag| (etag, sync_log));
         }
         Err(Error::new(Kind::Unreachable, "the store never showed the upload"))
     }
@@ -1212,6 +1383,10 @@ impl<S: Store> SyncClient<S> {
             let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
             (slot.generation, slot.auth.is_some())
         };
+        #[cfg(test)]
+        if let Some(notify) = self.before_file_lock.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            notify.notify_one();
+        }
         let lock = self.file_lock(name);
         let _file_guard = lock.lock().await;
         if self.session.identity() != Some(start_session) {
@@ -2126,9 +2301,13 @@ impl<S: Store> SyncClient<S> {
 
     /// The version a write's `204` names.
     async fn written_version(&self, response: reqwest::Response) -> Result<String, Error> {
+        self.written_version_for(None, response).await
+    }
+
+    async fn written_version_for(&self, expected_session: Option<u64>, response: reqwest::Response) -> Result<String, Error> {
         match response.status() {
             StatusCode::NO_CONTENT => self.etag(&response).ok_or_else(|| Error::new(Kind::Invalid, "a write without its version")),
-            StatusCode::OK => Err(self.json::<Value>(response).await.err().unwrap_or_else(|| Error::new(Kind::Invalid, "a write answered 200"))),
+            StatusCode::OK => Err(self.json_for::<Value>(expected_session, response, MAX_JSON).await.err().unwrap_or_else(|| Error::new(Kind::Invalid, "a write answered 200"))),
             _ => Err(refusal(response).await),
         }
     }
@@ -2340,6 +2519,12 @@ fn stale_epoch(response: &reqwest::Response, sent: Option<i64>) -> Option<i64> {
 enum ReconciledSnapshot {
     Hit(String, String),
     Replaced(u64),
+    Gone,
+}
+
+enum DetachedReconcile {
+    Recovered(String),
+    Conflicted,
     Gone,
 }
 

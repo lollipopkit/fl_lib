@@ -315,6 +315,10 @@ struct VersionState {
     /// instance (`"{app}/{name}"`), kept in memory so `PersonalVersions` JSON
     /// stays bounded while blocking unsigned replacements of signed blobs.
     seen_signed_blobs: BTreeSet<String>,
+    /// Log identifiers actively recorded or verified under this auth instance,
+    /// per app, so a detached snapshot recovery probe cannot rewind a log
+    /// binding already recorded under the same auth generation.
+    recorded_log_ids: BTreeMap<String, String>,
 }
 
 /// Signs outgoing writes and verifies incoming reads for one user's personal
@@ -337,6 +341,7 @@ impl PersonalAuth {
                 data: versions,
                 dirty: false,
                 seen_signed_blobs: BTreeSet::new(),
+                recorded_log_ids: BTreeMap::new(),
             }),
             keeper,
             published: AsyncMutex::new(false),
@@ -503,7 +508,9 @@ impl PersonalAuth {
 
     /// Records a committed signed batch append at [seq] of [log].
     pub async fn record_batch_written(&self, app: &str, log: &str, seq: i64) -> Result<(), Error> {
-        self.record_committed(|v| v.mark_log_signed_at(app, Some(log), seq)).await
+        let mut held = self.versions.lock().await;
+        held.recorded_log_ids.insert(app.to_string(), log.to_string());
+        Self::record_committed_held(&self.keeper, &mut held, |v| v.mark_log_signed_at(app, Some(log), seq)).await
     }
 
     pub async fn record_snapshot_written(&self, app: &str, seq: i64) -> Result<(), Error> {
@@ -511,7 +518,20 @@ impl PersonalAuth {
     }
 
     pub async fn record_snapshot_written_on(&self, app: &str, log: Option<&str>, seq: i64) -> Result<(), Error> {
-        self.record_committed(|v| v.saw_snapshot(app, log, seq)).await
+        let mut held = self.versions.lock().await;
+        if let Some(l) = log {
+            held.recorded_log_ids.insert(app.to_string(), l.to_string());
+        }
+        Self::record_committed_held(&self.keeper, &mut held, |v| v.saw_snapshot(app, log, seq)).await
+    }
+
+    /// Marks [app] as having seen a signed snapshot without altering its
+    /// recorded log identifier or log signing floor.
+    pub async fn record_snapshot_seen(&self, app: &str) -> Result<(), Error> {
+        self.record_committed(|v| {
+            v.signed_snapshots.insert(app.to_string());
+        })
+        .await
     }
 
     /// Records a previously committed signed snapshot without rewinding
@@ -519,8 +539,9 @@ impl PersonalAuth {
     /// observed concurrently. Returns `false` when `log` was already superseded
     /// by a different observed log.
     pub async fn record_snapshot_if_log_compatible(&self, app: &str, log: Option<&str>, seq: i64) -> Result<bool, Error> {
+        let mut held = self.versions.lock().await;
         let mut same_log = true;
-        self.record_committed(|v| match (log, v.signed_log_ids.get(app)) {
+        let res = Self::record_committed_held(&self.keeper, &mut held, |v| match (log, v.signed_log_ids.get(app)) {
             (Some(target), Some(known)) if known != target => {
                 v.signed_snapshots.insert(app.to_string());
                 same_log = false;
@@ -529,7 +550,13 @@ impl PersonalAuth {
                 v.saw_snapshot(app, log, seq);
             }
         })
-        .await?;
+        .await;
+        if same_log
+            && let Some(l) = log
+        {
+            held.recorded_log_ids.insert(app.to_string(), l.to_string());
+        }
+        res?;
         Ok(same_log)
     }
 
@@ -576,8 +603,8 @@ impl PersonalAuth {
             // once pre-signing uploads are no longer present.
             let mut held = self.versions.lock().await;
             let must_be_signed = held.seen_signed_blobs.contains(&key)
-                || held.data.files.contains_key(&key)
-                || (!allow_retained_unsigned && held.data.blob_requires_signature(app));
+                || held.data.requires_signature(app, Some(name))
+                || (!allow_retained_unsigned && held.data.signed_blobs.contains(app));
             if must_be_signed {
                 return Err(untrusted(format!("{app}/{name}: server stripped signature")));
             }
@@ -655,21 +682,98 @@ impl PersonalAuth {
             verify_sig(s, &msg, &what)?;
             first_signed = Some(first_signed.map_or(batch.seq, |f| f.min(batch.seq)));
         }
-        self.persist_checked(|v| {
-            if let Some(seq) = first_signed {
-                v.mark_log_signed_at(app, log, seq);
-            }
-            if let Some(seq) = unsigned.iter().find(|&&seq| v.log_requires_signature(app, log, seq)) {
-                return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
-            }
-            Ok(())
-        })
-        .await
+        let mut held = self.versions.lock().await;
+        let mut next = held.data.clone();
+        if let Some(seq) = first_signed {
+            next.mark_log_signed_at(app, log, seq);
+        }
+        if let Some(seq) = unsigned.iter().find(|&&seq| next.log_requires_signature(app, log, seq)) {
+            return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
+        }
+        if next != held.data || held.dirty {
+            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
+            held.data = next;
+            held.dirty = false;
+        }
+        if first_signed.is_some()
+            && let Some(l) = log
+        {
+            held.recorded_log_ids.insert(app.to_string(), l.to_string());
+        }
+        Ok(())
     }
 
     /// Verifies a log snapshot's signature.
     pub async fn verify_snapshot(&self, app: &str, snapshot: &Snapshot, body: &[u8]) -> Result<(), Error> {
         self.verify_snapshot_digest(app, snapshot, &digest(body)).await
+    }
+
+    /// Verifies a signed snapshot's cryptographic signature without advancing
+    /// persisted state; rejects unsigned snapshots.
+    pub async fn verify_snapshot_signature_only(&self, app: &str, snapshot: &Snapshot, body_digest: &[u8; KEY_LEN]) -> Result<(), Error> {
+        let what = format!("{app}/snapshot seq {}", snapshot.seq);
+        let s = snapshot.signed.as_ref().ok_or_else(|| untrusted(format!("{what}: server stripped signature")))?;
+        let owner = self.verify_own_key(s, &what).await?;
+        let msg = crypto::sync_snapshot_message(&owner, app, 0, snapshot.seq, body_digest);
+        verify_sig(s, &msg, &what)
+    }
+
+    /// Verifies a signed snapshot for detached recovery and persists its log
+    /// binding only if no different log binding has already been recorded under
+    /// this [`PersonalAuth`] instance or external observer ([check_external] /
+    /// [commit_external], both invoked synchronously while `self.versions` is
+    /// locked). Returns `false` when a conflicting log binding was observed
+    /// (persisting only `signed_snapshots[app]`).
+    pub async fn verify_snapshot_digest_for_detached(
+        &self,
+        app: &str,
+        snapshot: &Snapshot,
+        body_digest: &[u8; KEY_LEN],
+        check_external: impl FnOnce() -> Result<bool, Error>,
+        commit_external: impl FnOnce() -> Result<bool, Error>,
+    ) -> Result<bool, Error> {
+        self.verify_snapshot_signature_only(app, snapshot, body_digest).await?;
+        let mut held = self.versions.lock().await;
+        let external_ok = check_external()?;
+        let conflicting = !external_ok
+            || held
+                .recorded_log_ids
+                .get(app)
+                .is_some_and(|existing| existing != &snapshot.log);
+        if conflicting {
+            let mut next = held.data.clone();
+            next.signed_snapshots.insert(app.to_string());
+            if next != held.data || held.dirty {
+                self.keeper.save(next.to_json()).await.map_err(not_saved)?;
+                held.data = next;
+                held.dirty = false;
+            }
+            return Ok(false);
+        }
+        let mut next = held.data.clone();
+        next.saw_snapshot(app, Some(&snapshot.log), snapshot.seq);
+        let saved_candidate = next != held.data || held.dirty;
+        if saved_candidate {
+            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
+        }
+        if !commit_external()? {
+            // Another task observed a conflicting log while `keeper.save` was
+            // awaiting: do not commit `snapshot.log` into `held.data` or
+            // `recorded_log_ids`, and rewrite persisted state with only
+            // `signed_snapshots[app]` added.
+            let mut fallback = held.data.clone();
+            fallback.signed_snapshots.insert(app.to_string());
+            if saved_candidate || fallback != held.data || held.dirty {
+                self.keeper.save(fallback.to_json()).await.map_err(not_saved)?;
+                held.data = fallback;
+                held.dirty = false;
+            }
+            return Ok(false);
+        }
+        held.data = next;
+        held.dirty = false;
+        held.recorded_log_ids.insert(app.to_string(), snapshot.log.clone());
+        Ok(true)
     }
 
     /// Streaming variant of [`Self::verify_snapshot`] taking a precomputed blake3 digest.
@@ -687,11 +791,16 @@ impl PersonalAuth {
         let owner = self.verify_own_key(s, &what).await?;
         let msg = crypto::sync_snapshot_message(&owner, app, 0, snapshot.seq, body_digest);
         verify_sig(s, &msg, &what)?;
-        self.persist_checked(|v| {
-            v.saw_snapshot(app, Some(&snapshot.log), snapshot.seq);
-            Ok(())
-        })
-        .await
+        let mut held = self.versions.lock().await;
+        let mut next = held.data.clone();
+        next.saw_snapshot(app, Some(&snapshot.log), snapshot.seq);
+        if next != held.data || held.dirty {
+            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
+            held.data = next;
+            held.dirty = false;
+        }
+        held.recorded_log_ids.insert(app.to_string(), snapshot.log.clone());
+        Ok(())
     }
 
     /// The account's id when [s] is signed by a signing key it has had; the
@@ -738,13 +847,21 @@ impl PersonalAuth {
     /// fails so persistence can be retried without resending the remote write.
     async fn record_committed(&self, f: impl FnOnce(&mut PersonalVersions)) -> Result<(), Error> {
         let mut held = self.versions.lock().await;
+        Self::record_committed_held(&self.keeper, &mut held, f).await
+    }
+
+    async fn record_committed_held(
+        keeper: &Arc<dyn VersionKeeper>,
+        held: &mut VersionState,
+        f: impl FnOnce(&mut PersonalVersions),
+    ) -> Result<(), Error> {
         let mut next = held.data.clone();
         f(&mut next);
         if next != held.data {
             held.data = next;
             held.dirty = true;
         }
-        Self::flush(&self.keeper, &mut held).await
+        Self::flush(keeper, held).await
     }
 }
 
@@ -1108,5 +1225,29 @@ mod tests {
         legacy_auth.record_batch_written("serverbox", "log1", 50).await.unwrap();
         let low_unsigned = Batch { seq: 2, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
         assert_eq!(legacy_auth.verify_batches("serverbox", Some("log1"), &[low_unsigned]).await.unwrap_err().kind, Kind::Untrusted);
+    }
+
+    #[tokio::test]
+    async fn retained_blob_enforces_signed_apps_while_allowing_signed_blobs_legacy() {
+        let key = AccountKey::generate("u1");
+
+        // When only `signed_blobs` is set (ordinary files not locked to signed-only),
+        // a retained pre-signing blob remains readable while strict blob reads reject unsigned.
+        let blobs_only = PersonalVersions::from_json(r#"{"v":2,"signed_blobs":["serverbox"]}"#).unwrap();
+        let auth_blobs = PersonalAuth::new(key.clone(), blobs_only, MemKeeper::new());
+        auth_blobs.verify_retained_blob("serverbox", "op-legacy.age", b"legacy", None).await.unwrap();
+        assert_eq!(
+            auth_blobs.verify_blob("serverbox", "op-legacy.age", b"legacy", None).await.unwrap_err().kind,
+            Kind::Untrusted
+        );
+
+        // Once `signed_apps` locks ordinary files to signed-only, `verify_retained_blob`
+        // MUST also reject unsigned responses.
+        let apps_locked = PersonalVersions::from_json(r#"{"v":2,"signed_apps":["serverbox"],"signed_blobs":["serverbox"]}"#).unwrap();
+        let auth_locked = PersonalAuth::new(key, apps_locked, MemKeeper::new());
+        assert_eq!(
+            auth_locked.verify_retained_blob("serverbox", "op-legacy.age", b"legacy", None).await.unwrap_err().kind,
+            Kind::Untrusted
+        );
     }
 }

@@ -345,25 +345,25 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             }
         }
         let carried: Vec<_> = all.iter().filter(|r| run.carries(&r.c)).cloned().collect();
-        let (ops, complete, bindings) = core.ops_of_bound(&carried).await?;
+        let (ops, complete, bindings) = core.ops_of_prepared(&carried).await?;
         // A record that could not be read stops the send just before it, so it
         // and what follows are read again next time.
-        let stopped = ops.last().map(|op| op.h);
+        let stopped = ops.last().map(|p| p.snapshot_h);
         let stamped: Vec<_> = if complete { all } else { all.into_iter().filter(|r| stopped.is_some_and(|h| r.h <= h)).collect() };
         let mine = core.device().await?;
         let mut last = sent;
         let mut join_last = join_sent.clone();
         let mut join_log = if joining && join_sent.is_some() { log.clone() } else { None };
-        let batches = core.batches_bound(ops, &bindings)?;
+        let batches = core.batches_prepared(ops, &bindings)?;
         let had_batches = !batches.is_empty();
         let last_idx = batches.len().saturating_sub(1);
         for (idx, (chunk, body)) in batches.into_iter().enumerate() {
-            for op in &chunk {
-                if op.h.device == mine && Some(op.h) > last {
-                    last = Some(op.h);
+            for p in &chunk {
+                if p.snapshot_h.device == mine && Some(p.snapshot_h) > last {
+                    last = Some(p.snapshot_h);
                 }
                 if joining {
-                    let cur = JoinCursor { h: op.h, c: op.c.clone(), id: op.id.clone() };
+                    let cur = JoinCursor { h: p.snapshot_h, c: p.op.c.clone(), id: p.op.id.clone() };
                     if join_last.as_ref().is_none_or(|prev| cur > *prev) {
                         join_last = Some(cur);
                     }
@@ -520,7 +520,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
         };
         let extra = bindings.extra_for(&ops);
         let body = core.seal.seal(&engine::encode(&ops, extra)?)?;
-        let named: HashSet<String> = ops.iter().filter_map(|op| Core::<H, T, S>::blob_of(&op.d).map(str::to_string)).collect();
+        let named: HashSet<String> = ops.iter().filter_map(|op| engine::blob_of(&op.d).map(str::to_string)).collect();
         match self.transport.put_snapshot(cursor, body.clone()).await {
             Ok(false) => {
                 core.host.warn(format!("Sync snapshot at {cursor}: another is there already"));
@@ -557,6 +557,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             return Ok(());
         }
         Self::forget(host).await?;
+        host.clear_state(format!("{PREFIX}{}", engine::SIGNED_BLOB_STATE_PREFIX), vec![]).await?;
         host.set_state(vec![
             (format!("{PREFIX}{SIGNED_BLOBS}"), None),
             (format!("{PREFIX}{LEGACY_BLOBS}"), None),

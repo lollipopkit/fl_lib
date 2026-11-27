@@ -151,7 +151,7 @@ abstract final class SyncKeyring {
         return;
       }
       final pending = _decoded(await _pendingProp.storage.read(key: _pendingProp.key));
-      final extIntentRaw = pending['intent:lkc-account-key'];
+      final extIntentRaw = pending['ext-intent:lkc-account-key'];
       if (extIntentRaw != null) {
         String? protected;
         if (extIntentRaw is String) {
@@ -165,6 +165,20 @@ abstract final class SyncKeyring {
           throw StateError('A secret key has an unresolved external write intent; refusing conflicting import');
         }
       }
+      // TODO(migration): remove legacy `intent:lkc-account-key` check once
+      // pre-namespace external intent records are migrated or settled.
+      final legacyExtRaw = pending['intent:lkc-account-key'];
+      String? legacyExtProtected;
+      if (legacyExtRaw is String) {
+        final decoded = _decoded(legacyExtRaw);
+        final pwd = decoded['pwd'];
+        if (pwd is String && pwd.isNotEmpty) {
+          legacyExtProtected = normalizeSecretKey(pwd);
+        }
+      }
+      if (legacyExtProtected != null && legacyExtProtected != canonical) {
+        throw StateError('A secret key has an unresolved external write intent; refusing conflicting import');
+      }
       final stagedRaw = await _pendingSecretKeyProp.read(limited: false);
       final staged = stagedRaw == null || stagedRaw.trim().isEmpty
           ? null
@@ -173,7 +187,7 @@ abstract final class SyncKeyring {
           (current != null && current != canonical) ||
           (staged != null && staged != canonical);
       final hasOtherIntent = pending.keys.any(
-        (k) => k.startsWith('intent:') && k != 'intent:lkc-account-key',
+        (k) => k.startsWith('intent:') && !(k == 'intent:lkc-account-key' && legacyExtProtected != null),
       );
       if (replacingDifferentKey && hasOtherIntent) {
         throw StateError('A secret key has an unresolved remote write intent; refusing conflicting import');
@@ -197,14 +211,21 @@ abstract final class SyncKeyring {
       _accountKeySealedFor = null;
     }
     final SyncKeys ring;
-    final BigInt expectedSwitchGen;
+    final (BigInt, BigInt) probeGens;
     try {
       ring = _ring;
-      expectedSwitchGen = ring.registerLkcProbe(account: account);
+      probeGens = ring.registerLkcProbe(account: account);
     } on SyncEngineError catch (e) {
       return Future.error(syncException(e));
     }
-    return _said(() => ring.lkcSealedWithSecretKey(lkc: sync, account: account, expectedSwitchGen: expectedSwitchGen));
+    return _said(
+      () => ring.lkcSealedWithSecretKey(
+        lkc: sync,
+        account: account,
+        expectedSwitchGen: probeGens.$1,
+        expectedIdGen: probeGens.$2,
+      ),
+    );
   }
 
   /// [account]'s LK Cloud account key is sealed with a secret key this device

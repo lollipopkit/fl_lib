@@ -43,8 +43,8 @@ impl<S: Store> BlobStore for LkcLog<S> {
     }
 
     async fn put_blob_signed(&self, name: String, body: Vec<u8>) -> Result<bool> {
-        let signed = self.client.has_personal_auth();
-        match self.client.upload_blob_bytes(&name, body.clone()).await {
+        let (res, signed) = self.client.upload_blob_bytes_checked(&name, body.clone()).await;
+        match res {
             Ok(_) => Ok(signed),
             Err(e) if e.kind == Kind::Changed => match self.get_blob_verified(name.clone(), true).await? {
                 None => Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob"))),
@@ -66,12 +66,12 @@ impl<S: Store> BlobStore for LkcLog<S> {
     }
 
     async fn get_blob_verified(&self, name: String, allow_retained_unsigned: bool) -> Result<Option<(Vec<u8>, bool)>> {
-        let fetched = if allow_retained_unsigned {
-            self.client.download_retained_blob_bytes(&name).await
+        let (fetched, verified_auth) = if allow_retained_unsigned {
+            self.client.download_retained_blob_bytes_checked(&name).await
         } else {
-            self.client.download_blob_bytes(&name).await
+            self.client.download_blob_bytes_checked(&name).await
         };
-        Ok(fetched.map_err(remote)?.map(|(body, _, sig)| (body, sig.is_some())))
+        Ok(fetched.map_err(remote)?.map(|(body, _, sig)| (body, verified_auth && sig.is_some())))
     }
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
