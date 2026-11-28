@@ -192,7 +192,7 @@ fn names_are_homebases() {
 
 #[tokio::test]
 async fn failed_download_cleans_up_staged_part_file() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let (_fake, sync) = homebase(|_| {
         // Return an invalid signature so verification fails after staging `.part`.
         Response::status(200)
@@ -204,7 +204,7 @@ async fn failed_download_cleans_up_staged_part_file() {
             .body("tampered-body")
     })
     .await;
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()));
     sync.set_personal(Some(auth));
 
     let dir = tempdir::Dir::new();
@@ -216,15 +216,15 @@ async fn failed_download_cleans_up_staged_part_file() {
 
 #[tokio::test]
 async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
-    let key = crate::team::identity::AccountKey::generate("u1");
-    let auth = Arc::new(PersonalAuth::new(key.clone(), crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let key = AccountKey::generate("u1");
+    let auth = Arc::new(PersonalAuth::new(key.clone(), PersonalVersions::default(), TestKeeper::new()));
     let sig1 = auth.sign_file("serverbox", NAME, 1, b"v1-body").await;
     let sig2 = auth.sign_file("serverbox", NAME, 2, b"v2-body").await;
     let pk = key.signing_public();
-    let req_n = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let req_n = Arc::new(AtomicUsize::new(0));
     let seen = req_n.clone();
     let (_fake, sync) = homebase(move |_| {
-        let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let n = seen.fetch_add(1, Ordering::SeqCst);
         let (etag, ver, sig, body) = if n == 0 {
             ("\"e1\"", "1", sig1.signature.as_str(), "v1-body")
         } else {
@@ -241,9 +241,9 @@ async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
     .await;
     sync.set_personal(Some(auth));
 
-    let v1_verified = Arc::new(tokio::sync::Notify::new());
-    let release_v1 = Arc::new(tokio::sync::Notify::new());
-    let hook_fired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let v1_verified = Arc::new(Notify::new());
+    let release_v1 = Arc::new(Notify::new());
+    let hook_fired = Arc::new(AtomicBool::new(false));
     {
         let v1_ver_c = v1_verified.clone();
         let rel_v1_c = release_v1.clone();
@@ -251,7 +251,7 @@ async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
         *sync.after_verify_before_rename.lock().unwrap() = Some(Arc::new(move || {
             let v1_ver = v1_ver_c.clone();
             let rel_v1 = rel_v1_c.clone();
-            let first = !fired_c.swap(true, std::sync::atomic::Ordering::SeqCst);
+            let first = !fired_c.swap(true, Ordering::SeqCst);
             Box::pin(async move {
                 if first {
                     v1_ver.notify_one();
@@ -278,7 +278,7 @@ async fn concurrent_downloads_do_not_overwrite_newer_version_with_older() {
         tokio::time::timeout(Duration::from_millis(50), &mut t2).await.is_err(),
         "v2 download must remain blocked on destination lock while v1 holds it"
     );
-    assert_eq!(req_n.load(std::sync::atomic::Ordering::SeqCst), 1, "v2 must not even fetch before acquiring dest_lock");
+    assert_eq!(req_n.load(Ordering::SeqCst), 1, "v2 must not even fetch before acquiring dest_lock");
 
     release_v1.notify_one();
     assert_eq!(t1.await.unwrap().unwrap(), Fetched::Saved("e1".into()));
@@ -303,7 +303,7 @@ async fn file_mutations_stays_bounded_across_deletes_404s_and_non_personal_clien
     assert!(sync.pending_commits.lock().unwrap().file_mutations.is_empty());
 
     // With personal auth: completed upload clears its tracking entry, and untracked deletes/404s do not insert.
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
     let (_fake2, sync2) = homebase(move |r| match (r.method.as_str(), r.path()) {
@@ -313,7 +313,7 @@ async fn file_mutations_stays_bounded_across_deletes_404s_and_non_personal_clien
         _ => Response::status(404),
     })
     .await;
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()));
     sync2.set_personal(Some(auth));
 
     assert_eq!(sync2.upload_bytes("tracked.age", b"body".to_vec(), Condition::Absent).await.unwrap(), "e1");
@@ -324,9 +324,9 @@ async fn file_mutations_stays_bounded_across_deletes_404s_and_non_personal_clien
 
 #[tokio::test]
 async fn download_404_leaves_existing_destination_and_unrelated_part_file_untouched() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let (_fake, sync) = homebase(|_| Response::status(404)).await;
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()));
     sync.set_personal(Some(auth));
 
     let dir = tempdir::Dir::new();
@@ -340,4 +340,80 @@ async fn download_404_leaves_existing_destination_and_unrelated_part_file_untouc
     assert!(sync.download_snapshot(&dest).await.unwrap().is_none());
     assert_eq!(std::fs::read(&dest).unwrap(), b"existing-dest");
     assert_eq!(std::fs::read(&unrelated_part).unwrap(), b"unrelated-staged");
+}
+
+#[tokio::test]
+async fn a_held_version_below_the_watermark_is_read_again_not_taken_as_unchanged() {
+    let key = AccountKey::generate("u1");
+    let auth = Arc::new(PersonalAuth::new(key.clone(), PersonalVersions::default(), TestKeeper::new()));
+    let sig1 = auth.sign_file("serverbox", NAME, 1, b"v1-body").await;
+    let pk = key.signing_public();
+    let (fake, sync) = homebase(move |r| {
+        if r.header("if-none-match") == Some("\"e1\"") {
+            return Response::status(304);
+        }
+        Response::status(200)
+            .header("ETag", "\"e1\"")
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", &pk)
+            .header("X-Signature", &sig1.signature)
+            .header("X-Sync-Version", "1")
+            .body("v1-body")
+    })
+    .await;
+    sync.set_personal(Some(auth.clone()));
+    let dir = tempdir::Dir::new();
+    let to = dir.path().join("bak.age");
+    assert_eq!(sync.download(NAME, &to, None).await.unwrap(), Fetched::Saved("e1".into()));
+    // Held and verified at 1: a 304 for it stands.
+    assert_eq!(sync.download(NAME, &to, Some("e1")).await.unwrap(), Fetched::Unchanged);
+    // Another read raised the watermark to 2: version 1 is no longer enough.
+    auth.record_file_version("serverbox", NAME, 2).await.unwrap();
+    assert_eq!(sync.download(NAME, &to, Some("e1")).await.unwrap_err().kind, Kind::Untrusted);
+    let gets = fake.requests(&format!("/v2/sync/serverbox/{NAME}"));
+    assert_eq!(gets.last().unwrap().header("if-none-match"), None, "read again without the condition");
+}
+
+#[tokio::test]
+async fn a_download_verified_under_an_auth_replaced_before_it_is_published_is_not() {
+    let key = AccountKey::generate("u1");
+    let auth = Arc::new(PersonalAuth::new(key.clone(), PersonalVersions::default(), TestKeeper::new()));
+    let sig = auth.sign_file("serverbox", NAME, 1, b"v1-body").await;
+    let pk = key.signing_public();
+    let (_fake, sync) = homebase(move |_| {
+        Response::status(200)
+            .header("ETag", "\"e1\"")
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", &pk)
+            .header("X-Signature", &sig.signature)
+            .header("X-Sync-Version", "1")
+            .body("v1-body")
+    })
+    .await;
+    sync.set_personal(Some(auth));
+    let weak = Arc::downgrade(&sync);
+    *sync.after_verify_before_rename.lock().unwrap() = Some(Arc::new(move || {
+        let sync = weak.upgrade().unwrap();
+        Box::pin(async move { sync.set_personal(None) })
+    }));
+    let dir = tempdir::Dir::new();
+    let to = file(&dir, "bak.age", b"held");
+    assert_eq!(sync.download(NAME, &to, None).await.unwrap_err().kind, Kind::SignedOut);
+    assert_eq!(std::fs::read(&to).unwrap(), b"held", "what was there stays");
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "no staged part is left behind");
+}
+
+#[tokio::test]
+async fn a_held_version_of_a_file_never_seen_signed_is_still_asked_for_unchanged() {
+    let key = AccountKey::generate("u1");
+    let (fake, sync) = homebase(|r| match r.header("if-none-match") {
+        Some("\"e1\"") => Response::status(304),
+        _ => Response::status(200).header("ETag", "\"e1\"").body("legacy"),
+    })
+    .await;
+    sync.set_personal(Some(Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()))));
+    let dir = tempdir::Dir::new();
+    let to = dir.path().join("bak.age");
+    assert_eq!(sync.download(NAME, &to, Some("e1")).await.unwrap(), Fetched::Unchanged);
+    assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}"))[0].header("if-none-match"), Some("\"e1\""));
 }

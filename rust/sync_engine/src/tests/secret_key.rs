@@ -578,3 +578,17 @@ async fn external_intent_namespace_isolated_from_folder_writes_and_forget() {
     assert!(!d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key"));
     d.ring.store_secret_key(&key_b).await.unwrap();
 }
+
+#[tokio::test]
+async fn each_unresolved_external_write_of_one_account_settles_on_its_own_after_a_restart() {
+    let d = Device::new("pw");
+    let key = d.secrets.secret_key.lock().unwrap().clone().unwrap();
+    d.ring.stage_external_secret_key_commit_for(&key, Some("u1")).await.unwrap();
+    d.ring.stage_external_secret_key_commit_for(&key, Some("u1")).await.unwrap();
+    let restarted = KeyRing::new(d.secrets.clone(), "test");
+    let protected = || d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key");
+    restarted.clear_external_secret_key_commit_for(&key, None, Some("u1")).await.unwrap();
+    assert!(protected(), "the other write is still unresolved");
+    restarted.clear_external_secret_key_commit_for(&key, None, Some("u1")).await.unwrap();
+    assert!(!protected());
+}

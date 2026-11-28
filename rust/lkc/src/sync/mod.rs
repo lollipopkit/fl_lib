@@ -423,12 +423,62 @@ struct PendingCommits {
     /// `(entry_id, log_binding, etag)` so a confirmed log replacement invalidates
     /// stale entries while an unknown log is reconciled before reuse or removal.
     snapshots: HashMap<SnapshotCommitKey, SnapshotCommitEntry>,
+    /// Snapshot entries a retry recovered, `(entry_id, etag)`: another retry
+    /// holding the same entry answers that ETag instead of sending the PUT
+    /// again. Dropped once another log is observed, where a fresh write is due.
+    recovered_snapshots: HashMap<SnapshotCommitKey, (u64, String)>,
     /// Log identifier already observed and recorded under this `generation`,
     /// used to order live observations ahead of detached snapshot recovery.
     observed_log: Option<String>,
+    /// Each file's version (ETag) last verified signed here, with its signed
+    /// version: only such a one is offered as `If-None-Match`, so a `304`
+    /// never stands for a version below the file's watermark.
+    verified_files: HashMap<String, (String, i64)>,
+    /// Requests that observe the log take a ticket as they are sent, in that
+    /// order: an answer replaces the observation only when sent after the
+    /// one [observed_log] came from ([observed_ticket]).
+    next_ticket: u64,
+    observed_ticket: u64,
 }
 
 impl PendingCommits {
+    /// The next request's place in the order of sending.
+    fn ticket(&mut self) -> u64 {
+        self.next_ticket += 1;
+        self.next_ticket
+    }
+
+    /// [log] as the one observed now, dropping what belongs to another.
+    fn observe(&mut self, log: &str) {
+        let ticket = self.ticket();
+        self.observe_at(log, ticket);
+    }
+
+    /// [log] as observed by a request sent at [ticket]; false, changing
+    /// nothing, when one sent later observed another.
+    fn observe_at(&mut self, log: &str, ticket: u64) -> bool {
+        if ticket < self.observed_ticket && self.observed_log.as_deref().is_some_and(|obs| obs != log) {
+            return false;
+        }
+        self.retain_for_log(log);
+        self.observed_log = Some(log.to_string());
+        self.observed_ticket = self.observed_ticket.max(ticket);
+        true
+    }
+
+    /// Takes snapshot entry [entry_id] at [key] as recovered at [etag],
+    /// keeping that for the retries holding it; earlier snapshots' go.
+    fn recovered_snapshot(&mut self, key: SnapshotCommitKey, entry_id: u64, etag: &str) {
+        self.snapshots.remove(&key);
+        self.recovered_snapshots.retain(|(seq, _), _| *seq >= key.0);
+        self.recovered_snapshots.insert(key, (entry_id, etag.to_string()));
+    }
+
+    /// The ETag another retry recovered entry [entry_id] at [key] with.
+    fn recovered_etag(&self, key: &SnapshotCommitKey, entry_id: u64) -> Option<String> {
+        self.recovered_snapshots.get(key).filter(|(id, _)| *id == entry_id).map(|(_, etag)| etag.clone())
+    }
+
     fn next_id(&mut self) -> u64 {
         self.next_commit_id = self.next_commit_id.wrapping_add(1);
         self.next_commit_id
@@ -445,6 +495,9 @@ impl PendingCommits {
     /// different log once [observed_log] is seen, while keeping unknown-log
     /// snapshot entries until they are reconciled against `/snapshot`.
     fn retain_for_log(&mut self, observed_log: &str) {
+        if self.observed_log.as_deref() != Some(observed_log) {
+            self.recovered_snapshots.clear();
+        }
         self.batches.retain(|_, (_, appended)| appended.log == observed_log);
         self.snapshots.retain(|_, (_, binding, _)| match binding {
             SnapshotLogBinding::Confirmed(k) => k == observed_log,
@@ -508,8 +561,7 @@ impl<S: Store> LogObserver for PendingLogObserver<'_, S> {
             if p.observed_log.as_deref().is_some_and(|obs| obs != log) {
                 return false;
             }
-            p.observed_log = Some(log.to_string());
-            p.retain_for_log(log);
+            p.observe(log);
             true
         })
     }
@@ -593,9 +645,11 @@ impl<S: Store> SyncClient<S> {
                 let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                 pending.generation = slot.generation;
                 pending.files.clear();
+                pending.verified_files.clear();
                 pending.file_mutations.clear();
                 pending.batches.clear();
                 pending.snapshots.clear();
+                pending.recovered_snapshots.clear();
                 pending.observed_log = None;
                 drop(pending);
                 self.written.lock().unwrap_or_else(|e| e.into_inner()).clear();

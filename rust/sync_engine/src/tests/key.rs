@@ -1,6 +1,7 @@
 //! The key file: opening, password changes, rotation and probes.
 
 use super::*;
+use tokio::sync::Notify;
 
 #[tokio::test]
 async fn the_key_opens_on_another_device_with_the_password() {
@@ -310,12 +311,12 @@ async fn stale_probe_cannot_mark_missing_after_successful_open() {
     let b = Device::new("pw");
     *b.secrets.secret_key.lock().unwrap() = None;
 
-    let read_started = Arc::new(tokio::sync::Notify::new());
-    let release_read = Arc::new(tokio::sync::Notify::new());
+    let read_started = Arc::new(Notify::new());
+    let release_read = Arc::new(Notify::new());
     struct SlowProbeFile {
         inner: Arc<MemKeyFile>,
-        started: Arc<tokio::sync::Notify>,
-        release: Arc<tokio::sync::Notify>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
     }
     impl KeyFile for SlowProbeFile {
         fn id(&self) -> String {
@@ -493,13 +494,13 @@ async fn probe_invalidation_is_scoped_per_remote_and_stale_handle_cannot_clear_m
     let reader = Device::new("pw");
     *reader.secrets.secret_key.lock().unwrap() = None;
 
-    let read_started = Arc::new(tokio::sync::Notify::new());
-    let release_read = Arc::new(tokio::sync::Notify::new());
+    let read_started = Arc::new(Notify::new());
+    let release_read = Arc::new(Notify::new());
     struct SlowProbe {
         id: String,
         inner: Arc<MemKeyFile>,
-        started: Arc<tokio::sync::Notify>,
-        release: Arc<tokio::sync::Notify>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
     }
     impl KeyFile for SlowProbe {
         fn id(&self) -> String {
@@ -656,8 +657,8 @@ async fn merge_coordinates_with_secret_key_import_via_take() {
     // Pause inside `SyncKey::take` after reading the file with the different identity,
     // import `sk_new`, and replace the remote file with one sealed under `sk_new` so
     // `take`'s active-key check rejects the stale `sk_old` merge PUT and retries cleanly under `sk_new`!
-    let paused = Arc::new(tokio::sync::Notify::new());
-    let resume = Arc::new(tokio::sync::Notify::new());
+    let paused = Arc::new(Notify::new());
+    let resume = Arc::new(Notify::new());
     let paused_c = paused.clone();
     let resume_c = resume.clone();
     handle.set_before_take_merge(move || {
@@ -690,4 +691,113 @@ async fn merge_coordinates_with_secret_key_import_via_take() {
     assert_eq!(recorded.len(), 1, "expected exactly one retried merge PUT under new secret key");
     assert!(crate::key::open_with_password(&recorded[0], &sk_old.combine_passphrase("pw")).unwrap().is_none());
     assert!(crate::key::open_with_password(&recorded[0], &sk_new.combine_passphrase("pw")).unwrap().is_some());
+}
+
+#[tokio::test]
+async fn identities_whose_save_failed_are_saved_by_the_next_check() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    let rotating = a.key(&file).await.unwrap();
+    let b = Device::new("pw");
+    *b.secrets.secret_key.lock().unwrap() = a.secrets.secret_key.lock().unwrap().clone();
+    let key = b.key(&file).await.unwrap();
+    rotating.rotate().await.unwrap();
+    let newest = |d: &Device| d.secrets.kept.lock().unwrap().get("account").and_then(|k| k.lines().next().map(str::to_string));
+
+    b.secrets.fail_set_kept.store(true, Ordering::SeqCst);
+    assert!(key.check(true, true).await.is_err());
+    b.secrets.fail_set_kept.store(false, Ordering::SeqCst);
+    key.check(true, true).await.unwrap();
+    assert_eq!(newest(&b), newest(&a), "the rotated key is kept here once saving works again");
+}
+
+#[tokio::test]
+async fn a_failed_restore_keeps_the_handle_a_concurrent_lookup_took() {
+    struct GatedFile {
+        inner: Arc<MemKeyFile>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    }
+    impl KeyFile for GatedFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(self.inner.file.lock().unwrap().clone())
+            })
+        }
+        fn write(&self, _: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let (started, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let gated = Arc::new(GatedFile { inner: file.clone(), started: started.clone(), release: release.clone() });
+    let ring = d.ring.clone();
+    let restore = tokio::spawn(async move { ring.of(gated, false).await });
+    started.notified().await;
+    // A creating lookup takes the same handle while the restore reads.
+    let ring = d.ring.clone();
+    let creating = tokio::spawn({
+        let file = file.clone();
+        async move { ring.of(Arc::new(KeyFileOf(file, "account".into())), true).await }
+    });
+    tokio::task::yield_now().await;
+    release.notify_one();
+    assert!(matches!(restore.await.unwrap(), Err(Error::KeyNotHere(_))));
+    let made = creating.await.unwrap().unwrap();
+    let again = d.ring.of(Arc::new(KeyFileOf(file, "account".into())), false).await.unwrap();
+    assert!(Arc::ptr_eq(&made, &again), "the handle the creating lookup returned stays registered");
+}
+
+#[tokio::test]
+async fn a_failed_restore_leaves_no_handle_even_while_a_recheck_runs() {
+    struct GatedFile {
+        inner: Arc<MemKeyFile>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    }
+    impl KeyFile for GatedFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(self.inner.file.lock().unwrap().clone())
+            })
+        }
+        fn write(&self, body: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async move {
+                *self.inner.file.lock().unwrap() = Some((body, "v1".into()));
+                Ok(Some("v1".into()))
+            })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let (started, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let gated = Arc::new(GatedFile { inner: file.clone(), started: started.clone(), release: release.clone() });
+    let ring = d.ring.clone();
+    let restore = tokio::spawn(async move { ring.of(gated, false).await });
+    started.notified().await;
+    let ring = d.ring.clone();
+    let recheck = tokio::spawn(async move { ring.recheck().await });
+    tokio::task::yield_now().await;
+    release.notify_one();
+    assert!(matches!(restore.await.unwrap(), Err(Error::KeyNotHere(_))));
+    recheck.await.unwrap();
+    assert!(file.file.lock().unwrap().is_none(), "nothing is put where only a restore looked");
+    assert!(d.ring.mismatch().borrow().is_empty());
 }

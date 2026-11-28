@@ -11,6 +11,16 @@ impl SyncKey {
         self.file.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
+    /// Whether a lookup is checking it before any returned it.
+    pub(super) fn in_first_lookup(&self) -> bool {
+        self.lookups.load(Ordering::SeqCst) > 0 && !self.handed_out.load(Ordering::SeqCst)
+    }
+
+    /// Whether this is the handle registered for its remote.
+    fn registered(&self) -> bool {
+        self.ring.keys.lock().unwrap_or_else(|e| e.into_inner()).is_current(&self.id(), self)
+    }
+
     /// [read]'s settling, held to the file bound now too: one bound since the
     /// read (another store, signed in again) settles nothing either does not.
     pub(super) fn settles_now(&self, read: Settles) -> Settles {
@@ -81,9 +91,15 @@ impl SyncKey {
             // Reconcile pending immediately for the password that just opened
             // the remote so a concurrent password change before the next loop
             // iteration never sees a stale older pending entry.
+            // Only the handle registered for the remote settles, and only what
+            // it still holds: one released meanwhile settles nothing and stops
+            // there, its replacement's settlement standing.
             seen.read.settles = self.settles_now(seen.read.settles);
-            let current = || self.lock().opened.as_ref().is_some_and(|(v, _)| *v == seen.version);
+            let current = || self.registered() && self.lock().opened.as_ref().is_some_and(|(v, _)| *v == seen.version);
             if !self.ring.clear_pending_if_settled(&self.id(), self.forget_gen, &seen, &pwd, current).await? {
+                if !self.registered() {
+                    break sk;
+                }
                 continue;
             }
             let now = self.ring.password().await?;
@@ -151,6 +167,9 @@ impl SyncKey {
     ) -> Result<Option<(String, Option<String>)>> {
         let id = self.id();
         let staged = self.ring.stage_write_intent(&id, self.forget_gen, epoch, pwd).await?;
+        self.ring.dispatching(&id, &staged.intent).await;
+        // Admitted last: nothing is awaited between the check and the PUT, so
+        // no account switch meanwhile sends it under another.
         let superseded_seq = match self.admit_write(&id) {
             Ok(seq) => seq,
             Err(e) => {
@@ -160,7 +179,6 @@ impl SyncKey {
                 return Err(e);
             }
         };
-        self.ring.dispatching(&id, &staged.intent).await;
         let res = self.put_key_file(id.clone(), superseded_seq, body, if_version).await;
         if matches!(res, Ok(None)) {
             let _ = self.ring.rollback_write_intent(&id, self.forget_gen, &staged).await;
@@ -382,7 +400,7 @@ impl SyncKey {
             return Ok(());
         }
         let parsed = parse_identities(&identities)?;
-        let changed = {
+        let unsaved = {
             let mut s = self.lock();
             let changed = s.identities != identities;
             if changed || s.recipient.is_none() {
@@ -390,12 +408,18 @@ impl SyncKey {
             }
             s.identities = identities.clone();
             s.parsed = parsed;
-            changed
+            // Read from the keychain: what is held there already.
+            s.unsaved = if save { s.unsaved || changed } else { s.unsaved && !changed };
+            save && s.unsaved
         };
-        if save && changed {
+        if unsaved {
             let id = self.id();
             self.ring.ensure_not_forgotten(&id, self.forget_gen)?;
             self.ring.secrets.set_kept(id, identities.join("\n")).await?;
+            let mut s = self.lock();
+            if s.identities == identities {
+                s.unsaved = false;
+            }
         }
         Ok(())
     }

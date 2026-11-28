@@ -136,3 +136,15 @@ async fn a_full_page_of_large_batches_is_read() {
     let LogRead::Page { batches, .. } = sync.read_log(0, None, None).await.unwrap() else { panic!() };
     assert_eq!(batches.len(), 5);
 }
+
+#[tokio::test]
+async fn a_malformed_log_id_is_refused_before_it_is_kept() {
+    let (_fake, sync) = homebase(|r| match r.method.as_str() {
+        "POST" => Response::json(200, json!({ "code": 0, "data": { "log": "log/old", "seq": 3, "live": { "batches": 3, "bytes": 90 }, "compact": false } })),
+        _ => Response::json(200, json!({ "code": 0, "data": { "log": "log/old", "batches": [], "head": 0, "snapshot_seq": 0, "more": false } })),
+    })
+    .await;
+    assert_eq!(sync.read_log(0, None, None).await.unwrap_err().kind, Kind::Invalid);
+    assert_eq!(sync.append(KEY, b"b".to_vec()).await.unwrap_err().kind, Kind::Invalid);
+    assert_eq!(sync.pending_commits.lock().unwrap().observed_log, None);
+}

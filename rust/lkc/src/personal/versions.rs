@@ -139,7 +139,8 @@ impl PersonalVersions {
     /// Whether an unsigned batch or snapshot at [seq] of [log] is refused.
     pub(super) fn log_requires_signature(&self, app: &str, log: Option<&str>, seq: i64) -> bool {
         let Some(from) = self.log_signed_from(app) else { return false };
-        let other_log = matches!((self.signed_log_ids.get(app), log), (Some(known), Some(log)) if known != log);
+        // Below the floor only on the log it was recorded for, named so.
+        let other_log = self.signed_log_ids.get(app).is_some_and(|known| log != Some(known.as_str()));
         seq >= from || other_log
     }
 

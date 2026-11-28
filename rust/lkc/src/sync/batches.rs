@@ -10,6 +10,8 @@ impl<S: Store> SyncClient<S> {
         let Some((auth_gen, auth)) = self.personal_auth_with_gen() else {
             return self.append_signed(key, body, None).await;
         };
+        // Each attempt, retries too, goes under the session and auth it began with.
+        let bound = Some((self.session.identity().ok_or_else(|| Error::new(Kind::SignedOut, "signed out"))?, auth_gen, true));
         let body = bytes::Bytes::from(body);
         let commit_key = (key.to_string(), *blake3::hash(&body).as_bytes());
         let mut expected_id = {
@@ -110,17 +112,22 @@ impl<S: Store> SyncClient<S> {
         auth.ensure_published(&self.session, false).await?;
         self.ensure_personal_gen(auth_gen)?;
         let sig = auth.sign_batch(&self.app, key, &body).await;
-        let res = match self.append_signed_bytes(key, body.clone(), Some(&sig)).await {
+        let ticket = self.observation_ticket(auth_gen);
+        let res = match self.append_signed_bytes(bound, key, body.clone(), Some(&sig)).await {
             Err(e) if matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
                 self.ensure_personal_gen(auth_gen)?;
                 auth.ensure_published(&self.session, true).await?;
                 self.ensure_personal_gen(auth_gen)?;
                 let sig = auth.sign_batch(&self.app, key, &body).await;
-                self.append_signed_bytes(key, body, Some(&sig)).await?
+                self.append_signed_bytes(bound, key, body, Some(&sig)).await?
             }
             other => other?,
         };
-        self.retain_log_commits(auth_gen, Some(&res.log));
+        // Answered on a log another observation replaced meanwhile: it stays
+        // that one's, its state and binding untouched.
+        if !self.retain_log_commits(auth_gen, Some(&res.log), ticket) {
+            return Ok(res);
+        }
         if let Err(e) = auth.record_batch_written(&self.app, &res.log, res.seq).await {
             if e.kind == Kind::Invalid {
                 let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
@@ -140,10 +147,16 @@ impl<S: Store> SyncClient<S> {
 
     /// [append], signed by its writer ([sig], no version).
     pub async fn append_signed(&self, key: &str, body: Vec<u8>, sig: Option<&WriteSig>) -> Result<Appended, Error> {
-        self.append_signed_bytes(key, bytes::Bytes::from(body), sig).await
+        self.append_signed_bytes(None, key, bytes::Bytes::from(body), sig).await
     }
 
-    async fn append_signed_bytes(&self, key: &str, body: bytes::Bytes, sig: Option<&WriteSig>) -> Result<Appended, Error> {
+    async fn append_signed_bytes(
+        &self,
+        bound: Option<(u64, u64, bool)>,
+        key: &str,
+        body: bytes::Bytes,
+        sig: Option<&WriteSig>,
+    ) -> Result<Appended, Error> {
         if !(16..=64).contains(&key.len()) || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
             return Err(Error::new(Kind::Invalid, "not an idempotency key"));
         }
@@ -152,7 +165,7 @@ impl<S: Store> SyncClient<S> {
         }
         let path = format!("{}/log", self.app_path()?);
         let response = self
-            .send(Method::POST, &path, |r| {
+            .send_for(bound, Method::POST, &path, |r| {
                 signed_by(r, sig)
                     .header("idempotency-key", key)
                     .header(header::CONTENT_TYPE, "application/octet-stream")
@@ -160,7 +173,11 @@ impl<S: Store> SyncClient<S> {
                     .body(body.clone())
             })
             .await?;
-        self.json(response).await
+        let appended: Appended = self.json_for(bound.map(|(s, _, _)| s), response, MAX_JSON).await?;
+        if !valid_log_id(&appended.log) {
+            return Err(Error::new(Kind::Invalid, "a malformed log id"));
+        }
+        Ok(appended)
     }
 
     /// The log's batches after [after] of [log] (needed past 0), up to
@@ -183,6 +200,7 @@ impl<S: Store> SyncClient<S> {
             query.push_str(&format!("&limit={limit}"));
         }
         let auth = self.personal_auth_with_gen();
+        let ticket = auth.as_ref().map_or(0, |(auth_gen, _)| self.observation_ticket(*auth_gen));
         let response = self.send(Method::GET, &format!("{}/log?{query}", self.app_path()?), |r| r).await?;
         if response.status() == StatusCode::GONE {
             // Validated before anything is invalidated: a malformed 410 must
@@ -198,14 +216,15 @@ impl<S: Store> SyncClient<S> {
             if let Some((auth_gen, auth)) = &auth {
                 self.ensure_personal_gen(*auth_gen)?;
                 if let Some(ref log_id) = compacted_log {
-                    self.retain_log_commits(*auth_gen, Some(log_id));
+                    self.retain_log_commits(*auth_gen, Some(log_id), ticket);
                 }
                 auth.flush_pending_versions().await?;
                 self.ensure_personal_gen(*auth_gen)?;
             }
             return Ok((LogRead::Compacted { log: compacted_log, snapshot_seq }, auth.is_some()));
         }
-        let page: WirePage = self.json_within(response, MAX_LOG_PAGE).await?;
+        let mut page: WirePage = self.json_within(response, MAX_LOG_PAGE).await?;
+        page.log = answered_log(page.log)?;
         let mut batches = Vec::with_capacity(page.batches.len());
         for b in page.batches {
             let body = BASE64.decode(&b.body).map_err(|e| Error::new(Kind::Invalid, format!("batch {}: {e}", b.seq)))?;
@@ -218,7 +237,7 @@ impl<S: Store> SyncClient<S> {
             self.ensure_personal_gen(*auth_gen)?;
             auth.verify_batches(&self.app, page.log.as_deref(), &batches).await?;
             self.ensure_personal_gen(*auth_gen)?;
-            self.retain_log_commits(*auth_gen, page.log.as_deref());
+            self.retain_log_commits(*auth_gen, page.log.as_deref(), ticket);
         }
         Ok((LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more }, auth.is_some()))
     }

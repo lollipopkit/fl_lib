@@ -1,14 +1,17 @@
-use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::StreamExt;
 use serde_json::json;
+use tokio::sync::Notify;
 
 use super::*;
 use crate::fake::{Fake, Request, Response};
+use crate::personal::PersonalVersions;
 use crate::session::{Session, Store, Stored};
+use crate::team::identity::AccountKey;
 use crate::{Client, now_ms};
 
 mod auth;
@@ -83,18 +86,18 @@ fn page(batches: &[(i64, &[u8])], head: i64, more: bool) -> Response {
 
 struct TestKeeper {
     saved: StdMutex<String>,
-    fail: std::sync::atomic::AtomicBool,
+    fail: AtomicBool,
 }
 
 impl TestKeeper {
     fn new() -> Arc<Self> {
-        Arc::new(Self { saved: StdMutex::new(String::new()), fail: std::sync::atomic::AtomicBool::new(false) })
+        Arc::new(Self { saved: StdMutex::new(String::new()), fail: AtomicBool::new(false) })
     }
 }
 
 impl crate::personal::VersionKeeper for TestKeeper {
     fn save(&self, json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
-        if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+        if self.fail.load(Ordering::SeqCst) {
             return Box::pin(async { Err("disk full".into()) });
         }
         *self.saved.lock().unwrap() = json;
@@ -104,7 +107,7 @@ impl crate::personal::VersionKeeper for TestKeeper {
 
 /// Waits until [task] reaches the fixture's [reached] notification, failing
 /// with [stage] if it finishes first or does not get there in time.
-async fn reach<T: std::fmt::Debug>(stage: &str, reached: &tokio::sync::Notify, task: &mut tokio::task::JoinHandle<T>) {
+async fn reach<T: std::fmt::Debug>(stage: &str, reached: &Notify, task: &mut tokio::task::JoinHandle<T>) {
     tokio::select! {
         biased;
         () = reached.notified() => {}

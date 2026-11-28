@@ -96,7 +96,7 @@ impl<S: Store> SyncClient<S> {
                         ReconciledSnapshot::Conflicted => return Ok((false, None)),
                         ReconciledSnapshot::Replaced(_) => continue,
                         ReconciledSnapshot::Gone => {
-                            self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq, Settle::Entry(commit_key, entry_id)).await?;
+                            self.record_committed_snapshot(expected_user, log, seq, Settle::Entry(commit_key, entry_id)).await?;
                             return Ok((false, None));
                         }
                     }
@@ -123,7 +123,7 @@ impl<S: Store> SyncClient<S> {
                             DetachedReconcile::Recovered(resolved_log) => return Ok((true, Some(resolved_log))),
                             DetachedReconcile::Conflicted => return Ok((false, None)),
                             DetachedReconcile::Gone => {
-                                self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq, Settle::Nothing).await?;
+                                self.record_committed_snapshot(expected_user, log, seq, Settle::Nothing).await?;
                                 return Ok((false, None));
                             }
                         },
@@ -132,33 +132,6 @@ impl<S: Store> SyncClient<S> {
             }
         }
         Err(Error::new(Kind::Invalid, "personal signing auth changed during snapshot watermark flush"))
-    }
-
-    /// Records a committed snapshot `/snapshot` no longer serves: on a known
-    /// [log] as [`Self::flush_committed_snapshot`] does, which records only the
-    /// signed-snapshot marker once [log] is superseded; on an unknown one only
-    /// the marker, as [seq] belongs to no known log floor. [settle] runs only
-    /// once that is persisted.
-    async fn flush_gone_snapshot(
-        &self,
-        expected_user: &str,
-        auth: &PersonalAuth,
-        auth_gen: u64,
-        log: Option<&str>,
-        seq: i64,
-        settle: Settle,
-    ) -> Result<(), Error> {
-        match log {
-            Some(l) => self.record_committed_snapshot(expected_user, Some(l), seq, settle).await.map(drop),
-            None => {
-                auth.record_snapshot_seen(&self.app).await?;
-                self.ensure_personal_gen(auth_gen)?;
-                if !self.settle_committed_snapshots(auth_gen, settle) {
-                    return Err(Error::new(Kind::SignedOut, "personal signing auth changed during snapshot watermark flush"));
-                }
-                Ok(())
-            }
-        }
     }
 
     pub(super) async fn reconcile_detached_snapshot(
@@ -172,9 +145,7 @@ impl<S: Store> SyncClient<S> {
         let mut found = None;
         let fetched = self
             .fetch_with(&format!("{}/snapshot", self.app_path()?), Target::HashOnly(&mut digest), None, |response| {
-                found = header_non_empty(response, "sync-log")
-                    .zip(header_non_empty(response, "sync-seq").and_then(|v| v.parse().ok()))
-                    .map(|(log, s)| Snapshot { log, seq: s, signed: Signed::of(response) });
+                found = answered_snapshot(response);
             })
             .await?;
         self.ensure_personal_gen(auth_gen)?;
@@ -219,6 +190,8 @@ impl<S: Store> SyncClient<S> {
     /// committed remotely at [seq] under [expected_user] (on [log], when known),
     /// without resending `PUT /snapshot`. Returns `false` if another log
     /// superseded [log], including one observed while its binding was saved.
+    /// On an unknown log only the signed-snapshot marker is kept: [seq] belongs
+    /// to no known log's floor.
     pub async fn flush_committed_snapshot(&self, expected_user: &str, log: Option<&str>, seq: i64) -> Result<bool, Error> {
         self.record_committed_snapshot(expected_user, log, seq, Settle::Covered(log.map(str::to_string), seq)).await
     }
@@ -237,10 +210,11 @@ impl<S: Store> SyncClient<S> {
             if auth.user_id().await != expected_user {
                 return Err(Error::new(Kind::SignedOut, "personal signing auth belongs to a different user"));
             }
-            let compatible = match auth
-                .record_snapshot_if_log_compatible(&self.app, log, seq, &PendingLogObserver { client: self, auth_gen })
-                .await
-            {
+            let recorded = match log {
+                Some(_) => auth.record_snapshot_if_log_compatible(&self.app, log, seq, &PendingLogObserver { client: self, auth_gen }).await,
+                None => auth.record_snapshot_seen(&self.app).await.map(|()| true),
+            };
+            let compatible = match recorded {
                 Ok(compatible) => compatible,
                 Err(e) if e.kind == Kind::SignedOut && self.ensure_personal_gen(auth_gen).is_err() => continue,
                 Err(e) => return Err(e),
@@ -285,22 +259,34 @@ impl<S: Store> SyncClient<S> {
         true
     }
 
-    pub(super) fn retain_log_commits(&self, auth_gen: u64, observed_log: Option<&str>) {
+    /// Records what a request sent at [ticket] ([Self::observation_ticket])
+    /// observed: [observed_log], or none (the log gone, its entries with it).
+    /// False, changing nothing, when one sent later observed another log:
+    /// that one is newer and keeps what is bound to it.
+    pub(super) fn retain_log_commits(&self, auth_gen: u64, observed_log: Option<&str>, ticket: u64) -> bool {
         let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
-        if slot.generation == auth_gen {
-            let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-            if guard.generation == auth_gen {
-                match observed_log {
-                    Some(log_id) => {
-                        guard.observed_log = Some(log_id.to_string());
-                        guard.retain_for_log(log_id);
-                    }
-                    None => {
-                        guard.batches.clear();
-                        guard.snapshots.clear();
-                    }
-                }
+        if slot.generation != auth_gen {
+            return true;
+        }
+        let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.generation != auth_gen {
+            return true;
+        }
+        match observed_log {
+            Some(log_id) => guard.observe_at(log_id, ticket),
+            None if ticket < guard.observed_ticket => false,
+            None => {
+                guard.batches.clear();
+                guard.snapshots.clear();
+                true
             }
         }
+    }
+
+    /// The place of a request about to be sent in the order observations are
+    /// taken in ([Self::retain_log_commits]).
+    pub(super) fn observation_ticket(&self, auth_gen: u64) -> u64 {
+        let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.generation == auth_gen { guard.ticket() } else { 0 }
     }
 }

@@ -181,12 +181,12 @@ pub trait Host: Send + Sync + 'static {
     /// Removes every state key starting with [prefix] but [keep].
     fn clear_state(&self, prefix: String, keep: Vec<String>) -> impl Future<Output = Result<()>> + Send;
 
-    /// Keeps [ops], of collections not carried here, for [engine]'s
+    /// Keeps [ops], of collections not carried here, for `engine`'s
     /// snapshots (`sync_passed`): each replaces one of its record kept before
     /// only when its stamp is greater.
     fn pass(&self, engine: String, ops: Vec<Op>) -> impl Future<Output = Result<()>> + Send;
 
-    /// What [pass] kept for [engine].
+    /// What [pass] kept for `engine`.
     fn passed(&self, engine: String) -> impl Future<Output = Result<Vec<Op>>> + Send;
 
     fn forget_passed(&self, engine: String) -> impl Future<Output = Result<()>> + Send;

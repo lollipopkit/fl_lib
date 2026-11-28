@@ -2,24 +2,28 @@
 //! identities, the newest sealing and the ones it replaced ([SyncKey::rotate])
 //! still opening, so a device that joins later reads what was sealed before.
 //!
-//! Kept in the remote's key file (`identity.age`), sealed with the backup
-//! password: the one thing the password seals. Its first line, a comment
-//! `age -i` skips, says the file's epoch, raised each time it is sealed with
-//! a new password. Each device keeps the keys in the synced keychain
-//! ([Secrets::kept]).
+//! Kept in the remote's key file (`identity.age`), sealed with two factors:
+//! the backup password and the client-side secret key
+//! ([SecretKey::combine_passphrase]), both needed to open it; the one thing
+//! they seal. A file sealed with the password alone (before the secret key)
+//! opens with it until sealed again with both, and never once the remote has
+//! been opened with both. Its first line, a comment `age -i` skips, says the
+//! file's epoch, raised each time it is sealed with a new password. Each
+//! device keeps the keys in the synced keychain ([Secrets::kept]).
 //!
-//! The password is the remote's gate: where it does not open the file,
-//! nothing syncs there ([Error::PasswordMismatch]) until it does. A device
+//! The password and the secret key are the remote's gate: where they do not
+//! open the file, nothing syncs there ([Error::PasswordMismatch],
+//! [Error::SecretKeyMissing]) until they do. A device
 //! that changed it ([KeyRing::password_changed]) seals the file again with the
 //! new one, opening it with the one it changed from, unless another device
 //! sealed it since.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use std::io::{Read as _, Write as _};
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -267,6 +271,9 @@ struct State {
     identities: Vec<String>,
     parsed: Vec<age::x25519::Identity>,
     recipient: Option<age::x25519::Recipient>,
+    /// The identities held are not yet saved in the keychain: a save that
+    /// failed is tried again by the next one, unchanged or not.
+    unsaved: bool,
     epoch: i64,
     /// The file's version and credential tag that opened it here: a check
     /// that finds both unchanged derives no key.
@@ -296,6 +303,11 @@ pub struct SyncKey {
     ring: Arc<RingInner>,
     state: StdMutex<State>,
     checking: Mutex<()>,
+    /// Lookups ([KeyRing::of]) holding it now, and whether one returned it:
+    /// a failed restore unregisters only a handle no other has. Both changed
+    /// under the key table's lock.
+    lookups: AtomicUsize,
+    handed_out: AtomicBool,
     #[cfg(test)]
     before_take_merge: StdMutex<Option<TestTakeMergeHook>>,
 }

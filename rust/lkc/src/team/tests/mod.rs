@@ -403,7 +403,7 @@ fn handle(st: &Mutex<State>, r: &Request) -> Response {
                 .collect(),
         )),
         ("GET", p) if p == format!("{base}/sync/serverbox/snapshot") => match s.files.get(".snapshot") {
-            Some(f) => signed_headers(Response::status(200).header("etag", &format!("\"{}\"", f.0)).header("sync-log", "l").header("sync-seq", "5"), &f.3).body(f.1.clone()),
+            Some(f) => signed_headers(Response::status(200).header("etag", &format!("\"{}\"", f.0)).header("sync-log", "1f").header("sync-seq", "5"), &f.3).body(f.1.clone()),
             None => Response::status(404),
         },
         ("PUT", p) if p == format!("{base}/sync/serverbox/snapshot") => {

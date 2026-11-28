@@ -5,15 +5,16 @@ use super::*;
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct RecoveredExternal {
     pub(super) key: String,
-    pub(super) owners: BTreeSet<String>,
-    /// True when a pre-restart record carried an ownerless stage: treated as unmatched by account-scoped stage-less
-    /// settlement/clear so another account cannot clear an unattributed intent.
-    pub(super) unowned: bool,
+    /// Unresolved writes per creating account: each settles one.
+    pub(super) owners: BTreeMap<String, u32>,
+    /// Unresolved ownerless writes: treated as unmatched by account-scoped
+    /// stage-less settlement/clear so another account cannot clear one.
+    pub(super) unowned: u32,
 }
 
 impl RecoveredExternal {
     pub(super) fn is_empty(&self) -> bool {
-        self.owners.is_empty() && !self.unowned
+        self.owners.is_empty() && self.unowned == 0
     }
 }
 
@@ -212,8 +213,11 @@ impl KeyRing {
         self.0.secret_key_missing.subscribe()
     }
 
+    /// The handles registered, but one a first lookup still checks: that is
+    /// the lookup's own to check.
     pub(super) fn keys(&self) -> Vec<Arc<SyncKey>> {
-        self.0.keys.lock().unwrap_or_else(|e| e.into_inner()).keys.values().cloned().collect()
+        let table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        table.keys.values().filter(|k| !k.in_first_lookup()).cloned().collect()
     }
 
     /// [file]'s key, opened with the backup password here: one per remote,
@@ -253,6 +257,7 @@ impl KeyRing {
             match table.keys.get(&id).filter(|k| k.lkc_tokens == tokens) {
                 Some(k) => {
                     *k.file.lock().unwrap_or_else(|e| e.into_inner()) = file;
+                    k.lookups.fetch_add(1, Ordering::SeqCst);
                     (k.clone(), false, tokens)
                 }
                 None => {
@@ -267,6 +272,8 @@ impl KeyRing {
                         ring: self.0.clone(),
                         state: StdMutex::new(State::default()),
                         checking: Mutex::new(()),
+                        lookups: AtomicUsize::new(1),
+                        handed_out: AtomicBool::new(false),
                         #[cfg(test)]
                         before_take_merge: StdMutex::new(None),
                     });
@@ -277,11 +284,15 @@ impl KeyRing {
         };
         if let Err(e) = key.check(false, create).await {
             // A restore's lookup leaves nothing behind for a remote nothing
-            // syncs to; any committed write awaiting watermark flush stays in
+            // syncs to, unless another lookup holds or returned the handle;
+            // any committed write awaiting watermark flush stays in
             // `KeyTable::pending_writes` across lookups and releases.
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+            let others = key.lookups.fetch_sub(1, Ordering::SeqCst) - 1;
             if !create
                 && fresh
+                && others == 0
+                && !key.handed_out.load(Ordering::SeqCst)
                 && table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key))
                 && !table.pending_writes.contains_key(&id)
             {
@@ -292,16 +303,18 @@ impl KeyRing {
             }
             return Err(e);
         }
-        if let Some(t) = start_lkc_tokens {
-            let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
-            if !table.lkc_tokens_live(&id, t) {
-                if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) {
-                    table.keys.remove(&id);
-                    table.bump_id(&id);
-                    self.0.said_ok(&id);
-                }
-                return Err(Error::SignedOut);
+        let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
+        key.lookups.fetch_sub(1, Ordering::SeqCst);
+        key.handed_out.store(true, Ordering::SeqCst);
+        if let Some(t) = start_lkc_tokens
+            && !table.lkc_tokens_live(&id, t)
+        {
+            if table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key)) {
+                table.keys.remove(&id);
+                table.bump_id(&id);
+                self.0.said_ok(&id);
             }
+            return Err(Error::SignedOut);
         }
         Ok(key)
     }
@@ -580,7 +593,8 @@ impl KeyRing {
                 now.retain(|id| held.contains(id));
                 now.len() != before
             });
-            table.keys.values().cloned().collect::<Vec<_>>()
+            // One a first lookup still checks is its own to check.
+            table.keys.values().filter(|k| !k.in_first_lookup()).cloned().collect::<Vec<_>>()
         };
         for k in &keys {
             k.lock().checked_at = None;

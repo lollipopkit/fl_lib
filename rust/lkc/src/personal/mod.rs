@@ -364,6 +364,11 @@ impl PersonalAuth {
         WriteSig { signature: BASE64.encode(crypto::sign(key.signing(), &msg)), version: None }
     }
 
+    /// [name]'s highest version seen signed here.
+    pub async fn file_version(&self, app: &str, name: &str) -> i64 {
+        self.versions.lock().await.data.file_version(app, name)
+    }
+
     pub async fn record_file_version(&self, app: &str, name: &str, version: i64) -> Result<(), Error> {
         self.record_committed(|v| v.saw_file(app, name, version)).await
     }
@@ -424,7 +429,12 @@ impl PersonalAuth {
     /// observation arriving while its binding is saved.
     pub async fn record_snapshot_if_log_compatible(&self, app: &str, log: Option<&str>, seq: i64, observer: &impl LogObserver) -> Result<bool, Error> {
         let mut held = self.versions.lock().await;
-        let superseded = log.is_some_and(|target| held.data.signed_log_ids.get(app).is_some_and(|known| known != target));
+        // A log observed live since takes the place of the one bound, as in
+        // [Self::verify_snapshot_digest_observed].
+        let superseded = match log {
+            Some(target) => held.data.signed_log_ids.get(app).is_some_and(|known| known != target) && !observer.confirm(target)?,
+            None => false,
+        };
         Self::record_snapshot_ordered(&self.keeper, &mut held, app, log, seq, superseded, observer).await
     }
 

@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn committed_write_survives_keeper_failure_and_retries_without_resending() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
     let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
@@ -16,44 +16,44 @@ async fn committed_write_survives_keeper_failure_and_retries_without_resending()
     })
     .await;
     let keeper = TestKeeper::new();
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper.clone()));
     sync.set_personal(Some(auth));
 
     // 1. File upload commits remotely, local persistence fails -> error retains ETag; retry does NOT resend PUT.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.upload_bytes(NAME, b"file-body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, Some(Committed::File { etag: "e-committed".into(), version: 1 }));
     assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).len(), 1);
 
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(sync.upload_bytes(NAME, b"file-body".to_vec(), Condition::Absent).await.unwrap(), "e-committed");
     assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).len(), 1);
 
     // 2. Log append commits remotely, local persistence fails -> error retains Appended; retry does NOT resend POST.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.append(KEY, b"b1".to_vec()).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert!(matches!(err.committed, Some(Committed::Batch(Appended { seq: 1, .. }))));
     assert_eq!(fake.requests("/v2/sync/serverbox/log").len(), 1);
 
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(sync.append(KEY, b"b1".to_vec()).await.unwrap().seq, 1);
     assert_eq!(fake.requests("/v2/sync/serverbox/log").len(), 1);
 
     // 3. Snapshot write commits remotely, local persistence fails -> error retains ETag; retry does NOT resend PUT.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, Some(Committed::Snapshot { etag: "s-committed".into(), seq: 1, log: None }));
     assert_eq!(fake.requests("/v2/sync/serverbox/snapshot").len(), 1);
 
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(sync.put_snapshot_bytes(1, b"snap".to_vec()).await.unwrap(), "s-committed");
     assert_eq!(fake.requests("/v2/sync/serverbox/snapshot").len(), 1);
 
     // 4. Detaching/replacing personal auth clears pending_commits so a new auth instance cannot skip writes.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.upload_bytes(NAME, b"file-body-2".to_vec(), Condition::Match("e-committed".into())).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     sync.set_personal(None);
@@ -62,7 +62,7 @@ async fn committed_write_survives_keeper_failure_and_retries_without_resending()
 
 #[tokio::test]
 async fn idle_read_log_flushes_dirty_watermark_after_append_persist_failure() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
     let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
@@ -73,18 +73,18 @@ async fn idle_read_log_flushes_dirty_watermark_after_append_persist_failure() {
     })
     .await;
     let keeper = TestKeeper::new();
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper.clone()));
     sync.set_personal(Some(auth));
 
     // Append commits seq 1 remotely, but local keeper fails -> watermark stays dirty in memory.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.append(KEY, b"b1".to_vec()).await.unwrap_err();
     assert!(matches!(err.committed, Some(Committed::Batch(Appended { seq: 1, .. }))));
     assert!(keeper.saved.lock().unwrap().is_empty());
 
     // Keeper recovers. Subsequent idle sync only calls read_log(after=1) which
     // returns an empty page; it MUST flush the dirty watermark to keeper without resending POST.
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     let page = sync.read_log(1, Some("6f1c"), None).await.unwrap();
     assert!(matches!(page, LogRead::Page { ref batches, .. } if batches.is_empty()));
     let saved = keeper.saved.lock().unwrap().clone();
@@ -95,17 +95,17 @@ async fn idle_read_log_flushes_dirty_watermark_after_append_persist_failure() {
 
 #[tokio::test]
 async fn delete_invalidates_cached_pending_file_commit() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let deletes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(AtomicUsize::new(0));
+    let deletes = Arc::new(AtomicUsize::new(0));
     let seen = puts.clone();
     let del_seen = deletes.clone();
     let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", p) if p.ends_with(NAME) => {
-            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let n = seen.fetch_add(1, Ordering::SeqCst);
             match n {
                 0 => written("e-first"),
                 1 => written("e-second"),
@@ -115,66 +115,66 @@ async fn delete_invalidates_cached_pending_file_commit() {
             }
         }
         ("DELETE", p) if p.ends_with(NAME) => {
-            let d = del_seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let d = del_seen.fetch_add(1, Ordering::SeqCst);
             Response::status(if d == 0 { 204 } else { 404 })
         }
         _ => Response::status(404),
     })
     .await;
     let keeper = TestKeeper::new();
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper.clone()));
     sync.set_personal(Some(auth));
 
     // 1. Upload commits remotely, local persistence fails -> cached pending commit.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e-first".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // 2. Retrying with no intervening delete still fails local flush WITHOUT resending PUT
     //    and preserves `err.committed`.
     let err = sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, Some(Committed::File { etag: "e-first".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // 3. Intervening delete succeeds (204) -> invalidates the cached pending file result,
     //    so once keeper recovers a subsequent create MUST issue a fresh PUT.
     assert!(sync.delete(NAME, Some("e-first")).await.unwrap());
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(sync.upload_bytes(NAME, b"same-body".to_vec(), Condition::Absent).await.unwrap(), "e-second");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
 
     // 4. Another upload commits remotely then fails local save -> cached pending commit ("e-third").
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.upload_bytes(NAME, b"body-2".to_vec(), Condition::Match("e-second".into())).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e-third".into(), version: 3 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert_eq!(puts.load(Ordering::SeqCst), 3);
 
     // 5. Intervening delete answering 404 (already deleted remotely) MUST ALSO invalidate
     //    the cached pending file result so a subsequent conditional write sends PUT #4
     //    and observes 412 Kind::Changed rather than returning cached "e-third".
     assert!(!sync.delete(NAME, None).await.unwrap());
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(
         sync.upload_bytes(NAME, b"body-2".to_vec(), Condition::Match("e-second".into())).await.unwrap_err().kind,
         Kind::Changed,
     );
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert_eq!(puts.load(Ordering::SeqCst), 4);
     assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}")).iter().filter(|r| r.method == "PUT").count(), 4);
 }
 
 #[tokio::test]
 async fn upload_signed_replacement_invalidates_cached_pending_commit_only_on_success() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(AtomicUsize::new(0));
     let seen = puts.clone();
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", p) if p.ends_with(NAME) => {
-            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let n = seen.fetch_add(1, Ordering::SeqCst);
             match n {
                 0 => written("e1"),
                 1 => Response::status(412),
@@ -186,42 +186,42 @@ async fn upload_signed_replacement_invalidates_cached_pending_commit_only_on_suc
     })
     .await;
     let keeper = TestKeeper::new();
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper.clone()));
     sync.set_personal(Some(auth));
 
     // 1. upload_bytes commits remotely ("e1"), local persistence fails -> caches recovery entry.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // 2. Failed upload_signed (412) MUST retain the cached recovery entry.
     assert_eq!(sync.upload_signed(NAME, b"other".to_vec(), Condition::Match("wrong".into()), None).await.unwrap_err().kind, Kind::Changed);
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
 
     // 3. Successful upload_signed replacement invalidates the cached entry so a later
     //    upload_bytes sends a fresh PUT and hits 412 Kind::Changed rather than returning stale "e1".
     assert_eq!(sync.upload_signed(NAME, b"replaced".to_vec(), Condition::Match("e1".into()), None).await.unwrap(), "e2-signed");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(puts.load(Ordering::SeqCst), 3);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err().kind, Kind::Changed);
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert_eq!(puts.load(Ordering::SeqCst), 4);
 }
 
 #[tokio::test]
 async fn concurrent_delete_during_record_file_version_prevents_stale_pending_insert() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(AtomicUsize::new(0));
     let seen = puts.clone();
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", p) if p.ends_with(NAME) => {
-            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let n = seen.fetch_add(1, Ordering::SeqCst);
             written(if n == 0 { "e1" } else { "e2" })
         }
         ("DELETE", p) if p.ends_with(NAME) => Response::status(204),
@@ -233,12 +233,12 @@ async fn concurrent_delete_during_record_file_version_prevents_stale_pending_ins
     // returning a persistence error, simulating an overlapping DELETE.
     struct DeletingKeeper {
         sync: Arc<SyncClient<Kept>>,
-        fail: std::sync::atomic::AtomicBool,
+        fail: AtomicBool,
     }
     impl crate::personal::VersionKeeper for DeletingKeeper {
         fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
             Box::pin(async move {
-                if self.fail.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                if self.fail.swap(false, Ordering::SeqCst) {
                     assert!(self.sync.delete(NAME, Some("e1")).await.unwrap());
                     return Err("save failed after delete".into());
                 }
@@ -247,8 +247,8 @@ async fn concurrent_delete_during_record_file_version_prevents_stale_pending_ins
         }
     }
 
-    let keeper = Arc::new(DeletingKeeper { sync: sync.clone(), fail: std::sync::atomic::AtomicBool::new(true) });
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper));
+    let keeper = Arc::new(DeletingKeeper { sync: sync.clone(), fail: AtomicBool::new(true) });
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper));
     sync.set_personal(Some(auth));
 
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
@@ -257,34 +257,34 @@ async fn concurrent_delete_during_record_file_version_prevents_stale_pending_ins
 
     // Next create MUST send PUT #2 rather than returning deleted "e1".
     assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e2");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
 async fn stale_upload_does_not_insert_written_marker_after_set_personal() {
-    let key1 = crate::team::identity::AccountKey::generate("u1");
+    let key1 = AccountKey::generate("u1");
     let pub1 = key1.signing_public();
     let rec1 = key1.recipient();
-    let key2 = crate::team::identity::AccountKey::generate("u2");
+    let key2 = AccountKey::generate("u2");
     let pub2 = key2.signing_public();
     let rec2 = key2.recipient();
-    let auth2 = Arc::new(PersonalAuth::new(key2, crate::personal::PersonalVersions::default(), TestKeeper::new()));
-    let sync_slot: Arc<std::sync::OnceLock<Arc<SyncClient<Kept>>>> = Arc::new(std::sync::OnceLock::new());
+    let auth2 = Arc::new(PersonalAuth::new(key2, PersonalVersions::default(), TestKeeper::new()));
+    let sync_slot: Arc<OnceLock<Arc<SyncClient<Kept>>>> = Arc::new(OnceLock::new());
     let next_auth = Arc::new(StdMutex::new(Some(auth2)));
-    let put_n = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let put_n = Arc::new(AtomicUsize::new(0));
     let slot_c = sync_slot.clone();
     let next_c = next_auth.clone();
     let put_c = put_n.clone();
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => {
-            if put_c.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+            if put_c.load(Ordering::SeqCst) == 0 {
                 Response::json(200, json!({ "data": { "recipient": rec1, "signing_key": pub1, "next_seq": 2, "prev_signing_key": pub1 } }))
             } else {
                 Response::json(200, json!({ "data": { "recipient": rec2, "signing_key": pub2, "next_seq": 2, "prev_signing_key": pub2 } }))
             }
         }
         ("PUT", p) if p.ends_with(NAME) => {
-            let n = put_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let n = put_c.fetch_add(1, Ordering::SeqCst);
             if n == 0 {
                 // Switch auth while PUT #1 is in flight before upload_signed_bytes records `written`.
                 if let (Some(s), Some(a2)) = (slot_c.get(), next_c.lock().unwrap().take()) {
@@ -300,7 +300,7 @@ async fn stale_upload_does_not_insert_written_marker_after_set_personal() {
     .await;
 
     let _ = sync_slot.set(sync.clone());
-    let auth1 = Arc::new(PersonalAuth::new(key1, crate::personal::PersonalVersions::default(), TestKeeper::new()));
+    let auth1 = Arc::new(PersonalAuth::new(key1, PersonalVersions::default(), TestKeeper::new()));
     sync.set_personal(Some(auth1));
 
     assert_eq!(sync.upload_bytes(NAME, b"v1".to_vec(), Condition::Absent).await.unwrap(), "e-stale");
@@ -317,8 +317,8 @@ async fn stale_upload_does_not_insert_written_marker_after_set_personal() {
 
 #[tokio::test]
 async fn concurrent_delete_after_put_does_not_leave_put_etag_cached() {
-    let put_arrived = Arc::new(tokio::sync::Notify::new());
-    let delete_arrived = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let put_arrived = Arc::new(Notify::new());
+    let delete_arrived = Arc::new(AtomicBool::new(false));
     let (release_tx, release_rx) = tokio::sync::oneshot::channel();
     let release_slot = Arc::new(StdMutex::new(Some(release_rx)));
 
@@ -335,7 +335,7 @@ async fn concurrent_delete_after_put_does_not_leave_put_etag_cached() {
             resp
         }
         "DELETE" => {
-            del_c.store(true, std::sync::atomic::Ordering::SeqCst);
+            del_c.store(true, Ordering::SeqCst);
             Response::status(204)
         }
         _ => Response::status(404),
@@ -349,26 +349,26 @@ async fn concurrent_delete_after_put_does_not_leave_put_etag_cached() {
 
     let del = tokio::spawn(async move { s2.delete(NAME, None).await.unwrap() });
     tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    assert!(!delete_arrived.load(std::sync::atomic::Ordering::SeqCst), "DELETE must wait until PUT response and ETag commit complete");
+    assert!(!delete_arrived.load(Ordering::SeqCst), "DELETE must wait until PUT response and ETag commit complete");
 
     release_tx.send(()).unwrap();
     assert_eq!(put.await.unwrap(), "e-put");
     assert!(del.await.unwrap());
-    assert!(delete_arrived.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(delete_arrived.load(Ordering::SeqCst));
     assert!(sync.written.lock().unwrap().get(NAME).is_none(), "DELETE completing after PUT must leave no PUT ETag marker");
 }
 
 #[tokio::test]
 async fn upload_recovery_key_separates_blob_and_file_modes_and_invalidates_both_on_change() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(AtomicUsize::new(0));
     let seen = puts.clone();
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", _) => {
-            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let n = seen.fetch_add(1, Ordering::SeqCst);
             match n {
                 0 => written("e-blob"),
                 1 => Response::status(412),
@@ -380,44 +380,44 @@ async fn upload_recovery_key_separates_blob_and_file_modes_and_invalidates_both_
     })
     .await;
     let keeper = TestKeeper::new();
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper.clone()));
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper.clone()));
     sync.set_personal(Some(auth));
 
     // 1. Blob upload commits remotely, local save fails -> caches Blob recovery entry.
-    keeper.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(true, Ordering::SeqCst);
     let err = sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e-blob".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // 2. Retrying in the SAME mode (blob) flushes without resending PUT.
     let err = sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e-blob".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // 3. Mutable file upload with identical (name, Condition::Absent, body) MUST NOT reuse
     //    the blob recovery entry; it issues PUT #2 (hitting 412).
-    keeper.fail.store(false, std::sync::atomic::Ordering::SeqCst);
+    keeper.fail.store(false, Ordering::SeqCst);
     assert_eq!(sync.upload_bytes("op-notes.age", b"same".to_vec(), Condition::Absent).await.unwrap_err().kind, Kind::Changed);
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
 
     // 4. Deleting the file invalidates recovery entries across both modes so a
     //    subsequent blob upload issues PUT #3.
     assert!(sync.delete("op-notes.age", None).await.unwrap());
     assert_eq!(sync.upload_blob_bytes("op-notes.age", b"same".to_vec()).await.unwrap(), "e-new");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert_eq!(puts.load(Ordering::SeqCst), 3);
 }
 
 #[tokio::test]
 async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_committed_error() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(AtomicUsize::new(0));
     let seen = puts.clone();
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", p) if p.ends_with(NAME) => {
-            let n = seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let n = seen.fetch_add(1, Ordering::SeqCst);
             match n {
                 0 => written("e1"),
                 1 => written("e2"),
@@ -436,12 +436,12 @@ async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_co
     // 3 -> delete NAME while flushing, then fail save (must return Kind::Invalid WITHOUT Committed::File)
     struct ScriptedKeeper {
         sync: Arc<SyncClient<Kept>>,
-        step: std::sync::atomic::AtomicUsize,
+        step: AtomicUsize,
     }
     impl crate::personal::VersionKeeper for ScriptedKeeper {
         fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
             Box::pin(async move {
-                match self.step.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
+                match self.step.fetch_add(1, Ordering::SeqCst) {
                     0 => Err("initial save failed".into()),
                     1 => {
                         assert!(self.sync.delete(NAME, Some("e1")).await.unwrap());
@@ -458,15 +458,15 @@ async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_co
         }
     }
 
-    let keeper = Arc::new(ScriptedKeeper { sync: sync.clone(), step: std::sync::atomic::AtomicUsize::new(0) });
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper));
+    let keeper = Arc::new(ScriptedKeeper { sync: sync.clone(), step: AtomicUsize::new(0) });
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper));
     sync.set_personal(Some(auth));
 
     // 1. PUT #1 commits "e1", local save fails (step 0) -> caches ("e1", 1).
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // 2. Retry enters cached-commit branch, flushes versions (step 1 deletes NAME and
     //    succeeds). Recheck under file_lock -> personal -> pending_commits sees the
@@ -475,7 +475,7 @@ async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_co
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, Some(Committed::File { etag: "e2".into(), version: 2 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
 
     // 3. Retry enters cached-commit branch for ("e2", 2); step 3 deletes NAME during
     //    flush and fails with Kind::Invalid. Because the cached entry was invalidated,
@@ -483,24 +483,24 @@ async fn cached_commit_invalidated_during_flush_falls_through_and_drops_stale_co
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, None, "stale Committed::File must not be attached after invalidation");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(puts.load(Ordering::SeqCst), 2);
 
     // 4. Subsequent upload succeeds via PUT #3 ("e3").
     assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e3");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert_eq!(puts.load(Ordering::SeqCst), 3);
 }
 
 #[tokio::test]
 async fn cached_upload_entry_replaced_during_flush_must_not_return_on_earlier_flush() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
-    let puts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let puts = Arc::new(AtomicUsize::new(0));
     let seen = puts.clone();
     let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
         ("GET", "/v2/keys") => Response::json(200, json!({ "data": { "recipient": recipient, "signing_key": pub_key, "next_seq": 2, "prev_signing_key": pub_key } })),
         ("PUT", p) if p.ends_with(NAME) => {
-            seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            seen.fetch_add(1, Ordering::SeqCst);
             written("e1")
         }
         _ => Response::status(404),
@@ -515,13 +515,13 @@ async fn cached_upload_entry_replaced_during_flush_must_not_return_on_earlier_fl
     //              returning Ok("e2") on step 1's earlier flush!
     // save step 4: succeed -> next retry returns Ok("e2") with no extra PUT.
     struct StepKeeper {
-        step: std::sync::atomic::AtomicUsize,
-        first_flushed: Arc<tokio::sync::Notify>,
+        step: AtomicUsize,
+        first_flushed: Arc<Notify>,
     }
     impl crate::personal::VersionKeeper for StepKeeper {
         fn save(&self, _json: String) -> crate::personal::BoxFuture<'_, Result<(), String>> {
             Box::pin(async move {
-                match self.step.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
+                match self.step.fetch_add(1, Ordering::SeqCst) {
                     0 => Err("save 0 failed".into()),
                     1 => {
                         self.first_flushed.notify_one();
@@ -535,14 +535,14 @@ async fn cached_upload_entry_replaced_during_flush_must_not_return_on_earlier_fl
         }
     }
 
-    let first_flushed = Arc::new(tokio::sync::Notify::new());
-    let keeper = Arc::new(StepKeeper { step: std::sync::atomic::AtomicUsize::new(0), first_flushed: first_flushed.clone() });
-    let auth = Arc::new(PersonalAuth::new(key, crate::personal::PersonalVersions::default(), keeper));
+    let first_flushed = Arc::new(Notify::new());
+    let keeper = Arc::new(StepKeeper { step: AtomicUsize::new(0), first_flushed: first_flushed.clone() });
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), keeper));
     sync.set_personal(Some(auth.clone()));
 
     let err = sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap_err();
     assert_eq!(err.committed, Some(Committed::File { etag: "e1".into(), version: 1 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // Hold file_lock(NAME) so the retry flushes v1 (step 1) and then waits on file_lock.
     let lock = sync.file_lock(NAME);
@@ -567,23 +567,23 @@ async fn cached_upload_entry_replaced_during_flush_must_not_return_on_earlier_fl
     let err = retry.await.unwrap().unwrap_err();
     assert_eq!(err.kind, Kind::Invalid);
     assert_eq!(err.committed, Some(Committed::File { etag: "e2".into(), version: 2 }));
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 
     // Next retry flushes v2 successfully (step 4) and returns "e2" without resending PUT.
     assert_eq!(sync.upload_bytes(NAME, b"body".to_vec(), Condition::Absent).await.unwrap(), "e2");
-    assert_eq!(puts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(puts.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
 async fn flush_committed_file_installs_watermark_into_replacement_auth_on_rebind() {
-    let key = crate::team::identity::AccountKey::generate("u1");
+    let key = AccountKey::generate("u1");
     let (_fake, sync) = homebase(|_| Response::status(404)).await;
 
     let keeper2 = TestKeeper::new();
     let v1_json = r#"{"v":2,"files":{"serverbox/identity.age":1}}"#;
     let auth2 = Arc::new(PersonalAuth::new(
         key.clone(),
-        crate::personal::PersonalVersions::from_json(v1_json).unwrap(),
+        PersonalVersions::from_json(v1_json).unwrap(),
         keeper2.clone(),
     ));
 
@@ -606,7 +606,7 @@ async fn flush_committed_file_installs_watermark_into_replacement_auth_on_rebind
     });
     let auth1 = Arc::new(PersonalAuth::new(
         key,
-        crate::personal::PersonalVersions::from_json(v1_json).unwrap(),
+        PersonalVersions::from_json(v1_json).unwrap(),
         keeper1,
     ));
     sync.set_personal(Some(auth1));

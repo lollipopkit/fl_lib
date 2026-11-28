@@ -732,3 +732,18 @@ async fn no_file_on_a_store_that_orders_writes_settles_only_the_attempts_past_th
 
 // Pre-signing batches below the signing floor: accepted unsigned, while the
 // account's blob policy refuses an unsigned blob read strictly.
+
+#[tokio::test]
+async fn a_released_handle_settles_nothing() {
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let old = d.key(&file).await.unwrap();
+    d.ring.release("account");
+    let _replacement = d.key(&file).await.unwrap();
+    let own = json!({ "epoch": 0, "pwd": "pw" });
+    d.secrets.pending.lock().unwrap().insert("intent:account".into(), json!([own]).to_string());
+    d.secrets.pending.lock().unwrap().insert("account".into(), "older".into());
+    old.check(true, true).await.unwrap();
+    assert_eq!(intents_of(&d, "account"), Some(vec![own]), "its own write's intent is the replacement's to settle");
+    assert_eq!(d.secrets.pending.lock().unwrap().get("account").map(String::as_str), Some("older"));
+}

@@ -391,6 +391,7 @@ struct MemSecrets {
     allow_auto_gen: AtomicBool,
     fail_set_secret_key: AtomicBool,
     fail_set_epochs: AtomicBool,
+    fail_set_kept: AtomicBool,
     epochs_delay_ms: AtomicU64,
     kept: Mutex<HashMap<String, String>>,
     epochs: Mutex<HashMap<String, i64>>,
@@ -452,6 +453,9 @@ impl Secrets for MemSecrets {
 
     fn set_kept(&self, id: String, identities: String) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
+            if self.fail_set_kept.load(Ordering::SeqCst) {
+                return Err(Error::Host("keychain unavailable".into()));
+            }
             self.kept.lock().unwrap().insert(id, identities);
             Ok(())
         })

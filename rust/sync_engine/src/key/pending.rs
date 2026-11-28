@@ -72,26 +72,27 @@ pub(super) fn external_intent_secret_key(raw: &str) -> Option<String> {
 }
 
 /// An external account-key intent: only one carrying explicit provenance
-/// (`owners`) counts, whatever its `pwd` parses as.
+/// (`owners`, each account's unresolved writes counted) counts, whatever its
+/// `pwd` parses as.
 pub(super) fn decode_external_intent(raw: &str) -> Option<RecoveredExternal> {
     let v: serde_json::Value = serde_json::from_str(raw).ok()?;
     let _epoch = v["epoch"].as_i64()?;
     let key = SecretKey::parse(v["pwd"].as_str()?).ok()?.format().to_string();
-    let owners: BTreeSet<String> = v
+    let count = |n: &serde_json::Value| n.as_u64().and_then(|n| u32::try_from(n).ok()).filter(|n| *n > 0);
+    let owners: BTreeMap<String, u32> = v
         .get("owners")?
-        .as_array()?
+        .as_object()?
         .iter()
-        .filter_map(serde_json::Value::as_str)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
+        .filter(|(uid, _)| !uid.is_empty())
+        .filter_map(|(uid, n)| Some((uid.clone(), count(n)?)))
         .collect();
-    let unowned = v.get("unowned").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let unowned = v.get("unowned").and_then(count).unwrap_or(0);
     let rec = RecoveredExternal { key, owners, unowned };
     (!rec.is_empty()).then_some(rec)
 }
 
-pub(super) fn encode_external_intent(key: &str, owners: &BTreeSet<String>, unowned: bool) -> String {
-    serde_json::json!({ "epoch": 0, "pwd": key, "owners": owners, "unowned": unowned }).to_string()
+pub(super) fn encode_external_intent(rec: &RecoveredExternal) -> String {
+    serde_json::json!({ "epoch": 0, "pwd": rec.key, "owners": rec.owners, "unowned": rec.unowned }).to_string()
 }
 
 /// What one open verified there: the file's version and the epoch it holds,

@@ -123,7 +123,7 @@ impl SyncKey {
                 && verified.is_none_or(|v| old_epoch >= v)
             {
                 let identities = self.merged(old_identities);
-                let epoch = old_epoch + 1;
+                let epoch = next_epoch(&id, old_epoch)?;
                 let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version), observed.settles).await? else { continue };
                 self.use_identities(identities, true).await?;
                 if let Some(detail) = persist_err {
@@ -154,7 +154,7 @@ impl SyncKey {
                     // the new write cannot lose `(old_epoch, intent.pwd)`.
                     self.ring.record_committed_write(&id, self.forget_gen, old_epoch, &intent.pwd, self.settles_now(observed.settles)).await?;
                     let identities = self.merged(old_identities);
-                    let epoch = old_epoch + 1;
+                    let epoch = next_epoch(&id, old_epoch)?;
                     let (written, persist_err) = {
                         let mut init = self.ring.secret_key_init.lock().await;
                         self.ensure_writable(&id)?;
@@ -193,7 +193,7 @@ impl SyncKey {
                     // the new write cannot lose `(old_epoch, intent.pwd)`.
                     self.ring.record_committed_write(&id, self.forget_gen, old_epoch, &intent.pwd, self.settles_now(observed.settles)).await?;
                     let identities = self.merged(old_identities);
-                    let epoch = old_epoch + 1;
+                    let epoch = next_epoch(&id, old_epoch)?;
                     let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version), observed.settles).await? else { continue 'open };
                     self.use_identities(identities, true).await?;
                     if let Some(detail) = persist_err {
@@ -215,7 +215,7 @@ impl SyncKey {
                     && verified.is_none_or(|v| v == old_epoch)
                 {
                     let identities = self.merged(old_identities);
-                    let epoch = old_epoch + 1;
+                    let epoch = next_epoch(&id, old_epoch)?;
                     let (written, persist_err) = {
                         let mut init = self.ring.secret_key_init.lock().await;
                         self.ensure_writable(&id)?;
@@ -265,7 +265,7 @@ impl SyncKey {
                     && verified.is_none_or(|v| v == old_epoch)
                 {
                     let identities = self.merged(old_identities);
-                    let epoch = old_epoch + 1;
+                    let epoch = next_epoch(&id, old_epoch)?;
                     let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version), observed.settles).await? else { continue };
                     self.use_identities(identities, true).await?;
                     if let Some(detail) = persist_err {

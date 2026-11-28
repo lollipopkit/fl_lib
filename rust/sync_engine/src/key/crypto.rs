@@ -29,6 +29,11 @@ pub(super) fn read(sealed: &[u8], pwd: &str) -> Result<Option<(i64, Vec<String>)
     Ok(Some((epoch, identities)))
 }
 
+/// The epoch a file at [epoch] is sealed again at: none past the last.
+pub(super) fn next_epoch(id: &str, epoch: i64) -> Result<i64> {
+    epoch.checked_add(1).ok_or_else(|| Error::Untrusted(format!("{id}: key file epoch {epoch} cannot advance")))
+}
+
 /// `# … epoch <n>`: the `epoch` a word of its own.
 fn epoch_of(line: &str) -> Option<i64> {
     let at = line.rfind("epoch ")?;

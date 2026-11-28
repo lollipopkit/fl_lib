@@ -536,3 +536,25 @@ async fn retained_blob_needs_its_binding_and_survives_signed_apps_but_not_a_name
     let err = auth_locked.verify_retained_blob("serverbox", "op-signed.age", b"stripped", None, digest_of(b"stripped")).await.unwrap_err();
     assert!(err.kind == Kind::Untrusted && err.detail.ends_with("server stripped signature"));
 }
+
+#[tokio::test]
+async fn a_committed_snapshot_on_the_log_observed_live_takes_the_bound_one_s_place() {
+    let key = AccountKey::generate("u1");
+    let (auth, keeper) = auth_for(key);
+    assert!(auth.record_snapshot_if_log_compatible("serverbox", Some("log-a"), 5, &TestObserver::new(true, &keeper)).await.unwrap());
+    let live = TestObserver::new(true, &keeper);
+    *live.observed.lock().unwrap() = Some("log-b".into());
+    assert!(auth.record_snapshot_if_log_compatible("serverbox", Some("log-b"), 1, &live).await.unwrap());
+    let v = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
+    assert_eq!(v.signed_log_ids.get("serverbox").map(String::as_str), Some("log-b"));
+}
+
+#[test]
+fn a_legacy_unsigned_batch_is_taken_only_on_the_log_it_was_recorded_for() {
+    let mut v = PersonalVersions::default();
+    v.mark_log_signed_at("serverbox", Some("log-a"), 10);
+    assert!(!v.log_requires_signature("serverbox", Some("log-a"), 9));
+    assert!(v.log_requires_signature("serverbox", None, 9), "an answer naming no log is not log A's");
+    assert!(v.log_requires_signature("serverbox", Some("log-b"), 9));
+    assert!(v.log_requires_signature("serverbox", Some("log-a"), 10));
+}

@@ -237,6 +237,9 @@ impl<S: Store> SyncClient<S> {
                             }
                             return Err(e);
                         }
+                        if !write_once_blob {
+                            self.note_verified(auth_gen, name, &etag, version);
+                        }
                         return Ok(etag);
                     }
                     Err(e) if !version_retried && matches!(e.kind, Kind::Version(_)) => {
@@ -390,11 +393,7 @@ impl<S: Store> SyncClient<S> {
         self.complete_with_log_for(bound, path, id).await.map(|(etag, _)| etag)
     }
 
-    pub(super) async fn complete_with_log(&self, path: &str, id: &str) -> Result<(String, Option<String>), Error> {
-        self.complete_with_log_for(None, path, id).await
-    }
-
-    async fn complete_with_log_for(&self, bound: Option<(u64, u64, bool)>, path: &str, id: &str) -> Result<(String, Option<String>), Error> {
+    pub(super) async fn complete_with_log_for(&self, bound: Option<(u64, u64, bool)>, path: &str, id: &str) -> Result<(String, Option<String>), Error> {
         let mut wait = Duration::from_millis(500);
         for _ in 0..COMPLETE_TRIES {
             let response = self.send_for(bound, Method::POST, &format!("{path}/uploads/{id}/complete"), |r| r).await?;
@@ -418,7 +417,7 @@ impl<S: Store> SyncClient<S> {
                 wait = (wait * 2).min(Duration::from_secs(8));
                 continue;
             }
-            let sync_log = header_non_empty(&response, "sync-log");
+            let sync_log = answered_log(header_non_empty(&response, "sync-log"))?;
             return self.written_version_for(bound.map(|(s, _, _)| s), response).await.map(|etag| (etag, sync_log));
         }
         Err(Error::new(Kind::Unreachable, "the store never showed the upload"))
@@ -471,6 +470,7 @@ impl<S: Store> SyncClient<S> {
                         let mut pending = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                         if pending.generation == active_gen {
                             pending.files.retain(|(file_name, _, _, _), _| file_name != name);
+                            pending.verified_files.remove(name);
                             pending.bump_if_tracked(name);
                         }
                         drop(pending);
@@ -501,14 +501,27 @@ impl<S: Store> SyncClient<S> {
         };
         let lock = self.dest_lock(to);
         let _guard = lock.lock().await;
+        // A version held there stands only when verified here at or above the
+        // file's watermark (none before one is seen signed); otherwise the file
+        // is read and verified again.
+        let known = match known {
+            Some(etag) if enforce_monotonic => {
+                let floor = auth.file_version(&self.app, name).await;
+                (floor == 0 || self.verified_version(auth_gen, name, etag).is_some_and(|v| v >= floor)).then_some(etag)
+            }
+            other => other,
+        };
         let mut part = None;
         let mut signed = None;
         let mut digest = [0u8; 32];
         let fetched = self.fetch_with(path, Target::FileHashed(to, &mut part, &mut digest), known, |r| signed = Signed::of(r)).await?;
         self.ensure_personal_gen(auth_gen)?;
-        if let Fetched::Saved(_) = &fetched {
+        if let Fetched::Saved(etag) = &fetched {
             auth.verify_file_digest(&self.app, name, &digest, signed.as_ref(), enforce_monotonic).await?;
             self.ensure_personal_gen(auth_gen)?;
+            if enforce_monotonic && let Some(version) = signed.as_ref().and_then(|s| s.version) {
+                self.note_verified(auth_gen, name, etag, version);
+            }
             #[cfg(test)]
             {
                 let hook = self.after_verify_before_rename.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -516,11 +529,44 @@ impl<S: Store> SyncClient<S> {
                     h().await;
                 }
             }
-            let mut staged = part.ok_or_else(|| Error::new(Kind::Invalid, "missing staged file"))?;
-            tokio::fs::rename(staged.path(), to).await.map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
-            staged.disarm();
+            let staged = part.ok_or_else(|| Error::new(Kind::Invalid, "missing staged file"))?;
+            self.publish_verified(auth_gen, staged, to)?;
         }
         Ok(fetched)
+    }
+
+    /// Puts [staged], verified under [auth_gen], in [to]'s place. Checked and
+    /// renamed under the personal slot's lock, the one `set_personal` takes
+    /// (after the destination's, taken by the caller): no auth replaced
+    /// meanwhile sees it published. `set_personal` is synchronous, so the
+    /// slot is a std mutex and the rename (one metadata write beside the
+    /// file) is made synchronously under it: neither an await nor
+    /// `block_in_place` (which a current-thread runtime refuses) fits there.
+    pub(super) fn publish_verified(&self, auth_gen: u64, mut staged: PartGuard, to: &Path) -> Result<(), Error> {
+        let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.generation != auth_gen || slot.auth.is_none() {
+            return Err(Error::new(Kind::SignedOut, "personal signing auth changed during download"));
+        }
+        std::fs::rename(staged.path(), to).map_err(|e| Error::new(Kind::Invalid, format!("{}: {e}", to.display())))?;
+        drop(slot);
+        staged.disarm();
+        Ok(())
+    }
+
+    /// Records [etag] as [name]'s version verified signed at [version].
+    fn note_verified(&self, auth_gen: u64, name: &str, etag: &str, version: i64) {
+        let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.generation == auth_gen {
+            guard.verified_files.insert(name.to_string(), (etag.to_string(), version));
+        }
+    }
+
+    /// The signed version [etag] was verified at as [name]'s, if it was.
+    fn verified_version(&self, auth_gen: u64, name: &str, etag: &str) -> Option<i64> {
+        let guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
+        (guard.generation == auth_gen)
+            .then(|| guard.verified_files.get(name).filter(|(e, _)| e == etag).map(|(_, v)| *v))
+            .flatten()
     }
 
     /// [fetch_file], [answered] shown homebase's answer before its body is read.

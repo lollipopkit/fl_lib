@@ -21,32 +21,32 @@ impl RingInner {
         in_process: impl Iterator<Item = (Option<&str>, &str)>,
     ) -> Result<()> {
         let mut key: Option<String> = None;
-        let mut owners = BTreeSet::new();
-        let mut unowned = false;
+        let mut owners = BTreeMap::<String, u32>::new();
+        let mut unowned = 0u32;
         if let Some(rec) = recovered
             && !rec.is_empty()
         {
             key = Some(rec.key.clone());
-            owners.extend(rec.owners.iter().cloned());
-            unowned |= rec.unowned;
+            owners.extend(rec.owners.iter().map(|(uid, n)| (uid.clone(), *n)));
+            unowned = rec.unowned;
         }
+        // One count per unresolved write, so settling one leaves the others.
         for (owner, cand) in in_process {
             if key.is_none() {
                 key = Some(cand.to_string());
             }
             match owner {
                 Some(uid) if !uid.is_empty() => {
-                    owners.insert(uid.to_string());
+                    let n = owners.entry(uid.to_string()).or_default();
+                    *n = n.saturating_add(1);
                 }
-                _ => {
-                    unowned = true;
-                }
+                _ => unowned = unowned.saturating_add(1),
             }
         }
         let Some(key) = key else {
             return self.clear_external_commit_intent_for(None).await;
         };
-        let encoded = encode_external_intent(&key, &owners, unowned);
+        let encoded = encode_external_intent(&RecoveredExternal { key, owners, unowned });
         let _st = self.pending_lock.lock().await;
         let mut all = self.secrets.pending().await?;
         let map_key = external_intent_key(EXTERNAL_COMMIT_ID);
@@ -156,15 +156,19 @@ impl RingInner {
                 let mut next = cur.clone();
                 match account {
                     Some(uid) => {
-                        if uid.is_empty() || !next.owners.remove(uid) {
+                        let Some(n) = next.owners.get_mut(uid).filter(|_| !uid.is_empty()) else {
                             return Ok(());
+                        };
+                        *n -= 1;
+                        if *n == 0 {
+                            next.owners.remove(uid);
                         }
                     }
                     None => {
-                        if !next.unowned {
+                        if next.unowned == 0 {
                             return Ok(());
                         }
-                        next.unowned = false;
+                        next.unowned -= 1;
                     }
                 }
                 let next_opt = (!next.is_empty()).then_some(next);

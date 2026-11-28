@@ -9,7 +9,7 @@
 //! A device reads each other device's segments after the last it read; one
 //! gone (removed once covered), or not there yet while later ones are, is read
 //! from a snapshot covering it. It removes its own segments once every
-//! snapshot covers them, or once one does and they are [SEGMENT_MAX_MS] old.
+//! snapshot covers them, or once one does and they are `SEGMENT_MAX_MS` old.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;

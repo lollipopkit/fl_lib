@@ -4,10 +4,6 @@ use super::*;
 
 impl<S: Store> SyncClient<S> {
     /// The version a write's `204` names.
-    pub(super) async fn written_version(&self, response: reqwest::Response) -> Result<String, Error> {
-        self.written_version_for(None, response).await
-    }
-
     pub(super) async fn written_version_for(&self, expected_session: Option<u64>, response: reqwest::Response) -> Result<String, Error> {
         match response.status() {
             StatusCode::NO_CONTENT => self.etag(&response).ok_or_else(|| Error::new(Kind::Invalid, "a write without its version")),
@@ -159,6 +155,23 @@ pub(super) fn valid(s: &str, max: usize, upper: bool) -> bool {
 
 pub(super) fn valid_log_id(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+}
+
+/// The snapshot a `/snapshot` answer names (`Sync-Log`, `Sync-Seq`): none
+/// without both, or with a log id [valid_log_id] does not take.
+pub(super) fn answered_snapshot(response: &reqwest::Response) -> Option<Snapshot> {
+    let log = header_non_empty(response, "sync-log").filter(|l| valid_log_id(l))?;
+    let seq = header_non_empty(response, "sync-seq")?.parse().ok()?;
+    Some(Snapshot { log, seq, signed: Signed::of(response) })
+}
+
+/// A log id homebase answered with: none, or one [valid_log_id] takes, so a
+/// malformed one is never kept as observed (and refused later as a cursor).
+pub(super) fn answered_log(log: Option<String>) -> Result<Option<String>, Error> {
+    match log {
+        Some(l) if !valid_log_id(&l) => Err(Error::new(Kind::Invalid, "a malformed log id")),
+        other => Ok(other),
+    }
 }
 
 pub(super) fn quote(etag: &str) -> String {
