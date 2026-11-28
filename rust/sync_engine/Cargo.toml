@@ -18,5 +18,5 @@ tokio = { version = "1.53", default-features = false, features = ["sync", "time"
 zeroize = "1"
 
 [dev-dependencies]
-tokio = { version = "1.53", features = ["full"] }
+tokio = { version = "1.53", features = ["full", "test-util"] }
 proptest = "1"

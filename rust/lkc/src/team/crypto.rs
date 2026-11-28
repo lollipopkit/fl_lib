@@ -286,7 +286,7 @@ const INVITE_ROLE: &str = "member";
 /// What a keyed invite signs: epoch [epoch]'s key [key_id] wrapped by
 /// [signer] to the link's [recipient], for joining as a member (an admin is
 /// made by a signed promotion, never by a link).
-/// [INVITE_ROLE] keeps the bytes invites were signed with when they named one.
+/// `INVITE_ROLE` keeps the bytes invites were signed with when they named one.
 pub fn invite_message(team: &[u8; 16], epoch: i64, key_id: &[u8; KEY_LEN], signer: &str, recipient: &str) -> Vec<u8> {
     let mut m = Message::tagged(TAG_INVITE, team, epoch);
     m.raw(key_id).str(signer).str(INVITE_ROLE).str(recipient);
