@@ -16,6 +16,8 @@ analyzer:
     # The Rust crates; `rust/theme/tests/fixtures/from_seed.dart` is a
     # generator run by hand (`tests/scheme.rs`), not part of this package.
     - rust/**
+    - packages/**
+    - example/**
   language:
     strict-raw-types: true
 

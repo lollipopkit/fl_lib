@@ -1,0 +1,22 @@
+name: fl_lib_scan
+description: "Camera-based barcode and QR scanner page for fl_lib."
+version: 0.0.1
+homepage: https://github.com/lollipopkit/fl_lib
+publish_to: none
+
+environment:
+  sdk: ">=3.14.0 <4.0.0"
+  flutter: ">=3.50.0"
+
+dependencies:
+  fl_lib:
+    path: ../..
+  flutter:
+    sdk: flutter
+  material_ui: ^1.5.0
+  qr_code_dart_scan: ^0.14.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

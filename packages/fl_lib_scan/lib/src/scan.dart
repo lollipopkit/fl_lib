@@ -31,10 +31,7 @@ final class BarcodeScannerPageArgs {
 class BarcodeScannerPage extends StatefulWidget {
   final BarcodeScannerPageArgs? args;
 
-  const BarcodeScannerPage({
-    super.key,
-    this.args,
-  });
+  const BarcodeScannerPage({super.key, this.args});
 
   static const route = AppRoute<ScanResult, BarcodeScannerPageArgs>(
     page: BarcodeScannerPage.new,
@@ -94,7 +91,9 @@ class _BarcodeScannerWithOverlayState extends State<BarcodeScannerPage> {
             tooltip: libL10n.flashlight,
             isSelected: _torch,
             icon: Icon(
-              _torch ? Icons.flashlight_on_rounded : Icons.flashlight_off_rounded,
+              _torch
+                  ? Icons.flashlight_on_rounded
+                  : Icons.flashlight_off_rounded,
             ),
           ),
         ],
@@ -110,7 +109,8 @@ class _BarcodeScannerWithOverlayState extends State<BarcodeScannerPage> {
             // tap reaches here either way; `opaque` also covers the black
             // before the first frame.
             behavior: HitTestBehavior.opaque,
-            onTapUp: (details) => unawaited(_focusOn(details.localPosition, size)),
+            onTapUp: (details) =>
+                unawaited(_focusOn(details.localPosition, size)),
             onScaleStart: (_) => _zoomAtPinchStart = _zoom,
             onScaleUpdate: _onScaleUpdate,
             child: QRCodeDartScanView(

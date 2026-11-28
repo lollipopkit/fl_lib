@@ -31,3 +31,16 @@ jobs:
       # want to change this to 'flutter test'.
       - name: Run tests
         run: flutter test
+
+      - name: Check fl_lib_scan
+        working-directory: packages/fl_lib_scan
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed .
+          dart analyze
+
+      - name: Check example
+        working-directory: example
+        run: |
+          flutter pub get
+          dart analyze lib/main.dart
