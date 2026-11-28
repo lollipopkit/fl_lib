@@ -75,6 +75,14 @@ abstract final class SecureStoreProps {
     legacy: SecureStore.storage,
   );
 
+  /// Client-only 128-bit secret key (`S1-XXXXX-…`) combined with [bakPwd]
+  /// before sealing remote sync keys. Never uploaded to any server.
+  static const syncSecretKey = SecureProp(
+    'syncSecretKey',
+    storage: SecureStore.synced,
+    legacy: SecureStore.storage,
+  );
+
   /// Password of [HiveStore].
   static const hivePwd = SecureProp('hivePwd');
 

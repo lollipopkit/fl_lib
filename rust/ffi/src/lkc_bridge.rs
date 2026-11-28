@@ -3,6 +3,8 @@
 
 use std::sync::Arc;
 
+use fl_lkc::personal::{BoxFuture, KeySource, VersionKeeper};
+use fl_lkc::team::identity::AccountKey;
 use fl_lkc::sync::{Event, SyncClient};
 use fl_lkc::team::Keeper;
 use fl_lkc::{Store, Stored};
@@ -68,5 +70,29 @@ pub struct DartKeeper {
 impl Keeper for DartKeeper {
     async fn save(&self, json: String) -> Result<(), String> {
         if (self.save)(json).await { Ok(()) } else { Err("not written".into()) }
+    }
+}
+
+/// Personal sync monotonic versions persisted in Dart.
+pub struct DartVersionKeeper {
+    pub save: Arc<dyn Fn(String) -> DartFnFuture<bool> + Send + Sync>,
+}
+
+impl VersionKeeper for DartVersionKeeper {
+    fn save(&self, json: String) -> BoxFuture<'_, Result<(), String>> {
+        let save = self.save.clone();
+        Box::pin(async move { if save(json).await { Ok(()) } else { Err("not written".into()) } })
+    }
+}
+
+/// The account key file read again in Dart, as the key's text.
+pub struct DartKeySource {
+    pub fetch: Arc<dyn Fn() -> DartFnFuture<Option<String>> + Send + Sync>,
+}
+
+impl KeySource for DartKeySource {
+    fn fetch(&self) -> BoxFuture<'_, Option<AccountKey>> {
+        let fetch = self.fetch.clone();
+        Box::pin(async move { fetch().await.and_then(|text| AccountKey::from_text(&text).ok()) })
     }
 }

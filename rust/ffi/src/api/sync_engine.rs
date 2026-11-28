@@ -42,6 +42,10 @@ pub enum SyncEngineErrorKind {
     /// No key file there yet beside what was synced with one.
     KeyNotHere,
     PasswordMissing,
+    /// Remote key file exists, but this device has no client-side secret key.
+    SecretKeyMissing,
+    /// Server response failed Ed25519 signature or rollback verification.
+    Untrusted,
     SignedOut,
 }
 
@@ -66,11 +70,37 @@ impl From<Error> for SyncEngineError {
             Error::PasswordMismatch(id) => (K::PasswordMismatch, id),
             Error::KeyNotHere(id) => (K::KeyNotHere, id),
             Error::PasswordMissing => (K::PasswordMissing, String::new()),
+            Error::SecretKeyMissing => (K::SecretKeyMissing, String::new()),
+            Error::Untrusted(d) => (K::Untrusted, d),
             Error::SignedOut => (K::SignedOut, String::new()),
             Error::Pending(what) => (K::Remote, format!("{what} is not here yet")),
+            Error::AppendPersistFailed { detail, .. } => (K::Host, detail),
+            Error::SnapshotPersistFailed { detail, .. } => (K::Host, detail),
+            Error::KeyFilePersistFailed { detail, .. } => (K::Host, detail),
         };
         Self { kind, detail }
     }
+}
+
+/// Generates a fresh 128-bit client-side secret key (`S1-XXXXX-…`).
+#[frb(sync)]
+pub fn generate_secret_key() -> String {
+    fl_lkc::secret_key::SecretKey::generate().format().to_string()
+}
+
+/// Validates and canonicalizes a user-entered or scanned secret key; returns
+/// `None` when the format or checksum is invalid.
+#[frb(sync)]
+pub fn normalize_secret_key(input: String) -> Option<String> {
+    fl_lkc::secret_key::SecretKey::parse(&input).ok().map(|k| k.format().to_string())
+}
+
+/// Derives the combined `age scrypt` passphrase from `(password, secret_key)`.
+/// Returns `None` when [secret_key] is malformed or fails checksum.
+#[frb(sync)]
+pub fn derive_sync_passphrase(password: String, secret_key: String) -> Option<String> {
+    let key = fl_lkc::secret_key::SecretKey::parse(&secret_key).ok()?;
+    Some((*key.combine_passphrase(&password)).clone())
 }
 
 type R<T> = Result<T, SyncEngineError>;
@@ -97,7 +127,7 @@ impl SyncKeys {
     /// [create], none is made where there is none.
     pub async fn of_lkc(&self, lkc: &LkcSync, account: String, create: bool) -> R<SyncKeyHandle> {
         let file: Arc<dyn KeyFile> = Arc::new(LkcKeyFile { client: lkc.client(), account });
-        Ok(SyncKeyHandle(self.0.of(file, create).await?))
+        Ok(SyncKeyHandle(self.0.of_lkc(file, create).await?))
     }
 
     /// The key of a folder [id] names, its file reached through [file]
@@ -116,6 +146,85 @@ impl SyncKeys {
     #[frb(sync)]
     pub fn mismatch(&self) -> Vec<String> {
         self.0.mismatch().borrow().iter().cloned().collect()
+    }
+
+    /// The key files that cannot be opened because this device has no secret key.
+    #[frb(sync)]
+    pub fn secret_key_missing(&self) -> Vec<String> {
+        self.0.secret_key_missing().borrow().iter().cloned().collect()
+    }
+
+    /// The secret key currently staged in the pending slot, if any (read only).
+    pub async fn pending_secret_key(&self) -> R<Option<String>> {
+        Ok(self.0.pending_secret_key().await?)
+    }
+
+    /// The secret key LK Cloud's account key is first sealed with: the one
+    /// held, else one staged for it, made now when the app allows; null when
+    /// none may be made. [commit_secret_key] once the account key holds it.
+    pub async fn secret_key_candidate(&self) -> R<Option<String>> {
+        match self.0.secret_key_candidate().await {
+            Ok(key) => Ok(Some(key)),
+            Err(Error::SecretKeyMissing) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Synchronizes the active LK Cloud account (`None` when signed out),
+    /// invalidating in-flight missing-key probes for any previous LK Cloud
+    /// account and clearing only that previous account's missing-key status.
+    #[frb(sync)]
+    pub fn sync_lkc_account(&self, account: Option<String>) {
+        self.0.sync_lkc_account(account.as_deref());
+    }
+
+    /// Captures the LK Cloud account-switch generation and per-ID generation
+    /// synchronously before starting an async missing-key probe.
+    #[frb(sync)]
+    pub fn register_lkc_probe(&self, account: String) -> R<(u64, u64)> {
+        Ok(self.0.register_lkc_probe(&account)?)
+    }
+
+    /// Whether [account]'s LK Cloud key file ([lkc]'s `identity.age`) is
+    /// sealed with a secret key, read only: one to import here.
+    pub async fn lkc_sealed_with_secret_key(
+        &self,
+        lkc: &LkcSync,
+        account: String,
+        expected_switch_gen: u64,
+        expected_id_gen: u64,
+    ) -> R<bool> {
+        let file: Arc<dyn KeyFile> = Arc::new(LkcKeyFile { client: lkc.client(), account });
+        Ok(self
+            .0
+            .lkc_sealed_with_secret_key(file, expected_switch_gen, expected_id_gen)
+            .await?)
+    }
+
+    /// [candidate] as this device's secret key, settling [stage_id] when given
+    /// (or a crash-recovered external intent for [account] when [stage_id] is `None`).
+    pub async fn commit_secret_key(&self, candidate: String, stage_id: Option<String>, account: Option<String>) -> R<()> {
+        Ok(self.0.commit_secret_key_for(&candidate, stage_id.as_deref(), account.as_deref()).await?)
+    }
+
+    /// Marks [candidate] as having an in-flight/unconfirmed external remote
+    /// commit (such as LK Cloud's account key for [account]), returning its
+    /// stage identity.
+    pub async fn stage_external_secret_key_commit(&self, candidate: String, account: Option<String>) -> R<String> {
+        Ok(self.0.stage_external_secret_key_commit_for(&candidate, account.as_deref()).await?)
+    }
+
+    /// Clears the staged external commit identified by [stage_id] (or a
+    /// crash-recovered intent for [account] when omitted) when the remote write
+    /// is known not to have committed.
+    pub async fn clear_external_secret_key_commit(&self, candidate: String, stage_id: Option<String>, account: Option<String>) -> R<()> {
+        Ok(self.0.clear_external_secret_key_commit_for(&candidate, stage_id.as_deref(), account.as_deref()).await?)
+    }
+
+    /// Imports [key] as this device's secret key, coordinated with all remote
+    /// key-file staging/write/promotion operations on this ring.
+    pub async fn store_secret_key(&self, key: String, expect_empty_before: bool) -> R<()> {
+        Ok(self.0.store_secret_key_with_prior(&key, expect_empty_before).await?)
     }
 
     #[frb(sync)]
@@ -206,7 +315,8 @@ impl SyncLogEngine {
     /// [key] its account's.
     #[frb(sync)]
     pub fn new(lkc: &LkcSync, key: &SyncKeyHandle, host: impl Fn(String, String, Option<Vec<u8>>) -> DartFnFuture<SyncReply> + Send + Sync + 'static) -> SyncLogEngine {
-        Self(Log::Lkc(LogSync::new(Arc::new(DartHost(bridge(host))), Arc::new(LkcLog(lkc.client())), key.0.clone())))
+        let log = LkcLog { client: lkc.client(), account: key.0.id() };
+        Self(Log::Lkc(LogSync::new(Arc::new(DartHost(bridge(host))), Arc::new(log), key.0.clone())))
     }
 
     /// On a log [host] keeps too (`log.*`, its blobs `files.*`).

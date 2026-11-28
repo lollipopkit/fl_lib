@@ -159,7 +159,7 @@ impl BlobStore for DartFiles {
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
         let listed: Vec<(String, Option<i64>)> = self.0.call("files.list", prefix).await?;
-        Ok(listed.into_iter().map(|(name, at)| Listed { name, at }).collect())
+        Ok(listed.into_iter().map(|(name, at)| Listed { name, at, signed: false }).collect())
     }
 
     async fn delete_blob(&self, name: String) -> Result<()> {
@@ -210,6 +210,30 @@ pub struct DartSecrets(pub Bridge);
 impl Secrets for DartSecrets {
     fn password(&self) -> BoxFuture<'_, Result<Option<String>>> {
         Box::pin(async { self.0.call("secrets.password", ()).await })
+    }
+
+    fn secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+        Box::pin(async { self.0.call("secrets.secretKey", ()).await })
+    }
+
+    fn set_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move { self.0.call::<Value>("secrets.setSecretKey", key).await.map(|_| ()) })
+    }
+
+    fn import_secret_key(&self, key: String) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move { self.0.call::<Value>("secrets.importSecretKey", key).await.map(|_| ()) })
+    }
+
+    fn pending_secret_key(&self) -> BoxFuture<'_, Result<Option<String>>> {
+        Box::pin(async { self.0.call("secrets.pendingSecretKey", ()).await })
+    }
+
+    fn set_pending_secret_key(&self, key: Option<String>) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move { self.0.call::<Value>("secrets.setPendingSecretKey", key).await.map(|_| ()) })
+    }
+
+    fn allow_auto_generate_secret_key(&self) -> BoxFuture<'_, Result<bool>> {
+        Box::pin(async { self.0.call("secrets.allowAutoGenerate", ()).await })
     }
 
     fn kept(&self, id: String) -> BoxFuture<'_, Result<Option<String>>> {
@@ -286,7 +310,7 @@ impl LogTransport for DartLog {
             let seq = b.get("seq").and_then(Value::as_i64).ok_or_else(|| Error::Host("log.read: a batch without seq".into()))?;
             // Fetched apart: bytes do not travel in JSON.
             let body = self.0.raw("log.batch", json!(seq), None).await?.bytes.ok_or_else(|| Error::Host(format!("log.batch {seq}: gone")))?;
-            batches.push((seq, body));
+            batches.push((seq, body, false));
         }
         Ok(Page::Batches { log, batches, more: page.get("more").and_then(Value::as_bool).unwrap_or(false) })
     }
@@ -303,6 +327,7 @@ impl LogTransport for DartLog {
             log: s.get("log").and_then(Value::as_str).ok_or_else(|| Error::Host("log.snapshot: no log".into()))?.to_string(),
             seq: s.get("seq").and_then(Value::as_i64).ok_or_else(|| Error::Host("log.snapshot: no seq".into()))?,
             body,
+            signed: false,
         }))
     }
 }

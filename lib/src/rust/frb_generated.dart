@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1820685642;
+  int get rustContentHash => -1192728819;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -85,11 +85,48 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 abstract class RustLibApi extends BaseApi {
   String crateApiTeamLkcAccountKeyFingerprint({required LkcAccountKey that});
 
+  bool crateApiTeamLkcAccountKeyFollows({
+    required LkcAccountKey that,
+    required LkcAccountKey earlier,
+  });
+
   LkcAccountKey crateApiTeamLkcAccountKeyFromText({required String text});
 
   String crateApiTeamLkcAccountKeyToText({required LkcAccountKey that});
 
   String crateApiTeamLkcAccountKeyUserId({required LkcAccountKey that});
+
+  LkcAccountKey crateApiTeamLkcOpenedAccountKeyKey({
+    required LkcOpenedAccountKey that,
+  });
+
+  bool crateApiTeamLkcOpenedAccountKeyTwoFactor({
+    required LkcOpenedAccountKey that,
+  });
+
+  LkcPersonalAuth crateApiLkcLkcPersonalAuthOpen({
+    required LkcAccountKey key,
+    required String versions,
+    required FutureOr<bool> Function(String) save,
+    required FutureOr<String?> Function() fetchKey,
+  });
+
+  Future<bool> crateApiLkcLkcPersonalAuthRequiresSignature({
+    required LkcPersonalAuth that,
+    required String app,
+    String? name,
+  });
+
+  Future<void> crateApiLkcLkcPersonalAuthUpdateKey({
+    required LkcPersonalAuth that,
+    required LkcAccountKey key,
+  });
+
+  bool crateApiLkcLkcPersonalAuthVersionsRequireSignature({
+    required String versions,
+    required String app,
+    String? name,
+  });
 
   Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that});
 
@@ -128,6 +165,8 @@ abstract class RustLibApi extends BaseApi {
     required String key,
     required List<int> body,
   });
+
+  void crateApiLkcLkcSyncClearPersonalAuth({required LkcSync that});
 
   Future<bool> crateApiLkcLkcSyncDelete({
     required LkcSync that,
@@ -181,6 +220,11 @@ abstract class RustLibApi extends BaseApi {
     required PlatformInt64 after,
     String? log,
     int? limit,
+  });
+
+  void crateApiLkcLkcSyncSetPersonalAuth({
+    required LkcSync that,
+    required LkcPersonalAuth auth,
   });
 
   void crateApiLkcLkcSyncStopListening({required LkcSync that});
@@ -372,15 +416,19 @@ abstract class RustLibApi extends BaseApi {
     String? ifMatch,
   });
 
-  Future<LkcAccountKey> crateApiTeamLkcTeamsAccountKey({
+  Future<LkcOpenedAccountKey> crateApiTeamLkcTeamsAccountKey({
     required LkcTeams that,
     required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
   });
 
   Future<void> crateApiTeamLkcTeamsChangeKeyPassphrase({
     required LkcTeams that,
     required String old,
     required String new_,
+    String? secretKey,
+    required bool allowLegacy,
   });
 
   Future<String> crateApiTeamLkcTeamsCreate({
@@ -393,9 +441,11 @@ abstract class RustLibApi extends BaseApi {
     required String id,
   });
 
-  Future<LkcAccountKey?> crateApiTeamLkcTeamsFetchAccountKey({
+  Future<LkcOpenedAccountKey?> crateApiTeamLkcTeamsFetchAccountKey({
     required LkcTeams that,
     required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
   });
 
   Future<bool> crateApiTeamLkcTeamsHasAccountKey({required LkcTeams that});
@@ -422,6 +472,8 @@ abstract class RustLibApi extends BaseApi {
   Future<LkcAccountKey> crateApiTeamLkcTeamsRotateAccountKey({
     required LkcTeams that,
     required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
   });
 
   Future<void> crateApiSyncEngineSyncKeyHandleCheck({
@@ -446,9 +498,31 @@ abstract class RustLibApi extends BaseApi {
     required List<int> plain,
   });
 
+  Future<void> crateApiSyncEngineSyncKeysClearExternalSecretKeyCommit({
+    required SyncKeys that,
+    required String candidate,
+    String? stageId,
+    String? account,
+  });
+
+  Future<void> crateApiSyncEngineSyncKeysCommitSecretKey({
+    required SyncKeys that,
+    required String candidate,
+    String? stageId,
+    String? account,
+  });
+
   Future<void> crateApiSyncEngineSyncKeysForget({
     required SyncKeys that,
     required String id,
+  });
+
+  Future<bool> crateApiSyncEngineSyncKeysLkcSealedWithSecretKey({
+    required SyncKeys that,
+    required LkcSync lkc,
+    required String account,
+    required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
   });
 
   List<String> crateApiSyncEngineSyncKeysMismatch({required SyncKeys that});
@@ -487,11 +561,45 @@ abstract class RustLibApi extends BaseApi {
     String? previous,
   });
 
+  Future<String?> crateApiSyncEngineSyncKeysPendingSecretKey({
+    required SyncKeys that,
+  });
+
   Future<void> crateApiSyncEngineSyncKeysRecheck({required SyncKeys that});
+
+  (BigInt, BigInt) crateApiSyncEngineSyncKeysRegisterLkcProbe({
+    required SyncKeys that,
+    required String account,
+  });
 
   void crateApiSyncEngineSyncKeysRelease({
     required SyncKeys that,
     required String id,
+  });
+
+  Future<String?> crateApiSyncEngineSyncKeysSecretKeyCandidate({
+    required SyncKeys that,
+  });
+
+  List<String> crateApiSyncEngineSyncKeysSecretKeyMissing({
+    required SyncKeys that,
+  });
+
+  Future<String> crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit({
+    required SyncKeys that,
+    required String candidate,
+    String? account,
+  });
+
+  Future<void> crateApiSyncEngineSyncKeysStoreSecretKey({
+    required SyncKeys that,
+    required String key,
+    required bool expectEmptyBefore,
+  });
+
+  void crateApiSyncEngineSyncKeysSyncLkcAccount({
+    required SyncKeys that,
+    String? account,
   });
 
   Future<bool> crateApiSyncEngineSyncLogEngineBehind({
@@ -571,11 +679,20 @@ abstract class RustLibApi extends BaseApi {
 
   int crateApiThemeCompareThemeVersions({required String a, required String b});
 
+  String? crateApiSyncEngineDeriveSyncPassphrase({
+    required String password,
+    required String secretKey,
+  });
+
+  String crateApiSyncEngineGenerateSecretKey();
+
   List<ThemeVariantInfo>? crateApiThemeInstalledThemeVariants({
     required String manifest,
   });
 
   Future<LkcSyncEvent> crateApiLkcLkcSyncEventDefault();
+
+  String? crateApiSyncEngineNormalizeSecretKey({required String input});
 
   ThemeCatalogInfo crateApiThemeParseThemeCatalog({
     required List<int> bytes,
@@ -641,6 +758,24 @@ abstract class RustLibApi extends BaseApi {
 
   CrossPlatformFinalizerArg
   get rust_arc_decrement_strong_count_LkcAccountKeyPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcOpenedAccountKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcOpenedAccountKey;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcOpenedAccountKeyPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcPersonalAuth;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcPersonalAuth;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_LkcPersonalAuthPtr;
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LkcSession;
@@ -754,13 +889,49 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  bool crateApiTeamLkcAccountKeyFollows({
+    required LkcAccountKey that,
+    required LkcAccountKey earlier,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            earlier,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcAccountKeyFollowsConstMeta,
+        argValues: [that, earlier],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcAccountKeyFollowsConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcAccountKey_follows",
+        argNames: ["that", "earlier"],
+      );
+
+  @override
   LkcAccountKey crateApiTeamLkcAccountKeyFromText({required String text}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -790,7 +961,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -819,7 +990,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -839,6 +1010,227 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  LkcAccountKey crateApiTeamLkcOpenedAccountKeyKey({
+    required LkcOpenedAccountKey that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcOpenedAccountKeyKeyConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcOpenedAccountKeyKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcOpenedAccountKey_key",
+        argNames: ["that"],
+      );
+
+  @override
+  bool crateApiTeamLkcOpenedAccountKeyTwoFactor({
+    required LkcOpenedAccountKey that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTeamLkcOpenedAccountKeyTwoFactorConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTeamLkcOpenedAccountKeyTwoFactorConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcOpenedAccountKey_two_factor",
+        argNames: ["that"],
+      );
+
+  @override
+  LkcPersonalAuth crateApiLkcLkcPersonalAuthOpen({
+    required LkcAccountKey key,
+    required String versions,
+    required FutureOr<bool> Function(String) save,
+    required FutureOr<String?> Function() fetchKey,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            key,
+            serializer,
+          );
+          sse_encode_String(versions, serializer);
+          sse_encode_DartFn_Inputs_String_Output_bool_AnyhowException(
+            save,
+            serializer,
+          );
+          sse_encode_DartFn_Inputs__Output_opt_String_AnyhowException(
+            fetchKey,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcPersonalAuthOpenConstMeta,
+        argValues: [key, versions, save, fetchKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcPersonalAuthOpenConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcPersonalAuth_open",
+        argNames: ["key", "versions", "save", "fetchKey"],
+      );
+
+  @override
+  Future<bool> crateApiLkcLkcPersonalAuthRequiresSignature({
+    required LkcPersonalAuth that,
+    required String app,
+    String? name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+            that,
+            serializer,
+          );
+          sse_encode_String(app, serializer);
+          sse_encode_opt_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcPersonalAuthRequiresSignatureConstMeta,
+        argValues: [that, app, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcPersonalAuthRequiresSignatureConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcPersonalAuth_requires_signature",
+        argNames: ["that", "app", "name"],
+      );
+
+  @override
+  Future<void> crateApiLkcLkcPersonalAuthUpdateKey({
+    required LkcPersonalAuth that,
+    required LkcAccountKey key,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+            key,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcPersonalAuthUpdateKeyConstMeta,
+        argValues: [that, key],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcPersonalAuthUpdateKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcPersonalAuth_update_key",
+        argNames: ["that", "key"],
+      );
+
+  @override
+  bool crateApiLkcLkcPersonalAuthVersionsRequireSignature({
+    required String versions,
+    required String app,
+    String? name,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(versions, serializer);
+          sse_encode_String(app, serializer);
+          sse_encode_opt_String(name, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_lkc_sync_error,
+        ),
+        constMeta: kCrateApiLkcLkcPersonalAuthVersionsRequireSignatureConstMeta,
+        argValues: [versions, app, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiLkcLkcPersonalAuthVersionsRequireSignatureConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcPersonalAuth_versions_require_signature",
+        argNames: ["versions", "app", "name"],
+      );
+
+  @override
   Future<String> crateApiLkcLkcSessionAccessToken({required LkcSession that}) {
     return handler.executeNormal(
       NormalTask(
@@ -851,7 +1243,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 12,
             port: port_,
           );
         },
@@ -889,7 +1281,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 13,
             port: port_,
           );
         },
@@ -920,7 +1312,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -967,7 +1359,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 15,
             port: port_,
           );
         },
@@ -1010,7 +1402,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 16,
             port: port_,
           );
         },
@@ -1048,7 +1440,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 17,
             port: port_,
           );
         },
@@ -1079,7 +1471,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -1117,7 +1509,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 19,
             port: port_,
           );
         },
@@ -1138,6 +1530,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  void crateApiLkcLkcSyncClearPersonalAuth({required LkcSync that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSyncClearPersonalAuthConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncClearPersonalAuthConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSync_clear_personal_auth",
+        argNames: ["that"],
+      );
+
+  @override
   Future<bool> crateApiLkcLkcSyncDelete({
     required LkcSync that,
     required String name,
@@ -1156,7 +1577,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 21,
             port: port_,
           );
         },
@@ -1197,7 +1618,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 22,
             port: port_,
           );
         },
@@ -1234,7 +1655,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 23,
             port: port_,
           );
         },
@@ -1276,7 +1697,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 24,
             port: port_,
           );
         },
@@ -1314,7 +1735,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1347,7 +1768,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1377,7 +1798,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_StreamSink_lkc_sync_event_Sse(sink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1410,7 +1831,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(app, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -1439,7 +1860,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_i_64,
@@ -1474,7 +1895,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1516,7 +1937,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1537,6 +1958,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  void crateApiLkcLkcSyncSetPersonalAuth({
+    required LkcSync that,
+    required LkcPersonalAuth auth,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+            auth,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiLkcLkcSyncSetPersonalAuthConstMeta,
+        argValues: [that, auth],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiLkcLkcSyncSetPersonalAuthConstMeta =>
+      const TaskConstMeta(
+        debugName: "LkcSync_set_personal_auth",
+        argNames: ["that", "auth"],
+      );
+
+  @override
   void crateApiLkcLkcSyncStopListening({required LkcSync that}) {
     return handler.executeSync(
       SyncTask(
@@ -1546,7 +2003,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1586,7 +2043,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1623,7 +2080,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1666,7 +2123,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 36,
             port: port_,
           );
         },
@@ -1706,7 +2163,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1746,7 +2203,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1786,7 +2243,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1830,7 +2287,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 40,
             port: port_,
           );
         },
@@ -1868,7 +2325,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 41,
             port: port_,
           );
         },
@@ -1910,7 +2367,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 42,
             port: port_,
           );
         },
@@ -1950,7 +2407,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 43,
             port: port_,
           );
         },
@@ -1988,7 +2445,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 44,
             port: port_,
           );
         },
@@ -2030,7 +2487,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 45,
             port: port_,
           );
         },
@@ -2068,7 +2525,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 46,
             port: port_,
           );
         },
@@ -2108,7 +2565,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 47,
             port: port_,
           );
         },
@@ -2144,7 +2601,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 39,
+            funcId: 48,
             port: port_,
           );
         },
@@ -2184,7 +2641,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 40,
+            funcId: 49,
             port: port_,
           );
         },
@@ -2228,7 +2685,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 50,
             port: port_,
           );
         },
@@ -2268,7 +2725,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 51,
             port: port_,
           );
         },
@@ -2307,7 +2764,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 43,
+            funcId: 52,
             port: port_,
           );
         },
@@ -2349,7 +2806,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 44,
+            funcId: 53,
             port: port_,
           );
         },
@@ -2387,7 +2844,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             key,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -2426,7 +2883,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 46,
+            funcId: 55,
             port: port_,
           );
         },
@@ -2466,7 +2923,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 56,
             port: port_,
           );
         },
@@ -2502,7 +2959,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 48,
+            funcId: 57,
             port: port_,
           );
         },
@@ -2535,7 +2992,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 49,
+            funcId: 58,
             port: port_,
           );
         },
@@ -2567,7 +3024,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_StreamSink_lkc_sync_event_Sse(sink, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2606,7 +3063,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 51,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2644,7 +3101,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 52,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2686,7 +3143,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 53,
+            funcId: 62,
             port: port_,
           );
         },
@@ -2722,7 +3179,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 54,
+            funcId: 63,
             port: port_,
           );
         },
@@ -2758,7 +3215,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 64,
             port: port_,
           );
         },
@@ -2789,7 +3246,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2829,7 +3286,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 66,
             port: port_,
           );
         },
@@ -2851,9 +3308,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<LkcAccountKey> crateApiTeamLkcTeamsAccountKey({
+  Future<LkcOpenedAccountKey> crateApiTeamLkcTeamsAccountKey({
     required LkcTeams that,
     required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2864,20 +3323,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(passphrase, serializer);
+          sse_encode_opt_String(secretKey, serializer);
+          sse_encode_bool(allowLegacy, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 67,
             port: port_,
           );
         },
         codec: SseCodec(
           decodeSuccessData:
-              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey,
           decodeErrorData: sse_decode_lkc_team_error,
         ),
         constMeta: kCrateApiTeamLkcTeamsAccountKeyConstMeta,
-        argValues: [that, passphrase],
+        argValues: [that, passphrase, secretKey, allowLegacy],
         apiImpl: this,
       ),
     );
@@ -2886,7 +3347,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTeamLkcTeamsAccountKeyConstMeta =>
       const TaskConstMeta(
         debugName: "LkcTeams_account_key",
-        argNames: ["that", "passphrase"],
+        argNames: ["that", "passphrase", "secretKey", "allowLegacy"],
       );
 
   @override
@@ -2894,6 +3355,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required LkcTeams that,
     required String old,
     required String new_,
+    String? secretKey,
+    required bool allowLegacy,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2905,10 +3368,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(old, serializer);
           sse_encode_String(new_, serializer);
+          sse_encode_opt_String(secretKey, serializer);
+          sse_encode_bool(allowLegacy, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 68,
             port: port_,
           );
         },
@@ -2917,7 +3382,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_lkc_team_error,
         ),
         constMeta: kCrateApiTeamLkcTeamsChangeKeyPassphraseConstMeta,
-        argValues: [that, old, new_],
+        argValues: [that, old, new_, secretKey, allowLegacy],
         apiImpl: this,
       ),
     );
@@ -2926,7 +3391,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTeamLkcTeamsChangeKeyPassphraseConstMeta =>
       const TaskConstMeta(
         debugName: "LkcTeams_change_key_passphrase",
-        argNames: ["that", "old", "new_"],
+        argNames: ["that", "old", "new_", "secretKey", "allowLegacy"],
       );
 
   @override
@@ -2946,7 +3411,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 60,
+            funcId: 69,
             port: port_,
           );
         },
@@ -2983,7 +3448,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 61,
+            funcId: 70,
             port: port_,
           );
         },
@@ -3004,9 +3469,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<LkcAccountKey?> crateApiTeamLkcTeamsFetchAccountKey({
+  Future<LkcOpenedAccountKey?> crateApiTeamLkcTeamsFetchAccountKey({
     required LkcTeams that,
     required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -3017,20 +3484,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(passphrase, serializer);
+          sse_encode_opt_String(secretKey, serializer);
+          sse_encode_bool(allowLegacy, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 71,
             port: port_,
           );
         },
         codec: SseCodec(
           decodeSuccessData:
-              sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey,
+              sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey,
           decodeErrorData: sse_decode_lkc_team_error,
         ),
         constMeta: kCrateApiTeamLkcTeamsFetchAccountKeyConstMeta,
-        argValues: [that, passphrase],
+        argValues: [that, passphrase, secretKey, allowLegacy],
         apiImpl: this,
       ),
     );
@@ -3039,7 +3508,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTeamLkcTeamsFetchAccountKeyConstMeta =>
       const TaskConstMeta(
         debugName: "LkcTeams_fetch_account_key",
-        argNames: ["that", "passphrase"],
+        argNames: ["that", "passphrase", "secretKey", "allowLegacy"],
       );
 
   @override
@@ -3055,7 +3524,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 63,
+            funcId: 72,
             port: port_,
           );
         },
@@ -3093,7 +3562,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 64,
+            funcId: 73,
             port: port_,
           );
         },
@@ -3126,7 +3595,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 65,
+            funcId: 74,
             port: port_,
           );
         },
@@ -3158,7 +3627,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(userId, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -3204,7 +3673,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 67,
+            funcId: 76,
             port: port_,
           );
         },
@@ -3229,6 +3698,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<LkcAccountKey> crateApiTeamLkcTeamsRotateAccountKey({
     required LkcTeams that,
     required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -3239,10 +3710,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(passphrase, serializer);
+          sse_encode_opt_String(secretKey, serializer);
+          sse_encode_bool(allowLegacy, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 68,
+            funcId: 77,
             port: port_,
           );
         },
@@ -3252,7 +3725,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_lkc_team_error,
         ),
         constMeta: kCrateApiTeamLkcTeamsRotateAccountKeyConstMeta,
-        argValues: [that, passphrase],
+        argValues: [that, passphrase, secretKey, allowLegacy],
         apiImpl: this,
       ),
     );
@@ -3261,7 +3734,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTeamLkcTeamsRotateAccountKeyConstMeta =>
       const TaskConstMeta(
         debugName: "LkcTeams_rotate_account_key",
-        argNames: ["that", "passphrase"],
+        argNames: ["that", "passphrase", "secretKey", "allowLegacy"],
       );
 
   @override
@@ -3281,7 +3754,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 69,
+            funcId: 78,
             port: port_,
           );
         },
@@ -3312,7 +3785,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3342,7 +3815,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_list_prim_u_8_loose(data, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3378,7 +3851,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 72,
+            funcId: 81,
             port: port_,
           );
         },
@@ -3416,7 +3889,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 73,
+            funcId: 82,
             port: port_,
           );
         },
@@ -3438,6 +3911,92 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiSyncEngineSyncKeysClearExternalSecretKeyCommit({
+    required SyncKeys that,
+    required String candidate,
+    String? stageId,
+    String? account,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(candidate, serializer);
+          sse_encode_opt_String(stageId, serializer);
+          sse_encode_opt_String(account, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 83,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta:
+            kCrateApiSyncEngineSyncKeysClearExternalSecretKeyCommitConstMeta,
+        argValues: [that, candidate, stageId, account],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSyncEngineSyncKeysClearExternalSecretKeyCommitConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_clear_external_secret_key_commit",
+        argNames: ["that", "candidate", "stageId", "account"],
+      );
+
+  @override
+  Future<void> crateApiSyncEngineSyncKeysCommitSecretKey({
+    required SyncKeys that,
+    required String candidate,
+    String? stageId,
+    String? account,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(candidate, serializer);
+          sse_encode_opt_String(stageId, serializer);
+          sse_encode_opt_String(account, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 84,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysCommitSecretKeyConstMeta,
+        argValues: [that, candidate, stageId, account],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysCommitSecretKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_commit_secret_key",
+        argNames: ["that", "candidate", "stageId", "account"],
+      );
+
+  @override
   Future<void> crateApiSyncEngineSyncKeysForget({
     required SyncKeys that,
     required String id,
@@ -3454,7 +4013,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 74,
+            funcId: 85,
             port: port_,
           );
         },
@@ -3476,6 +4035,60 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool> crateApiSyncEngineSyncKeysLkcSealedWithSecretKey({
+    required SyncKeys that,
+    required LkcSync lkc,
+    required String account,
+    required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSync(
+            lkc,
+            serializer,
+          );
+          sse_encode_String(account, serializer);
+          sse_encode_u_64(expectedSwitchGen, serializer);
+          sse_encode_u_64(expectedIdGen, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 86,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysLkcSealedWithSecretKeyConstMeta,
+        argValues: [that, lkc, account, expectedSwitchGen, expectedIdGen],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSyncEngineSyncKeysLkcSealedWithSecretKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_lkc_sealed_with_secret_key",
+        argNames: [
+          "that",
+          "lkc",
+          "account",
+          "expectedSwitchGen",
+          "expectedIdGen",
+        ],
+      );
+
+  @override
   List<String> crateApiSyncEngineSyncKeysMismatch({required SyncKeys that}) {
     return handler.executeSync(
       SyncTask(
@@ -3485,7 +4098,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_String,
@@ -3515,7 +4128,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             secrets,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -3559,7 +4172,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 77,
+            funcId: 89,
             port: port_,
           );
         },
@@ -3605,7 +4218,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 78,
+            funcId: 90,
             port: port_,
           );
         },
@@ -3644,7 +4257,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 79,
+            funcId: 91,
             port: port_,
           );
         },
@@ -3682,7 +4295,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 80,
+            funcId: 92,
             port: port_,
           );
         },
@@ -3720,7 +4333,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 81,
+            funcId: 93,
             port: port_,
           );
         },
@@ -3742,6 +4355,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String?> crateApiSyncEngineSyncKeysPendingSecretKey({
+    required SyncKeys that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 94,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysPendingSecretKeyConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysPendingSecretKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_pending_secret_key",
+        argNames: ["that"],
+      );
+
+  @override
   Future<void> crateApiSyncEngineSyncKeysRecheck({required SyncKeys that}) {
     return handler.executeNormal(
       NormalTask(
@@ -3754,7 +4403,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 82,
+            funcId: 95,
             port: port_,
           );
         },
@@ -3773,6 +4422,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "SyncKeys_recheck", argNames: ["that"]);
 
   @override
+  (BigInt, BigInt) crateApiSyncEngineSyncKeysRegisterLkcProbe({
+    required SyncKeys that,
+    required String account,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(account, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_record_u_64_u_64,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysRegisterLkcProbeConstMeta,
+        argValues: [that, account],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysRegisterLkcProbeConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_register_lkc_probe",
+        argNames: ["that", "account"],
+      );
+
+  @override
   void crateApiSyncEngineSyncKeysRelease({
     required SyncKeys that,
     required String id,
@@ -3786,7 +4468,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(id, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 97)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -3806,6 +4488,192 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<String?> crateApiSyncEngineSyncKeysSecretKeyCandidate({
+    required SyncKeys that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 98,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysSecretKeyCandidateConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysSecretKeyCandidateConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_secret_key_candidate",
+        argNames: ["that"],
+      );
+
+  @override
+  List<String> crateApiSyncEngineSyncKeysSecretKeyMissing({
+    required SyncKeys that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 99)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysSecretKeyMissingConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysSecretKeyMissingConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_secret_key_missing",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<String> crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit({
+    required SyncKeys that,
+    required String candidate,
+    String? account,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(candidate, serializer);
+          sse_encode_opt_String(account, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 100,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta:
+            kCrateApiSyncEngineSyncKeysStageExternalSecretKeyCommitConstMeta,
+        argValues: [that, candidate, account],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSyncEngineSyncKeysStageExternalSecretKeyCommitConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_stage_external_secret_key_commit",
+        argNames: ["that", "candidate", "account"],
+      );
+
+  @override
+  Future<void> crateApiSyncEngineSyncKeysStoreSecretKey({
+    required SyncKeys that,
+    required String key,
+    required bool expectEmptyBefore,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_String(key, serializer);
+          sse_encode_bool(expectEmptyBefore, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 101,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_sync_engine_error,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysStoreSecretKeyConstMeta,
+        argValues: [that, key, expectEmptyBefore],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysStoreSecretKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_store_secret_key",
+        argNames: ["that", "key", "expectEmptyBefore"],
+      );
+
+  @override
+  void crateApiSyncEngineSyncKeysSyncLkcAccount({
+    required SyncKeys that,
+    String? account,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSyncKeys(
+            that,
+            serializer,
+          );
+          sse_encode_opt_String(account, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 102,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncEngineSyncKeysSyncLkcAccountConstMeta,
+        argValues: [that, account],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineSyncKeysSyncLkcAccountConstMeta =>
+      const TaskConstMeta(
+        debugName: "SyncKeys_sync_lkc_account",
+        argNames: ["that", "account"],
+      );
+
+  @override
   Future<bool> crateApiSyncEngineSyncLogEngineBehind({
     required SyncLogEngine that,
     required PlatformInt64 seq,
@@ -3822,7 +4690,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 84,
+            funcId: 103,
             port: port_,
           );
         },
@@ -3860,7 +4728,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 85,
+            funcId: 104,
             port: port_,
           );
         },
@@ -3896,7 +4764,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 86,
+            funcId: 105,
             port: port_,
           );
         },
@@ -3939,7 +4807,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             host,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 106,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -3976,7 +4848,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             host,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 107,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -4011,7 +4887,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 89,
+            funcId: 108,
             port: port_,
           );
         },
@@ -4044,7 +4920,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 90,
+            funcId: 109,
             port: port_,
           );
         },
@@ -4082,7 +4958,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 91,
+            funcId: 110,
             port: port_,
           );
         },
@@ -4118,7 +4994,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 92,
+            funcId: 111,
             port: port_,
           );
         },
@@ -4146,7 +5022,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 93)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 112,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -4182,7 +5062,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 94,
+            funcId: 113,
             port: port_,
           );
         },
@@ -4218,7 +5098,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 95,
+            funcId: 114,
             port: port_,
           );
         },
@@ -4256,7 +5136,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             host,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 115,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -4291,7 +5175,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 97,
+            funcId: 116,
             port: port_,
           );
         },
@@ -4327,7 +5211,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 98,
+            funcId: 117,
             port: port_,
           );
         },
@@ -4360,7 +5244,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 99)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 118,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -4393,7 +5281,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 100,
+            funcId: 119,
           )!;
         },
         codec: SseCodec(
@@ -4427,7 +5315,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 101,
+            funcId: 120,
           )!;
         },
         codec: SseCodec(
@@ -4448,6 +5336,66 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  String? crateApiSyncEngineDeriveSyncPassphrase({
+    required String password,
+    required String secretKey,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(password, serializer);
+          sse_encode_String(secretKey, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 121,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncEngineDeriveSyncPassphraseConstMeta,
+        argValues: [password, secretKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineDeriveSyncPassphraseConstMeta =>
+      const TaskConstMeta(
+        debugName: "derive_sync_passphrase",
+        argNames: ["password", "secretKey"],
+      );
+
+  @override
+  String crateApiSyncEngineGenerateSecretKey() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 122,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncEngineGenerateSecretKeyConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineGenerateSecretKeyConstMeta =>
+      const TaskConstMeta(debugName: "generate_secret_key", argNames: []);
+
+  @override
   List<ThemeVariantInfo>? crateApiThemeInstalledThemeVariants({
     required String manifest,
   }) {
@@ -4459,7 +5407,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 102,
+            funcId: 123,
           )!;
         },
         codec: SseCodec(
@@ -4488,7 +5436,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 103,
+            funcId: 124,
             port: port_,
           );
         },
@@ -4507,6 +5455,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "lkc_sync_event_default", argNames: []);
 
   @override
+  String? crateApiSyncEngineNormalizeSecretKey({required String input}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(input, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 125,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSyncEngineNormalizeSecretKeyConstMeta,
+        argValues: [input],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSyncEngineNormalizeSecretKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "normalize_secret_key",
+        argNames: ["input"],
+      );
+
+  @override
   ThemeCatalogInfo crateApiThemeParseThemeCatalog({
     required List<int> bytes,
     String? base,
@@ -4520,7 +5498,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 104,
+            funcId: 126,
           )!;
         },
         codec: SseCodec(
@@ -4554,7 +5532,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 105,
+            funcId: 127,
           )!;
         },
         codec: SseCodec(
@@ -4586,7 +5564,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 106,
+            funcId: 128,
             port: port_,
           );
         },
@@ -4619,7 +5597,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 107,
+            funcId: 129,
             port: port_,
           );
         },
@@ -4654,7 +5632,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 108,
+            funcId: 130,
           )!;
         },
         codec: SseCodec(
@@ -4688,7 +5666,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 109,
+            funcId: 131,
           )!;
         },
         codec: SseCodec(
@@ -4718,7 +5696,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 110,
+            funcId: 132,
           )!;
         },
         codec: SseCodec(
@@ -4747,7 +5725,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 111,
+            funcId: 133,
           )!;
         },
         codec: SseCodec(
@@ -4781,7 +5759,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 112,
+            funcId: 134,
           )!;
         },
         codec: SseCodec(
@@ -4811,7 +5789,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 113,
+            funcId: 135,
           )!;
         },
         codec: SseCodec(
@@ -4839,7 +5817,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 114,
+            funcId: 136,
           )!;
         },
         codec: SseCodec(
@@ -4874,7 +5852,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 115,
+            funcId: 137,
           )!;
         },
         codec: SseCodec(
@@ -4907,7 +5885,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 116,
+            funcId: 138,
           )!;
         },
         codec: SseCodec(
@@ -4935,7 +5913,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 117,
+            funcId: 139,
           )!;
         },
         codec: SseCodec(
@@ -4962,7 +5940,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 118,
+            funcId: 140,
           )!;
         },
         codec: SseCodec(
@@ -5089,6 +6067,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     };
   }
 
+  Future<void> Function(int)
+  encode_DartFn_Inputs__Output_opt_String_AnyhowException(
+    FutureOr<String?> Function() raw,
+  ) {
+    return (callId) async {
+      Box<String?>? rawOutput;
+      Box<AnyhowException>? rawError;
+      try {
+        rawOutput = Box(await raw());
+      } catch (e, s) {
+        rawError = Box(AnyhowException("$e\n\n$s"));
+      }
+
+      final serializer = SseSerializer(generalizedFrbRustBinding);
+      assert((rawOutput != null) ^ (rawError != null));
+      if (rawOutput != null) {
+        serializer.buffer.putUint8(0);
+        sse_encode_opt_String(rawOutput.value, serializer);
+      } else {
+        serializer.buffer.putUint8(1);
+        sse_encode_AnyhowException(rawError!.value, serializer);
+      }
+      final output = serializer.intoRaw();
+
+      generalizedFrbRustBinding.dartFnDeliverOutput(
+        callId: callId,
+        ptr: output.ptr,
+        rustVecLen: output.rustVecLen,
+        dataLen: output.dataLen,
+      );
+    };
+  }
+
   Future<void> Function(int, dynamic)
   encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
     FutureOr<bool> Function(String?) raw,
@@ -5131,6 +6142,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RustArcDecrementStrongCountFnType
   get rust_arc_decrement_strong_count_LkcAccountKey => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcOpenedAccountKey => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcOpenedAccountKey => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_LkcPersonalAuth => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_LkcPersonalAuth => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth;
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_LkcSession => wire
@@ -5217,6 +6244,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return LkcAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcOpenedAccountKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcOpenedAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcPersonalAuth
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcPersonalAuthImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -5307,6 +6352,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return LkcAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcOpenedAccountKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcOpenedAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcPersonalAuth
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcPersonalAuthImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -5414,6 +6477,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FutureOr<String?> Function()
+  dco_decode_DartFn_Inputs__Output_opt_String_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError('');
+  }
+
+  @protected
   FutureOr<bool> Function(String?)
   dco_decode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -5433,6 +6503,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return LkcAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcOpenedAccountKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcOpenedAccountKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  LkcPersonalAuth
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return LkcPersonalAuthImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -5537,12 +6625,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  LkcAccountKey
-  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+  LkcOpenedAccountKey
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    return dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
       raw,
     );
   }
@@ -6021,14 +7109,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  LkcAccountKey?
-  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+  LkcOpenedAccountKey?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null
         ? null
-        : dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+        : dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
             raw,
           );
   }
@@ -6088,6 +7176,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       iconPack: dco_decode_bool(arr[3]),
       files: dco_decode_list_theme_file(arr[4]),
     );
+  }
+
+  @protected
+  (BigInt, BigInt) dco_decode_record_u_64_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (dco_decode_u_64(arr[0]), dco_decode_u_64(arr[1]));
   }
 
   @protected
@@ -6239,6 +7337,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LkcOpenedAccountKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcOpenedAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcPersonalAuth
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcPersonalAuthImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
   LkcSession
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     SseDeserializer deserializer,
@@ -6353,6 +7475,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return LkcAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcOpenedAccountKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcOpenedAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcPersonalAuth
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcPersonalAuthImpl.frbInternalSseDecode(
       sse_decode_usize(deserializer),
       sse_decode_i_32(deserializer),
     );
@@ -6480,6 +7626,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return LkcAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcOpenedAccountKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcOpenedAccountKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  LkcPersonalAuth
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return LkcPersonalAuthImpl.frbInternalSseDecode(
       sse_decode_usize(deserializer),
       sse_decode_i_32(deserializer),
     );
@@ -6615,12 +7785,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  LkcAccountKey
-  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+  LkcOpenedAccountKey
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    return sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
       deserializer,
     );
   }
@@ -7190,14 +8360,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  LkcAccountKey?
-  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+  LkcOpenedAccountKey?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
-      return sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      return sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
         deserializer,
       );
     } else {
@@ -7305,6 +8475,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       iconPack: var_iconPack,
       files: var_files,
     );
+  }
+
+  @protected
+  (BigInt, BigInt) sse_decode_record_u_64_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    final var_field0 = sse_decode_u_64(deserializer);
+    final var_field1 = sse_decode_u_64(deserializer);
+    return (var_field0, var_field1);
   }
 
   @protected
@@ -7443,6 +8621,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    LkcOpenedAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcOpenedAccountKeyImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    LkcPersonalAuth self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcPersonalAuthImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcSession(
     LkcSession self,
     SseSerializer serializer,
@@ -7567,6 +8771,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as LkcAccountKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    LkcOpenedAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcOpenedAccountKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    LkcPersonalAuth self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcPersonalAuthImpl).frbInternalSseEncode(move: false),
       serializer,
     );
   }
@@ -7728,6 +8958,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_DartFn_Inputs__Output_opt_String_AnyhowException(
+    FutureOr<String?> Function() self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_DartOpaque(
+      encode_DartFn_Inputs__Output_opt_String_AnyhowException(self),
+      serializer,
+    );
+  }
+
+  @protected
   void sse_encode_DartFn_Inputs_opt_String_Output_bool_AnyhowException(
     FutureOr<bool> Function(String?) self,
     SseSerializer serializer,
@@ -7763,6 +9005,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as LkcAccountKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    LkcOpenedAccountKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcOpenedAccountKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcPersonalAuth(
+    LkcPersonalAuth self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as LkcPersonalAuthImpl).frbInternalSseEncode(move: null),
       serializer,
     );
   }
@@ -7915,12 +9183,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
-  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
-    LkcAccountKey self,
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    LkcOpenedAccountKey self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+    sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
       self,
       serializer,
     );
@@ -8399,15 +9667,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
-  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
-    LkcAccountKey? self,
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
+    LkcOpenedAccountKey? self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
-      sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcAccountKey(
+      sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLkcOpenedAccountKey(
         self,
         serializer,
       );
@@ -8510,6 +9778,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.name, serializer);
     sse_encode_bool(self.iconPack, serializer);
     sse_encode_list_theme_file(self.files, serializer);
+  }
+
+  @protected
+  void sse_encode_record_u_64_u_64(
+    (BigInt, BigInt) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.$1, serializer);
+    sse_encode_u_64(self.$2, serializer);
   }
 
   @protected
@@ -8643,11 +9921,85 @@ class LkcAccountKeyImpl extends RustOpaque implements LkcAccountKey {
   String fingerprint() =>
       RustLib.instance.api.crateApiTeamLkcAccountKeyFingerprint(that: this);
 
+  /// Whether this is [earlier] or a rotation of it: its signing history
+  /// holds [earlier]'s signing key.
+  bool follows({required LkcAccountKey earlier}) => RustLib.instance.api
+      .crateApiTeamLkcAccountKeyFollows(that: this, earlier: earlier);
+
   String toText() =>
       RustLib.instance.api.crateApiTeamLkcAccountKeyToText(that: this);
 
   String userId() =>
       RustLib.instance.api.crateApiTeamLkcAccountKeyUserId(that: this);
+}
+
+@sealed
+class LkcOpenedAccountKeyImpl extends RustOpaque
+    implements LkcOpenedAccountKey {
+  // Not to be used by end users
+  LkcOpenedAccountKeyImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcOpenedAccountKeyImpl.frbInternalSseDecode(
+    BigInt ptr,
+    int externalSizeOnNative,
+  ) : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount: RustLib
+        .instance
+        .api
+        .rust_arc_increment_strong_count_LkcOpenedAccountKey,
+    rustArcDecrementStrongCount: RustLib
+        .instance
+        .api
+        .rust_arc_decrement_strong_count_LkcOpenedAccountKey,
+    rustArcDecrementStrongCountPtr: RustLib
+        .instance
+        .api
+        .rust_arc_decrement_strong_count_LkcOpenedAccountKeyPtr,
+  );
+
+  LkcAccountKey key() =>
+      RustLib.instance.api.crateApiTeamLkcOpenedAccountKeyKey(that: this);
+
+  /// Sealed with the secret key too, not the passphrase alone.
+  bool twoFactor() =>
+      RustLib.instance.api.crateApiTeamLkcOpenedAccountKeyTwoFactor(that: this);
+}
+
+@sealed
+class LkcPersonalAuthImpl extends RustOpaque implements LkcPersonalAuth {
+  // Not to be used by end users
+  LkcPersonalAuthImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  LkcPersonalAuthImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_LkcPersonalAuth,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcPersonalAuth,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_LkcPersonalAuthPtr,
+  );
+
+  /// Whether an unsigned answer for [name] of [app] is refused here; with
+  /// no [name], for the app's files in general.
+  Future<bool> requiresSignature({required String app, String? name}) =>
+      RustLib.instance.api.crateApiLkcLkcPersonalAuthRequiresSignature(
+        that: this,
+        app: app,
+        name: name,
+      );
+
+  /// Updates the account key (e.g. after rotation here).
+  Future<void> updateKey({required LkcAccountKey key}) => RustLib.instance.api
+      .crateApiLkcLkcPersonalAuthUpdateKey(that: this, key: key);
 }
 
 @sealed
@@ -8733,6 +10085,10 @@ class LkcSyncImpl extends RustOpaque implements LkcSync {
         body: body,
       );
 
+  /// Detaches personal-space signing and rollback protection.
+  void clearPersonalAuth() =>
+      RustLib.instance.api.crateApiLkcLkcSyncClearPersonalAuth(that: this);
+
   Future<bool> delete({required String name, String? ifMatch}) => RustLib
       .instance
       .api
@@ -8803,6 +10159,10 @@ class LkcSyncImpl extends RustOpaque implements LkcSync {
     log: log,
     limit: limit,
   );
+
+  /// Attaches personal-space signing and rollback protection.
+  void setPersonalAuth({required LkcPersonalAuth auth}) => RustLib.instance.api
+      .crateApiLkcLkcSyncSetPersonalAuth(that: this, auth: auth);
 
   /// Closes the connection [LkcSync::listen] holds.
   void stopListening() =>
@@ -9121,19 +10481,31 @@ class LkcTeamsImpl extends RustOpaque implements LkcTeams {
         RustLib.instance.api.rust_arc_decrement_strong_count_LkcTeamsPtr,
   );
 
-  /// The account key, made now if no device has, and published.
-  Future<LkcAccountKey> accountKey({required String passphrase}) => RustLib
-      .instance
-      .api
-      .crateApiTeamLkcTeamsAccountKey(that: this, passphrase: passphrase);
+  /// The account key, made now if no device has, and published without
+  /// resetting an existing signing chain. When a secret key is supplied,
+  /// requires confirmed two-factor sealing before publishing or returning.
+  Future<LkcOpenedAccountKey> accountKey({
+    required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamsAccountKey(
+    that: this,
+    passphrase: passphrase,
+    secretKey: secretKey,
+    allowLegacy: allowLegacy,
+  );
 
   Future<void> changeKeyPassphrase({
     required String old,
     required String new_,
+    String? secretKey,
+    required bool allowLegacy,
   }) => RustLib.instance.api.crateApiTeamLkcTeamsChangeKeyPassphrase(
     that: this,
     old: old,
     new_: new_,
+    secretKey: secretKey,
+    allowLegacy: allowLegacy,
   );
 
   Future<String> create({required String name}) =>
@@ -9142,13 +10514,18 @@ class LkcTeamsImpl extends RustOpaque implements LkcTeams {
   Future<void> delete({required String id}) =>
       RustLib.instance.api.crateApiTeamLkcTeamsDelete(that: this, id: id);
 
-  /// The account key opened with the LK Cloud key password; `None` before
-  /// any device made one.
-  Future<LkcAccountKey?> fetchAccountKey({required String passphrase}) =>
-      RustLib.instance.api.crateApiTeamLkcTeamsFetchAccountKey(
-        that: this,
-        passphrase: passphrase,
-      );
+  /// The account key opened with the LK Cloud key password (and optional
+  /// client-side secret key); `None` before any device made one.
+  Future<LkcOpenedAccountKey?> fetchAccountKey({
+    required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamsFetchAccountKey(
+    that: this,
+    passphrase: passphrase,
+    secretKey: secretKey,
+    allowLegacy: allowLegacy,
+  );
 
   /// Whether a device of the account made its key: asked for, not set.
   Future<bool> hasAccountKey() =>
@@ -9175,11 +10552,16 @@ class LkcTeamsImpl extends RustOpaque implements LkcTeams {
 
   /// New account keys in place of these, written and published: a device
   /// lost trust. Then open them and [LkcTeamKeys::rewrap_teams].
-  Future<LkcAccountKey> rotateAccountKey({required String passphrase}) =>
-      RustLib.instance.api.crateApiTeamLkcTeamsRotateAccountKey(
-        that: this,
-        passphrase: passphrase,
-      );
+  Future<LkcAccountKey> rotateAccountKey({
+    required String passphrase,
+    String? secretKey,
+    required bool allowLegacy,
+  }) => RustLib.instance.api.crateApiTeamLkcTeamsRotateAccountKey(
+    that: this,
+    passphrase: passphrase,
+    secretKey: secretKey,
+    allowLegacy: allowLegacy,
+  );
 }
 
 @sealed
@@ -9241,8 +10623,51 @@ class SyncKeysImpl extends RustOpaque implements SyncKeys {
         RustLib.instance.api.rust_arc_decrement_strong_count_SyncKeysPtr,
   );
 
+  /// Clears the staged external commit identified by [stage_id] (or a
+  /// crash-recovered intent for [account] when omitted) when the remote write
+  /// is known not to have committed.
+  Future<void> clearExternalSecretKeyCommit({
+    required String candidate,
+    String? stageId,
+    String? account,
+  }) => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysClearExternalSecretKeyCommit(
+        that: this,
+        candidate: candidate,
+        stageId: stageId,
+        account: account,
+      );
+
+  /// [candidate] as this device's secret key, settling [stage_id] when given
+  /// (or a crash-recovered external intent for [account] when [stage_id] is `None`).
+  Future<void> commitSecretKey({
+    required String candidate,
+    String? stageId,
+    String? account,
+  }) => RustLib.instance.api.crateApiSyncEngineSyncKeysCommitSecretKey(
+    that: this,
+    candidate: candidate,
+    stageId: stageId,
+    account: account,
+  );
+
   Future<void> forget({required String id}) =>
       RustLib.instance.api.crateApiSyncEngineSyncKeysForget(that: this, id: id);
+
+  /// Whether [account]'s LK Cloud key file ([lkc]'s `identity.age`) is
+  /// sealed with a secret key, read only: one to import here.
+  Future<bool> lkcSealedWithSecretKey({
+    required LkcSync lkc,
+    required String account,
+    required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
+  }) => RustLib.instance.api.crateApiSyncEngineSyncKeysLkcSealedWithSecretKey(
+    that: this,
+    lkc: lkc,
+    account: account,
+    expectedSwitchGen: expectedSwitchGen,
+    expectedIdGen: expectedIdGen,
+  );
 
   /// The key files the password here does not open.
   List<String> mismatch() =>
@@ -9291,12 +10716,63 @@ class SyncKeysImpl extends RustOpaque implements SyncKeys {
         previous: previous,
       );
 
+  /// The secret key currently staged in the pending slot, if any (read only).
+  Future<String?> pendingSecretKey() => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysPendingSecretKey(that: this);
+
   /// Every key in use checked again: the password here changed.
   Future<void> recheck() =>
       RustLib.instance.api.crateApiSyncEngineSyncKeysRecheck(that: this);
 
+  /// Captures the LK Cloud account-switch generation and per-ID generation
+  /// synchronously before starting an async missing-key probe.
+  (BigInt, BigInt) registerLkcProbe({required String account}) => RustLib
+      .instance
+      .api
+      .crateApiSyncEngineSyncKeysRegisterLkcProbe(that: this, account: account);
+
   void release({required String id}) => RustLib.instance.api
       .crateApiSyncEngineSyncKeysRelease(that: this, id: id);
+
+  /// The secret key LK Cloud's account key is first sealed with: the one
+  /// held, else one staged for it, made now when the app allows; null when
+  /// none may be made. [commit_secret_key] once the account key holds it.
+  Future<String?> secretKeyCandidate() => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysSecretKeyCandidate(that: this);
+
+  /// The key files that cannot be opened because this device has no secret key.
+  List<String> secretKeyMissing() => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysSecretKeyMissing(that: this);
+
+  /// Marks [candidate] as having an in-flight/unconfirmed external remote
+  /// commit (such as LK Cloud's account key for [account]), returning its
+  /// stage identity.
+  Future<String> stageExternalSecretKeyCommit({
+    required String candidate,
+    String? account,
+  }) => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysStageExternalSecretKeyCommit(
+        that: this,
+        candidate: candidate,
+        account: account,
+      );
+
+  /// Imports [key] as this device's secret key, coordinated with all remote
+  /// key-file staging/write/promotion operations on this ring.
+  Future<void> storeSecretKey({
+    required String key,
+    required bool expectEmptyBefore,
+  }) => RustLib.instance.api.crateApiSyncEngineSyncKeysStoreSecretKey(
+    that: this,
+    key: key,
+    expectEmptyBefore: expectEmptyBefore,
+  );
+
+  /// Synchronizes the active LK Cloud account (`None` when signed out),
+  /// invalidating in-flight missing-key probes for any previous LK Cloud
+  /// account and clearing only that previous account's missing-key status.
+  void syncLkcAccount({String? account}) => RustLib.instance.api
+      .crateApiSyncEngineSyncKeysSyncLkcAccount(that: this, account: account);
 }
 
 @sealed

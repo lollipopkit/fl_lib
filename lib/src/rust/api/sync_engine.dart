@@ -12,6 +12,25 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Log`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`, `from`
 
+/// Generates a fresh 128-bit client-side secret key (`S1-XXXXX-…`).
+String generateSecretKey() =>
+    RustLib.instance.api.crateApiSyncEngineGenerateSecretKey();
+
+/// Validates and canonicalizes a user-entered or scanned secret key; returns
+/// `None` when the format or checksum is invalid.
+String? normalizeSecretKey({required String input}) =>
+    RustLib.instance.api.crateApiSyncEngineNormalizeSecretKey(input: input);
+
+/// Derives the combined `age scrypt` passphrase from `(password, secret_key)`.
+/// Returns `None` when [secret_key] is malformed or fails checksum.
+String? deriveSyncPassphrase({
+  required String password,
+  required String secretKey,
+}) => RustLib.instance.api.crateApiSyncEngineDeriveSyncPassphrase(
+  password: password,
+  secretKey: secretKey,
+);
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeyHandle>>
 abstract class SyncKeyHandle implements RustOpaqueInterface {
   /// Opened with the password here again, now with [force].
@@ -32,7 +51,33 @@ abstract class SyncKeyHandle implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncKeys>>
 abstract class SyncKeys implements RustOpaqueInterface {
+  /// Clears the staged external commit identified by [stage_id] (or a
+  /// crash-recovered intent for [account] when omitted) when the remote write
+  /// is known not to have committed.
+  Future<void> clearExternalSecretKeyCommit({
+    required String candidate,
+    String? stageId,
+    String? account,
+  });
+
+  /// [candidate] as this device's secret key, settling [stage_id] when given
+  /// (or a crash-recovered external intent for [account] when [stage_id] is `None`).
+  Future<void> commitSecretKey({
+    required String candidate,
+    String? stageId,
+    String? account,
+  });
+
   Future<void> forget({required String id});
+
+  /// Whether [account]'s LK Cloud key file ([lkc]'s `identity.age`) is
+  /// sealed with a secret key, read only: one to import here.
+  Future<bool> lkcSealedWithSecretKey({
+    required LkcSync lkc,
+    required String account,
+    required BigInt expectedSwitchGen,
+    required BigInt expectedIdGen,
+  });
 
   /// The key files the password here does not open.
   List<String> mismatch();
@@ -72,10 +117,45 @@ abstract class SyncKeys implements RustOpaqueInterface {
   /// Before the backup password here changes from [previous].
   Future<void> passwordChanged({String? previous});
 
+  /// The secret key currently staged in the pending slot, if any (read only).
+  Future<String?> pendingSecretKey();
+
   /// Every key in use checked again: the password here changed.
   Future<void> recheck();
 
+  /// Captures the LK Cloud account-switch generation and per-ID generation
+  /// synchronously before starting an async missing-key probe.
+  (BigInt, BigInt) registerLkcProbe({required String account});
+
   void release({required String id});
+
+  /// The secret key LK Cloud's account key is first sealed with: the one
+  /// held, else one staged for it, made now when the app allows; null when
+  /// none may be made. [commit_secret_key] once the account key holds it.
+  Future<String?> secretKeyCandidate();
+
+  /// The key files that cannot be opened because this device has no secret key.
+  List<String> secretKeyMissing();
+
+  /// Marks [candidate] as having an in-flight/unconfirmed external remote
+  /// commit (such as LK Cloud's account key for [account]), returning its
+  /// stage identity.
+  Future<String> stageExternalSecretKeyCommit({
+    required String candidate,
+    String? account,
+  });
+
+  /// Imports [key] as this device's secret key, coordinated with all remote
+  /// key-file staging/write/promotion operations on this ring.
+  Future<void> storeSecretKey({
+    required String key,
+    required bool expectEmptyBefore,
+  });
+
+  /// Synchronizes the active LK Cloud account (`None` when signed out),
+  /// invalidating in-flight missing-key probes for any previous LK Cloud
+  /// account and clearing only that previous account's missing-key status.
+  void syncLkcAccount({String? account});
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SyncLogEngine>>
@@ -207,6 +287,12 @@ enum SyncEngineErrorKind {
   /// No key file there yet beside what was synced with one.
   keyNotHere,
   passwordMissing,
+
+  /// Remote key file exists, but this device has no client-side secret key.
+  secretKeyMissing,
+
+  /// Server response failed Ed25519 signature or rollback verification.
+  untrusted,
   signedOut,
 }
 

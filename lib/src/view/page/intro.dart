@@ -1,4 +1,10 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:fl_lib/fl_lib.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 typedef IntroPageBuilder = Widget Function(BuildContext ctx, double padTop);
@@ -14,10 +20,24 @@ final class IntroPageArgs {
   /// the window edges. Pass whatever the pages use.
   final double maxWidth;
 
+  /// Optional per-page gate for the Next / Done button and forward swiping.
+  /// When non-null and its current value is `false`, Next / Done is disabled
+  /// and swiping forward is locked until it becomes `true`; swiping back
+  /// stays.
+  final ValueListenable<bool>? Function(int page)? canProceed;
+
+  /// Optional per-page commit hook invoked when advancing past [page] via
+  /// Next / Done (not when a page calls [IntroPage.nextOf] to skip itself).
+  /// Pages with a non-null hook also lock swiping forward so users cannot
+  /// bypass the hook by swiping past the page. Return `false` to stay.
+  final Future<bool> Function()? Function(int page)? onBeforeNext;
+
   const IntroPageArgs({
     required this.pages,
     required this.onDone,
     this.maxWidth = UIs.pageColumnWidth,
+    this.canProceed,
+    this.onBeforeNext,
   });
 }
 
@@ -28,6 +48,19 @@ final class IntroPage extends StatefulWidget {
     super.key,
     required this.args,
   });
+
+  /// Advances the enclosing [IntroPage] to the next step (or finishes if on the
+  /// last step), bypassing [IntroPageArgs.canProceed] (for explicit skip actions).
+  static void nextOf(BuildContext context) {
+    final state = context.findAncestorStateOfType<_IntroPageState>();
+    state?._advanceBypass();
+  }
+
+  /// Finishes the enclosing [IntroPage] immediately via [IntroPageArgs.onDone].
+  static void finishOf(BuildContext context) {
+    final state = context.findAncestorStateOfType<_IntroPageState>();
+    state?._finishNow();
+  }
 
   @override
   State<IntroPage> createState() => _IntroPageState();
@@ -83,6 +116,11 @@ final class IntroPage extends StatefulWidget {
 final class _IntroPageState extends State<IntroPage> {
   final _pageController = PageController();
   final _currentPage = 0.vn;
+  late final _backOnly = _BackOnlyPhysics(page: () => _currentPage.value, movingOn: () => _movingOn);
+
+  /// Next or [IntroPage.nextOf] is turning the page: past what a swipe may.
+  var _movingOn = false;
+  var _pageGen = 0;
 
   /// Read through, never cached. The caller rebuilds these args whenever the
   /// layout changes — a rotation, a resized window, a keyboard appearing — and
@@ -97,6 +135,7 @@ final class _IntroPageState extends State<IntroPage> {
   static const _switchCurve = Curves.easeOutCubic;
   static const _barHeight = 61.6;
   static const _progressHeight = 3.0;
+  static final _alwaysAllowed = ValueNotifier<bool>(true);
 
   @override
   void dispose() {
@@ -108,11 +147,32 @@ final class _IntroPageState extends State<IntroPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageView.builder(
-        controller: _pageController,
-        itemCount: _pageCount,
-        onPageChanged: (index) => _currentPage.value = index,
-        itemBuilder: (_, index) => _args.pages[index],
+      body: ListenBuilder(
+        listenable: _currentPage,
+        builder: () {
+          // Keep the exact same widget tree depth across gated and ungated
+          // pages so PageView is never unmounted on page change.
+          final page = _currentPage.value;
+          final gate = _args.canProceed?.call(page) ?? _alwaysAllowed;
+          final hasCommitHook = _args.onBeforeNext?.call(page) != null;
+          return ValBuilder(
+            listenable: gate,
+            builder: (allowed) => PageView.builder(
+              controller: _pageController,
+              physics: allowed && !hasCommitHook ? null : _backOnly,
+              itemCount: _pageCount,
+              onPageChanged: (index) {
+                _pageGen++;
+                _currentPage.value = index;
+              },
+              itemBuilder: (pageCtx, index) => Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerSignal: (event) => _onPointerSignal(context, pageCtx, event),
+                child: _args.pages[index],
+              ),
+            ),
+          );
+        },
       ),
       bottomNavigationBar: _buildBar(context),
     );
@@ -186,9 +246,18 @@ final class _IntroPageState extends State<IntroPage> {
   }
 
   Widget _buildNext(BuildContext context) {
+    final gate = _args.canProceed?.call(_currentPage.value);
+    if (gate == null) return _nextButton(context, enabled: true);
+    return ValBuilder(
+      listenable: gate,
+      builder: (allowed) => _nextButton(context, enabled: allowed),
+    );
+  }
+
+  Widget _nextButton(BuildContext context, {required bool enabled}) {
     final libL10n = context.libL10n;
     return FilledButton(
-      onPressed: hasNext ? _toNext : () => _args.onDone(context),
+      onPressed: enabled ? () => _onTapNext(context) : null,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -203,6 +272,108 @@ final class _IntroPageState extends State<IntroPage> {
         ],
       ),
     );
+  }
+
+  double _horizontalScrollDelta(BuildContext context, PointerScrollEvent event) {
+    final modifiers = ScrollConfiguration.of(context).pointerAxisModifiers;
+    final flipAxes = event.kind == PointerDeviceKind.mouse &&
+        HardwareKeyboard.instance.logicalKeysPressed.any(modifiers.contains);
+    final raw = flipAxes ? event.scrollDelta.dy : event.scrollDelta.dx;
+    return Directionality.of(context) == TextDirection.rtl ? -raw : raw;
+  }
+
+  /// First page at or after [fromPage] whose gate is closed or that has an
+  /// `onBeforeNext` hook, or `null` when none blocks forward pointer scrolling.
+  int? _firstForwardBarrier(int fromPage) {
+    for (var i = fromPage; i < _pageCount; i++) {
+      final allowed = _args.canProceed?.call(i)?.value ?? true;
+      final hasCommitHook = _args.onBeforeNext?.call(i) != null;
+      if (!allowed || hasCommitHook) return i;
+    }
+    return null;
+  }
+
+  /// Pointer-scroll bypasses [ScrollPhysics.applyBoundaryConditions] via
+  /// `forcePixels`, so intercept forward horizontal scroll signals whenever
+  /// they would cross a gated or hook-guarded page (either the current page or
+  /// an intermediate page). Clamp crossing deltas onto the barrier page, and
+  /// route attempts to advance past a hook-guarded current page through
+  /// [_onTapNext] to match Next / Done behavior.
+  void _onPointerSignal(BuildContext navContext, BuildContext pageCtx, PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_pageController.hasClients) return;
+    final delta = _horizontalScrollDelta(pageCtx, event);
+    if (delta <= 0) return;
+    final pos = _pageController.position;
+    final viewport = pos.viewportDimension;
+    if (viewport <= 0) return;
+    final page = _currentPage.value;
+    final barrier = _advancing ? page : _firstForwardBarrier(page);
+    if (barrier == null) return;
+    final limit = barrier * viewport;
+    if (pos.pixels + delta <= limit) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (!mounted || !_pageController.hasClients) return;
+      final curPos = _pageController.position;
+      final curViewport = curPos.viewportDimension;
+      if (curViewport <= 0) return;
+      final curPage = _currentPage.value;
+      final curAllowed = _args.canProceed?.call(curPage)?.value ?? true;
+      final curHasHook = _args.onBeforeNext?.call(curPage) != null;
+      if (_advancing || !curAllowed) return;
+      if (curHasHook) {
+        unawaited(_onTapNext(navContext));
+        return;
+      }
+      final curBarrier = _firstForwardBarrier(curPage);
+      if (curBarrier == null) return;
+      final clampedDelta = curBarrier * curViewport - curPos.pixels;
+      if (clampedDelta > 0) {
+        curPos.pointerScroll(clampedDelta);
+      }
+    });
+  }
+
+  var _advancing = false;
+
+  Future<void> _onTapNext(BuildContext context) async {
+    if (_advancing) return;
+    _advancing = true;
+    try {
+      final page = _currentPage.value;
+      final gen = _pageGen;
+      final before = _args.onBeforeNext?.call(page);
+      if (before != null) {
+        final ok = await before();
+        if (!ok || !mounted || _pageGen != gen || _currentPage.value != page) return;
+      }
+      if (!context.mounted || _pageGen != gen || _currentPage.value != page) return;
+      if (hasNext) {
+        await _toNext();
+      } else {
+        _args.onDone(context);
+      }
+    } finally {
+      _advancing = false;
+    }
+  }
+
+  Future<void> _advanceBypass() async {
+    if (_advancing || !mounted) return;
+    _advancing = true;
+    try {
+      if (hasNext) {
+        await _toNext();
+      } else {
+        _args.onDone(context);
+      }
+    } finally {
+      _advancing = false;
+    }
+  }
+
+  void _finishNow() {
+    if (_advancing || !mounted) return;
+    _args.onDone(context);
   }
 
   Widget _buildCounter(BuildContext context) {
@@ -252,16 +423,55 @@ final class _IntroPageState extends State<IntroPage> {
     );
   }
 
-  void _toPre() => _pageController.previousPage(
-    duration: context.motion(_switchDuration),
-    curve: _switchCurve,
-  );
+  Future<void> _toPre() async {
+    if (_advancing) return;
+    _advancing = true;
+    try {
+      await _pageController.previousPage(
+        duration: context.motion(_switchDuration),
+        curve: _switchCurve,
+      );
+    } finally {
+      _advancing = false;
+    }
+  }
 
-  void _toNext() => _pageController.nextPage(
-    duration: context.motion(_switchDuration),
-    curve: _switchCurve,
-  );
+  Future<void> _toNext() async {
+    _movingOn = true;
+    try {
+      await _pageController.nextPage(
+        duration: context.motion(_switchDuration),
+        curve: _switchCurve,
+      );
+    } finally {
+      _movingOn = false;
+    }
+  }
 
   bool get hasPre => _currentPage.value > 0;
   bool get hasNext => _currentPage.value < _pageCount - 1;
+}
+
+/// Swipes back from the current [page], never past it forward, by a drag or
+/// a fling alike; [movingOn] (Next, [IntroPage.nextOf]) goes past. One
+/// instance reads both live: a [Scrollable] keeps the physics it made its
+/// position with while their type stays.
+final class _BackOnlyPhysics extends ScrollPhysics {
+  const _BackOnlyPhysics({required this.page, required this.movingOn, super.parent});
+
+  final int Function() page;
+  final bool Function() movingOn;
+
+  @override
+  _BackOnlyPhysics applyTo(ScrollPhysics? ancestor) =>
+      _BackOnlyPhysics(page: page, movingOn: movingOn, parent: buildParent(ancestor));
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    final limit = page() * position.viewportDimension;
+    if (!movingOn() && value > limit && value > position.pixels) {
+      return value - math.max(position.pixels, limit);
+    }
+    return super.applyBoundaryConditions(position, value);
+  }
 }

@@ -344,7 +344,7 @@ final class FileLogSync {
       if (identical(_opening, opening)) _opening = null;
       if (isStillCurrent()) {
         lastFailure.value = e;
-        if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing) {
+        if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
           Loggers.app.warning('File log sync: opening', e, s);
         }
       }

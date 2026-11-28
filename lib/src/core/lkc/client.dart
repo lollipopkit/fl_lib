@@ -11,6 +11,8 @@ import 'package:fl_lib/src/rust/api/lkc.dart';
 import 'package:fl_lib/src/rust/api/team.dart';
 import 'package:fl_lib/src/core/store/iface.dart';
 import 'package:fl_lib/src/core/store/secure.dart';
+import 'package:fl_lib/src/core/sync/log/errors.dart';
+import 'package:fl_lib/src/core/sync/log/keys.dart';
 import 'package:fl_lib/src/core/utils/platform/base.dart';
 import 'package:flutter/widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -240,28 +242,781 @@ final class LkcClient {
   /// that listens must be the one that writes, or every upload comes back as
   /// another device's.
   Future<LkcSync> sync(String app) => _syncs[app] ??= _ensureSession()
-      .then((session) => LkcSync(session: session, app: app))
+      .then((session) {
+        final s = LkcSync(session: session, app: app);
+        if (_personalAuth case (final uid, final auth) when uid == user.value?.id) {
+          s.setPersonalAuth(auth: auth);
+        }
+        _resolvedSyncs[app] = s;
+        return s;
+      })
       .catchError((Object e, StackTrace s) {
         _syncs.remove(app);
+        _resolvedSyncs.remove(app);
         Error.throwWithStackTrace(e, s);
       });
 
   final _syncs = <String, Future<LkcSync>>{};
+  final _resolvedSyncs = <String, LkcSync>{};
+
+  /// Personal-space Ed25519 signing and rollback protection for the signed-in
+  /// account.
+  (String, LkcPersonalAuth)? _personalAuth;
+  (String, Future<bool>)? _personalAuthPending;
+  var _personalAuthGen = 0;
+  final _passphraseOps = <String, Future<void>>{};
+  final _passphraseFlushes = <String, Future<void>>{};
+  final _versionsOps = <String, Future<void>>{};
+
+  static SecureProp _accountKeyProp(String uid) =>
+      SecureProp('lkcAccountKey.$uid', storage: SecureStore.synced, legacy: SecureStore.storage);
+
+  /// Device-local marker set once `lkc/identity.age` has been opened or sealed
+  /// with two-factor `(passphrase, secretKey)`, rejecting later passphrase-only
+  /// downgrades.
+  static SecureProp accountKey2faProp(String uid) => SecureProp('lkcAccountKey2fa.$uid');
+
+  static Future<bool> isAccountKey2fa(String uid) async =>
+      (await accountKey2faProp(uid).read(limited: false)) == '1';
+
+  static Future<void> markAccountKey2fa(String uid) =>
+      accountKey2faProp(uid).write('1', limited: false);
+
+  /// What this device has seen signed (`PersonalVersions`): device-local
+  /// only, never synced remotely or overwritten by server state.
+  static SecureProp _personalVersionsProp(String uid) => SecureProp('lkcPersonalVersions.$uid');
+
+  /// Device-local pending old passphrase when a backup password change could
+  /// not yet re-seal `lkc/identity.age` (e.g. offline).
+  static SecureProp _pendingAccountKeyPwdProp(String uid) => SecureProp('lkcAccountKeyPendingPwd.$uid');
+
+  /// Test hook invoked immediately after reading the cached account key during
+  /// [_refetchAccountKey].
+  @visibleForTesting
+  static FutureOr<void> Function(String uid)? debugOnAccountKeyHeldRead;
+
+  /// Detaches personal-space signing auth (and optionally clears the cached
+  /// account key, e.g. after replacing the client-side secret key).
+  Future<void> resetPersonalAuth({bool clearCachedKey = false}) async {
+    final uid = user.value?.id ?? _personalAuth?.$1;
+    _personalAuthGen++;
+    _personalAuth = null;
+    _personalAuthPending = null;
+    for (final s in _resolvedSyncs.values) {
+      s.clearPersonalAuth();
+    }
+    if (clearCachedKey && uid != null) {
+      await _accountKeyProp(uid).write(null, limited: false);
+    }
+  }
+
+  /// Whether an unsigned answer for [name] of [app] is refused on this device
+  /// for the signed-in account; with no [name], for the app's files in
+  /// general. While personal signing cannot be opened here, only what this
+  /// says is unrefused may be read or written unsigned.
+  Future<bool> personalRequiresSignature(String app, {String? name}) async {
+    final uid = user.value?.id;
+    if (uid == null) return false;
+    if (_personalAuth case (final id, final auth) when id == uid) {
+      return auth.requiresSignature(app: app, name: name);
+    }
+    final raw = await _personalVersionsProp(uid).read(limited: false);
+    if (raw == null || raw.trim().isEmpty) return false;
+    await FlRust.ensureInitialized();
+    return LkcPersonalAuth.versionsRequireSignature(versions: raw, app: app, name: name);
+  }
+
+  /// Why personal signing cannot be opened here ([ensurePersonalAuth] said
+  /// false): what the person is to do about it.
+  Future<Exception> personalAuthUnavailable() async {
+    if (user.value == null) return const LkcException(code: LkcCode.perm, reason: 'signed_out');
+    final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+    if (pwd == null || pwd.isEmpty) return const SyncPasswordMissing();
+    final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+    if (secretKey == null || secretKey.isEmpty) return const SyncSecretKeyMissing();
+    return const LkcException(
+      code: LkcCode.perm,
+      reason: 'personal_auth_unavailable',
+      message: 'Personal sync signing unavailable',
+    );
+  }
+
+  /// Attaches personal-space Ed25519 signing and verification to [app]'s
+  /// [LkcSync] when credentials are available. Returns false when neither a
+  /// cached account key nor the backup password and a secret key (held, or
+  /// made now where the app allows) open one; [personalAuthUnavailable] says
+  /// why.
+  Future<bool> ensurePersonalAuth(String app) async {
+    final uid = user.value?.id;
+    if (uid == null) return false;
+    SyncKeyring.syncLkcAccount(uid);
+    if (_personalAuth case (final id, final auth)) {
+      if (id == uid) {
+        final gen = _personalAuthGen;
+        await _flushPendingAccountKeyPassphrase(uid);
+        final s = await sync(app);
+        if (gen == _personalAuthGen && user.value?.id == uid && identical(_personalAuth?.$2, auth)) {
+          s.setPersonalAuth(auth: auth);
+          return true;
+        }
+        return false;
+      }
+      // Signed-in account changed without passing through `_clear`.
+      _personalAuthGen++;
+      _personalAuth = null;
+      _personalAuthPending = null;
+      for (final s in _resolvedSyncs.values) {
+        s.clearPersonalAuth();
+      }
+    }
+    final pending = _personalAuthPending;
+    final Future<bool> job;
+    if (pending != null && pending.$1 == uid) {
+      job = pending.$2;
+    } else {
+      late final Future<bool> created;
+      created = _openPersonalAuth(uid, app).whenComplete(() {
+        if (identical(_personalAuthPending?.$2, created)) {
+          _personalAuthPending = null;
+        }
+      });
+      _personalAuthPending = (uid, created);
+      job = created;
+    }
+    final ready = await job;
+    if (!ready || user.value?.id != uid) return false;
+    final current = _personalAuth;
+    if (current == null || current.$1 != uid) return false;
+    final auth = current.$2;
+    final gen = _personalAuthGen;
+    final s = await sync(app);
+    // Re-check after awaiting `sync(app)` in case sign-out/switch occurred.
+    if (gen != _personalAuthGen || user.value?.id != uid || !identical(_personalAuth?.$2, auth)) {
+      return false;
+    }
+    s.setPersonalAuth(auth: auth);
+    for (final existing in _resolvedSyncs.values) {
+      existing.setPersonalAuth(auth: auth);
+    }
+    return true;
+  }
+
+  Future<bool> _openPersonalAuth(String uid, String app) async {
+    final gen = _personalAuthGen;
+    bool stillValid() => gen == _personalAuthGen && user.value?.id == uid;
+
+    final keyProp = _accountKeyProp(uid);
+    // Flush any deferred passphrase change on `lkc/identity.age` when online.
+    await _flushPendingAccountKeyPassphrase(uid);
+    if (!stillValid()) return false;
+    LkcAccountKey? key;
+    final cached = await keyProp.read(limited: false);
+    if (!stillValid()) return false;
+    if (cached != null && cached.isNotEmpty) {
+      try {
+        final parsed = LkcAccountKey.fromText(text: cached);
+        if (parsed.userId() == uid) key = parsed;
+      } catch (e) {
+        Loggers.app.warning('Ignoring unreadable cached account key', e);
+      }
+    }
+    if (key == null) {
+      final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+      if (!stillValid()) return false;
+      if (pwd == null || pwd.isEmpty) return false;
+      final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+      if (!stillValid()) return false;
+      key = secretKey == null || secretKey.isEmpty
+          ? await SyncKeyring.withSecretKeyLock(() => _accountKeyWithNewSecretKey(uid, app, pwd, stillValid))
+          : await _accountKeyWith(uid, pwd, secretKey, stillValid);
+      if (key == null || !stillValid()) return false;
+      await keyProp.write(key.toText(), limited: false);
+    }
+    // Verify the open was not invalidated while awaiting storage or network.
+    if (!stillValid()) return false;
+    final versionsProp = _personalVersionsProp(uid);
+    final savedVersions =
+        await _serializeVersions(uid, () => versionsProp.read(limited: false)) ?? '';
+    if (!stillValid()) return false;
+    final auth = LkcPersonalAuth.open(
+      key: key,
+      versions: savedVersions,
+      save: (json) => _serializeVersions(uid, () async {
+        if (!stillValid()) return false;
+        try {
+          await versionsProp.write(json, limited: false);
+          return true;
+        } catch (e) {
+          Loggers.app.warning('Personal sync versions not saved', e);
+          return false;
+        }
+      }),
+      fetchKey: () => _refetchAccountKey(uid, stillValid),
+    );
+    if (!stillValid()) return false;
+    _personalAuth = (uid, auth);
+    return true;
+  }
+
+  final List<({String uid, String candidate, String stageId})> _pendingExternalCommits = [];
+
+  Future<void> _settleExternalCommit(String uid, String candidate, {String? currentStageId}) async {
+    final canonical = SyncKeyring.normalizeSecretKey(candidate) ?? candidate;
+    final ids = <String>[
+      for (final entry in _pendingExternalCommits)
+        if (entry.uid == uid && entry.candidate == canonical) entry.stageId,
+      if (currentStageId != null &&
+          !_pendingExternalCommits.any((e) => e.uid == uid && e.candidate == canonical && e.stageId == currentStageId))
+        currentStageId,
+    ];
+    for (final id in ids) {
+      await SyncKeyring.commitSecretKey(canonical, stageId: id, account: uid);
+      _pendingExternalCommits.removeWhere((e) => e.uid == uid && e.candidate == canonical && e.stageId == id);
+    }
+    if (!_pendingExternalCommits.any((e) => e.uid == uid && e.candidate == canonical)) {
+      await SyncKeyring.commitSecretKey(canonical, account: uid);
+    }
+  }
+
+  Future<void> _clearExternalCommit(String uid, String candidate) async {
+    final canonical = SyncKeyring.normalizeSecretKey(candidate) ?? candidate;
+    final ids = <String>[
+      for (final entry in _pendingExternalCommits)
+        if (entry.uid == uid && entry.candidate == canonical) entry.stageId,
+    ];
+    for (final id in ids) {
+      await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: id, account: uid);
+      _pendingExternalCommits.removeWhere((e) => e.uid == uid && e.candidate == canonical && e.stageId == id);
+    }
+    if (!_pendingExternalCommits.any((e) => e.uid == uid && e.candidate == canonical)) {
+      await SyncKeyring.clearExternalSecretKeyCommit(canonical, account: uid);
+    }
+  }
+
+  /// Clears only [stageId] for an attempt known not to have committed, leaving
+  /// any earlier unresolved stages for [candidate] tracked for settlement.
+  Future<void> _clearExternalStage(String uid, String candidate, String stageId) async {
+    final canonical = SyncKeyring.normalizeSecretKey(candidate) ?? candidate;
+    await SyncKeyring.clearExternalSecretKeyCommit(canonical, stageId: stageId, account: uid);
+    _pendingExternalCommits.removeWhere((e) => e.uid == uid && e.candidate == canonical && e.stageId == stageId);
+  }
+
+  /// The account key opened (made if no device has) with [secretKey], kept
+  /// as two-factor once its file is.
+  Future<LkcAccountKey?> _accountKeyWith(String uid, String pwd, String secretKey, bool Function() stillValid) async {
+    final upgraded = await isAccountKey2fa(uid);
+    if (!stillValid()) return null;
+    LkcOpenedAccountKey? opened;
+    try {
+      final t = await teams();
+      if (!stillValid()) return null;
+      try {
+        opened = await t.accountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: !upgraded);
+      } on LkcTeamError catch (e) {
+        if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
+        if (!stillValid()) return null;
+        final pendingPwd = await _readPendingPassphrase(_pendingAccountKeyPwdProp(uid));
+        if (!stillValid()) return null;
+        if (pendingPwd != null) {
+          final candidates = <String>[
+            ...pendingPwd.sources,
+            if (pendingPwd.target case final prevTarget? when prevTarget != pwd) prevTarget,
+          ];
+          var matchedPending = false;
+          for (final oldPwd in candidates) {
+            if (oldPwd == pwd || oldPwd.isEmpty) continue;
+            if (!stillValid()) return null;
+            try {
+              final candidateOpen = await t.fetchAccountKey(
+                passphrase: oldPwd,
+                secretKey: secretKey,
+                allowLegacy: !upgraded,
+              );
+              if (candidateOpen != null) {
+                matchedPending = true;
+                if (candidateOpen.twoFactor()) {
+                  await markAccountKey2fa(uid);
+                  if (SyncKeyring.ready) await _settleExternalCommit(uid, secretKey);
+                }
+                break;
+              }
+            } on LkcTeamError catch (oldErr) {
+              if (oldErr.kind != LkcTeamErrorKind.wrongPassphrase) {
+                throw _mapTeamError(oldErr, uid);
+              }
+            }
+          }
+          if (matchedPending) {
+            if (!stillValid()) return null;
+            await _flushPendingAccountKeyPassphrase(uid);
+            if (!stillValid()) return null;
+            final allowLegacyNow = !await isAccountKey2fa(uid);
+            if (!stillValid()) return null;
+            try {
+              opened = await t.accountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: allowLegacyNow);
+            } on LkcTeamError catch (reopenErr) {
+              throw _mapTeamError(reopenErr, uid);
+            }
+          }
+        }
+        if (opened == null) {
+          if (!stillValid()) return null;
+          if (SyncKeyring.ready) await _clearExternalCommit(uid, secretKey);
+          throw _mapTeamError(e, uid);
+        }
+      }
+    } on StateError {
+      if (!stillValid()) return null;
+      rethrow;
+    }
+    if (opened.twoFactor()) {
+      await markAccountKey2fa(uid);
+      if (SyncKeyring.ready) await _settleExternalCommit(uid, secretKey);
+    }
+    if (!stillValid()) return null;
+    SyncKeyring.clearAccountKeySealed(uid);
+    return opened.key();
+  }
+
+  /// No secret key here (under [SyncKeyring.withSecretKeyLock]): the account
+  /// key is the first thing sealed with one, made now where the app allows
+  /// and kept once the account key holds it, so nothing is written unsigned
+  /// before. None is made where the account's files are already sealed with
+  /// one: that one is to be imported ([SyncKeyring.secretKeyMissing]).
+  Future<LkcAccountKey?> _accountKeyWithNewSecretKey(String uid, String app, String pwd, bool Function() stillValid) async {
+    final stored = await SecureStoreProps.syncSecretKey.read(limited: false);
+    if (!stillValid()) return null;
+    if (stored != null && stored.isNotEmpty) return _accountKeyWith(uid, pwd, stored, stillValid);
+    // An app that syncs no keys makes no secret key.
+    if (!SyncKeyring.ready) return null;
+    final s = await sync(app);
+    if (!stillValid() || await SyncKeyring.lkcSealedWithSecretKey(s, uid)) return null;
+    final t = await teams();
+    if (!stillValid()) return null;
+    try {
+      // Read only: there and opened by the password alone, or not there.
+      await t.fetchAccountKey(passphrase: pwd, allowLegacy: true);
+    } on LkcTeamError catch (e) {
+      if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
+      if (!stillValid()) return null;
+      final staged = await SyncKeyring.pendingSecretKey();
+      if (!stillValid()) return null;
+      if (staged != null && staged.isNotEmpty) {
+        LkcOpenedAccountKey? recovered;
+        var stagedWrongPassphrase = false;
+        var matchedPendingPassphrase = false;
+        try {
+          recovered = await t.fetchAccountKey(
+            passphrase: pwd,
+            secretKey: staged,
+            allowLegacy: false,
+          );
+        } on LkcTeamError catch (stagedErr) {
+          if (stagedErr.kind != LkcTeamErrorKind.wrongPassphrase) {
+            throw _mapTeamError(stagedErr, uid);
+          }
+          stagedWrongPassphrase = true;
+        }
+        if (stagedWrongPassphrase) {
+          // A password change recorded while `syncSecretKey` was still pending
+          // could not yet re-seal `lkc/identity.age`: check deferred source
+          // passphrases before treating `staged` as rejected.
+          final pendingPwd = await _readPendingPassphrase(_pendingAccountKeyPwdProp(uid));
+          if (!stillValid()) return null;
+          if (pendingPwd != null) {
+            final candidates = <String>[
+              ...pendingPwd.sources,
+              if (pendingPwd.target case final prevTarget? when prevTarget != pwd) prevTarget,
+            ];
+            for (final oldPwd in candidates) {
+              if (oldPwd == pwd || oldPwd.isEmpty) continue;
+              if (!stillValid()) return null;
+              try {
+                final candidateOpen = await t.fetchAccountKey(
+                  passphrase: oldPwd,
+                  secretKey: staged,
+                  allowLegacy: false,
+                );
+                if (candidateOpen != null && candidateOpen.twoFactor()) {
+                  recovered = candidateOpen;
+                  stagedWrongPassphrase = false;
+                  matchedPendingPassphrase = true;
+                  break;
+                }
+              } on LkcTeamError catch (oldErr) {
+                if (oldErr.kind != LkcTeamErrorKind.wrongPassphrase) {
+                  throw _mapTeamError(oldErr, uid);
+                }
+              }
+            }
+          }
+        }
+        if (!stillValid()) return null;
+        if (!stagedWrongPassphrase) {
+          if (recovered == null) return null;
+          if (recovered.twoFactor()) {
+            await markAccountKey2fa(uid);
+            await _settleExternalCommit(uid, staged);
+            if (matchedPendingPassphrase) {
+              await _flushPendingAccountKeyPassphrase(uid);
+            }
+            if (!stillValid()) return null;
+            SyncKeyring.clearAccountKeySealed(uid);
+            final LkcOpenedAccountKey published;
+            try {
+              published = await t.accountKey(
+                passphrase: pwd,
+                secretKey: staged,
+                allowLegacy: false,
+              );
+            } on LkcTeamError catch (pubErr) {
+              throw _mapTeamError(pubErr, uid);
+            }
+            if (!stillValid() || !published.twoFactor()) return null;
+            return published.key();
+          }
+        } else {
+          await _clearExternalCommit(uid, staged);
+          if (!stillValid()) return null;
+        }
+      }
+      if (!stillValid()) return null;
+      SyncKeyring.accountKeySealed(uid);
+      return null;
+    }
+    if (!stillValid()) return null;
+    final candidate = await SyncKeyring.secretKeyCandidate();
+    if (candidate == null || !stillValid()) return null;
+    final allowLegacy = !await isAccountKey2fa(uid);
+    if (!stillValid()) return null;
+    final stageId = await SyncKeyring.stageExternalSecretKeyCommit(candidate, account: uid);
+    _pendingExternalCommits.add((uid: uid, candidate: candidate, stageId: stageId));
+    if (!stillValid()) {
+      await _clearExternalStage(uid, candidate, stageId);
+      return null;
+    }
+    final LkcOpenedAccountKey opened;
+    try {
+      opened = await t.accountKey(passphrase: pwd, secretKey: candidate, allowLegacy: allowLegacy);
+    } on LkcTeamError catch (e) {
+      // Sealed with another device's meanwhile.
+      if (e.kind != LkcTeamErrorKind.wrongPassphrase) throw _mapTeamError(e, uid);
+      await _clearExternalStage(uid, candidate, stageId);
+      if (!stillValid()) return null;
+      SyncKeyring.accountKeySealed(uid);
+      return null;
+    }
+    if (!opened.twoFactor()) {
+      await _clearExternalStage(uid, candidate, stageId);
+      return null;
+    }
+    await markAccountKey2fa(uid);
+    await _settleExternalCommit(uid, candidate, currentStageId: stageId);
+    if (!stillValid()) return null;
+    SyncKeyring.clearAccountKeySealed(uid);
+    return opened.key();
+  }
+
+  /// The account key file read again (another device may have rotated the
+  /// key) and kept here; null when it cannot be.
+  Future<String?> _refetchAccountKey(String uid, bool Function() stillValid) async {
+    try {
+      final pwd = await SecureStoreProps.bakPwd.read(limited: false);
+      final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+      if (pwd == null || pwd.isEmpty || secretKey == null || secretKey.isEmpty) return null;
+      final upgraded = await isAccountKey2fa(uid);
+      if (!stillValid()) return null;
+      final t = await teams();
+      if (!stillValid()) return null;
+      final opened = await t.fetchAccountKey(passphrase: pwd, secretKey: secretKey, allowLegacy: !upgraded);
+      if (opened == null || !stillValid()) return null;
+      final key = opened.key();
+      if (key.userId() != uid) return null;
+      if (opened.twoFactor()) await markAccountKey2fa(uid);
+      if (!stillValid()) return null;
+      final text = key.toText();
+      // Kept only as the signer takes it: a rotation of the key held.
+      final held = await _accountKeyProp(uid).read(limited: false);
+      await debugOnAccountKeyHeldRead?.call(uid);
+      if (!stillValid()) return null;
+      if (held != null && held.isNotEmpty && !key.follows(earlier: LkcAccountKey.fromText(text: held))) return null;
+      if (!stillValid()) return null;
+      await _accountKeyProp(uid).write(text, limited: false);
+      return stillValid() ? text : null;
+    } catch (e, s) {
+      Loggers.app.warning('Account key not read again', e, s);
+      return null;
+    }
+  }
+
+  static Exception _mapTeamError(LkcTeamError e, String uid) => switch (e.kind) {
+    LkcTeamErrorKind.wrongPassphrase => SyncPasswordMismatch(uid),
+    LkcTeamErrorKind.untrusted => SyncUntrusted(e.detail),
+    LkcTeamErrorKind.signedOut => const LkcException(code: LkcCode.perm),
+    LkcTeamErrorKind.refused => LkcException(code: LkcCode.perm, reason: e.detail, message: e.detail),
+    _ => LkcException(message: e.detail),
+  };
+
+  /// Updates the active personal-space signing key after an account key
+  /// rotation here.
+  Future<void> updatePersonalAuthKey(LkcAccountKey key) async {
+    if (_personalAuth case (final uid, final auth) when uid == key.userId()) {
+      await auth.updateKey(key: key);
+    }
+  }
+
+  Future<T> _serializeVersions<T>(String uid, Future<T> Function() op) {
+    final prev = _versionsOps[uid] ?? Future<void>.value();
+    final run = prev.then((_) => op(), onError: (_) => op());
+    final done = run.then((_) {}, onError: (_) {});
+    late final Future<void> tracked;
+    tracked = done.whenComplete(() {
+      if (identical(_versionsOps[uid], tracked)) {
+        _versionsOps.remove(uid);
+      }
+    });
+    _versionsOps[uid] = tracked;
+    return run;
+  }
+
+  Future<void> _serializePassphrase(String uid, Future<void> Function() op) {
+    final prev = _passphraseOps[uid] ?? Future<void>.value();
+    final run = prev.then((_) => op(), onError: (_) => op());
+    late final Future<void> tracked;
+    tracked = run.whenComplete(() {
+      if (identical(_passphraseOps[uid], tracked)) {
+        _passphraseOps.remove(uid);
+      }
+    });
+    _passphraseOps[uid] = tracked;
+    return tracked;
+  }
+
+  /// Reads persisted pending passphrase recovery state (`sources` + `target`),
+  /// accepting both the JSON format and the legacy plain-string source format.
+  static Future<({List<String> sources, String? target})?> _readPendingPassphrase(
+    SecureProp prop,
+  ) async {
+    final raw = await prop.read(limited: false);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final sources = <String>[];
+        final rawSources = decoded['sources'];
+        if (rawSources is List) {
+          for (final item in rawSources) {
+            if (item is String && item.isNotEmpty && !sources.contains(item)) {
+              sources.add(item);
+            }
+          }
+        }
+        final from = decoded['from'];
+        if (from is String && from.isNotEmpty && !sources.contains(from)) {
+          sources.insert(0, from);
+        }
+        final target = decoded['target'];
+        if (sources.isNotEmpty) {
+          return (
+            sources: sources,
+            target: target is String && target.isNotEmpty ? target : null,
+          );
+        }
+      }
+    } on FormatException {
+      // Legacy plain-string record storing only the source passphrase.
+    }
+    return (sources: [raw], target: null);
+  }
+
+  static Future<void> _writePendingPassphrase(
+    SecureProp prop, {
+    required List<String> sources,
+    String? target,
+  }) => prop.write(
+    jsonEncode({
+      'sources': sources,
+      if (target != null && target.isNotEmpty) 'target': target,
+    }),
+    limited: false,
+  );
+
+  /// Re-seals `lkc/identity.age` after the backup password changes. Persists
+  /// both the candidate source passphrases and the intended target locally
+  /// before resealing so offline or partially completed multi-step changes
+  /// (`A -> B -> C`) recover cleanly without losing track of `B`.
+  Future<void> changePersonalAuthPassphrase({
+    required String old,
+    required String newPassphrase,
+  }) async {
+    if (old.isEmpty || newPassphrase.isEmpty || old == newPassphrase) return;
+    try {
+      await _ensureSession();
+    } catch (_) {}
+    final uid =
+        user.value?.id ??
+        (_session == null || signedIn
+            ? _cached(_kUser, (d) => LkcUser.fromJson(d as Map<String, dynamic>))?.id
+            : null);
+    if (uid == null || (_session != null && !signedIn)) return;
+    await _serializePassphrase(uid, () async {
+      // Always persist the recovery state for the account that initiated the
+      // change so a sign-out or account switch while queued never silently
+      // drops `old -> newPassphrase`. Flush immediately only if that account is
+      // still active and signed in.
+      final pendingProp = _pendingAccountKeyPwdProp(uid);
+      final existing = await _readPendingPassphrase(pendingProp);
+      final sources = <String>[];
+      if (existing != null) {
+        for (final s in existing.sources) {
+          if (!sources.contains(s)) sources.add(s);
+        }
+        if (existing.target case final prevTarget? when !sources.contains(prevTarget)) {
+          sources.add(prevTarget);
+        }
+      }
+      if (!sources.contains(old)) sources.add(old);
+      await _writePendingPassphrase(pendingProp, sources: sources, target: newPassphrase);
+      if (signedIn && user.value?.id == uid) {
+        await _flushPendingAccountKeyPassphraseUnlocked(uid, targetPassphrase: newPassphrase);
+      }
+    });
+  }
+
+  Future<void> _flushPendingAccountKeyPassphrase(String uid) {
+    final existing = _passphraseFlushes[uid];
+    if (existing != null) return existing;
+    late final Future<void> job;
+    job = _serializePassphrase(uid, () => _flushPendingAccountKeyPassphraseUnlocked(uid)).whenComplete(() {
+      if (identical(_passphraseFlushes[uid], job)) {
+        _passphraseFlushes.remove(uid);
+      }
+    });
+    _passphraseFlushes[uid] = job;
+    return job;
+  }
+
+  Future<void> _flushPendingAccountKeyPassphraseUnlocked(String uid, {String? targetPassphrase}) async {
+    if (user.value?.id != uid) return;
+    try {
+      await _ensureSession();
+    } catch (_) {}
+    bool sameAccount() => signedIn && user.value?.id == uid;
+    if (!sameAccount()) return;
+    final pendingProp = _pendingAccountKeyPwdProp(uid);
+    final record = await _readPendingPassphrase(pendingProp);
+    if (record == null || record.sources.isEmpty) return;
+    if (!sameAccount()) return;
+    final storedPwd = targetPassphrase == null ? await SecureStoreProps.bakPwd.read(limited: false) : null;
+    final newPwd = targetPassphrase ?? (storedPwd != null && storedPwd.isNotEmpty ? storedPwd : record.target);
+    final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+    if (!sameAccount()) return;
+    if (newPwd == null || newPwd.isEmpty || secretKey == null || secretKey.isEmpty) return;
+
+    final candidates = <String>[...record.sources];
+    if (record.target case final prevTarget? when prevTarget != newPwd && !candidates.contains(prevTarget)) {
+      candidates.add(prevTarget);
+    }
+    if (candidates.length == 1 && candidates.first == newPwd) {
+      await pendingProp.write(null, limited: false);
+      return;
+    }
+    // Persist intended target alongside source candidates before resealing.
+    if (record.target != newPwd || candidates.length != record.sources.length) {
+      await _writePendingPassphrase(pendingProp, sources: candidates, target: newPwd);
+    }
+
+    final upgraded = await isAccountKey2fa(uid);
+    if (!sameAccount()) return;
+    try {
+      final t = await teams();
+      if (!sameAccount()) return;
+      final hasKey = await t.hasAccountKey();
+      if (!sameAccount()) return;
+      if (!hasKey) {
+        await pendingProp.write(null, limited: false);
+        return;
+      }
+
+      for (final oldPwd in candidates) {
+        if (!sameAccount()) return;
+        if (oldPwd == newPwd) continue;
+        try {
+          await t.changeKeyPassphrase(
+            old: oldPwd,
+            new_: newPwd,
+            secretKey: secretKey,
+            allowLegacy: !upgraded,
+          );
+          if (!sameAccount()) return;
+          await markAccountKey2fa(uid);
+          if (!sameAccount()) return;
+          await pendingProp.write(null, limited: false);
+          return;
+        } on LkcTeamError catch (e) {
+          if (e.kind == LkcTeamErrorKind.wrongPassphrase) {
+            // Retain all recorded candidates: `wrongPassphrase` may reflect a
+            // secret-key mismatch rather than an obsolete source passphrase.
+            continue;
+          }
+          Loggers.app.warning('Deferred LK Cloud account key passphrase change failed', e);
+          return;
+        }
+      }
+
+      // None of the recorded source passphrases opened the remote key with the
+      // current secret key; clear the pending record ONLY when the remote key
+      // is confirmed sealed under `(newPwd, secretKey)` (or no longer exists),
+      // never on an ambiguous `wrongPassphrase` mismatch.
+      if (!sameAccount()) return;
+      try {
+        final fetched = await t.fetchAccountKey(
+          passphrase: newPwd,
+          secretKey: secretKey,
+          allowLegacy: !upgraded,
+        );
+        if (!sameAccount()) return;
+        if (fetched == null) {
+          await pendingProp.write(null, limited: false);
+        } else if (fetched.twoFactor()) {
+          await markAccountKey2fa(uid);
+          if (!sameAccount()) return;
+          await pendingProp.write(null, limited: false);
+        }
+      } on LkcTeamError catch (e) {
+        if (e.kind != LkcTeamErrorKind.wrongPassphrase) {
+          Loggers.app.warning('Deferred LK Cloud account key passphrase verification failed', e);
+        }
+      }
+    } catch (e, s) {
+      Loggers.app.warning('Deferred LK Cloud account key passphrase change failed', e, s);
+    }
+  }
 
   /// The signed-in account's teams and its key ([LkcTeams]), on this
   /// session; see [LkcTeamAccount].
-  Future<LkcTeams> teams() => _teams ??= _ensureSession()
-      .then((session) {
-        final id = user.value?.id;
-        if (id == null) throw StateError('LK Cloud: not signed in');
-        return LkcTeams(session: session, userId: id);
-      })
-      .catchError((Object e, StackTrace s) {
-        _teams = null;
-        Error.throwWithStackTrace(e, s);
-      });
+  Future<LkcTeams> teams() {
+    final id = user.value?.id;
+    if (id == null) return Future.error(StateError('LK Cloud: not signed in'));
+    if (_teams case (final cachedId, final job)) {
+      if (cachedId == id) return job;
+      _teams = null;
+    }
+    late final Future<LkcTeams> created;
+    created = _ensureSession()
+        .then((session) {
+          if (user.value?.id != id) throw StateError('LK Cloud: not signed in');
+          return LkcTeams(session: session, userId: id);
+        })
+        .catchError((Object e, StackTrace s) {
+          if (identical(_teams?.$2, created)) _teams = null;
+          Error.throwWithStackTrace(e, s);
+        });
+    _teams = (id, created);
+    return created;
+  }
 
-  Future<LkcTeams>? _teams;
+  (String, Future<LkcTeams>)? _teams;
 
   /// Load the saved session and its user. A session the IdP or homebase
   /// refuses is dropped; on any other error it is kept, and the error thrown.
@@ -308,6 +1063,7 @@ final class LkcClient {
   Future<LkcUser> _refreshUser() async {
     final data = await _call('GET', '/auth/user');
     final u = LkcUser.fromJson(data as Map<String, dynamic>);
+    SyncKeyring.syncLkcAccount(u.id);
     user.value = u;
     cache.write(_kUser, data);
     return u;
@@ -380,8 +1136,15 @@ final class LkcClient {
   }
 
   void _clear() {
-    // Of the account signed in: another's teams are not this one's.
+    // Of the account signed in: another's teams and signing auth are not this one's.
     _teams = null;
+    _personalAuthGen++;
+    _personalAuth = null;
+    _personalAuthPending = null;
+    for (final s in _resolvedSyncs.values) {
+      s.clearPersonalAuth();
+    }
+    SyncKeyring.syncLkcAccount(null);
     _refreshedAt = null;
     usage.value = null;
     user.value = null;

@@ -31,6 +31,14 @@ final class LkcRemoteStorage
   ) async {
     final sync = _sync ??= await client.sync(app);
     try {
+      if (client.user.value != null) {
+        final authed = await client.ensurePersonalAuth(app);
+        if (!authed &&
+            (client.user.value == null ||
+                await client.personalRequiresSignature(app, name: relativePath.isEmpty ? null : relativePath))) {
+          throw await client.personalAuthUnavailable();
+        }
+      }
       return await f(sync);
     } on LkcSyncError catch (e) {
       if (e.kind == LkcSyncErrorKind.changed) {
@@ -139,6 +147,7 @@ extension LkcSyncErrorX on LkcSyncError {
     ),
     // Not homebase's answer as this build knows it: a defect to report.
     LkcSyncErrorKind.invalid => FormatException(detail),
+    LkcSyncErrorKind.untrusted => SyncUntrusted(detail),
     _ => LkcException(message: detail),
   };
 }

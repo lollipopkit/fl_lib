@@ -281,7 +281,7 @@ impl Keyring {
     /// [state]'s chain of records (all of them, from the first), then each
     /// of its wraps for [key]'s account, trusted only if:
     /// - each record follows the one before (`prev_key_id`), is committed by
-    ///   one [authorized] after the epoch before, under a key their [chains]
+    ///   one `authorized` after the epoch before, under a key their [chains]
     ///   reach from the bound one by signed rotations, signed under the key it
     ///   names, which [trust] holds of them; a commit MAC after the first; the
     ///   chain reaches the last epoch verified at its key id, and goes no

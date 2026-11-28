@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex};
 use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture, frb};
 use futures_util::stream::select;
 use fl_lkc::Session;
+use fl_lkc::secret_key::SecretKey;
 use fl_lkc::sync::{Condition, Kind};
-use fl_lkc::team::identity::{AccountKey, AccountKeyFile};
+use fl_lkc::team::identity::{AccountKey, AccountKeyFile, Opened};
 use fl_lkc::team::{self, InviteTerms, Reencrypted, TeamClient, TeamError, TeamLog, TeamSpace, Teams, Trust};
 use tokio::sync::watch;
 
@@ -158,6 +159,29 @@ impl From<TeamError> for LkcTeamError {
 #[frb(opaque)]
 pub struct LkcAccountKey(AccountKey);
 
+/// The account key as its file holds it.
+#[frb(opaque)]
+pub struct LkcOpenedAccountKey(Opened);
+
+impl LkcOpenedAccountKey {
+    #[frb(sync)]
+    pub fn key(&self) -> LkcAccountKey {
+        LkcAccountKey(self.0.key.clone())
+    }
+
+    /// Sealed with the secret key too, not the passphrase alone.
+    #[frb(sync)]
+    pub fn two_factor(&self) -> bool {
+        self.0.two_factor
+    }
+}
+
+impl From<Opened> for LkcOpenedAccountKey {
+    fn from(o: Opened) -> Self {
+        Self(o)
+    }
+}
+
 impl LkcAccountKey {
     #[frb(sync)]
     pub fn from_text(text: String) -> Result<LkcAccountKey, LkcTeamError> {
@@ -169,6 +193,14 @@ impl LkcAccountKey {
         self.0.to_text().to_string()
     }
 
+    /// Whether this is [earlier] or a rotation of it: its signing history
+    /// holds [earlier]'s signing key.
+    #[frb(sync)]
+    pub fn follows(&self, earlier: &LkcAccountKey) -> bool {
+        let held = earlier.0.signing_public();
+        self.0.signing_history().any(|k| k == held)
+    }
+
     #[frb(sync)]
     pub fn user_id(&self) -> String {
         self.0.user_id().to_string()
@@ -178,6 +210,11 @@ impl LkcAccountKey {
     #[frb(sync)]
     pub fn fingerprint(&self) -> String {
         team::crypto::fingerprint(self.0.user_id(), &self.0.recipient(), &self.0.signing_raw())
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn inner(&self) -> &AccountKey {
+        &self.0
     }
 }
 
@@ -307,30 +344,39 @@ impl LkcTeams {
         Ok(self.files.exists().await?)
     }
 
-    /// The account key opened with the LK Cloud key password; `None` before
-    /// any device made one.
-    pub async fn fetch_account_key(&self, passphrase: String) -> Result<Option<LkcAccountKey>, LkcTeamError> {
-        Ok(self.files.fetch(&passphrase).await?.map(|(k, _)| LkcAccountKey(k)))
+    /// The account key opened with the LK Cloud key password (and optional
+    /// client-side secret key); `None` before any device made one.
+    pub async fn fetch_account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<Option<LkcOpenedAccountKey>, LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        Ok(self.files.fetch_with(&passphrase, sk.as_ref(), allow_legacy).await?.map(Into::into))
     }
 
-    /// The account key, made now if no device has, and published.
-    pub async fn account_key(&self, passphrase: String) -> Result<LkcAccountKey, LkcTeamError> {
-        let key = self.files.load_or_create(&passphrase).await?;
-        self.api().publish(&key).await?;
-        Ok(LkcAccountKey(key))
+    /// The account key, made now if no device has, and published without
+    /// resetting an existing signing chain. When a secret key is supplied,
+    /// requires confirmed two-factor sealing before publishing or returning.
+    pub async fn account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<LkcOpenedAccountKey, LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        let opened = self.files.load_or_create_with(&passphrase, sk.as_ref(), allow_legacy).await?;
+        if sk.is_some() && !opened.two_factor {
+            return Err(TeamError::Unreachable("account key two-factor sealing not confirmed".into()).into());
+        }
+        self.api().publish_no_reset(&opened.key).await?;
+        Ok(LkcOpenedAccountKey(opened))
     }
 
     /// New account keys in place of these, written and published: a device
     /// lost trust. Then open them and [LkcTeamKeys::rewrap_teams].
-    pub async fn rotate_account_key(&self, passphrase: String) -> Result<LkcAccountKey, LkcTeamError> {
-        let (old, etag) = self.files.fetch(&passphrase).await?.ok_or(TeamError::NotFound)?;
-        let next = self.files.rotate(&old, &etag, &passphrase).await?;
+    pub async fn rotate_account_key(&self, passphrase: String, secret_key: Option<String>, allow_legacy: bool) -> Result<LkcAccountKey, LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        let Opened { key: old, etag, .. } = self.files.fetch_with(&passphrase, sk.as_ref(), allow_legacy).await?.ok_or(TeamError::NotFound)?;
+        let next = self.files.rotate_with(&old, &etag, &passphrase, sk.as_ref()).await?;
         self.api().publish(&next).await?;
         Ok(LkcAccountKey(next))
     }
 
-    pub async fn change_key_passphrase(&self, old: String, new: String) -> Result<(), LkcTeamError> {
-        Ok(self.files.change_passphrase(&old, &new).await?)
+    pub async fn change_key_passphrase(&self, old: String, new: String, secret_key: Option<String>, allow_legacy: bool) -> Result<(), LkcTeamError> {
+        let sk = parse_secret_key(secret_key)?;
+        Ok(self.files.change_passphrase_with(&old, &new, sk.as_ref(), allow_legacy).await?)
     }
 
     pub async fn list(&self) -> Result<Vec<LkcTeam>, LkcTeamError> {
@@ -629,5 +675,12 @@ impl LkcTeamSpace {
 impl Drop for LkcTeamSpace {
     fn drop(&mut self) {
         self.stop_listening();
+    }
+}
+
+fn parse_secret_key(raw: Option<String>) -> Result<Option<SecretKey>, LkcTeamError> {
+    match raw.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) => Ok(Some(SecretKey::parse(s).map_err(TeamError::from)?)),
+        None => Ok(None),
     }
 }

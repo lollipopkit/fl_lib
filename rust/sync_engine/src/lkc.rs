@@ -2,13 +2,14 @@
 //! file, `identity.age`, written only if unchanged ([KeyFile]).
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use fl_lkc::Store;
-use fl_lkc::sync::{Condition, Error as LkcError, Kind, LogRead, SyncClient};
+use fl_lkc::sync::{Committed, Condition, Error as LkcError, Kind, LogRead, SyncClient};
 
 use crate::key::{BoxFuture, KeyFile, Versioned};
 use crate::log::{Appended, LogTransport, Page, SnapshotBody};
-use crate::{BlobStore, Error, Listed, Result};
+use crate::{BlobStore, Error, Listed, Result, RetainedBinding};
 
 /// The key file's name beside the log.
 pub const KEY_FILE: &str = "identity.age";
@@ -21,59 +22,140 @@ fn remote(e: LkcError) -> Error {
         // can do anything about it.
         Kind::TooLarge => Error::Refused("sync_file_too_large".into()),
         Kind::SignedOut => Error::SignedOut,
+        Kind::Untrusted => Error::Untrusted(e.detail),
         _ => Error::Remote(e.to_string()),
     }
 }
 
 /// [LogTransport] on an app's LK Cloud sync.
-pub struct LkcLog<S: Store>(pub Arc<SyncClient<S>>);
+pub struct LkcLog<S: Store> {
+    pub client: Arc<SyncClient<S>>,
+    /// The account's id.
+    pub account: String,
+}
 
 impl<S: Store> BlobStore for LkcLog<S> {
+    fn signs_blobs(&self) -> bool {
+        self.client.has_personal_auth()
+    }
+
     async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
-        match self.0.upload_bytes(&name, body, Condition::Absent).await {
-            Ok(_) => Ok(()),
-            // Named by its content: the one there is this one.
-            Err(e) if e.kind == Kind::Changed => Ok(()),
+        self.put_blob_signed(name, body).await.map(|_| ())
+    }
+
+    async fn put_blob_signed(&self, name: String, body: Vec<u8>) -> Result<bool> {
+        let (res, signed) = self.client.upload_blob_bytes_checked(&name, body.clone()).await;
+        match res {
+            Ok(_) => Ok(signed),
+            Err(e) if e.kind == Kind::Changed => {
+                // Probes only whether the blob there is signed: an unsigned one
+                // is bound by the caller against its decoded content, one seen
+                // signed before is refused by the verification.
+                let differs = AtomicBool::new(false);
+                let same = |b: &[u8]| {
+                    let same = b == body.as_slice();
+                    differs.store(!same, Ordering::Relaxed);
+                    same
+                };
+                match self.get_blob_verified(name.clone(), Some(RetainedBinding::Content(&same))).await {
+                    Ok(None) => Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob"))),
+                    Ok(Some((_, signed_there))) => Ok(signed_there),
+                    Err(Error::Untrusted(_)) if differs.load(Ordering::Relaxed) => Ok(false),
+                    Err(e) => Err(e),
+                }
+            }
             Err(e) => Err(remote(e)),
         }
     }
 
     async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
-        Ok(self.0.download_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
+        Ok(self.client.download_blob_bytes(&name).await.map_err(remote)?.map(|(body, _, _)| body))
+    }
+
+    async fn get_blob_verified(&self, name: String, retained: Option<RetainedBinding<'_>>) -> Result<Option<(Vec<u8>, bool)>> {
+        let (fetched, verified_auth) = match retained {
+            Some(binding) => self.client.download_retained_blob_bytes_checked(&name, binding).await,
+            None => self.client.download_blob_bytes_checked(&name).await,
+        };
+        Ok(fetched.map_err(remote)?.map(|(body, _, sig)| (body, verified_auth && sig.is_some())))
     }
 
     async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
-        Ok(self.0.list().await.map_err(remote)?.into_iter().filter(|f| f.name.starts_with(&prefix)).map(|f| Listed { at: rfc3339_ms(&f.updated_at), name: f.name }).collect())
+        Ok(self
+            .client
+            .list()
+            .await
+            .map_err(remote)?
+            .into_iter()
+            .filter(|f| f.name.starts_with(&prefix))
+            .map(|f| Listed { at: rfc3339_ms(&f.updated_at), name: f.name, signed: f.signed.is_some() })
+            .collect())
     }
 
     async fn delete_blob(&self, name: String) -> Result<()> {
-        self.0.delete(&name, None).await.map(|_| ()).map_err(remote)
+        self.client.delete(&name, None).await.map(|_| ()).map_err(remote)
     }
 }
 
 impl<S: Store> LogTransport for LkcLog<S> {
     async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
-        let a = self.0.append(&key, body).await.map_err(remote)?;
-        Ok(Appended { log: a.log, seq: a.seq, compact: a.compact })
+        match self.client.append(&key, body).await {
+            Ok(a) => Ok(Appended { log: a.log, seq: a.seq, compact: a.compact }),
+            Err(e) => {
+                if let Some(Committed::Batch(a)) = e.committed {
+                    return Err(Error::AppendPersistFailed {
+                        appended: Appended { log: a.log, seq: a.seq, compact: a.compact },
+                        detail: e.detail,
+                    });
+                }
+                Err(remote(e))
+            }
+        }
     }
 
     async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
-        Ok(match self.0.read_log(after, log.as_deref(), None).await.map_err(remote)? {
+        let (read, verified) = self.client.read_log_checked(after, log.as_deref(), None).await.map_err(remote)?;
+        Ok(match read {
             LogRead::Compacted { log, .. } => Page::Compacted { log },
-            LogRead::Page { log, batches, more, .. } => Page::Batches { log, batches: batches.into_iter().map(|b| (b.seq, b.body)).collect(), more },
+            LogRead::Page { log, batches, more, .. } => Page::Batches {
+                log,
+                batches: batches.into_iter().map(|b| (b.seq, b.body, verified && b.signed.is_some())).collect(),
+                more,
+            },
         })
     }
 
     async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
-        match self.0.put_snapshot_bytes(seq, body).await {
+        match self.client.put_snapshot_bytes(seq, body).await {
             Ok(_) => Ok(true),
             Err(LkcError { kind: Kind::Refused(reason), .. }) if reason == "sync_snapshot_stale" => Ok(false),
-            Err(e) => Err(remote(e)),
+            Err(e) => {
+                if let Some(Committed::Snapshot { log, seq, .. }) = e.committed {
+                    return Err(Error::SnapshotPersistFailed { log, seq, detail: e.detail });
+                }
+                Err(remote(e))
+            }
         }
     }
 
+    async fn flush_committed_snapshot(&self, log: Option<String>, seq: i64, body: Vec<u8>) -> Result<(bool, Option<String>)> {
+        self.client
+            .flush_committed_snapshot_bytes(&self.account, log.as_deref(), seq, &body)
+            .await
+            .map_err(|e| match e.kind {
+                Kind::Invalid => {
+                    if let Some(Committed::Snapshot { log, seq, .. }) = e.committed {
+                        return Error::SnapshotPersistFailed { log, seq, detail: e.detail };
+                    }
+                    Error::Host(e.detail)
+                }
+                _ => remote(e),
+            })
+    }
+
     async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
-        Ok(self.0.download_snapshot_bytes().await.map_err(remote)?.map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body }))
+        let (found, verified) = self.client.download_snapshot_bytes_checked().await.map_err(remote)?;
+        Ok(found.map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body, signed: verified && s.signed.is_some() }))
     }
 }
 
@@ -100,13 +182,32 @@ impl<S: Store> KeyFile for LkcKeyFile<S> {
             match self.client.upload_bytes(KEY_FILE, body, condition).await {
                 Ok(v) => Ok(Some(v)),
                 Err(e) if e.kind == Kind::Changed => Ok(None),
-                Err(e) => Err(remote(e)),
+                Err(e) => {
+                    if let Some(Committed::File { etag, version }) = e.committed {
+                        return Err(Error::KeyFilePersistFailed { version: etag, sync_version: Some(version), detail: e.detail });
+                    }
+                    Err(remote(e))
+                }
             }
+        })
+    }
+
+    fn flush_committed_write(&self, _version: String, sync_version: Option<i64>) -> BoxFuture<'_, Result<()>> {
+        Box::pin(async move {
+            let ver = sync_version.ok_or_else(|| Error::Host("a committed key-file write without its signed version".into()))?;
+            self.client.flush_committed_file(&self.account, KEY_FILE, ver).await.map_err(|e| match e.kind {
+                Kind::Invalid => Error::Host(e.detail),
+                _ => remote(e),
+            })
         })
     }
 
     fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
         Box::pin(async { Ok(true) })
+    }
+
+    fn orders_writes(&self) -> bool {
+        true
     }
 }
 
@@ -156,7 +257,7 @@ mod tests {
     use super::*;
 
     fn lkc(kind: Kind) -> LkcError {
-        LkcError { kind, detail: String::new() }
+        LkcError { kind, detail: String::new(), committed: None }
     }
 
     #[test]

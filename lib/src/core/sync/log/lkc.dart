@@ -33,7 +33,7 @@ final class LkcLogSync {
 
   static const _debounce = Duration(milliseconds: 500);
 
-  Future<SyncLogEngine>? _opening;
+  Future<(String, SyncLogEngine)>? _opening;
   Timer? _soon;
 
   /// The account whose key was read last.
@@ -48,6 +48,7 @@ final class LkcLogSync {
 
   /// A run is going on.
   final running = ValueNotifier(false);
+  var _activeRuns = 0;
 
   /// When a run last went through.
   final lastSyncAt = ValueNotifier<DateTime?>(null);
@@ -71,7 +72,7 @@ final class LkcLogSync {
         unawaited(SyncLogEngine.forget(host: _host.call));
         return;
       }
-      unawaited(opening.then((s) => s.reset()).then((_) => sync(), onError: (Object _) => SyncLogEngine.forget(host: _host.call)));
+      unawaited(opening.then((s) => s.$2.reset()).then((_) => sync(), onError: (Object _) => SyncLogEngine.forget(host: _host.call)));
     });
     // Signed out, or in as someone else: the next run opens anew, and what
     // this device knew of the account before goes.
@@ -81,6 +82,7 @@ final class LkcLogSync {
       final now = client.user.value?.id;
       if (now == user) return;
       user = now;
+      SyncKeyring.syncLkcAccount(now);
       final was = _account;
       if (was != null && was != now) unawaited(SyncKeyring.forget(was));
       reset();
@@ -121,42 +123,72 @@ final class LkcLogSync {
     final SyncLogEngine engine;
     final opening = _opening ??= _open();
     try {
-      engine = await opening;
+      final (engineAccount, opened) = await opening;
+      if (!identical(_opening, opening)) return;
+      engine = opened;
       // The password still opens the key: nothing syncs while it does not.
-      await key();
+      final k = await key();
+      _ensureAccount(engineAccount, actual: k.id(), releaseOnMismatch: true);
     } catch (e, s) {
       // Opened again next time: the key, the password or the network may be
       // there by then. Only this one: another may have taken its place meanwhile.
-      if (identical(_opening, opening)) _opening = null;
+      if (!identical(_opening, opening)) return;
+      _opening = null;
+      // Switching accounts while opening: the next run opens the new one's.
+      if (e is LkcException && e.reason == 'account_changed') return;
       lastFailure.value = e;
-      if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing) {
+      if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
         Loggers.app.warning('LK Cloud log sync: opening', e, s);
       }
       return;
     }
+    if (!identical(_opening, opening)) return;
+    _activeRuns++;
     running.value = true;
     try {
       await syncCall(() => run(engine));
-      lastFailure.value = null;
-      lastSyncAt.value = DateTime.now();
+      if (identical(_opening, opening)) {
+        lastFailure.value = null;
+        lastSyncAt.value = DateTime.now();
+      }
     } catch (e, s) {
-      lastFailure.value = e;
-      if (e is! SyncRefused && !(e is SyncError && e.kind == SyncEngineErrorKind.remote)) {
-        Loggers.app.warning('LK Cloud log sync', e, s);
+      if (identical(_opening, opening)) {
+        lastFailure.value = e;
+        if (e is! SyncRefused && !(e is SyncError && e.kind == SyncEngineErrorKind.remote)) {
+          Loggers.app.warning('LK Cloud log sync', e, s);
+        }
       }
     } finally {
-      tooNew.value = engine.tooNew();
-      running.value = false;
+      if (identical(_opening, opening)) {
+        tooNew.value = engine.tooNew();
+      }
+      _activeRuns--;
+      if (_activeRuns == 0) running.value = false;
     }
   }
 
-  Future<SyncLogEngine> _open() async {
+  void _ensureAccount(String uid, {String? actual, bool releaseOnMismatch = false}) {
+    if ((actual != null && actual != uid) || client.user.value?.id != uid) {
+      if (releaseOnMismatch) SyncKeyring.release(uid);
+      throw const LkcException(
+        code: LkcCode.perm,
+        reason: 'account_changed',
+        message: 'Signed-in account changed while opening sync key',
+      );
+    }
+  }
+
+  Future<(String, SyncLogEngine)> _open() async {
     final user = client.user.value;
     if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
+    final uid = user.id;
     final sync = await client.sync(app);
+    _ensureAccount(uid);
     final k = await key();
-    await syncCall(() => SyncLogEngine.bind(account: user.id, host: _host.call));
-    return SyncLogEngine(lkc: sync, key: k, host: _host.call);
+    _ensureAccount(uid, actual: k.id(), releaseOnMismatch: true);
+    await syncCall(() => SyncLogEngine.bind(account: uid, host: _host.call));
+    _ensureAccount(uid, releaseOnMismatch: true);
+    return (uid, SyncLogEngine(lkc: sync, key: k, host: _host.call));
   }
 
   /// The account's sync key, opened with the password here: what the log,
@@ -165,16 +197,29 @@ final class LkcLogSync {
   Future<SyncKeyHandle> key({bool create = true}) async {
     final user = client.user.value;
     if (user == null) throw const LkcException(code: LkcCode.perm, reason: 'signed_out');
-    _account = user.id;
-    return SyncKeyring.ofLkc(await client.sync(app), user.id, create: create);
+    final uid = user.id;
+    _account = uid;
+    final sync = await client.sync(app);
+    _ensureAccount(uid);
+    // Signing first: the key file is never written unsigned.
+    if (!await client.ensurePersonalAuth(app)) {
+      _ensureAccount(uid);
+      throw await client.personalAuthUnavailable();
+    }
+    _ensureAccount(uid);
+    final k = await SyncKeyring.ofLkc(sync, uid, create: create);
+    _ensureAccount(uid, releaseOnMismatch: true);
+    return k;
   }
 
   /// Replaces the account's sync key (a device that held it is gone): what
   /// is written from now on is sealed to a new one.
   Future<void> rotateKey() async {
     if (!_wanted) throw StateError('LK Cloud sync is off');
-    final engine = await (_opening ??= _open());
+    final opening = _opening ??= _open();
+    final (engineAccount, engine) = await opening;
     final k = await key();
+    _ensureAccount(engineAccount, actual: k.id(), releaseOnMismatch: true);
     await syncCall(() => engine.rotate(key: k));
   }
 

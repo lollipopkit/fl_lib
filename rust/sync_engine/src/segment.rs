@@ -9,7 +9,7 @@
 //! A device reads each other device's segments after the last it read; one
 //! gone (removed once covered), or not there yet while later ones are, is read
 //! from a snapshot covering it. It removes its own segments once every
-//! snapshot covers them, or once one does and they are [SEGMENT_MAX_MS] old.
+//! snapshot covers them, or once one does and they are `SEGMENT_MAX_MS` old.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
@@ -272,18 +272,18 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
         let sent = core.get_hlc(SENT).await?;
         let all = if joining { core.host.all().await? } else { core.host.pending(sent).await? };
         let carried: Vec<_> = all.iter().filter(|r| run.carries(&r.c)).cloned().collect();
-        let (ops, complete) = core.ops_of(&carried).await?;
+        let (ops, complete, bindings) = core.ops_of_prepared(&carried).await?;
         // A record that could not be read stops the send just before it.
-        let stopped = ops.last().map(|op| op.h);
+        let stopped = ops.last().map(|p| p.snapshot_h);
         let stamped: Vec<_> = if complete { all } else { all.into_iter().filter(|r| stopped.is_some_and(|h| r.h <= h)).collect() };
         let device = core.device().await?;
         let mine = format!("{device:016x}");
         let mut last = sent;
         let mut n = listed.segments.get(&mine).and_then(|ns| ns.keys().max().copied()).unwrap_or(0).max(core.get_int(N).await?);
-        for (chunk, body) in core.batches(ops)? {
-            for op in &chunk {
-                if op.h.device == device && Some(op.h) > last {
-                    last = Some(op.h);
+        for (chunk, body) in core.batches_prepared(ops, &bindings)? {
+            for p in &chunk {
+                if p.snapshot_h.device == device && Some(p.snapshot_h) > last {
+                    last = Some(p.snapshot_h);
                 }
             }
             // Kept once written: a write that failed is listed next time if it
@@ -326,7 +326,7 @@ impl<H: Host, F: Files, S: Seal> SegmentSync<H, F, S> {
         extra.insert("covers".into(), Value::Object(covers));
         self.files.write(snapshot_name(&mine), core.seal.seal(&engine::encode(&ops, extra)?)?).await?;
         core.put(vec![(SINCE, None), (SNAPPED, Some(own.to_string()))]).await?;
-        let named: HashSet<String> = ops.iter().filter_map(|op| Core::<H, F, S>::blob_of(&op.d).map(str::to_string)).collect();
+        let named: HashSet<String> = ops.iter().filter_map(|op| engine::blob_of(&op.d).map(str::to_string)).collect();
         core.sweep_blobs(named).await;
         Ok(())
     }

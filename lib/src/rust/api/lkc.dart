@@ -7,8 +7,46 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+import 'team.dart';
+
 // These functions are ignored because they are not marked as `pub`: `client`, `fetched_of`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcPersonalAuth>>
+abstract class LkcPersonalAuth implements RustOpaqueInterface {
+  /// Opens personal signing for [key] starting from the persisted
+  /// [versions] JSON. [fetch_key] reads the account key file again (its
+  /// text, null when it cannot), when another device may have rotated it.
+  static LkcPersonalAuth open({
+    required LkcAccountKey key,
+    required String versions,
+    required FutureOr<bool> Function(String) save,
+    required FutureOr<String?> Function() fetchKey,
+  }) => RustLib.instance.api.crateApiLkcLkcPersonalAuthOpen(
+    key: key,
+    versions: versions,
+    save: save,
+    fetchKey: fetchKey,
+  );
+
+  /// Whether an unsigned answer for [name] of [app] is refused here; with
+  /// no [name], for the app's files in general.
+  Future<bool> requiresSignature({required String app, String? name});
+
+  /// Updates the account key (e.g. after rotation here).
+  Future<void> updateKey({required LkcAccountKey key});
+
+  /// [requires_signature] as the persisted [versions] JSON says.
+  static bool versionsRequireSignature({
+    required String versions,
+    required String app,
+    String? name,
+  }) => RustLib.instance.api.crateApiLkcLkcPersonalAuthVersionsRequireSignature(
+    versions: versions,
+    app: app,
+    name: name,
+  );
+}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LkcSession>>
 abstract class LkcSession implements RustOpaqueInterface {
@@ -63,6 +101,9 @@ abstract class LkcSync implements RustOpaqueInterface {
   /// (16 to 64 of `[A-Za-z0-9_-]`).
   Future<LkcAppended> append({required String key, required List<int> body});
 
+  /// Detaches personal-space signing and rollback protection.
+  void clearPersonalAuth();
+
   Future<bool> delete({required String name, String? ifMatch});
 
   Future<LkcFetched> download({
@@ -108,6 +149,9 @@ abstract class LkcSync implements RustOpaqueInterface {
     String? log,
     int? limit,
   });
+
+  /// Attaches personal-space signing and rollback protection.
+  void setPersonalAuth({required LkcPersonalAuth auth});
 
   /// Closes the connection [LkcSync::listen] holds.
   void stopListening();
@@ -350,6 +394,9 @@ enum LkcSyncErrorKind {
   signedOut,
   unreachable,
   invalid,
+
+  /// Server response failed Ed25519 signature or rollback verification.
+  untrusted,
 }
 
 /// What another device did: [name] now at [etag], or removed (`None`).

@@ -6,12 +6,14 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::{BaseAsyncRuntime, DartFnFuture, frb};
+use fl_lkc::personal::{PersonalAuth, PersonalVersions};
 use fl_lkc::sync::{Condition, Fetched, Kind, LogRead, SyncClient};
 use fl_lkc::{Client, Session, Store, Stored, Tokens};
 use tokio::sync::watch;
 
+use crate::api::team::LkcAccountKey;
 use crate::frb_generated::{FLUTTER_RUST_BRIDGE_HANDLER, StreamSink};
-use crate::lkc_bridge::DartStore;
+use crate::lkc_bridge::{DartKeySource, DartStore, DartVersionKeeper};
 
 /// Why a session request failed (`fl_lkc::Failure`).
 pub enum LkcFailure {
@@ -147,6 +149,8 @@ pub enum LkcSyncErrorKind {
     SignedOut,
     Unreachable,
     Invalid,
+    /// Server response failed Ed25519 signature or rollback verification.
+    Untrusted,
 }
 
 #[derive(Debug)]
@@ -174,6 +178,7 @@ impl std::fmt::Debug for LkcSyncErrorKind {
             Self::SignedOut => "SignedOut",
             Self::Unreachable => "Unreachable",
             Self::Invalid => "Invalid",
+            Self::Untrusted => "Untrusted",
         })
     }
 }
@@ -196,6 +201,7 @@ impl From<fl_lkc::sync::Error> for LkcSyncError {
             Kind::SignedOut => (LkcSyncErrorKind::SignedOut, None),
             Kind::Unreachable => (LkcSyncErrorKind::Unreachable, None),
             Kind::Invalid => (LkcSyncErrorKind::Invalid, None),
+            Kind::Untrusted => (LkcSyncErrorKind::Untrusted, None),
         };
         Self { kind, reason, epoch, detail: e.detail }
     }
@@ -277,6 +283,45 @@ pub struct LkcSnapshot {
     pub seq: i64,
 }
 
+/// Personal-space Ed25519 signer/verifier and monotonic version tracker.
+#[frb(opaque)]
+pub struct LkcPersonalAuth(Arc<PersonalAuth>);
+
+impl LkcPersonalAuth {
+    /// Opens personal signing for [key] starting from the persisted
+    /// [versions] JSON. [fetch_key] reads the account key file again (its
+    /// text, null when it cannot), when another device may have rotated it.
+    #[frb(sync)]
+    pub fn open(
+        key: &LkcAccountKey,
+        versions: String,
+        save: impl Fn(String) -> DartFnFuture<bool> + Send + Sync + 'static,
+        fetch_key: impl Fn() -> DartFnFuture<Option<String>> + Send + Sync + 'static,
+    ) -> Result<LkcPersonalAuth, LkcSyncError> {
+        let parsed = PersonalVersions::from_json(&versions)?;
+        let keeper = Arc::new(DartVersionKeeper { save: Arc::new(save) });
+        let source = Arc::new(DartKeySource { fetch: Arc::new(fetch_key) });
+        Ok(Self(Arc::new(PersonalAuth::new(key.inner().clone(), parsed, keeper).with_key_source(source))))
+    }
+
+    /// Updates the account key (e.g. after rotation here).
+    pub async fn update_key(&self, key: &LkcAccountKey) -> Result<(), LkcSyncError> {
+        Ok(self.0.update_key(key.inner().clone()).await?)
+    }
+
+    /// Whether an unsigned answer for [name] of [app] is refused here; with
+    /// no [name], for the app's files in general.
+    pub async fn requires_signature(&self, app: String, name: Option<String>) -> bool {
+        self.0.requires_signature(&app, name.as_deref()).await
+    }
+
+    /// [requires_signature] as the persisted [versions] JSON says.
+    #[frb(sync)]
+    pub fn versions_require_signature(versions: String, app: String, name: Option<String>) -> Result<bool, LkcSyncError> {
+        Ok(PersonalVersions::from_json(&versions)?.requires_signature(&app, name.as_deref()))
+    }
+}
+
 /// One app's files on homebase, on a session.
 #[frb(opaque)]
 pub struct LkcSync {
@@ -290,6 +335,18 @@ impl LkcSync {
     #[frb(sync)]
     pub fn new(session: &LkcSession, app: String) -> LkcSync {
         Self { client: Arc::new(SyncClient::new(session.0.clone(), &app)), listening: std::sync::Mutex::new(None) }
+    }
+
+    /// Attaches personal-space signing and rollback protection.
+    #[frb(sync)]
+    pub fn set_personal_auth(&self, auth: &LkcPersonalAuth) {
+        self.client.set_personal(Some(auth.0.clone()));
+    }
+
+    /// Detaches personal-space signing and rollback protection.
+    #[frb(sync)]
+    pub fn clear_personal_auth(&self) {
+        self.client.set_personal(None);
     }
 
     /// The client, for the sync engine on it.

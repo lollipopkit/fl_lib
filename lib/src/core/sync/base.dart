@@ -288,9 +288,24 @@ abstract class SyncIface<T extends Mergeable, I> {
   /// wrote meanwhile ([RemoteChangedException]).
   static const _attempts = 3;
 
+  /// The [RemoteStorage] of the cycle currently running (`fromFile`, `backup`),
+  /// null outside a cycle. Subclasses can use this to bind keys strictly to the
+  /// storage a cycle is downloading from (e.g. while switching sync channels).
+  RemoteStorage<I>? get currentSyncStorage => _currentSyncStorage;
+  RemoteStorage<I>? _currentSyncStorage;
+
   /// Download, merge, upload, record. [beforeRemote] is the remote's tag as
   /// read before, null when not read.
   Future<void> _cycle(RemoteStorage<I> rs, String? beforeRemote) async {
+    _currentSyncStorage = rs;
+    try {
+      await _runCycle(rs, beforeRemote);
+    } finally {
+      _currentSyncStorage = null;
+    }
+  }
+
+  Future<void> _runCycle(RemoteStorage<I> rs, String? beforeRemote) async {
     final localBefore = await localVersionTag;
     final uploaded = await _uploaded(rs, localBefore);
     final remoteExists = await rs.exists(Paths.bakName);

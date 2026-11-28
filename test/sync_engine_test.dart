@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -132,11 +133,15 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await PrefStore.shared.init();
     FlutterSecureStorage.setMockInitialValues({'bakPwd': 'pw'});
+    SecureProp.legacyApart = false;
     SyncKeyring.resetForTest();
     SyncKeyring.init(label: 'Test sync key');
   });
 
-  tearDown(SqliteDb.close);
+  tearDown(() async {
+    SecureProp.legacyApart = null;
+    await SqliteDb.close();
+  });
 
   test('what one device edits, another reads from the folder', () async {
     final folder = _Folder();
@@ -181,12 +186,34 @@ void main() {
     final store = await _freshDevice();
     store.set('theme', 'dark');
     await syncCall((await _engine(folder)).run);
+    final secretKey = await SecureStoreProps.syncSecretKey.read(limited: false);
+    expect(secretKey, isNotNull);
+    expect(SyncKeyring.normalizeSecretKey(secretKey!), secretKey);
+
+    // Without the client-side secret key, the second device gets SyncSecretKeyMissing.
     await _freshDevice();
     SyncKeyring.resetForTest();
     SyncKeyring.init(label: 'Test sync key');
-    FlutterSecureStorage.setMockInitialValues({'bakPwd': 'other'});
+    FlutterSecureStorage.setMockInitialValues({'bakPwd': 'pw'});
+    await expectLater(_engine(folder), throwsA(isA<SyncSecretKeyMissing>()));
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // With the secret key but another password, it gets SyncPasswordMismatch.
+    await _freshDevice();
+    SyncKeyring.resetForTest();
+    SyncKeyring.init(label: 'Test sync key');
+    FlutterSecureStorage.setMockInitialValues({'bakPwd': 'other', 'syncSecretKey': secretKey});
     await expectLater(_engine(folder), throwsA(isA<SyncPasswordMismatch>()));
     expect(SyncKeyring.passwordMismatch.value, {'folder'});
+  });
+
+  test('secret key generation and normalization validate checksums', () {
+    final key = SyncKeyring.generateSecretKey();
+    expect(key, startsWith('S1-'));
+    expect(key.length, 38);
+    expect(SyncKeyring.normalizeSecretKey('  ${key.toLowerCase().replaceAll('-', ' ')}  '), key);
+    final bad = '${key.substring(0, key.length - 1)}${key.endsWith('0') ? '1' : '0'}';
+    expect(SyncKeyring.normalizeSecretKey(bad), isNull);
   });
 
   test('a log Dart keeps carries the edits, and its snapshot covers them', () async {
@@ -240,6 +267,140 @@ void main() {
     final sealed = await key.seal(plain: Uint8List.fromList([1, 2, 3]));
     expect(SyncKeyring.sealedToKey(sealed), isTrue);
     expect(await SyncKeyring.openAny(sealed), [1, 2, 3]);
+  });
+
+  test('accountKeySealed is scoped per account and clears on account switch or sign-out', () {
+    SyncKeyring.accountKeySealed('account-a');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // Same account keeps the sealed flag.
+    SyncKeyring.syncLkcAccount('account-a');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+
+    // Switching to another account clears it before listeners observe secretKeyMissing.
+    SyncKeyring.syncLkcAccount('account-b');
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+
+    // Releasing or signing out clears the sealed account as well.
+    SyncKeyring.accountKeySealed('account-b');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+    SyncKeyring.release('account-b');
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+
+    SyncKeyring.accountKeySealed('account-c');
+    expect(SyncKeyring.secretKeyMissing.value, isTrue);
+    SyncKeyring.syncLkcAccount(null);
+    expect(SyncKeyring.secretKeyMissing.value, isFalse);
+  });
+
+  test('storeSecretKey rejects conflicting import when a staged key committed via ofFiles', () async {
+    final folder = _Folder();
+    await _freshDevice();
+    final writeStarted = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final inner = FilesKeyFile(folder, 'folder');
+    final slowFile = _BlockingKeyFile(inner, writeStarted, releaseWrite);
+
+    // Start ofFiles which generates staged key A and writes remotely.
+    final opening = SyncKeyring.ofFiles(slowFile);
+    await writeStarted.future;
+
+    // Concurrently attempt to import conflicting secret key B while write is in flight.
+    // Attach expectLater immediately so an early rejection is captured cleanly.
+    final keyB = SyncKeyring.generateSecretKey();
+    final importAssertion = expectLater(
+      SyncKeyring.storeSecretKey(keyB),
+      throwsA(anything),
+    );
+
+    // Allow the remote write with staged key A to commit and promote.
+    releaseWrite.complete();
+    final handle = await opening;
+    final committedA = await SecureStoreProps.syncSecretKey.read(limited: false);
+    expect(committedA, isNotNull);
+    expect(committedA, isNot(keyB));
+
+    // Conflicting import B must be rejected rather than overwriting committed key A.
+    await importAssertion;
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), committedA);
+    expect(await handle.open(sealed: await handle.seal(plain: Uint8List.fromList([7, 8]))), [7, 8]);
+  });
+
+  test('storeSecretKey validates and normalizes input consistently across both paths', () async {
+    final canonical = SyncKeyring.generateSecretKey();
+    final alternateSpelling = '  ${canonical.toLowerCase().replaceAll('-', ' ')}  ';
+    const invalidReady = 'S1-NOT-A-VALID-READY-KEY-9999';
+    const invalidNotReady = 'S1-NOT-A-VALID-UNREADY-KEY-8888';
+
+    // Invalid secret key is rejected before modifying secure storage and never
+    // retains or displays the supplied key value in ArgumentError.
+    await expectLater(
+      SyncKeyring.storeSecretKey(invalidReady),
+      throwsA(
+        isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'key')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => e.message, 'message', 'Invalid sync secret key')
+            .having((e) => e.toString(), 'toString', isNot(contains(invalidReady))),
+      ),
+    );
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+
+    // Ready path stores canonical spelling.
+    await SyncKeyring.storeSecretKey(alternateSpelling);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);
+
+    // Non-ready path also validates and stores canonical spelling without leaking input.
+    SyncKeyring.resetForTest();
+    FlutterSecureStorage.setMockInitialValues({});
+    await expectLater(
+      SyncKeyring.storeSecretKey(invalidNotReady),
+      throwsA(
+        isA<ArgumentError>()
+            .having((e) => e.name, 'name', 'key')
+            .having((e) => e.invalidValue, 'invalidValue', isNull)
+            .having((e) => e.message, 'message', 'Invalid sync secret key')
+            .having((e) => e.toString(), 'toString', isNot(contains(invalidNotReady))),
+      ),
+    );
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+    await SyncKeyring.storeSecretKey(alternateSpelling);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), canonical);
+  });
+
+  test('storeSecretKey non-ready path enforces durable intent whether active or staged', () async {
+    final keyA = SyncKeyring.generateSecretKey();
+    final keyB = SyncKeyring.generateSecretKey();
+    final intentJson = '{"ext-intent:lkc-account-key":"{\\"epoch\\":0,\\"pwd\\":\\"$keyA\\"}"}';
+
+    // Case 1: keyA is already ACTIVE (no pending staged key), durable external intent exists.
+    SyncKeyring.resetForTest();
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKey': keyA,
+      'syncKeyPending': intentJson,
+    });
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
+
+    // Same-key import is allowed and keeps the unresolved intent intact.
+    await SyncKeyring.storeSecretKey(keyA);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyA);
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+
+    // Case 2: keyA is STAGED (no active key), durable external intent exists.
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKeyPending': keyA,
+      'syncKeyPending': intentJson,
+    });
+    await expectLater(SyncKeyring.storeSecretKey(keyB), throwsStateError);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), isNull);
+
+    // Case 3: once no unresolved intent exists, replacing active keyA with keyB succeeds.
+    FlutterSecureStorage.setMockInitialValues({
+      'syncSecretKey': keyA,
+    });
+    await SyncKeyring.storeSecretKey(keyB);
+    expect(await SecureStoreProps.syncSecretKey.read(limited: false), keyB);
   });
 
   group('FileLogSync WebDAV binding', () {
@@ -374,4 +535,28 @@ void main() {
       );
     });
   });
+}
+
+final class _BlockingKeyFile implements SyncKeyFile {
+  final SyncKeyFile inner;
+  final Completer<void> writeStarted;
+  final Completer<void> releaseWrite;
+
+  _BlockingKeyFile(this.inner, this.writeStarted, this.releaseWrite);
+
+  @override
+  String get id => inner.id;
+
+  @override
+  Future<({Uint8List body, String version})?> read() => inner.read();
+
+  @override
+  Future<String?> write(Uint8List body, {required String? ifVersion}) async {
+    if (!writeStarted.isCompleted) writeStarted.complete();
+    await releaseWrite.future;
+    return inner.write(body, ifVersion: ifVersion);
+  }
+
+  @override
+  Future<bool> canCreate() => inner.canCreate();
 }

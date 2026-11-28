@@ -19,7 +19,10 @@ use std::collections::HashSet;
 use std::future::Future;
 
 pub use fl_sync::{Hlc, Op};
+pub use fl_lkc::personal::{RETAINED_MISMATCH, RetainedBinding};
 use serde_json::Value;
+
+use crate::log::Appended;
 
 mod engine;
 pub mod key;
@@ -56,11 +59,28 @@ pub enum Error {
     KeyNotHere(String),
     /// No backup password here: nothing is sealed or opened without one.
     PasswordMissing,
+    /// Remote key file exists, but this device has no secret key to open it.
+    SecretKeyMissing,
+    /// Server response failed Ed25519 signature or rollback verification.
+    Untrusted(String),
     /// Signed out, or in as someone the run was not for.
     SignedOut,
     /// What an op names is not there yet (a blob a folder has not brought):
     /// the read stops before it, to be tried again.
     Pending(String),
+    /// The remote append already committed ([appended]), but local watermark
+    /// persistence failed ([detail]); the engine advances its local checkpoint
+    /// from [appended] so the mutation is not resent.
+    AppendPersistFailed { appended: Appended, detail: String },
+    /// The remote snapshot already committed at [seq] (on [log], when reported
+    /// by the response), but local watermark persistence failed ([detail]); the
+    /// engine retains the committed snapshot so a retry flushes local
+    /// persistence without resending it, then sweeps covered blobs.
+    SnapshotPersistFailed { log: Option<String>, seq: i64, detail: String },
+    /// The remote key file already committed at [version], but local signing
+    /// watermark persistence failed ([detail]); the key engine reconciles the
+    /// committed write and retries watermark flush without resending the PUT.
+    KeyFilePersistFailed { version: String, sync_version: Option<i64>, detail: String },
 }
 
 impl std::fmt::Display for Error {
@@ -75,8 +95,13 @@ impl std::fmt::Display for Error {
             Error::PasswordMismatch(id) => write!(f, "the backup password does not open the sync key of {id}"),
             Error::KeyNotHere(id) => write!(f, "the sync key of {id} is not here yet"),
             Error::PasswordMissing => f.write_str("no backup password"),
+            Error::SecretKeyMissing => f.write_str("no secret key"),
+            Error::Untrusted(e) => write!(f, "untrusted: {e}"),
             Error::SignedOut => f.write_str("signed out"),
             Error::Pending(what) => write!(f, "{what} is not here yet"),
+            Error::AppendPersistFailed { detail, .. } => write!(f, "host: {detail}"),
+            Error::SnapshotPersistFailed { detail, .. } => write!(f, "host: {detail}"),
+            Error::KeyFilePersistFailed { detail, .. } => write!(f, "host: {detail}"),
         }
     }
 }
@@ -156,12 +181,12 @@ pub trait Host: Send + Sync + 'static {
     /// Removes every state key starting with [prefix] but [keep].
     fn clear_state(&self, prefix: String, keep: Vec<String>) -> impl Future<Output = Result<()>> + Send;
 
-    /// Keeps [ops], of collections not carried here, for [engine]'s
+    /// Keeps [ops], of collections not carried here, for `engine`'s
     /// snapshots (`sync_passed`): each replaces one of its record kept before
     /// only when its stamp is greater.
     fn pass(&self, engine: String, ops: Vec<Op>) -> impl Future<Output = Result<()>> + Send;
 
-    /// What [pass] kept for [engine].
+    /// What [pass] kept for `engine`.
     fn passed(&self, engine: String) -> impl Future<Output = Result<Vec<Op>>> + Send;
 
     fn forget_passed(&self, engine: String) -> impl Future<Output = Result<()>> + Send;
@@ -182,6 +207,12 @@ pub trait Seal: Send + Sync + 'static {
     /// (`fl_sync::blob_name`).
     fn name_of(&self, data: &[u8]) -> String;
 
+    /// Whether [name] matches [Self::name_of] under the current or any kept
+    /// historical identity of this seal.
+    fn matches_name_of(&self, name: &str, data: &[u8]) -> bool {
+        name == self.name_of(data)
+    }
+
     /// Looks again for the account's key, after something did not [open]:
     /// whether a newer one was found (the key was replaced elsewhere).
     fn refresh(&self) -> impl Future<Output = Result<bool>> + Send;
@@ -189,11 +220,43 @@ pub trait Seal: Send + Sync + 'static {
 
 /// Where large records are kept beside the ops (`op-<name>.age`).
 pub trait BlobStore: Send + Sync + 'static {
+    /// Whether this store currently attaches personal/team signatures to newly
+    /// uploaded blobs and containers.
+    fn signs_blobs(&self) -> bool {
+        false
+    }
+
     /// [body] kept as [name]; already there is done.
     fn put_blob(&self, name: String, body: Vec<u8>) -> impl Future<Output = Result<()>> + Send;
 
+    /// Like [Self::put_blob], answering whether the stored blob carries an
+    /// authenticated signature.
+    fn put_blob_signed(&self, name: String, body: Vec<u8>) -> impl Future<Output = Result<bool>> + Send {
+        async move { self.put_blob(name, body).await.map(|_| false) }
+    }
+
     /// The blob [name], `None` when it is gone.
     fn get_blob(&self, name: String) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
+
+    /// Like [Self::get_blob], answering `(bytes, was_signed)` and permitting an
+    /// unsigned pre-signing blob only when [retained] is given (a reference
+    /// retained by a batch or snapshot, or by this device's own content), the
+    /// bytes hold it, and the blob was never previously signed.
+    fn get_blob_verified(
+        &self,
+        name: String,
+        retained: Option<RetainedBinding<'_>>,
+    ) -> impl Future<Output = Result<Option<(Vec<u8>, bool)>>> + Send {
+        async move {
+            let Some(body) = self.get_blob(name.clone()).await? else {
+                return Ok(None);
+            };
+            if retained.is_some_and(|b| !b.holds(&body)) {
+                return Err(Error::Untrusted(format!("{name}: {RETAINED_MISMATCH}")));
+            }
+            Ok(Some((body, false)))
+        }
+    }
 
     /// The blobs whose name starts with [prefix], and when each was written
     /// (Unix ms).
@@ -208,6 +271,8 @@ pub struct Listed {
     pub name: String,
     /// When it was written, Unix ms; `None` when the store does not say.
     pub at: Option<i64>,
+    /// Whether the listing reports an attached signature on the entry.
+    pub signed: bool,
 }
 
 pub(crate) fn now_ms() -> i64 {
