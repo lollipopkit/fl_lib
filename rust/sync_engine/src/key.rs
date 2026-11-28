@@ -167,10 +167,11 @@ fn two_fa_key(id: &str) -> String {
 }
 
 /// Prefix for the device-local pre-CAS write-intent record stored inside
-/// `pending` (`intent:<remote_id>`). Written before a remote key-file CAS write
-/// and cleared only after `epochs` and `pending` reflect the outcome, so a
-/// failure in `set_epoch_2fa`/`set_pending` or a crash after commit can still
-/// distinguish a committed write from an uncommitted attempt or lost CAS.
+/// `pending` (`intent:<remote_id>`): every remote key-file CAS attempt not yet
+/// resolved, oldest first. One is added before its write and goes only once a
+/// remote read or the write's own result settles it, so a failure in
+/// `set_epoch_2fa`/`set_pending`, a crash after commit or a later attempt can
+/// still tell a committed write from an uncommitted attempt or lost CAS.
 const WRITE_INTENT_PREFIX: &str = "intent:";
 
 /// Distinct namespace prefix for external account-key write intents
@@ -206,22 +207,50 @@ struct WriteIntent {
 }
 
 impl WriteIntent {
-    fn encode(&self) -> String {
-        serde_json::json!({ "epoch": self.epoch, "pwd": self.pwd }).to_string()
+    fn json(&self) -> serde_json::Value {
+        serde_json::json!({ "epoch": self.epoch, "pwd": self.pwd })
     }
 
-    fn decode(raw: &str) -> Option<Self> {
-        let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    fn of(v: &serde_json::Value) -> Option<Self> {
         let epoch = v["epoch"].as_i64()?;
         let pwd = v["pwd"].as_str()?.to_string();
         (!pwd.is_empty()).then_some(Self { epoch, pwd })
     }
+
+    fn decode(raw: &str) -> Option<Self> {
+        Self::of(&serde_json::from_str(raw).ok()?)
+    }
+
+    /// The unresolved attempts on [id], oldest first.
+    fn all_of(pending: &HashMap<String, String>, id: &str) -> Vec<Self> {
+        pending
+            .get(&write_intent_key(id))
+            .and_then(|raw| serde_json::from_str::<Vec<serde_json::Value>>(raw).ok())
+            .map(|list| list.iter().filter_map(Self::of).collect())
+            .unwrap_or_default()
+    }
+
+    /// Stores [intents] as [id]'s, answering whether `pending` changed.
+    fn put_all(pending: &mut HashMap<String, String>, id: &str, intents: &[Self]) -> bool {
+        let key = write_intent_key(id);
+        let next = (!intents.is_empty()).then(|| serde_json::Value::from(intents.iter().map(Self::json).collect::<Vec<_>>()).to_string());
+        if pending.get(&key) == next.as_ref() {
+            return false;
+        }
+        match next {
+            Some(raw) => pending.insert(key, raw),
+            None => pending.remove(&key),
+        };
+        true
+    }
 }
 
-/// A write intent as staged by one write, and the one it replaced.
+/// A write intent as staged by one attempt: [added] when that attempt put it
+/// there (an equal one from an earlier attempt that may have committed stays
+/// that one's). Attempts on one ring are serialized by `secret_key_init`.
 struct StagedIntent {
-    written: String,
-    prior: Option<String>,
+    intent: WriteIntent,
+    added: bool,
 }
 
 /// An external account-key intent: only one carrying explicit provenance
@@ -777,43 +806,55 @@ impl RingInner {
         Ok(())
     }
 
-    /// Records the pre-CAS write intent for [id], returning what it replaced
-    /// so a write that never reaches the backend restores exactly that.
+    /// Adds the pre-CAS write intent for one attempt on [id], beside those of
+    /// earlier attempts that may still have committed; an equal one already
+    /// there covers it too.
     async fn stage_write_intent(&self, id: &str, expected_forget_gen: u64, epoch: i64, pwd: &str) -> Result<StagedIntent> {
         let _st = self.pending_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.pending().await?;
-        let key = write_intent_key(id);
-        let written = WriteIntent { epoch, pwd: pwd.to_string() }.encode();
-        let prior = all.get(&key).cloned();
-        if prior.as_ref() != Some(&written) {
-            all.insert(key, written.clone());
-            self.secrets.set_pending(all).await?;
+        let intent = WriteIntent { epoch, pwd: pwd.to_string() };
+        let mut intents = WriteIntent::all_of(&all, id);
+        if intents.contains(&intent) {
+            return Ok(StagedIntent { intent, added: false });
         }
-        Ok(StagedIntent { written, prior })
+        intents.push(intent.clone());
+        WriteIntent::put_all(&mut all, id, &intents);
+        self.secrets.set_pending(all).await?;
+        Ok(StagedIntent { intent, added: true })
     }
 
-    /// Undoes [staged] for a write known not to have committed, unless the
-    /// intent changed since: only what that write created goes.
+    /// Removes [staged]'s intent when that attempt added it and its write is
+    /// known not to have committed; every other attempt's stays.
     async fn rollback_write_intent(&self, id: &str, expected_forget_gen: u64, staged: &StagedIntent) -> Result<()> {
-        if staged.prior.as_ref() == Some(&staged.written) {
+        if !staged.added {
             return Ok(());
         }
         let _st = self.pending_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
         let mut all = self.secrets.pending().await?;
-        let key = write_intent_key(id);
-        if all.get(&key) != Some(&staged.written) {
+        let mut intents = WriteIntent::all_of(&all, id);
+        let Some(at) = intents.iter().position(|i| *i == staged.intent) else {
             return Ok(());
-        }
-        match &staged.prior {
-            Some(p) => all.insert(key, p.clone()),
-            None => all.remove(&key),
         };
+        intents.remove(at);
+        WriteIntent::put_all(&mut all, id, &intents);
         self.secrets.set_pending(all).await
     }
 
-    async fn reconcile_pending_locked(&self, st: &mut PendingState, id: &str, settled_pwd: &str, preserve_same_pending: bool) -> Result<()> {
+    /// Settles `pending[id]` for the remote seen at [settled_epoch] under
+    /// [settled_pwd]: the attempts it resolves (at or below that epoch: the
+    /// one that committed it, the ones it superseded or beat) go, a later one
+    /// stays until its own write settles. Without [settled_epoch], only the
+    /// attempts under [settled_pwd] go.
+    async fn reconcile_pending_locked(
+        &self,
+        st: &mut PendingState,
+        id: &str,
+        settled_epoch: Option<i64>,
+        settled_pwd: &str,
+        preserve_same_pending: bool,
+    ) -> Result<()> {
         let mut all = self.secrets.pending().await?;
         let current = self.secrets.password().await?;
         let notified = st.notified.get(id).is_some_and(|v| v.iter().any(|p| p == settled_pwd));
@@ -824,7 +865,12 @@ impl RingInner {
             }
             _ => None,
         };
-        let removed_intent = all.remove(&write_intent_key(id)).is_some();
+        let mut intents = WriteIntent::all_of(&all, id);
+        intents.retain(|i| match settled_epoch {
+            Some(e) => i.epoch > e,
+            None => i.pwd != settled_pwd,
+        });
+        let removed_intent = WriteIntent::put_all(&mut all, id, &intents);
         let pwd_changed = all.get(id) != next.as_ref();
         if removed_intent || pwd_changed {
             match &next {
@@ -857,16 +903,18 @@ impl RingInner {
         self.set_epoch_2fa(id, expected_forget_gen, epoch).await?;
         let mut st = self.pending_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
-        self.reconcile_pending_locked(&mut st, id, committed_pwd, true).await
+        self.reconcile_pending_locked(&mut st, id, Some(epoch), committed_pwd, true).await
     }
 
-    /// Clears the pre-CAS write intent and `pending[id]` after [id] opened
-    /// cleanly under [opened_pwd], unless a `password_changed` notification for
-    /// [opened_pwd] or a newer stored password is already outstanding.
+    /// Clears the write intents this open resolved and `pending[id]` after
+    /// [id] opened cleanly under [opened_pwd] (its epoch recorded), unless a
+    /// `password_changed` notification for [opened_pwd] or a newer stored
+    /// password is already outstanding.
     async fn clear_pending_if_settled(&self, id: &str, expected_forget_gen: u64, opened_pwd: &str) -> Result<()> {
+        let opened_epoch = self.secrets.epochs().await?.get(id).copied();
         let mut st = self.pending_lock.lock().await;
         self.ensure_not_forgotten(id, expected_forget_gen)?;
-        self.reconcile_pending_locked(&mut st, id, opened_pwd, false).await
+        self.reconcile_pending_locked(&mut st, id, opened_epoch, opened_pwd, false).await
     }
 }
 
@@ -1740,7 +1788,7 @@ impl SyncKey {
 
     async fn open(&self, pwd: &str, create: bool) -> Result<SecretKey> {
         let id = self.id();
-        loop {
+        'open: loop {
             let sk = self.ring.secret_key().await?;
             let tag = cred_tag(pwd, sk.as_ref());
             let Some((body, version)) = self.file().read().await? else {
@@ -1860,14 +1908,14 @@ impl SyncKey {
             }
             self.lock().opened = None;
             let pending_map = self.ring.secrets.pending().await?;
-            // First check any durable pre-CAS write intent: if our previous
-            // remote write already committed at `intent.epoch` under
-            // `intent.pwd` (e.g. `set_epoch_2fa` or `set_pending` failed
-            // afterward) and the password changed again since, recover from
-            // that committed state instead of treating it as a mismatch.
-            if let Some(intent) = pending_map.get(&write_intent_key(&id)).and_then(|raw| WriteIntent::decode(raw))
-                && intent.pwd != pwd
-            {
+            // First check every durable pre-CAS write intent (only those at the
+            // body's epoch can match, and only under the password that sealed
+            // it): if one of our earlier remote writes already committed at
+            // `intent.epoch` under `intent.pwd` (e.g. `set_epoch_2fa` or
+            // `set_pending` failed afterward, or a later attempt followed) and
+            // the password changed again since, recover from that committed
+            // state instead of treating it as a mismatch.
+            for intent in WriteIntent::all_of(&pending_map, &id).into_iter().rev().filter(|i| i.pwd != pwd) {
                 if sk.is_none()
                     && let Some(ref staged) = staged
                     && let Some((old_epoch, old_identities)) = read(&body, &staged.combine_passphrase(&intent.pwd))?
@@ -1886,11 +1934,11 @@ impl SyncKey {
                         if let Some(existing) = self.ring.secret_key().await?
                             && existing.format().as_str() != staged.format().as_str()
                         {
-                            continue;
+                            continue 'open;
                         }
                         let sealed = self.sealed(&identities, epoch, pwd, staged)?;
                         let Some((written, persist_err)) = self.commit_key_file_with_intent(sealed, Some(version), epoch, pwd).await? else {
-                            continue;
+                            continue 'open;
                         };
                         init.committed_staged = Some(staged.format().to_string());
                         if let Err(e) = self.ring.record_committed_write(&id, self.forget_gen, epoch, pwd).await {
@@ -1918,7 +1966,7 @@ impl SyncKey {
                     self.ring.record_committed_write(&id, self.forget_gen, old_epoch, &intent.pwd).await?;
                     let identities = self.merged(old_identities);
                     let epoch = old_epoch + 1;
-                    let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue };
+                    let Some((written, sk, persist_err)) = self.write_with_secret_key(&identities, epoch, pwd, Some(version)).await? else { continue 'open };
                     self.use_identities(identities, true).await?;
                     if let Some(detail) = persist_err {
                         return Err(Error::Host(detail));
@@ -2000,7 +2048,7 @@ impl SyncKey {
                 // key later can still finish sealing the password change.
             }
             if sk.is_some()
-                && (pending_map.contains_key(&id) || pending_map.contains_key(&write_intent_key(&id)))
+                && (pending_map.contains_key(&id) || !WriteIntent::all_of(&pending_map, &id).is_empty())
             {
                 self.ring.clear_all_pending_for(&id, self.forget_gen).await?;
             }

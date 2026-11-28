@@ -134,6 +134,8 @@ final class LkcLogSync {
       // there by then. Only this one: another may have taken its place meanwhile.
       if (!identical(_opening, opening)) return;
       _opening = null;
+      // Switching accounts while opening: the next run opens the new one's.
+      if (e is LkcException && e.reason == 'account_changed') return;
       lastFailure.value = e;
       if (e is! SyncPasswordMismatch && e is! SyncPasswordMissing && e is! SyncSecretKeyMissing) {
         Loggers.app.warning('LK Cloud log sync: opening', e, s);

@@ -4179,7 +4179,7 @@ async fn lkc_retained_pre_signing_blob_remains_readable_while_stripped_signed_bl
     let (_, b2_doc) = crate::engine::parse(&seal_b2.open(&b2_snapshot.1).unwrap()).unwrap();
     assert_eq!(b2_doc["legacy_blobs"][&pre_blob_name], json!(blake3::hash(&original_pre.0).to_hex().to_string()));
 
-    // A fresh `signed_apps` reader reads B2's snapshot with the original ciphertext...
+    // A fresh `signed_apps` reader pulls B2's snapshot (writing none) with the original ciphertext...
     let fresh_reader = || async {
         let dev = Device::new("pw");
         *dev.secrets.secret_key.lock().unwrap() = sk_a.clone();
@@ -4190,7 +4190,7 @@ async fn lkc_retained_pre_signing_blob_remains_readable_while_stripped_signed_bl
         (dev, log)
     };
     let (dev_b3, log_b3) = fresh_reader().await;
-    log_b3.sync().await.unwrap();
+    log_b3.pull().await.unwrap();
     assert_eq!(dev_b3.host.value("servers", "pre"), Some(pre_val));
 
     // 3c. ...while a validly sealed but different unsigned ciphertext under the retained name
@@ -4199,7 +4199,7 @@ async fn lkc_retained_pre_signing_blob_remains_readable_while_stripped_signed_bl
     assert_ne!(resealed, original_pre.0);
     blobs.lock().unwrap().insert(pre_blob_name.clone(), (resealed, None));
     let (_dev_b4, log_b4) = fresh_reader().await;
-    match log_b4.sync().await {
+    match log_b4.pull().await {
         Err(Error::Untrusted(detail)) => assert_eq!(detail, format!("serverbox/{pre_blob_name}: {}", crate::RETAINED_MISMATCH)),
         other => panic!("expected digest mismatch, got {other:?}"),
     }
@@ -4626,7 +4626,7 @@ async fn key_write_refused_before_dispatch_rolls_back_only_its_own_intent() {
     let d = Device::new("pw");
     let file = Arc::new(MemKeyFile::default());
     // A write intent this write did not create.
-    let prior = serde_json::json!({ "epoch": 9, "pwd": "older" }).to_string();
+    let prior = serde_json::json!([{ "epoch": 9, "pwd": "older" }]).to_string();
     d.secrets.pending.lock().unwrap().insert("intent:u1".into(), prior.clone());
     // The account switches right after the write intent is staged, before
     // the PUT is dispatched.
@@ -4634,7 +4634,7 @@ async fn key_write_refused_before_dispatch_rolls_back_only_its_own_intent() {
     let switched = Arc::new(AtomicBool::new(false));
     let flag = switched.clone();
     *d.secrets.on_set_pending.lock().unwrap() = Some(Box::new(move |p| {
-        if p.get("intent:u1").is_some_and(|raw| !raw.contains("older")) && !flag.swap(true, Ordering::SeqCst) {
+        if p.get("intent:u1").is_some_and(|raw| raw.matches("epoch").count() == 2) && !flag.swap(true, Ordering::SeqCst) {
             ring.sync_lkc_account(Some("u2"));
         }
     }));
@@ -4646,7 +4646,7 @@ async fn key_write_refused_before_dispatch_rolls_back_only_its_own_intent() {
 }
 
 #[tokio::test]
-async fn key_write_intent_is_restored_after_a_lost_cas_and_kept_after_a_transport_error() {
+async fn key_write_intent_goes_after_a_lost_cas_and_stays_beside_earlier_ones_after_a_transport_error() {
     struct FlakyKeyFile {
         writes: AtomicU64,
     }
@@ -4671,20 +4671,43 @@ async fn key_write_intent_is_restored_after_a_lost_cas_and_kept_after_a_transpor
         }
     }
     let d = Device::new("pw");
-    let prior = serde_json::json!({ "epoch": 9, "pwd": "older" }).to_string();
+    let older = serde_json::json!({ "epoch": 9, "pwd": "older" });
+    let prior = serde_json::json!([older]).to_string();
     d.secrets.pending.lock().unwrap().insert("intent:remote-1".into(), prior.clone());
     let history = Arc::new(Mutex::new(Vec::new()));
     let seen = history.clone();
     *d.secrets.on_set_pending.lock().unwrap() = Some(Box::new(move |p| {
         seen.lock().unwrap().push(p.get("intent:remote-1").cloned());
     }));
-    let res = d.ring.of(Arc::new(FlakyKeyFile { writes: AtomicU64::new(0) }), true).await;
+    let flaky = Arc::new(FlakyKeyFile { writes: AtomicU64::new(0) });
+    let res = d.ring.of(flaky.clone(), true).await;
+    assert!(matches!(res, Err(Error::Host(_))), "{:?}", res.err());
+    // The same attempt failing again adds no second copy of its intent.
+    let res = d.ring.of(flaky, true).await;
     assert!(matches!(res, Err(Error::Host(_))), "{:?}", res.err());
     let history = history.lock().unwrap().clone();
     let staged = history[0].clone().expect("the first write stages its intent");
-    assert_ne!(staged, prior);
-    assert_eq!(history[1].as_ref(), Some(&prior), "a lost CAS restores the intent it replaced");
-    assert_eq!(d.secrets.pending.lock().unwrap().get("intent:remote-1"), Some(&staged), "a PUT that may have landed keeps its intent");
+    let staged: Vec<serde_json::Value> = serde_json::from_str(&staged).unwrap();
+    assert_eq!(staged.len(), 2);
+    assert_eq!(staged[0], older, "an earlier attempt that may have committed stays");
+    assert_eq!(history[1].as_ref(), Some(&prior), "a lost CAS removes only its own intent");
+    let kept: Vec<serde_json::Value> = serde_json::from_str(d.secrets.pending.lock().unwrap().get("intent:remote-1").unwrap()).unwrap();
+    assert_eq!(kept, staged, "a PUT that may have landed keeps its intent beside the earlier one");
+}
+
+#[tokio::test]
+async fn an_open_settles_only_the_write_intents_at_or_below_its_epoch() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    a.key(&file).await.unwrap();
+    let b = Device::new("pw");
+    *b.secrets.secret_key.lock().unwrap() = a.secrets.secret_key.lock().unwrap().clone();
+    let later = serde_json::json!({ "epoch": 1, "pwd": "later" });
+    let intents = serde_json::json!([{ "epoch": 0, "pwd": "pw" }, { "epoch": 0, "pwd": "lost" }, later]).to_string();
+    b.secrets.pending.lock().unwrap().insert("intent:account".into(), intents);
+    b.key(&file).await.unwrap();
+    let kept: Vec<serde_json::Value> = serde_json::from_str(b.secrets.pending.lock().unwrap().get("intent:account").expect("a later attempt stays")).unwrap();
+    assert_eq!(kept, vec![later]);
 }
 
 // Pre-signing batches below the signing floor: accepted unsigned, while the
@@ -4813,4 +4836,59 @@ async fn pre_signing_batch_blob_is_bound_by_its_digest_or_a_covering_signed_snap
     assert_eq!(value, Some(big));
     set_blob(reseal(&original));
     assert!(matches!(read(true).await.0, Err(Error::Untrusted(d)) if d == mismatch));
+}
+
+/// A store that signs nothing, whose snapshot cannot be read.
+struct SnapshotDownLog(Arc<MemLog>);
+
+impl BlobStore for SnapshotDownLog {
+    async fn put_blob(&self, name: String, body: Vec<u8>) -> Result<()> {
+        self.0.put_blob(name, body).await
+    }
+
+    async fn get_blob(&self, name: String) -> Result<Option<Vec<u8>>> {
+        self.0.get_blob(name).await
+    }
+
+    async fn blobs(&self, prefix: String) -> Result<Vec<Listed>> {
+        self.0.blobs(prefix).await
+    }
+
+    async fn delete_blob(&self, name: String) -> Result<()> {
+        self.0.delete_blob(name).await
+    }
+}
+
+impl LogTransport for SnapshotDownLog {
+    async fn append(&self, key: String, body: Vec<u8>) -> Result<Appended> {
+        self.0.append(key, body).await
+    }
+
+    async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
+        self.0.read(after, log).await
+    }
+
+    async fn put_snapshot(&self, seq: i64, body: Vec<u8>) -> Result<bool> {
+        self.0.put_snapshot(seq, body).await
+    }
+
+    async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
+        Err(Error::Remote("snapshot unavailable".into()))
+    }
+}
+
+#[tokio::test]
+async fn an_unsigned_batch_blob_on_a_store_that_signs_nothing_needs_no_snapshot() {
+    let file = Arc::new(MemKeyFile::default());
+    let big = json!({ "payload": "p".repeat(70 << 10) });
+    let writer = Device::new("pw");
+    let inner = MemLog::new();
+    writer.host.edit("servers", "pre", Some(big.clone()));
+    writer.log(&inner, &file).await.sync().await.unwrap();
+    assert!(!inner.lock().blobs.is_empty());
+
+    let reader = Device::new("pw");
+    let log = LogSync::new(reader.host.clone(), Arc::new(SnapshotDownLog(inner)), reader.key(&file).await.unwrap());
+    log.pull().await.unwrap();
+    assert_eq!(reader.host.value("servers", "pre"), Some(big));
 }

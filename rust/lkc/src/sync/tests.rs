@@ -2241,7 +2241,8 @@ async fn a_404_settles_only_the_reconciled_snapshot_entry_once_its_marker_is_per
     // Cache miss: the 404 is settled without pruning unrelated entries.
     let keeper = attach(false);
     assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap(), (false, None));
-    assert!(keeper.saved.lock().unwrap().contains("signed_snapshots"));
+    let saved: serde_json::Value = serde_json::from_str(&keeper.saved.lock().unwrap()).unwrap();
+    assert!(saved["signed_snapshots"].as_array().is_some_and(|apps| apps.iter().any(|a| a == "serverbox")));
     assert!(unrelated.iter().all(pending));
 
     // Cache hit: the checked entry stays until the marker is persisted, then only it goes.
@@ -2296,4 +2297,79 @@ async fn a_replaced_remote_snapshot_settles_the_checked_entry_only_after_verific
     assert!(!pending(&hit));
     assert!(pending(&unrelated));
     assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("c1"));
+}
+
+#[tokio::test]
+async fn a_cached_snapshot_on_another_log_than_the_observed_one_settles_nothing() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let body = b"snap-body";
+    let sig = PersonalAuth::new(key.clone(), Default::default(), TestKeeper::new()).sign_snapshot("serverbox", 5, body).await.signature;
+    let (_fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
+        ("GET", p) if p.ends_with("/snapshot") => Response::status(200)
+            .header("ETag", "\"e5\"")
+            .header("Sync-Log", "c1")
+            .header("Sync-Seq", "5")
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", &pub_key)
+            .header("X-Signature", &sig)
+            .body("snap-body"),
+        _ => Response::status(404),
+    })
+    .await;
+    sync.set_personal(Some(Arc::new(PersonalAuth::new(key, Default::default(), TestKeeper::new()))));
+    let hit = (5i64, *blake3::hash(body).as_bytes());
+    let confirmed = (3i64, [1u8; 32]);
+    {
+        let mut guard = sync.pending_commits.lock().unwrap();
+        guard.observed_log = Some("a2".into());
+        let id = guard.next_id();
+        guard.snapshots.insert(confirmed, (id, SnapshotLogBinding::Confirmed("a2".into()), "e3".into()));
+        let id = guard.next_id();
+        guard.snapshots.insert(hit, (id, SnapshotLogBinding::Unknown, "e5".into()));
+    }
+
+    assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap(), (false, None));
+    let guard = sync.pending_commits.lock().unwrap();
+    assert_eq!(guard.observed_log.as_deref(), Some("a2"), "the live observation stays");
+    assert!(guard.snapshots.contains_key(&hit));
+    assert!(matches!(guard.snapshots.get(&confirmed), Some((_, SnapshotLogBinding::Confirmed(l), _)) if l == "a2"));
+}
+
+#[tokio::test]
+async fn a_signature_counts_as_verified_only_when_personal_auth_checked_it() {
+    let key = crate::team::identity::AccountKey::generate("u1");
+    let pub_key = key.signing_public();
+    let signer = PersonalAuth::new(key.clone(), Default::default(), TestKeeper::new());
+    let batch_sig = signer.sign_batch("serverbox", "k1", b"one").await.signature;
+    let snap_sig = signer.sign_snapshot("serverbox", 5, b"snap").await.signature;
+    let (_fake, sync) = homebase(move |r| match r.path() {
+        "/v2/sync/serverbox/log" => Response::json(200, json!({ "code": 0, "data": { "log": "6f1c", "batches": [{
+            "seq": 1, "size": 3, "digest": blake3::hash(b"one").to_hex().as_str(), "body": BASE64.encode(b"one"),
+            "idempotency_key": "k1", "signer": "u1", "signing_key": &pub_key, "signature": &batch_sig,
+        }], "head": 1, "snapshot_seq": 0, "more": false } })),
+        "/v2/sync/serverbox/snapshot" => Response::status(200)
+            .header("ETag", "\"e5\"")
+            .header("Sync-Log", "6f1c")
+            .header("Sync-Seq", "5")
+            .header("X-Signer", "u1")
+            .header("X-Signing-Key", &pub_key)
+            .header("X-Signature", &snap_sig)
+            .body("snap"),
+        _ => Response::status(404),
+    })
+    .await;
+    let signed_batch = |read: &LogRead| matches!(read, LogRead::Page { batches, .. } if batches[0].signed.is_some());
+
+    // Signature fields alone, with nothing to check them.
+    let (read, verified) = sync.read_log_checked(0, None, None).await.unwrap();
+    assert!(signed_batch(&read) && !verified);
+    let (found, verified) = sync.download_snapshot_bytes_checked().await.unwrap();
+    assert!(found.unwrap().0.signed.is_some() && !verified);
+
+    sync.set_personal(Some(Arc::new(PersonalAuth::new(key, Default::default(), TestKeeper::new()))));
+    let (read, verified) = sync.read_log_checked(0, None, None).await.unwrap();
+    assert!(signed_batch(&read) && verified);
+    let (found, verified) = sync.download_snapshot_bytes_checked().await.unwrap();
+    assert!(found.is_some() && verified);
 }

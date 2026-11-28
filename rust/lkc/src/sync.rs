@@ -704,6 +704,7 @@ impl<S: Store> SyncClient<S> {
                 FlushAction::Reconcile(entry_id, expected_etag) => {
                     match self.reconcile_snapshot_commit(&auth, auth_gen, commit_key, entry_id, &expected_etag).await? {
                         ReconciledSnapshot::Hit(_, resolved_log) => return Ok((true, Some(resolved_log))),
+                        ReconciledSnapshot::Conflicted => return Ok((false, None)),
                         ReconciledSnapshot::Replaced(_) => continue,
                         ReconciledSnapshot::Gone => {
                             self.flush_gone_snapshot(expected_user, &auth, auth_gen, log, seq, Settle::Entry(commit_key, entry_id)).await?;
@@ -1645,6 +1646,12 @@ impl<S: Store> SyncClient<S> {
     /// The log's batches after [after] of [log] (needed past 0), up to
     /// [limit] (homebase's default when `None`).
     pub async fn read_log(&self, after: i64, log: Option<&str>, limit: Option<u32>) -> Result<LogRead, Error> {
+        self.read_log_checked(after, log, limit).await.map(|(read, _)| read)
+    }
+
+    /// Like [`Self::read_log`], also answering whether personal auth verified
+    /// this read's batch signatures.
+    pub async fn read_log_checked(&self, after: i64, log: Option<&str>, limit: Option<u32>) -> Result<(LogRead, bool), Error> {
         let mut query = format!("after={after}");
         if let Some(log) = log {
             if !valid_log_id(log) {
@@ -1676,7 +1683,7 @@ impl<S: Store> SyncClient<S> {
                 auth.flush_pending_versions().await?;
                 self.ensure_personal_gen(*auth_gen)?;
             }
-            return Ok(LogRead::Compacted { log: compacted_log, snapshot_seq });
+            return Ok((LogRead::Compacted { log: compacted_log, snapshot_seq }, auth.is_some()));
         }
         let page: WirePage = self.json_within(response, MAX_LOG_PAGE).await?;
         let mut batches = Vec::with_capacity(page.batches.len());
@@ -1693,7 +1700,7 @@ impl<S: Store> SyncClient<S> {
             self.ensure_personal_gen(*auth_gen)?;
             self.retain_log_commits(*auth_gen, page.log.as_deref());
         }
-        Ok(LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more })
+        Ok((LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more }, auth.is_some()))
     }
 
     /// [from] as the log's snapshot up to [seq]: further than the last, up to
@@ -1850,6 +1857,8 @@ impl<S: Store> SyncClient<S> {
                                     .await?
                                 {
                                     ReconciledSnapshot::Hit(etag, _) => return Ok(etag),
+                                    // Kept for the log observed; this PUT is judged by the server.
+                                    ReconciledSnapshot::Conflicted => break,
                                     ReconciledSnapshot::Replaced(next_id) => {
                                         expected_id = Some(next_id);
                                         continue;
@@ -2034,11 +2043,17 @@ impl<S: Store> SyncClient<S> {
                     return Err(e);
                 }
                 self.ensure_personal_gen(auth_gen)?;
-                self.retain_log_commits(auth_gen, Some(&snap.log));
                 let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
                 if slot.generation == auth_gen && slot.auth.is_some() {
                     let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                     if guard.generation == auth_gen {
+                        // A log observed live under `auth_gen` takes precedence:
+                        // its observation and recovery entries stay.
+                        if guard.observed_log.as_deref().is_some_and(|obs| obs != snap.log) {
+                            return Ok(ReconciledSnapshot::Conflicted);
+                        }
+                        guard.observed_log = Some(snap.log.clone());
+                        guard.retain_for_log(&snap.log);
                         return Ok(match guard.snapshots.get(&commit_key) {
                             Some((cur_id, _, _)) if *cur_id == entry_id && same_snapshot => {
                                 guard.snapshots.remove(&commit_key);
@@ -2122,13 +2137,20 @@ impl<S: Store> SyncClient<S> {
 
     /// The log's snapshot and its bytes; `None` before there is one.
     pub async fn download_snapshot_bytes(&self) -> Result<Option<(Snapshot, Vec<u8>)>, Error> {
+        self.download_snapshot_bytes_checked().await.map(|(found, _)| found)
+    }
+
+    /// Like [`Self::download_snapshot_bytes`], also answering whether personal
+    /// auth verified this read's signature.
+    pub async fn download_snapshot_bytes_checked(&self) -> Result<(Option<(Snapshot, Vec<u8>)>, bool), Error> {
         let mut body = Vec::new();
         let auth = self.personal_auth_with_gen();
+        let verified = auth.is_some();
         let Some(snap) = self.snapshot_into(Target::Memory(&mut body)).await? else {
             if let Some((auth_gen, _)) = auth {
                 self.ensure_personal_gen(auth_gen)?;
             }
-            return Ok(None);
+            return Ok((None, verified));
         };
         if let Some((auth_gen, auth)) = auth {
             self.ensure_personal_gen(auth_gen)?;
@@ -2136,7 +2158,7 @@ impl<S: Store> SyncClient<S> {
             self.ensure_personal_gen(auth_gen)?;
             self.retain_log_commits(auth_gen, Some(&snap.log));
         }
-        Ok(Some((snap, body)))
+        Ok((Some((snap, body)), verified))
     }
 
     async fn snapshot_into(&self, into: Target<'_>) -> Result<Option<Snapshot>, Error> {
@@ -2576,6 +2598,9 @@ enum ReconciledSnapshot {
     Hit(String, String),
     Replaced(u64),
     Gone,
+    /// `/snapshot` is on a log other than the one observed under the auth
+    /// generation: nothing is settled.
+    Conflicted,
 }
 
 enum DetachedReconcile {

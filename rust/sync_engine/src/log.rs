@@ -150,7 +150,7 @@ struct PendingSnapshot {
 struct Covering {
     log: String,
     seq: i64,
-    blobs: HashMap<String, Option<String>>,
+    blobs: Arc<HashMap<String, Option<String>>>,
 }
 
 pub struct LogSync<H, T, S> {
@@ -314,13 +314,16 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
                             && !bindings.binds_all(batch_ops)
                         {
                             if covering.is_none() {
-                                covering = Some(self.signed_snapshot_covering().await?);
+                                // Only a store that signs verifies a snapshot's
+                                // signature: elsewhere none covers the batch,
+                                // which goes on without one.
+                                covering = Some(if self.transport.signs_blobs() { self.signed_snapshot_covering().await? } else { None });
                             }
                             if let Some(Some(c)) = &covering
                                 && log.as_ref() == Some(&c.log)
                                 && c.seq >= seq
                             {
-                                bindings.covering = Some(c.blobs.clone());
+                                bindings.covering = Some(Arc::clone(&c.blobs));
                             }
                         }
                         self.core
@@ -341,7 +344,7 @@ impl<H: Host, T: LogTransport, S: Seal> LogSync<H, T, S> {
             return Ok(None);
         };
         let decoded = self.core.decode_bound(&snapshot.body, &format!("snapshot {}", snapshot.seq)).await?;
-        Ok(decoded.map(|(ops, bindings)| Covering { log: snapshot.log, seq: snapshot.seq, blobs: bindings.covering_of(&ops) }))
+        Ok(decoded.map(|(ops, bindings)| Covering { log: snapshot.log, seq: snapshot.seq, blobs: Arc::new(bindings.covering_of(&ops)) }))
     }
 
     fn state(&self, values: Vec<(&str, Option<String>)>) -> Vec<(String, Option<String>)> {

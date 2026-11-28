@@ -47,7 +47,7 @@ pub(crate) struct BlobBindings {
     /// For an unsigned container accepted below the signing floor: each blob
     /// a verified signed snapshot covering it names, with its legacy digest
     /// (`None`: named as signed).
-    pub covering: Option<HashMap<String, Option<String>>>,
+    pub covering: Option<Arc<HashMap<String, Option<String>>>>,
 }
 
 /// An op prepared for sending alongside the original snapshot stamp (`r.h`)

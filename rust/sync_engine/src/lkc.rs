@@ -49,7 +49,8 @@ impl<S: Store> BlobStore for LkcLog<S> {
             Ok(_) => Ok(signed),
             Err(e) if e.kind == Kind::Changed => {
                 // Probes only whether the blob there is signed: an unsigned one
-                // other than [body] is bound by the caller against its content.
+                // is bound by the caller against its decoded content, one seen
+                // signed before is refused by the verification.
                 let differs = AtomicBool::new(false);
                 let same = |b: &[u8]| {
                     let same = b == body.as_slice();
@@ -58,9 +59,7 @@ impl<S: Store> BlobStore for LkcLog<S> {
                 };
                 match self.get_blob_verified(name.clone(), Some(RetainedBinding::Content(&same))).await {
                     Ok(None) => Err(Error::Untrusted(format!("{name}: server answered 412 for missing blob"))),
-                    Ok(Some((_, true))) => Ok(true),
-                    Ok(Some((_, false))) if signed => Err(Error::Untrusted(format!("{name}: server stripped signature on upload"))),
-                    Ok(Some((_, false))) => Ok(false),
+                    Ok(Some((_, signed_there))) => Ok(signed_there),
                     Err(Error::Untrusted(_)) if differs.load(Ordering::Relaxed) => Ok(false),
                     Err(e) => Err(e),
                 }
@@ -115,11 +114,12 @@ impl<S: Store> LogTransport for LkcLog<S> {
     }
 
     async fn read(&self, after: i64, log: Option<String>) -> Result<Page> {
-        Ok(match self.client.read_log(after, log.as_deref(), None).await.map_err(remote)? {
+        let (read, verified) = self.client.read_log_checked(after, log.as_deref(), None).await.map_err(remote)?;
+        Ok(match read {
             LogRead::Compacted { log, .. } => Page::Compacted { log },
             LogRead::Page { log, batches, more, .. } => Page::Batches {
                 log,
-                batches: batches.into_iter().map(|b| (b.seq, b.body, b.signed.is_some())).collect(),
+                batches: batches.into_iter().map(|b| (b.seq, b.body, verified && b.signed.is_some())).collect(),
                 more,
             },
         })
@@ -154,12 +154,8 @@ impl<S: Store> LogTransport for LkcLog<S> {
     }
 
     async fn snapshot(&self) -> Result<Option<SnapshotBody>> {
-        Ok(self
-            .client
-            .download_snapshot_bytes()
-            .await
-            .map_err(remote)?
-            .map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body, signed: s.signed.is_some() }))
+        let (found, verified) = self.client.download_snapshot_bytes_checked().await.map_err(remote)?;
+        Ok(found.map(|(s, body)| SnapshotBody { log: s.log, seq: s.seq, body, signed: verified && s.signed.is_some() }))
     }
 }
 
