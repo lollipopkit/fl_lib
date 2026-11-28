@@ -1,15 +1,20 @@
 //! Homebase's sync for real: signs in with a device code (approve it in a
 //! browser), writes, races, reads and removes a file of its own, appends to and
 //! snapshots a log of an app of its own ([`LOG_APP`]), then revokes the
-//! session. Needs an account whose plan has sync; leaves only that log's
-//! snapshot and the batches it covers, which homebase drops a day later
-//! (never a token printed):
-//! `cargo run -p fl_lkc --example sync_e2e` (from `rust/`).
+//! session. With `LKC_KEY_PASSPHRASE` (the account key's password), it does so
+//! again signed under the account key, on [SIGNED_APP]. Needs an account whose
+//! plan has sync; leaves only those logs' snapshots and the batches they
+//! cover, which homebase drops a day later (never a token printed):
+//! `LKC_KEY_PASSPHRASE=$(op read op://Dev/lkc-key-password/password) cargo run -p fl_lkc --example sync_e2e`
+//! (from `rust/`).
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use fl_lkc::personal::{BoxFuture, PersonalAuth, PersonalVersions, VersionKeeper};
 use fl_lkc::sync::{Condition, DIRECT_MAX, Event, Fetched, Kind, LogRead, Snapshot, SyncClient};
+use fl_lkc::team::TeamClient;
+use fl_lkc::team::identity::AccountKeyFile;
 use fl_lkc::{Client, DevicePoll, Failure, Session, Store, Stored};
 use futures_util::StreamExt;
 
@@ -25,6 +30,17 @@ impl Store for Memory {
 const APP: &str = "serverbox";
 /// Not ServerBox's: its devices would try to read the batches written here.
 const LOG_APP: &str = "fl-lkc-e2e";
+/// Signed under the account key, apart from [LOG_APP]'s unsigned batches.
+const SIGNED_APP: &str = "fl-lkc-e2e-signed";
+
+/// This run's signing watermarks, kept in memory only.
+struct Forget;
+
+impl VersionKeeper for Forget {
+    fn save(&self, _: String) -> BoxFuture<'_, Result<(), String>> {
+        Box::pin(async { Ok(()) })
+    }
+}
 
 /// An age file's header ahead of [len] bytes: homebase keeps age files only.
 fn age(len: usize, fill: u8) -> Vec<u8> {
@@ -49,10 +65,12 @@ async fn main() {
             Err(e) => panic!("poll: {e}"),
         }
     };
+    let me = client.user(&tokens.access).await.expect("user").id;
     let session = Arc::new(Session::restore(client, Memory, None).await);
     session.sign_in(tokens).await.expect("session");
 
-    let result = tokio::spawn(run(session.clone())).await;
+    let passphrase = std::env::var("LKC_KEY_PASSPHRASE").ok();
+    let result = tokio::spawn(run(session.clone(), me, passphrase)).await;
     session.sign_out("the e2e run ended".into()).await;
     println!("signed out");
     if let Err(e) = result {
@@ -61,7 +79,7 @@ async fn main() {
     println!("all passed");
 }
 
-async fn run(session: Arc<Session<Memory>>) {
+async fn run(session: Arc<Session<Memory>>, me: String, passphrase: Option<String>) {
     let dir = std::env::temp_dir().join(format!("fl-lkc-e2e-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let name = format!("e2e-{}.age", fl_lkc::now_ms());
@@ -115,8 +133,57 @@ async fn run(session: Arc<Session<Memory>>) {
     assert_eq!(this.head(&name).await.unwrap(), None);
     println!("removed");
 
-    log(Arc::new(SyncClient::new(session, LOG_APP)), &dir).await;
+    log(Arc::new(SyncClient::new(session.clone(), LOG_APP)), &dir).await;
+    match passphrase {
+        Some(p) => signed(session, &me, &p).await,
+        None => println!("signed log skipped: no LKC_KEY_PASSPHRASE"),
+    }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Batches, a snapshot and a blob signed under the account key: each read
+/// answers verified only once personal auth checked it.
+async fn signed(session: Arc<Session<Memory>>, me: &str, passphrase: &str) {
+    let key = AccountKeyFile::new(session.clone(), me).load_or_create(passphrase).await.expect("the account key");
+    TeamClient::new(session.clone()).publish_no_reset(&key).await.expect("publish it");
+    let sync = SyncClient::new(session, SIGNED_APP);
+    let (_, verified) = sync.read_log_checked(0, None, Some(1)).await.expect("read unchecked");
+    assert!(!verified, "verified without personal auth");
+    sync.set_personal(Some(Arc::new(PersonalAuth::new(key, PersonalVersions::default(), Arc::new(Forget)))));
+
+    let head = match sync.read_log_checked(0, None, Some(1)).await.expect("read the signed log") {
+        (LogRead::Page { head, .. }, true) => head,
+        (LogRead::Compacted { log, snapshot_seq }, true) => match sync.read_log_checked(snapshot_seq, log.as_deref(), Some(1)).await.expect("read past the snapshot") {
+            (LogRead::Page { head, .. }, true) => head,
+            other => panic!("{other:?}"),
+        },
+        other => panic!("{other:?}"),
+    };
+    let batch_key = format!("{:016x}{:016x}", fl_lkc::now_ms(), std::process::id());
+    let appended = sync.append(&batch_key, age(150, b'x')).await.expect("signed append");
+    assert_eq!(appended.seq, head + 1);
+    let (read, verified) = sync.read_log_checked(appended.seq - 1, Some(&appended.log), None).await.expect("read it back");
+    let LogRead::Page { batches, .. } = read else { panic!("compacted right after an append") };
+    assert!(verified && batches.len() == 1 && batches[0].signed.is_some(), "{batches:?}");
+    println!("a signed batch read back, verified");
+
+    sync.put_snapshot_bytes(appended.seq, age(400, b'y')).await.expect("signed snapshot");
+    let (found, verified) = sync.download_snapshot_bytes_checked().await.expect("read the snapshot");
+    let (snap, body) = found.expect("a snapshot");
+    assert!(verified && snap.signed.is_some() && snap.seq == appended.seq && body == age(400, b'y'), "{snap:?}");
+    println!("a signed snapshot read back, verified");
+
+    let blob = format!("op-e2e-{}.age", fl_lkc::now_ms());
+    let (put, signed) = sync.upload_blob_bytes_checked(&blob, age(300, b'z')).await;
+    put.expect("signed blob");
+    assert!(signed, "a blob uploaded unsigned");
+    let (got, verified) = sync.download_blob_bytes_checked(&blob).await;
+    let (body, _, sig) = got.expect("read the blob").expect("the blob");
+    assert!(verified && sig.is_some() && body == age(300, b'z'));
+    let (again, _) = sync.upload_blob_bytes_checked(&blob, age(300, b'w')).await;
+    assert_eq!(again.unwrap_err().kind, Kind::Changed);
+    assert!(sync.delete(&blob, None).await.unwrap());
+    println!("a signed blob read back verified, a second write refused, removed");
 }
 
 async fn log(sync: Arc<SyncClient<Memory>>, dir: &std::path::Path) {
