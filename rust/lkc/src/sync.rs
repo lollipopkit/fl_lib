@@ -2015,7 +2015,15 @@ impl<S: Store> SyncClient<S> {
                     return Err(Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq"));
                 };
                 let same_snapshot = remote_etag == expected_etag && snap.seq == seq && &digest == expected_digest;
-                if let Err(e) = auth.verify_snapshot_digest(&self.app, &snap, &digest).await {
+                let verified = auth
+                    .verify_snapshot_digest_observed(&self.app, &snap, &digest, &PendingLogObserver { client: self, auth_gen })
+                    .await;
+                if matches!(verified, Ok(false)) {
+                    // Another log observed live: nothing was bound to this one.
+                    self.ensure_personal_gen(auth_gen)?;
+                    return Ok(ReconciledSnapshot::Conflicted);
+                }
+                if let Err(e) = verified {
                     self.ensure_personal_gen(auth_gen)?;
                     if e.kind == Kind::Invalid && same_snapshot {
                         let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
@@ -2048,7 +2056,8 @@ impl<S: Store> SyncClient<S> {
                     let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
                     if guard.generation == auth_gen {
                         // A log observed live under `auth_gen` takes precedence:
-                        // its observation and recovery entries stay.
+                        // its observation and recovery entries stay. Only an
+                        // unsigned snapshot gets here unordered by the verification.
                         if guard.observed_log.as_deref().is_some_and(|obs| obs != snap.log) {
                             return Ok(ReconciledSnapshot::Conflicted);
                         }

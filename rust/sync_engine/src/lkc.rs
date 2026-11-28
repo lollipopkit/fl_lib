@@ -192,31 +192,22 @@ impl<S: Store> KeyFile for LkcKeyFile<S> {
         })
     }
 
-    fn flush_committed_write(
-        &self,
-        body: Vec<u8>,
-        if_version: Option<String>,
-        _version: String,
-        sync_version: Option<i64>,
-    ) -> BoxFuture<'_, Result<()>> {
+    fn flush_committed_write(&self, _version: String, sync_version: Option<i64>) -> BoxFuture<'_, Result<()>> {
         Box::pin(async move {
-            if let Some(ver) = sync_version {
-                return self.client.flush_committed_file(&self.account, KEY_FILE, ver).await.map_err(|e| match e.kind {
-                    Kind::Invalid => Error::Host(e.detail),
-                    _ => remote(e),
-                });
-            }
-            match self.write(body, if_version).await {
-                Ok(Some(_)) => Ok(()),
-                Ok(None) => Err(Error::Host("committed key-file write watermark remains unpersisted after CAS miss".into())),
-                Err(Error::KeyFilePersistFailed { detail, .. }) => Err(Error::Host(detail)),
-                Err(e) => Err(e),
-            }
+            let ver = sync_version.ok_or_else(|| Error::Host("a committed key-file write without its signed version".into()))?;
+            self.client.flush_committed_file(&self.account, KEY_FILE, ver).await.map_err(|e| match e.kind {
+                Kind::Invalid => Error::Host(e.detail),
+                _ => remote(e),
+            })
         })
     }
 
     fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
         Box::pin(async { Ok(true) })
+    }
+
+    fn orders_writes(&self) -> bool {
+        true
     }
 }
 

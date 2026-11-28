@@ -775,6 +775,28 @@ impl PersonalAuth {
         Self::record_snapshot_ordered(&self.keeper, &mut held, app, Some(&snapshot.log), snapshot.seq, superseded, observer).await
     }
 
+    /// [`Self::verify_snapshot_digest`] ordered against [observer]: a signed
+    /// snapshot on a log other than the one observed, or than the one this
+    /// instance recorded while not the one observed, is refused (`Ok(false)`)
+    /// before it changes the signing binding or floor; its signed-snapshot
+    /// marker is recorded either way.
+    pub async fn verify_snapshot_digest_observed(
+        &self,
+        app: &str,
+        snapshot: &Snapshot,
+        body_digest: &[u8; KEY_LEN],
+        observer: &impl LogObserver,
+    ) -> Result<bool, Error> {
+        if snapshot.signed.is_none() {
+            return self.verify_snapshot_digest(app, snapshot, body_digest).await.map(|()| true);
+        }
+        self.verify_snapshot_signature_only(app, snapshot, body_digest).await?;
+        let mut held = self.versions.lock().await;
+        // A log observed live since takes the place of the one recorded.
+        let superseded = held.recorded_log_ids.get(app).is_some_and(|known| known != &snapshot.log) && !observer.confirm(&snapshot.log)?;
+        Self::record_snapshot_ordered(&self.keeper, &mut held, app, Some(&snapshot.log), snapshot.seq, superseded, observer).await
+    }
+
     /// Streaming variant of [`Self::verify_snapshot`] taking a precomputed blake3 digest.
     pub async fn verify_snapshot_digest(&self, app: &str, snapshot: &Snapshot, body_digest: &[u8; KEY_LEN]) -> Result<(), Error> {
         let what = format!("{app}/snapshot seq {}", snapshot.seq);
@@ -886,7 +908,24 @@ impl PersonalAuth {
             v.signed_snapshots.insert(app.to_string());
         })
         .await?;
-        if superseded || !log.map_or(Ok(true), |l| observer.commit(l))? {
+        if superseded {
+            return Ok(false);
+        }
+        Self::bind_snapshot_ordered(keeper, held, app, log, seq, observer).await
+    }
+
+    /// Binds [app]'s signing floor to [log] at [seq] once [observer] takes
+    /// [log] as the one observed, and keeps it only while it still is once
+    /// saved; `false` (nothing bound) otherwise.
+    async fn bind_snapshot_ordered(
+        keeper: &Arc<dyn VersionKeeper>,
+        held: &mut VersionState,
+        app: &str,
+        log: Option<&str>,
+        seq: i64,
+        observer: &impl LogObserver,
+    ) -> Result<bool, Error> {
+        if !log.map_or(Ok(true), |l| observer.commit(l))? {
             return Ok(false);
         }
         let mut bound = held.data.clone();
@@ -1044,6 +1083,25 @@ mod tests {
         let v = saved(&keeper);
         assert_eq!(v.signed_log_ids.get("serverbox").map(String::as_str), Some("log-a"));
         assert_eq!(v.log_signed_from("serverbox"), Some(5));
+    }
+
+    #[tokio::test]
+    async fn an_observed_snapshot_on_another_log_than_the_recorded_one_binds_nothing() {
+        let key = AccountKey::generate("u1");
+        let (auth, keeper) = auth_for(key.clone());
+        let on_a = signed_snapshot(&auth, &key, "log-a", 5, b"a").await;
+        auth.verify_snapshot_digest("serverbox", &on_a, &digest(b"a")).await.unwrap();
+        let on_b = signed_snapshot(&auth, &key, "log-b", 9, b"b").await;
+        let observer = TestObserver::new(true, &keeper);
+        assert!(!auth.verify_snapshot_digest_observed("serverbox", &on_b, &digest(b"b"), &observer).await.unwrap());
+        assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("log-a"));
+        assert!(observer.observed.lock().unwrap().is_none(), "the observation is untouched");
+        assert!(PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap().signed_snapshots.contains("serverbox"), "its marker is kept");
+
+        // Once log B is observed live, it takes the recorded one's place.
+        *observer.observed.lock().unwrap() = Some("log-b".into());
+        assert!(auth.verify_snapshot_digest_observed("serverbox", &on_b, &digest(b"b"), &observer).await.unwrap());
+        assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("log-b"));
     }
 
     #[tokio::test]

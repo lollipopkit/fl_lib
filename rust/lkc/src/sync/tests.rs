@@ -2317,7 +2317,9 @@ async fn a_cached_snapshot_on_another_log_than_the_observed_one_settles_nothing(
         _ => Response::status(404),
     })
     .await;
-    sync.set_personal(Some(Arc::new(PersonalAuth::new(key, Default::default(), TestKeeper::new()))));
+    let keeper = TestKeeper::new();
+    let auth = Arc::new(PersonalAuth::new(key, Default::default(), keeper.clone()));
+    sync.set_personal(Some(auth.clone()));
     let hit = (5i64, *blake3::hash(body).as_bytes());
     let confirmed = (3i64, [1u8; 32]);
     {
@@ -2330,10 +2332,14 @@ async fn a_cached_snapshot_on_another_log_than_the_observed_one_settles_nothing(
     }
 
     assert_eq!(sync.flush_committed_snapshot_bytes("u1", None, 5, body).await.unwrap(), (false, None));
-    let guard = sync.pending_commits.lock().unwrap();
-    assert_eq!(guard.observed_log.as_deref(), Some("a2"), "the live observation stays");
-    assert!(guard.snapshots.contains_key(&hit));
-    assert!(matches!(guard.snapshots.get(&confirmed), Some((_, SnapshotLogBinding::Confirmed(l), _)) if l == "a2"));
+    {
+        let guard = sync.pending_commits.lock().unwrap();
+        assert_eq!(guard.observed_log.as_deref(), Some("a2"), "the live observation stays");
+        assert!(guard.snapshots.contains_key(&hit));
+        assert!(matches!(guard.snapshots.get(&confirmed), Some((_, SnapshotLogBinding::Confirmed(l), _)) if l == "a2"));
+    }
+    assert_eq!(auth.signed_log_id("serverbox").await, None, "the conflicting log binds nothing");
+    assert!(!keeper.saved.lock().unwrap().contains("c1"), "nor is it saved");
 }
 
 #[tokio::test]

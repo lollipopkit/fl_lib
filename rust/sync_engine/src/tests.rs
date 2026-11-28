@@ -368,6 +368,10 @@ impl KeyFile for KeyFileOf {
     fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
         Box::pin(async { Ok(!self.0.unordered) })
     }
+
+    fn orders_writes(&self) -> bool {
+        !self.0.unordered
+    }
 }
 
 #[derive(Default)]
@@ -2300,7 +2304,8 @@ async fn lkc_key_file_persist_failure_reconciles_and_retries_without_resending_p
                     } else if let Some(im) = hdr("if-match") {
                         guard.as_ref().is_some_and(|(_, e, _, _)| format!("\"{e}\"") == im)
                     } else {
-                        true
+                        // A key-file write is always conditional.
+                        false
                     };
                     if !ok {
                         ("412 Precondition Failed", String::new(), Vec::new())
@@ -2498,12 +2503,10 @@ async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
     let legacy_body = crate::key::seal_with_password(format!("# test, epoch 0\n{legacy_id}").as_bytes(), "pw").unwrap();
     *inner.file.lock().unwrap() = Some((legacy_body, "v1".into()));
 
-    type CommittedKeyWrite = (Vec<u8>, Option<String>, String);
     struct FailFirstPersistKeyFile {
         inner: Arc<MemKeyFile>,
         writes: AtomicUsize,
         fail_persist: AtomicBool,
-        committed_body: Mutex<Option<CommittedKeyWrite>>,
     }
     impl KeyFile for FailFirstPersistKeyFile {
         fn id(&self) -> String {
@@ -2514,28 +2517,13 @@ async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
         }
         fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
             Box::pin(async move {
-                // Retry of already-committed body flushes local state without re-writing remote.
-                if let Some((ref prev_body, ref prev_if, ref ver)) = *self.committed_body.lock().unwrap()
-                    && prev_body == &body
-                    && prev_if == &if_version
-                {
-                    if self.fail_persist.load(Ordering::SeqCst) {
-                        return Err(Error::KeyFilePersistFailed {
-                            version: ver.clone(),
-                            sync_version: None,
-                            detail: "still failing".into(),
-                        });
-                    }
-                    return Ok(Some(ver.clone()));
-                }
                 self.writes.fetch_add(1, Ordering::SeqCst);
                 let mut f = self.inner.file.lock().unwrap();
                 if f.as_ref().map(|(_, v)| v) != if_version.as_ref() {
                     return Ok(None);
                 }
                 let ver = "v2".to_string();
-                *f = Some((body.clone(), ver.clone()));
-                *self.committed_body.lock().unwrap() = Some((body, if_version, ver.clone()));
+                *f = Some((body, ver.clone()));
                 if self.fail_persist.load(Ordering::SeqCst) {
                     return Err(Error::KeyFilePersistFailed {
                         version: ver,
@@ -2546,17 +2534,20 @@ async fn restore_retains_pending_write_after_legacy_upgrade_persist_failure() {
                 Ok(Some(ver))
             })
         }
+        fn flush_committed_write(&self, _: String, _: Option<i64>) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async {
+                if self.fail_persist.load(Ordering::SeqCst) {
+                    return Err(Error::Host("still failing".into()));
+                }
+                Ok(())
+            })
+        }
         fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
             Box::pin(async { Ok(true) })
         }
     }
 
-    let kf = Arc::new(FailFirstPersistKeyFile {
-        inner: inner.clone(),
-        writes: AtomicUsize::new(0),
-        fail_persist: AtomicBool::new(true),
-        committed_body: Mutex::new(None),
-    });
+    let kf = Arc::new(FailFirstPersistKeyFile { inner: inner.clone(), writes: AtomicUsize::new(0), fail_persist: AtomicBool::new(true) });
     let d = Device::new("pw");
 
     // Restore (`create = false`) upgrades legacy file; PUT commits, local save fails.
@@ -3402,32 +3393,38 @@ async fn active_key_pending_write_blocks_conflicting_import_and_flushes_across_a
 }
 
 #[tokio::test]
-async fn cas_miss_during_default_flush_committed_write_retains_pending_write() {
-    struct CasMissOnRetryKeyFile {
+async fn a_committed_key_write_s_watermark_is_flushed_without_writing_again() {
+    struct LocalWatermarkKeyFile {
         inner: Arc<MemKeyFile>,
-        mode: AtomicUsize, // 0 = commit + persist fail, 1 = CAS miss Ok(None), 2 = succeed Ok(Some)
+        writes: AtomicUsize,
+        flush_fails: AtomicBool,
+        flushed: Mutex<Option<(String, Option<i64>)>>,
     }
-    impl KeyFile for CasMissOnRetryKeyFile {
+    impl KeyFile for LocalWatermarkKeyFile {
         fn id(&self) -> String {
             "account".into()
         }
         fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
             Box::pin(async { Ok(self.inner.file.lock().unwrap().clone()) })
         }
-        fn write(&self, body: Vec<u8>, _if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+        fn write(&self, body: Vec<u8>, if_version: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
             Box::pin(async move {
-                match self.mode.load(Ordering::SeqCst) {
-                    0 => {
-                        *self.inner.file.lock().unwrap() = Some((body, "v1".into()));
-                        Err(Error::KeyFilePersistFailed {
-                            version: "v1".into(),
-                            sync_version: None,
-                            detail: "save failed".into(),
-                        })
-                    }
-                    1 => Ok(None),
-                    _ => Ok(Some("v1".into())),
+                self.writes.fetch_add(1, Ordering::SeqCst);
+                let mut file = self.inner.file.lock().unwrap();
+                if file.as_ref().map(|(_, v)| v.clone()) != if_version {
+                    return Ok(None);
                 }
+                *file = Some((body, "v1".into()));
+                Err(Error::KeyFilePersistFailed { version: "v1".into(), sync_version: Some(1), detail: "save failed".into() })
+            })
+        }
+        fn flush_committed_write(&self, version: String, sync_version: Option<i64>) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async move {
+                if self.flush_fails.load(Ordering::SeqCst) {
+                    return Err(Error::Host("save failed again".into()));
+                }
+                *self.flushed.lock().unwrap() = Some((version, sync_version));
+                Ok(())
             })
         }
         fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
@@ -3435,20 +3432,24 @@ async fn cas_miss_during_default_flush_committed_write_retains_pending_write() {
         }
     }
 
-    let inner = Arc::new(MemKeyFile::default());
-    let kf = Arc::new(CasMissOnRetryKeyFile { inner, mode: AtomicUsize::new(0) });
+    let kf = Arc::new(LocalWatermarkKeyFile {
+        inner: Arc::new(MemKeyFile::default()),
+        writes: AtomicUsize::new(0),
+        flush_fails: AtomicBool::new(true),
+        flushed: Mutex::new(None),
+    });
     let d = Device::new("pw");
     let other = fl_lkc::secret_key::SecretKey::generate().format().to_string();
 
     assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
-    // Next flush receives `Ok(None)` (CAS miss): MUST fail and retain `pending_write`.
-    kf.mode.store(1, Ordering::SeqCst);
+    // A local flush that fails keeps the pending write.
     assert!(matches!(d.ring.of(kf.clone(), true).await, Err(Error::Host(_))));
-    assert!(d.ring.store_secret_key(&other).await.is_err(), "pending_write must remain retained after Ok(None)");
+    assert!(d.ring.store_secret_key(&other).await.is_err(), "the pending write stays");
 
-    // Once flush completes (`Ok(Some)`), `pending_write` clears.
-    kf.mode.store(2, Ordering::SeqCst);
-    d.ring.of(kf, true).await.unwrap();
+    kf.flush_fails.store(false, Ordering::SeqCst);
+    d.ring.of(kf.clone(), true).await.unwrap();
+    assert_eq!(*kf.flushed.lock().unwrap(), Some(("v1".into(), Some(1))));
+    assert_eq!(kf.writes.load(Ordering::SeqCst), 1, "the committed write is never sent again");
     d.ring.store_secret_key(&other).await.unwrap();
 }
 
@@ -3534,6 +3535,14 @@ async fn released_handle_late_ok_preserves_replacement_pending_write_and_forget_
                     });
                 }
                 Ok(Some("v-new".into()))
+            })
+        }
+        fn flush_committed_write(&self, _: String, _: Option<i64>) -> BoxFuture<'_, Result<()>> {
+            Box::pin(async {
+                if self.fail.load(Ordering::SeqCst) {
+                    return Err(Error::Host("watermark save failed".into()));
+                }
+                Ok(())
             })
         }
         fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
@@ -4626,7 +4635,7 @@ async fn key_write_refused_before_dispatch_rolls_back_only_its_own_intent() {
     let d = Device::new("pw");
     let file = Arc::new(MemKeyFile::default());
     // A write intent this write did not create.
-    let prior = serde_json::json!([{ "epoch": 9, "pwd": "older" }]).to_string();
+    let prior = serde_json::json!([{ "epoch": 9, "pwd": "older", "at": now_ms() }]).to_string();
     d.secrets.pending.lock().unwrap().insert("intent:u1".into(), prior.clone());
     // The account switches right after the write intent is staged, before
     // the PUT is dispatched.
@@ -4671,7 +4680,7 @@ async fn key_write_intent_goes_after_a_lost_cas_and_stays_beside_earlier_ones_af
         }
     }
     let d = Device::new("pw");
-    let older = serde_json::json!({ "epoch": 9, "pwd": "older" });
+    let older = serde_json::json!({ "epoch": 9, "pwd": "older", "at": now_ms() });
     let prior = serde_json::json!([older]).to_string();
     d.secrets.pending.lock().unwrap().insert("intent:remote-1".into(), prior.clone());
     let history = Arc::new(Mutex::new(Vec::new()));
@@ -4692,22 +4701,102 @@ async fn key_write_intent_goes_after_a_lost_cas_and_stays_beside_earlier_ones_af
     assert_eq!(staged[0], older, "an earlier attempt that may have committed stays");
     assert_eq!(history[1].as_ref(), Some(&prior), "a lost CAS removes only its own intent");
     let kept: Vec<serde_json::Value> = serde_json::from_str(d.secrets.pending.lock().unwrap().get("intent:remote-1").unwrap()).unwrap();
-    assert_eq!(kept, staged, "a PUT that may have landed keeps its intent beside the earlier one");
+    let attempts = |list: &[Value]| list.iter().map(|i| (i["epoch"].clone(), i["pwd"].clone())).collect::<Vec<_>>();
+    assert_eq!(attempts(&kept), attempts(&staged), "a PUT that may have landed keeps its intent beside the earlier one");
+    assert!(kept[1]["at"].as_i64() >= staged[1]["at"].as_i64(), "sent again, its window starts anew");
 }
 
 #[tokio::test]
-async fn an_open_settles_only_the_write_intents_at_or_below_its_epoch() {
+async fn an_open_settles_only_its_own_write_intent_and_the_other_password_stays_recoverable() {
+    let made = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    a.key(&made).await.unwrap();
+    // Read from a store that does not order writes: a lost attempt may still land.
+    let file = Arc::new(MemKeyFile { unordered: true, file: Mutex::new(made.file.lock().unwrap().clone()), ..Default::default() });
+    let sk = a.secrets.secret_key.lock().unwrap().clone();
+    let b = Device::new("pw");
+    *b.secrets.secret_key.lock().unwrap() = sk.clone();
+    let intents_of = |d: &Device| -> Vec<Value> { serde_json::from_str(d.secrets.pending.lock().unwrap().get("intent:account").expect("intents")).unwrap() };
+    // Attempts at epoch 0 under `pw` and under `lost` (the latter may still
+    // land, on a store that does not order writes), and one at epoch 1.
+    let now = now_ms();
+    let lost = json!({ "epoch": 0, "pwd": "lost", "at": now });
+    let later = json!({ "epoch": 1, "pwd": "later", "at": now });
+    let intents = json!([{ "epoch": 0, "pwd": "pw", "at": now }, lost, later]).to_string();
+    b.secrets.pending.lock().unwrap().insert("intent:account".into(), intents);
+
+    // Opening at epoch 0 under `pw` settles only that write.
+    let key = b.key(&file).await.unwrap();
+    assert_eq!(intents_of(&b), vec![lost, later.clone()]);
+
+    // The `lost` write lands after all, and the password here changes: it is
+    // recovered from its intent and sealed again under the new one.
+    let other = Arc::new(MemKeyFile::default());
+    let c = Device::new("lost");
+    *c.secrets.secret_key.lock().unwrap() = sk.clone();
+    c.key(&other).await.unwrap();
+    let landed = other.file.lock().unwrap().clone().unwrap().0;
+    *file.file.lock().unwrap() = Some((landed, "landed".into()));
+    *b.secrets.password.lock().unwrap() = Some("new".into());
+    key.check(true, true).await.unwrap();
+    assert_eq!(intents_of(&b), vec![later]);
+
+    let reader = Device::new("new");
+    *reader.secrets.secret_key.lock().unwrap() = sk;
+    reader.key(&file).await.expect("sealed again under the new password");
+}
+
+#[tokio::test]
+async fn on_a_store_that_orders_writes_an_open_settles_every_attempt_at_its_epoch() {
     let file = Arc::new(MemKeyFile::default());
     let a = Device::new("pw");
     a.key(&file).await.unwrap();
     let b = Device::new("pw");
     *b.secrets.secret_key.lock().unwrap() = a.secrets.secret_key.lock().unwrap().clone();
-    let later = serde_json::json!({ "epoch": 1, "pwd": "later" });
-    let intents = serde_json::json!([{ "epoch": 0, "pwd": "pw" }, { "epoch": 0, "pwd": "lost" }, later]).to_string();
+    let now = now_ms();
+    let later = json!({ "epoch": 1, "pwd": "later", "at": now });
+    let intents = json!([{ "epoch": 0, "pwd": "pw", "at": now }, { "epoch": 0, "pwd": "lost", "at": now }, later]).to_string();
     b.secrets.pending.lock().unwrap().insert("intent:account".into(), intents);
     b.key(&file).await.unwrap();
-    let kept: Vec<serde_json::Value> = serde_json::from_str(b.secrets.pending.lock().unwrap().get("intent:account").expect("a later attempt stays")).unwrap();
-    assert_eq!(kept, vec![later]);
+    let kept: Vec<Value> = serde_json::from_str(b.secrets.pending.lock().unwrap().get("intent:account").expect("a later attempt stays")).unwrap();
+    assert_eq!(kept, vec![later], "the other attempt at epoch 0 lost its condition");
+}
+
+#[tokio::test]
+async fn on_a_store_that_does_not_order_writes_an_attempt_past_its_window_is_over() {
+    let made = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    a.key(&made).await.unwrap();
+    let file = Arc::new(MemKeyFile { unordered: true, file: Mutex::new(made.file.lock().unwrap().clone()), ..Default::default() });
+    let b = Device::new("pw");
+    *b.secrets.secret_key.lock().unwrap() = a.secrets.secret_key.lock().unwrap().clone();
+    let window = i64::try_from(crate::key::SETTLE_WINDOW.as_millis()).unwrap();
+    let recent = json!({ "epoch": 0, "pwd": "recent", "at": now_ms() - window / 2 });
+    let stale = |pwd: &str, epoch: i64| json!({ "epoch": epoch, "pwd": pwd, "at": now_ms() - window - 1000 });
+    let intents = json!([stale("lost", 0), stale("lost", 1), recent]).to_string();
+    b.secrets.pending.lock().unwrap().insert("intent:account".into(), intents);
+    b.key(&file).await.unwrap();
+    let kept: Vec<Value> = serde_json::from_str(b.secrets.pending.lock().unwrap().get("intent:account").expect("the recent attempt stays")).unwrap();
+    assert_eq!(kept, vec![recent], "an attempt the file does not hold, past its window, is over");
+}
+
+#[tokio::test]
+async fn a_refused_password_keeps_only_the_write_intents_within_their_window() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    a.key(&file).await.unwrap();
+    let b = Device::new("other");
+    *b.secrets.secret_key.lock().unwrap() = a.secrets.secret_key.lock().unwrap().clone();
+    let window = i64::try_from(crate::key::SETTLE_WINDOW.as_millis()).unwrap();
+    let recent = json!({ "epoch": 1, "pwd": "unsettled", "at": now_ms() });
+    let stale = json!({ "epoch": 1, "pwd": "never-landed", "at": now_ms() - window - 1000 });
+    b.secrets.pending.lock().unwrap().insert("intent:account".into(), json!([stale, recent]).to_string());
+    b.secrets.pending.lock().unwrap().insert("account".into(), "older".into());
+    assert!(matches!(b.key(&file).await, Err(Error::PasswordMismatch(_))));
+    let pending = b.secrets.pending.lock().unwrap().clone();
+    let kept: Vec<Value> = serde_json::from_str(pending.get("intent:account").expect("the recent attempt stays")).unwrap();
+    assert_eq!(kept, vec![recent], "one past its window that the file does not hold is over");
+    assert!(!pending.contains_key("account"));
 }
 
 // Pre-signing batches below the signing floor: accepted unsigned, while the
