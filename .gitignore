@@ -24,6 +24,7 @@ migrate_working_dir/
 # Flutter/Dart/Pub related
 # Libraries should not include the root pubspec.lock, but keep the example app lockfile trackable. Per https://dart.dev/guides/libraries/private-files#pubspeclock.
 /pubspec.lock
+packages/*/pubspec.lock
 !/example/pubspec.lock
 **/doc/api/
 .dart_tool/

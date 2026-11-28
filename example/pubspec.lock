@@ -336,6 +336,13 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  fl_lib_scan:
+    dependency: "direct main"
+    description:
+      path: "../packages/fl_lib_scan"
+      relative: true
+    source: path
+    version: "0.0.1"
   flutter:
     dependency: "direct main"
     description: flutter

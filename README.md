@@ -38,5 +38,21 @@ Common library for the my Flutter projects.
    }
    ```
 
+### Optional sub-packages
+
+#### `fl_lib_scan` (`packages/fl_lib_scan`)
+Provides `BarcodeScannerPage` (depends on `qr_code_dart_scan` / `camera`). Kept separate so apps that do not scan codes do not link camera plugins or inherit camera permission requirements.
+
+With `fl_lib` as a git submodule:
+```yaml
+dependencies:
+  fl_lib:
+    path: packages/fl_lib
+  fl_lib_scan:
+    path: packages/fl_lib/packages/fl_lib_scan
+```
+
+If consumed via `git:` instead of a submodule, pin both `fl_lib` and `fl_lib_scan` to the same full 40-character commit SHA (or add a `dependency_overrides` entry for `fl_lib`), because `fl_lib_scan` references `fl_lib` via `path: ../..`.
+
 ### Attention
 Remember to run `./export_all.dart` after changing any file in this library.

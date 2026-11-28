@@ -50,7 +50,6 @@ dependencies:
   path_provider: ^2.1.4
   pointycastle: ^4.0.0
   pretty_qr_code: ^3.3.0
-  qr_code_dart_scan: ^0.14.0
   # age encryption (`AgeCryptor`): the Rust `age` crate, built by its hook.
   rage: ^0.1.1
   re_editor:
