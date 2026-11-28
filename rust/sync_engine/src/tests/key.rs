@@ -801,3 +801,61 @@ async fn a_failed_restore_leaves_no_handle_even_while_a_recheck_runs() {
     assert!(file.file.lock().unwrap().is_none(), "nothing is put where only a restore looked");
     assert!(d.ring.mismatch().borrow().is_empty());
 }
+
+#[tokio::test]
+async fn the_last_of_two_failed_restores_leaves_no_handle() {
+    struct GatedFile {
+        inner: Arc<MemKeyFile>,
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    }
+    impl KeyFile for GatedFile {
+        fn id(&self) -> String {
+            "account".into()
+        }
+        fn read(&self) -> BoxFuture<'_, Result<Option<Versioned>>> {
+            Box::pin(async {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(self.inner.file.lock().unwrap().clone())
+            })
+        }
+        fn write(&self, _: Vec<u8>, _: Option<String>) -> BoxFuture<'_, Result<Option<String>>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn can_create(&self) -> BoxFuture<'_, Result<bool>> {
+            Box::pin(async { Ok(true) })
+        }
+    }
+    let file = Arc::new(MemKeyFile::default());
+    let d = Device::new("pw");
+    let (started, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let gated = || Arc::new(GatedFile { inner: file.clone(), started: started.clone(), release: release.clone() });
+    let (ring, first) = (d.ring.clone(), gated());
+    let first = tokio::spawn(async move { ring.of(first, false).await });
+    started.notified().await;
+    let (ring, second) = (d.ring.clone(), gated());
+    let second = tokio::spawn(async move { ring.of(second, false).await });
+    tokio::task::yield_now().await;
+    release.notify_one();
+    assert!(matches!(first.await.unwrap(), Err(Error::KeyNotHere(_))));
+    started.notified().await;
+    release.notify_one();
+    assert!(matches!(second.await.unwrap(), Err(Error::KeyNotHere(_))));
+    // Only a registered handle's remote takes a password change.
+    d.ring.password_changed(Some("old".into())).await.unwrap();
+    assert!(!d.secrets.pending.lock().unwrap().contains_key("account"), "no handle stays registered");
+}
+
+#[tokio::test]
+async fn a_handle_a_failed_restore_unregisters_says_nothing_more() {
+    let file = Arc::new(MemKeyFile::default());
+    let a = Device::new("pw");
+    a.key(&file).await.unwrap();
+    let b = Device::new("other");
+    *b.secrets.secret_key.lock().unwrap() = a.secrets.secret_key.lock().unwrap().clone();
+    assert!(matches!(b.key(&file).await, Err(Error::PasswordMismatch(_))));
+    assert!(b.ring.mismatch().borrow().contains("account"));
+    assert!(matches!(b.ring.of(Arc::new(KeyFileOf(file.clone(), "account".into())), false).await, Err(Error::PasswordMismatch(_))));
+    assert!(b.ring.mismatch().borrow().is_empty(), "no handle is left to say it of");
+}

@@ -413,7 +413,8 @@ async fn a_held_version_of_a_file_never_seen_signed_is_still_asked_for_unchanged
     .await;
     sync.set_personal(Some(Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()))));
     let dir = tempdir::Dir::new();
-    let to = dir.path().join("bak.age");
+    let to = file(&dir, "bak.age", b"legacy");
     assert_eq!(sync.download(NAME, &to, Some("e1")).await.unwrap(), Fetched::Unchanged);
+    assert_eq!(std::fs::read(&to).unwrap(), b"legacy", "what is held stays");
     assert_eq!(fake.requests(&format!("/v2/sync/serverbox/{NAME}"))[0].header("if-none-match"), Some("\"e1\""));
 }

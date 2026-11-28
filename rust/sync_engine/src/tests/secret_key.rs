@@ -580,15 +580,24 @@ async fn external_intent_namespace_isolated_from_folder_writes_and_forget() {
 }
 
 #[tokio::test]
-async fn each_unresolved_external_write_of_one_account_settles_on_its_own_after_a_restart() {
+async fn a_stage_less_settlement_resolves_its_account_s_writes_from_before_a_restart_once() {
     let d = Device::new("pw");
     let key = d.secrets.secret_key.lock().unwrap().clone().unwrap();
     d.ring.stage_external_secret_key_commit_for(&key, Some("u1")).await.unwrap();
     d.ring.stage_external_secret_key_commit_for(&key, Some("u1")).await.unwrap();
+    d.ring.stage_external_secret_key_commit_for(&key, Some("u2")).await.unwrap();
     let restarted = KeyRing::new(d.secrets.clone(), "test");
-    let protected = || d.secrets.pending.lock().unwrap().contains_key("ext-intent:lkc-account-key");
-    restarted.clear_external_secret_key_commit_for(&key, None, Some("u1")).await.unwrap();
-    assert!(protected(), "the other write is still unresolved");
-    restarted.clear_external_secret_key_commit_for(&key, None, Some("u1")).await.unwrap();
-    assert!(!protected());
+    let owners = || -> Vec<String> {
+        let pending = d.secrets.pending.lock().unwrap();
+        pending.get("ext-intent:lkc-account-key").map_or_else(Vec::new, |raw| {
+            let v: Value = serde_json::from_str(raw).unwrap();
+            v["owners"].as_array().unwrap().iter().map(|o| o.as_str().unwrap().to_string()).collect()
+        })
+    };
+    restarted.commit_secret_key_for(&key, None, Some("u1")).await.unwrap();
+    assert_eq!(owners(), vec!["u2".to_string()], "u1's remote resolves both its writes; u2's stays");
+    restarted.commit_secret_key_for(&key, None, Some("u1")).await.unwrap();
+    assert_eq!(owners(), vec!["u2".to_string()], "asked again, nothing more goes");
+    restarted.clear_external_secret_key_commit_for(&key, None, Some("u2")).await.unwrap();
+    assert!(owners().is_empty());
 }

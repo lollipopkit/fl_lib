@@ -347,8 +347,12 @@ async fn concurrent_delete_after_put_does_not_leave_put_etag_cached() {
     let put = tokio::spawn(async move { s1.upload_signed(NAME, b"x".to_vec(), Condition::Absent, None).await.unwrap() });
     put_arrived.notified().await;
 
-    let del = tokio::spawn(async move { s2.delete(NAME, None).await.unwrap() });
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    let before_lock = Arc::new(Notify::new());
+    *sync.before_file_lock.lock().unwrap() = Some(before_lock.clone());
+    let mut del = tokio::spawn(async move { s2.delete(NAME, None).await.unwrap() });
+    reach("DELETE at the file lock", &before_lock, &mut del).await;
+    // Held there: given time to send, nothing is sent.
+    assert!(tokio::time::timeout(Duration::from_millis(30), &mut del).await.is_err());
     assert!(!delete_arrived.load(Ordering::SeqCst), "DELETE must wait until PUT response and ETag commit complete");
 
     release_tx.send(()).unwrap();

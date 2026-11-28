@@ -2,6 +2,7 @@
 //! landed leaves behind, and when a read settles it.
 
 use super::*;
+use serde_json::Value;
 
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct WriteIntent {
@@ -10,11 +11,11 @@ pub(super) struct WriteIntent {
 }
 
 impl WriteIntent {
-    fn json(&self) -> serde_json::Value {
+    fn json(&self) -> Value {
         serde_json::json!({ "epoch": self.epoch, "pwd": self.pwd })
     }
 
-    pub(super) fn of(v: &serde_json::Value) -> Option<Self> {
+    pub(super) fn of(v: &Value) -> Option<Self> {
         let epoch = v["epoch"].as_i64()?;
         let pwd = v["pwd"].as_str()?.to_string();
         (!pwd.is_empty()).then_some(Self { epoch, pwd })
@@ -36,7 +37,7 @@ impl WriteIntent {
     pub(super) fn all_of(pending: &HashMap<String, String>, id: &str) -> Vec<Self> {
         pending
             .get(&write_intent_key(id))
-            .and_then(|raw| serde_json::from_str::<Vec<serde_json::Value>>(raw).ok())
+            .and_then(|raw| serde_json::from_str::<Vec<Value>>(raw).ok())
             .map(|list| list.iter().filter_map(Self::of).collect())
             .unwrap_or_default()
     }
@@ -44,7 +45,7 @@ impl WriteIntent {
     /// Stores [intents] as [id]'s, answering whether `pending` changed.
     fn put_all(pending: &mut HashMap<String, String>, id: &str, intents: &[Self]) -> bool {
         let key = write_intent_key(id);
-        let next = (!intents.is_empty()).then(|| serde_json::Value::from(intents.iter().map(Self::json).collect::<Vec<_>>()).to_string());
+        let next = (!intents.is_empty()).then(|| Value::from(intents.iter().map(Self::json).collect::<Vec<_>>()).to_string());
         if pending.get(&key) == next.as_ref() {
             return false;
         }
@@ -67,26 +68,25 @@ pub(super) struct StagedIntent {
 /// The secret key an external account-key intent protects, whatever its
 /// provenance.
 pub(super) fn external_intent_secret_key(raw: &str) -> Option<String> {
-    let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let v: Value = serde_json::from_str(raw).ok()?;
     Some(SecretKey::parse(v["pwd"].as_str()?).ok()?.format().to_string())
 }
 
 /// An external account-key intent: only one carrying explicit provenance
-/// (`owners`, each account's unresolved writes counted) counts, whatever its
-/// `pwd` parses as.
+/// (`owners`) counts, whatever its `pwd` parses as.
 pub(super) fn decode_external_intent(raw: &str) -> Option<RecoveredExternal> {
-    let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let v: Value = serde_json::from_str(raw).ok()?;
     let _epoch = v["epoch"].as_i64()?;
     let key = SecretKey::parse(v["pwd"].as_str()?).ok()?.format().to_string();
-    let count = |n: &serde_json::Value| n.as_u64().and_then(|n| u32::try_from(n).ok()).filter(|n| *n > 0);
-    let owners: BTreeMap<String, u32> = v
+    let owners: BTreeSet<String> = v
         .get("owners")?
-        .as_object()?
+        .as_array()?
         .iter()
-        .filter(|(uid, _)| !uid.is_empty())
-        .filter_map(|(uid, n)| Some((uid.clone(), count(n)?)))
+        .filter_map(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
         .collect();
-    let unowned = v.get("unowned").and_then(count).unwrap_or(0);
+    let unowned = v.get("unowned").and_then(Value::as_bool).unwrap_or(false);
     let rec = RecoveredExternal { key, owners, unowned };
     (!rec.is_empty()).then_some(rec)
 }

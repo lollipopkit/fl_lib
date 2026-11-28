@@ -736,12 +736,17 @@ async fn observed_mid_write() -> (Fake, Arc<SyncClient<Kept>>, Arc<PersonalAuth>
     let key = AccountKey::generate("u1");
     let pub_key = key.signing_public();
     let recipient = key.recipient();
+    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()));
+    let batch_sig = auth.sign_batch("serverbox", KEY, b"batch").await;
+    let snap_sig = auth.sign_snapshot("serverbox", 3, b"snap").await;
     let client: Arc<OnceLock<Arc<SyncClient<Kept>>>> = Arc::default();
     let observe = {
         let client = client.clone();
         move || {
             let sync = client.get().unwrap();
-            { let ticket = sync.observation_ticket(sync.personal_generation()); sync.retain_log_commits(sync.personal_generation(), Some("1a0b"), ticket) };
+            let auth_gen = sync.personal_generation();
+            let ticket = sync.observation_ticket(auth_gen);
+            sync.retain_log_commits(auth_gen, Some("1a0b"), ticket);
         }
     };
     let (fake, sync) = homebase(move |r| match (r.method.as_str(), r.path()) {
@@ -750,15 +755,33 @@ async fn observed_mid_write() -> (Fake, Arc<SyncClient<Kept>>, Arc<PersonalAuth>
             observe();
             Response::json(200, json!({ "data": { "log": "1a0a", "seq": 3, "live": { "batches": 1, "bytes": 4 }, "compact": false } }))
         }
+        ("GET", p) if p.ends_with("/log") => {
+            observe();
+            let batch = json!({
+                "seq": 3, "digest": blake3::hash(b"batch").to_hex().as_str(), "body": BASE64.encode(b"batch"),
+                "idempotency_key": KEY, "signer": "u1", "signing_key": pub_key, "signature": batch_sig.signature,
+            });
+            Response::json(200, json!({ "data": { "log": "1a0a", "batches": [batch], "head": 3, "snapshot_seq": 0, "more": false } }))
+        }
         ("PUT", p) if p.ends_with("/snapshot") => {
             observe();
             written("snap-a").header("sync-log", "1a0a")
+        }
+        ("GET", p) if p.ends_with("/snapshot") => {
+            observe();
+            Response::status(200)
+                .header("ETag", "\"snap-a\"")
+                .header("sync-log", "1a0a")
+                .header("sync-seq", "3")
+                .header("X-Signer", "u1")
+                .header("X-Signing-Key", &pub_key)
+                .header("X-Signature", &snap_sig.signature)
+                .body("snap")
         }
         _ => Response::status(404),
     })
     .await;
     client.set(sync.clone()).ok().unwrap();
-    let auth = Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()));
     sync.set_personal(Some(auth.clone()));
     (fake, sync, auth)
 }
@@ -766,7 +789,7 @@ async fn observed_mid_write() -> (Fake, Arc<SyncClient<Kept>>, Arc<PersonalAuth>
 #[tokio::test]
 async fn a_delayed_append_answer_leaves_the_log_observed_since() {
     let (_fake, sync, auth) = observed_mid_write().await;
-    let appended = sync.append("idempotency-key-1234", b"batch".to_vec()).await.unwrap();
+    let appended = sync.append(KEY, b"batch".to_vec()).await.unwrap();
     assert_eq!(appended.log, "1a0a");
     assert_eq!(sync.pending_commits.lock().unwrap().observed_log.as_deref(), Some("1a0b"));
     assert_ne!(auth.signed_log_id("serverbox").await.as_deref(), Some("1a0a"), "log-b's binding is not replaced");
@@ -818,4 +841,24 @@ fn an_observation_sent_earlier_and_answered_later_replaces_none_sent_after_it() 
     let later = pending.ticket();
     assert!(pending.observe_at("1a0b", later), "one sent after it does");
     assert_eq!(pending.observed_log.as_deref(), Some("1a0b"));
+}
+
+#[tokio::test]
+async fn a_page_sent_before_another_log_was_observed_binds_nothing() {
+    let (_fake, sync, auth) = observed_mid_write().await;
+    assert_eq!(sync.read_log(0, None, None).await.unwrap_err().kind, Kind::Changed, "not taken: read again from there");
+    assert_eq!(sync.pending_commits.lock().unwrap().observed_log.as_deref(), Some("1a0b"));
+    assert_ne!(auth.signed_log_id("serverbox").await.as_deref(), Some("1a0a"), "log-b's binding is not replaced");
+}
+
+#[tokio::test]
+async fn a_snapshot_read_on_a_log_observed_replaced_meanwhile_is_not_taken() {
+    let (_fake, sync, auth) = observed_mid_write().await;
+    assert_eq!(sync.download_snapshot_bytes().await.unwrap_err().kind, Kind::Changed);
+    let dir = tempdir::Dir::new();
+    let to = file(&dir, "snap", b"held");
+    assert_eq!(sync.download_snapshot(&to).await.unwrap_err().kind, Kind::Changed);
+    assert_eq!(std::fs::read(&to).unwrap(), b"held", "not published");
+    assert_eq!(sync.pending_commits.lock().unwrap().observed_log.as_deref(), Some("1a0b"));
+    assert_ne!(auth.signed_log_id("serverbox").await.as_deref(), Some("1a0a"));
 }

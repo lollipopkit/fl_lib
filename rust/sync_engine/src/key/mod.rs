@@ -18,7 +18,7 @@
 //! new one, opening it with the one it changed from, unless another device
 //! sealed it since.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::io::{Read as _, Write as _};
 use std::pin::Pin;

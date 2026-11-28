@@ -112,13 +112,15 @@ impl<S: Store> SyncClient<S> {
         auth.ensure_published(&self.session, false).await?;
         self.ensure_personal_gen(auth_gen)?;
         let sig = auth.sign_batch(&self.app, key, &body).await;
-        let ticket = self.observation_ticket(auth_gen);
+        let mut ticket = self.observation_ticket(auth_gen);
         let res = match self.append_signed_bytes(bound, key, body.clone(), Some(&sig)).await {
             Err(e) if matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
                 self.ensure_personal_gen(auth_gen)?;
                 auth.ensure_published(&self.session, true).await?;
                 self.ensure_personal_gen(auth_gen)?;
                 let sig = auth.sign_batch(&self.app, key, &body).await;
+                // Sent again: its place is now.
+                ticket = self.observation_ticket(auth_gen);
                 self.append_signed_bytes(bound, key, body, Some(&sig)).await?
             }
             other => other?,
@@ -215,8 +217,10 @@ impl<S: Store> SyncClient<S> {
                 .ok_or_else(|| Error::new(Kind::Invalid, "a 410 without a valid Sync-Snapshot-Seq"))?;
             if let Some((auth_gen, auth)) = &auth {
                 self.ensure_personal_gen(*auth_gen)?;
-                if let Some(ref log_id) = compacted_log {
-                    self.retain_log_commits(*auth_gen, Some(log_id), ticket);
+                if let Some(ref log_id) = compacted_log
+                    && !self.retain_log_commits(*auth_gen, Some(log_id), ticket)
+                {
+                    return Err(superseded_log());
                 }
                 auth.flush_pending_versions().await?;
                 self.ensure_personal_gen(*auth_gen)?;
@@ -235,9 +239,13 @@ impl<S: Store> SyncClient<S> {
         }
         if let Some((auth_gen, auth)) = &auth {
             self.ensure_personal_gen(*auth_gen)?;
-            auth.verify_batches(&self.app, page.log.as_deref(), &batches).await?;
+            // A page sent before one that observed another log binds nothing
+            // and is not taken: the log is read again from there.
+            let bound = auth.verify_batches_observed(&self.app, page.log.as_deref(), &batches, &self.observer_at(*auth_gen, ticket)).await?;
             self.ensure_personal_gen(*auth_gen)?;
-            self.retain_log_commits(*auth_gen, page.log.as_deref(), ticket);
+            if !bound || !self.retain_log_commits(*auth_gen, page.log.as_deref(), ticket) {
+                return Err(superseded_log());
+            }
         }
         Ok((LogRead::Page { log: page.log, batches, head: page.head, snapshot_seq: page.snapshot_seq, more: page.more }, auth.is_some()))
     }

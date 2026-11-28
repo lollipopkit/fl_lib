@@ -246,14 +246,14 @@ async fn forged_key_and_stripped_batches_are_rejected() {
         idempotency_key: Some("idem-123456789012".into()),
         signed: Some(signed(&attacker, BASE64.encode(crypto::sign(attacker.signing(), &msg)), None)),
     };
-    assert_eq!(auth.verify_batches("serverbox", Some("log1"), &[forged]).await.unwrap_err().kind, Kind::Untrusted);
+    assert_eq!(auth.verify_batches_observed("serverbox", Some("log1"), &[forged], &Live).await.unwrap_err().kind, Kind::Untrusted);
 
     let good = signed_batch(&auth, &key, 1, "idem-123456789012", body).await;
-    auth.verify_batches("serverbox", Some("log1"), std::slice::from_ref(&good)).await.unwrap();
+    auth.verify_batches_observed("serverbox", Some("log1"), std::slice::from_ref(&good), &Live).await.unwrap();
 
     // Stripped signature on a later batch rejected.
     let unsigned = Batch { seq: 3, signed: None, ..good };
-    assert_eq!(auth.verify_batches("serverbox", Some("log1"), &[unsigned]).await.unwrap_err().kind, Kind::Untrusted);
+    assert_eq!(auth.verify_batches_observed("serverbox", Some("log1"), &[unsigned], &Live).await.unwrap_err().kind, Kind::Untrusted);
 }
 
 #[tokio::test]
@@ -262,21 +262,21 @@ async fn log_made_anew_reads_on() {
     let (auth, keeper) = auth_for(key.clone());
 
     let batch = signed_batch(&auth, &key, 500, "idem-123456789012", b"op").await;
-    auth.verify_batches("serverbox", Some("log-1"), std::slice::from_ref(&batch)).await.unwrap();
-    auth.verify_snapshot("serverbox", &signed_snapshot(&auth, &key, "log-1", 500, b"snap-500").await, b"snap-500").await.unwrap();
+    auth.verify_batches_observed("serverbox", Some("log-1"), std::slice::from_ref(&batch), &Live).await.unwrap();
+    auth.verify_snapshot_digest("serverbox", &signed_snapshot(&auth, &key, "log-1", 500, b"snap-500").await, &digest(b"snap-500")).await.unwrap();
 
     // Homebase made the log anew: seqs start at 1 again, a batch sent
     // again under its key lands at another seq, after a restart too.
     let restarted = PersonalAuth::new(key.clone(), PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap(), MemKeeper::new());
-    restarted.verify_snapshot("serverbox", &signed_snapshot(&auth, &key, "log-2", 20, b"snap-20").await, b"snap-20").await.unwrap();
-    restarted.verify_batches("serverbox", Some("log-2"), &[Batch { seq: 21, ..batch }]).await.unwrap();
+    restarted.verify_snapshot_digest("serverbox", &signed_snapshot(&auth, &key, "log-2", 20, b"snap-20").await, &digest(b"snap-20")).await.unwrap();
+    restarted.verify_batches_observed("serverbox", Some("log-2"), &[Batch { seq: 21, ..batch }], &Live).await.unwrap();
 
     // Stripping a snapshot's signature stays refused at any seq, and the
     // new log holds no legacy batch below the old log's first signed one.
     let stripped = Snapshot { log: "log-2".into(), seq: 1, signed: None };
-    assert_eq!(restarted.verify_snapshot("serverbox", &stripped, b"evil").await.unwrap_err().kind, Kind::Untrusted);
+    assert_eq!(restarted.verify_snapshot_digest("serverbox", &stripped, &digest(b"evil")).await.unwrap_err().kind, Kind::Untrusted);
     let unsigned = Batch { seq: 3, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
-    assert_eq!(restarted.verify_batches("serverbox", Some("log-2"), &[unsigned]).await.unwrap_err().kind, Kind::Untrusted);
+    assert_eq!(restarted.verify_batches_observed("serverbox", Some("log-2"), &[unsigned], &Live).await.unwrap_err().kind, Kind::Untrusted);
 }
 
 #[tokio::test]
@@ -289,7 +289,7 @@ async fn versions_stay_small() {
         auth.verify_blob("serverbox", &name, b"blob", Some(&s)).await.unwrap();
         auth.record_blob_written("serverbox").await.unwrap();
         let batch = signed_batch(&auth, &key, i + 1, &format!("idem-{i:012}"), b"op").await;
-        auth.verify_batches("serverbox", Some("log1"), &[batch]).await.unwrap();
+        auth.verify_batches_observed("serverbox", Some("log1"), &[batch], &Live).await.unwrap();
         auth.record_batch_written("serverbox", "log1", i + 100).await.unwrap();
     }
     let saved = keeper.saved.lock().unwrap().clone();
@@ -468,11 +468,11 @@ async fn first_signed_log_write_preserves_legacy_backups_and_earlier_batches() {
     auth.verify_file("serverbox", "srvbox_bak_v4.age", b"legacy-backup", None, true).await.unwrap();
     // Unconsumed legacy unsigned batch from before seq 10 remains readable.
     let legacy_batch = Batch { seq: 9, body: b"legacy-op".to_vec(), epoch: None, idempotency_key: None, signed: None };
-    auth.verify_batches("serverbox", Some("log1"), &[legacy_batch]).await.unwrap();
+    auth.verify_batches_observed("serverbox", Some("log1"), &[legacy_batch], &Live).await.unwrap();
     // Unsigned batch at or past seq 10 is rejected.
     for seq in [10, 11] {
         let stripped = Batch { seq, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
-        assert_eq!(auth.verify_batches("serverbox", Some("log1"), &[stripped]).await.unwrap_err().kind, Kind::Untrusted);
+        assert_eq!(auth.verify_batches_observed("serverbox", Some("log1"), &[stripped], &Live).await.unwrap_err().kind, Kind::Untrusted);
     }
 
     // Signing the sync key file and log blobs keeps the legacy backup
@@ -492,7 +492,7 @@ async fn first_signed_log_write_preserves_legacy_backups_and_earlier_batches() {
     let legacy_auth = PersonalAuth::new(key, legacy_versions, MemKeeper::new());
     legacy_auth.record_batch_written("serverbox", "log1", 50).await.unwrap();
     let low_unsigned = Batch { seq: 2, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
-    assert_eq!(legacy_auth.verify_batches("serverbox", Some("log1"), &[low_unsigned]).await.unwrap_err().kind, Kind::Untrusted);
+    assert_eq!(legacy_auth.verify_batches_observed("serverbox", Some("log1"), &[low_unsigned], &Live).await.unwrap_err().kind, Kind::Untrusted);
 }
 
 #[tokio::test]
@@ -557,4 +557,78 @@ fn a_legacy_unsigned_batch_is_taken_only_on_the_log_it_was_recorded_for() {
     assert!(v.log_requires_signature("serverbox", None, 9), "an answer naming no log is not log A's");
     assert!(v.log_requires_signature("serverbox", Some("log-b"), 9));
     assert!(v.log_requires_signature("serverbox", Some("log-a"), 10));
+}
+
+/// An observer every log is taken by: no other request competes.
+struct Live;
+
+impl LogObserver for Live {
+    fn commit(&self, _: &str) -> Result<bool, Error> {
+        Ok(true)
+    }
+
+    fn confirm(&self, _: &str) -> Result<bool, Error> {
+        Ok(true)
+    }
+}
+
+#[tokio::test]
+async fn a_page_with_a_stripped_batch_observes_nothing() {
+    let key = AccountKey::generate("u1");
+    let (auth, keeper) = auth_for(key.clone());
+    let signed = signed_batch(&auth, &key, 5, "idem-123456789012", b"op").await;
+    let stripped = Batch { seq: 6, body: b"forged".to_vec(), epoch: None, idempotency_key: None, signed: None };
+    let observer = TestObserver::new(true, &keeper);
+    let err = auth.verify_batches_observed("serverbox", Some("log-a"), &[signed, stripped], &observer).await.unwrap_err();
+    assert_eq!(err.kind, Kind::Untrusted);
+    assert!(observer.observed.lock().unwrap().is_none(), "a refused page moves no observation");
+}
+
+#[tokio::test]
+async fn a_page_binding_saved_after_another_log_was_observed_is_taken_back() {
+    let key = AccountKey::generate("u1");
+    let (auth, keeper) = auth_for(key.clone());
+    let batch = signed_batch(&auth, &key, 5, "idem-123456789012", b"op").await;
+    // Another log observed while the binding is saved.
+    struct Moved;
+    impl LogObserver for Moved {
+        fn commit(&self, _: &str) -> Result<bool, Error> {
+            Ok(true)
+        }
+        fn confirm(&self, _: &str) -> Result<bool, Error> {
+            Ok(false)
+        }
+    }
+    assert!(!auth.verify_batches_observed("serverbox", Some("log-a"), &[batch], &Moved).await.unwrap());
+    assert_eq!(auth.signed_log_id("serverbox").await, None);
+    let v = PersonalVersions::from_json(&keeper.saved.lock().unwrap()).unwrap();
+    assert!(v.signed_log_ids.is_empty(), "nothing stays bound: {v:?}");
+}
+
+#[tokio::test]
+async fn a_snapshot_a_request_sent_later_read_takes_the_recorded_log_s_place() {
+    let key = AccountKey::generate("u1");
+    let (auth, keeper) = auth_for(key.clone());
+    let on_k = signed_snapshot(&auth, &key, "log-k", 3, b"k").await;
+    let k_seen = TestObserver::new(true, &keeper);
+    assert!(auth.verify_snapshot_digest_observed("serverbox", &on_k, &digest(b"k"), &k_seen).await.unwrap());
+    let on_l = signed_snapshot(&auth, &key, "log-l", 1, b"l").await;
+    // Not ordered: the recorded log, still observed, supersedes it.
+    assert!(!auth.verify_snapshot_digest_observed("serverbox", &on_l, &digest(b"l"), &k_seen).await.unwrap());
+    // Ordered: placed by its request, sent after the observation of log-k.
+    struct Ordered(TestObserver);
+    impl LogObserver for Ordered {
+        fn commit(&self, log: &str) -> Result<bool, Error> {
+            self.0.commit(log)
+        }
+        fn confirm(&self, log: &str) -> Result<bool, Error> {
+            self.0.confirm(log)
+        }
+        fn ordered(&self) -> bool {
+            true
+        }
+    }
+    let later = Ordered(TestObserver::new(true, &keeper));
+    assert!(auth.verify_snapshot_digest_observed("serverbox", &on_l, &digest(b"l"), &later).await.unwrap());
+    assert_eq!(auth.signed_log_id("serverbox").await.as_deref(), Some("log-l"));
 }

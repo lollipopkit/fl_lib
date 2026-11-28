@@ -512,5 +512,6 @@ async fn a_snapshot_upload_is_not_completed_under_an_auth_set_meanwhile() {
     sync.set_personal(Some(Arc::new(PersonalAuth::new(key, PersonalVersions::default(), TestKeeper::new()))));
     let err = sync.put_snapshot_bytes(9, vec![1u8; (DIRECT_MAX + 1) as usize]).await.unwrap_err();
     assert_eq!(err.kind, Kind::SignedOut, "{err:?}");
+    assert_eq!(fake.requests("/store/u1").len(), 1, "the body went to the store, under which the auth was replaced");
     assert!(fake.requests("/v2/sync/serverbox/snapshot/uploads/u1/complete").is_empty(), "not completed under the other auth");
 }

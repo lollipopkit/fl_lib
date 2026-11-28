@@ -448,9 +448,10 @@ impl PendingCommits {
         self.next_ticket
     }
 
-    /// [log] as the one observed now, dropping what belongs to another.
+    /// [log] as observed here, not by a request: in the place of the
+    /// observation it stands beside, so a request sent later still replaces it.
     fn observe(&mut self, log: &str) {
-        let ticket = self.ticket();
+        let ticket = self.observed_ticket;
         self.observe_at(log, ticket);
     }
 
@@ -534,10 +535,13 @@ impl Drop for FileRecoveryToken<'_> {
     }
 }
 
-/// [`LogObserver`] over [`PendingCommits::observed_log`] of one auth generation.
+/// [`LogObserver`] over [`PendingCommits::observed_log`] of one auth
+/// generation: for a request's answer, in the order it was sent ([ticket]),
+/// else for what is verified here, taken only while no other log is observed.
 struct PendingLogObserver<'a, S: Store> {
     client: &'a SyncClient<S>,
     auth_gen: u64,
+    ticket: Option<u64>,
 }
 
 impl<S: Store> PendingLogObserver<'_, S> {
@@ -557,17 +561,24 @@ impl<S: Store> PendingLogObserver<'_, S> {
 
 impl<S: Store> LogObserver for PendingLogObserver<'_, S> {
     fn commit(&self, log: &str) -> Result<bool, Error> {
-        self.with_pending(|p| {
-            if p.observed_log.as_deref().is_some_and(|obs| obs != log) {
-                return false;
+        self.with_pending(|p| match self.ticket {
+            Some(ticket) => p.observe_at(log, ticket),
+            None => {
+                if p.observed_log.as_deref().is_some_and(|obs| obs != log) {
+                    return false;
+                }
+                p.observe(log);
+                true
             }
-            p.observe(log);
-            true
         })
     }
 
     fn confirm(&self, log: &str) -> Result<bool, Error> {
         self.with_pending(|p| p.observed_log.as_deref() == Some(log))
+    }
+
+    fn ordered(&self) -> bool {
+        self.ticket.is_some()
     }
 }
 
@@ -655,6 +666,16 @@ impl<S: Store> SyncClient<S> {
                 self.written.lock().unwrap_or_else(|e| e.into_inner()).clear();
             }
         }
+    }
+
+    /// The observer for what is verified here under [auth_gen].
+    fn observer(&self, auth_gen: u64) -> PendingLogObserver<'_, S> {
+        PendingLogObserver { client: self, auth_gen, ticket: None }
+    }
+
+    /// The observer for the answer of a request sent at [ticket].
+    fn observer_at(&self, auth_gen: u64, ticket: u64) -> PendingLogObserver<'_, S> {
+        PendingLogObserver { client: self, auth_gen, ticket: Some(ticket) }
     }
 
     fn personal_generation(&self) -> u64 {

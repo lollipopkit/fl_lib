@@ -171,7 +171,7 @@ impl<S: Store> SyncClient<S> {
                 // `PersonalAuth` takes precedence over a detached recovery
                 // probe for a different log.
                 let recorded = auth
-                    .verify_snapshot_digest_for_detached(&self.app, &snap, &digest, &PendingLogObserver { client: self, auth_gen })
+                    .verify_snapshot_digest_for_detached(&self.app, &snap, &digest, &self.observer(auth_gen))
                     .await?;
                 self.ensure_personal_gen(auth_gen)?;
                 if !recorded {
@@ -211,7 +211,7 @@ impl<S: Store> SyncClient<S> {
                 return Err(Error::new(Kind::SignedOut, "personal signing auth belongs to a different user"));
             }
             let recorded = match log {
-                Some(_) => auth.record_snapshot_if_log_compatible(&self.app, log, seq, &PendingLogObserver { client: self, auth_gen }).await,
+                Some(_) => auth.record_snapshot_if_log_compatible(&self.app, log, seq, &self.observer(auth_gen)).await,
                 None => auth.record_snapshot_seen(&self.app).await.map(|()| true),
             };
             let compatible = match recorded {
@@ -278,6 +278,7 @@ impl<S: Store> SyncClient<S> {
             None => {
                 guard.batches.clear();
                 guard.snapshots.clear();
+                guard.recovered_snapshots.clear();
                 true
             }
         }

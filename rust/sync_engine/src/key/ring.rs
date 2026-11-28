@@ -5,16 +5,20 @@ use super::*;
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct RecoveredExternal {
     pub(super) key: String,
-    /// Unresolved writes per creating account: each settles one.
-    pub(super) owners: BTreeMap<String, u32>,
-    /// Unresolved ownerless writes: treated as unmatched by account-scoped
-    /// stage-less settlement/clear so another account cannot clear one.
-    pub(super) unowned: u32,
+    /// The accounts with writes staged before the restart. A stage-less
+    /// settlement or clear for one stands for what its account's remote shows
+    /// now (opened with [key], or with another), which resolves every write
+    /// it staged then at once; asked again, it changes nothing.
+    pub(super) owners: BTreeSet<String>,
+    /// An ownerless write was staged then: treated as unmatched by
+    /// account-scoped stage-less settlement/clear so another account cannot
+    /// clear it.
+    pub(super) unowned: bool,
 }
 
 impl RecoveredExternal {
     pub(super) fn is_empty(&self) -> bool {
-        self.owners.is_empty() && self.unowned == 0
+        self.owners.is_empty() && !self.unowned
     }
 }
 
@@ -237,7 +241,7 @@ impl KeyRing {
     async fn of_inner(&self, file: Arc<dyn KeyFile>, create: bool, lkc: bool) -> Result<Arc<SyncKey>> {
         let id = file.id();
         validate_remote_id(&id)?;
-        let (key, fresh, start_lkc_tokens) = {
+        let (key, start_lkc_tokens) = {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
             let tokens = if lkc {
                 if table
@@ -258,7 +262,7 @@ impl KeyRing {
                 Some(k) => {
                     *k.file.lock().unwrap_or_else(|e| e.into_inner()) = file;
                     k.lookups.fetch_add(1, Ordering::SeqCst);
-                    (k.clone(), false, tokens)
+                    (k.clone(), tokens)
                 }
                 None => {
                     table.next_handle_id = table.next_handle_id.wrapping_add(1);
@@ -278,7 +282,7 @@ impl KeyRing {
                         before_take_merge: StdMutex::new(None),
                     });
                     table.keys.insert(id.clone(), key.clone());
-                    (key, true, tokens)
+                    (key, tokens)
                 }
             }
         };
@@ -290,13 +294,15 @@ impl KeyRing {
             let mut table = self.0.keys.lock().unwrap_or_else(|e| e.into_inner());
             let others = key.lookups.fetch_sub(1, Ordering::SeqCst) - 1;
             if !create
-                && fresh
                 && others == 0
                 && !key.handed_out.load(Ordering::SeqCst)
                 && table.keys.get(&id).is_some_and(|k| Arc::ptr_eq(k, &key))
                 && !table.pending_writes.contains_key(&id)
             {
+                // What it said goes with it: nothing checks that remote now.
                 table.keys.remove(&id);
+                table.bump_id(&id);
+                self.0.said_ok(&id);
             }
             if start_lkc_tokens.is_some_and(|t| !table.lkc_tokens_live(&id, t)) {
                 return Err(Error::SignedOut);

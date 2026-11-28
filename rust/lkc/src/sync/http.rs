@@ -165,6 +165,12 @@ pub(super) fn answered_snapshot(response: &reqwest::Response) -> Option<Snapshot
     Some(Snapshot { log, seq, signed: Signed::of(response) })
 }
 
+/// An answer on a log a request sent later observed replaced: the log is
+/// read again from there.
+pub(super) fn superseded_log() -> Error {
+    Error::new(Kind::Changed, "an answer on a log replaced meanwhile")
+}
+
 /// A log id homebase answered with: none, or one [valid_log_id] takes, so a
 /// malformed one is never kept as observed (and refused later as a cursor).
 pub(super) fn answered_log(log: Option<String>) -> Result<Option<String>, Error> {

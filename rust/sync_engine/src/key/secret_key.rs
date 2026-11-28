@@ -21,26 +21,24 @@ impl RingInner {
         in_process: impl Iterator<Item = (Option<&str>, &str)>,
     ) -> Result<()> {
         let mut key: Option<String> = None;
-        let mut owners = BTreeMap::<String, u32>::new();
-        let mut unowned = 0u32;
+        let mut owners = BTreeSet::new();
+        let mut unowned = false;
         if let Some(rec) = recovered
             && !rec.is_empty()
         {
             key = Some(rec.key.clone());
-            owners.extend(rec.owners.iter().map(|(uid, n)| (uid.clone(), *n)));
-            unowned = rec.unowned;
+            owners.extend(rec.owners.iter().cloned());
+            unowned |= rec.unowned;
         }
-        // One count per unresolved write, so settling one leaves the others.
         for (owner, cand) in in_process {
             if key.is_none() {
                 key = Some(cand.to_string());
             }
             match owner {
                 Some(uid) if !uid.is_empty() => {
-                    let n = owners.entry(uid.to_string()).or_default();
-                    *n = n.saturating_add(1);
+                    owners.insert(uid.to_string());
                 }
-                _ => unowned = unowned.saturating_add(1),
+                _ => unowned = true,
             }
         }
         let Some(key) = key else {
@@ -154,21 +152,19 @@ impl RingInner {
                     return Ok(());
                 }
                 let mut next = cur.clone();
+                // Every write [account] staged before the restart at once:
+                // what its remote shows now resolves each.
                 match account {
                     Some(uid) => {
-                        let Some(n) = next.owners.get_mut(uid).filter(|_| !uid.is_empty()) else {
+                        if uid.is_empty() || !next.owners.remove(uid) {
                             return Ok(());
-                        };
-                        *n -= 1;
-                        if *n == 0 {
-                            next.owners.remove(uid);
                         }
                     }
                     None => {
-                        if next.unowned == 0 {
+                        if !next.unowned {
                             return Ok(());
                         }
-                        next.unowned -= 1;
+                        next.unowned = false;
                     }
                 }
                 let next_opt = (!next.is_empty()).then_some(next);

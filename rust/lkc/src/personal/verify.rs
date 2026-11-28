@@ -2,6 +2,7 @@
 
 use super::*;
 
+
 impl PersonalAuth {
     /// Verifies a downloaded file's signature and monotonic version.
     ///
@@ -132,8 +133,11 @@ impl PersonalAuth {
     }
 
     /// Verifies a page of log batches and persists the log's signing marker
-    /// in a single [`VersionKeeper::save`] call.
-    pub async fn verify_batches(&self, app: &str, log: Option<&str>, batches: &[Batch]) -> Result<(), Error> {
+    /// in a single [`VersionKeeper::save`] call, for a page [observer] places
+    /// among the log's observations: its log's signing binding moves only
+    /// once [observer] commits it, and stays (answering false) when a newer
+    /// observation is of another log.
+    pub async fn verify_batches_observed(&self, app: &str, log: Option<&str>, batches: &[Batch], observer: &impl LogObserver) -> Result<bool, Error> {
         let mut first_signed: Option<i64> = None;
         let mut unsigned: Vec<i64> = Vec::new();
         for batch in batches {
@@ -148,30 +152,43 @@ impl PersonalAuth {
             verify_sig(s, &msg, &what)?;
             first_signed = Some(first_signed.map_or(batch.seq, |f| f.min(batch.seq)));
         }
+        let stripped = |v: &PersonalVersions| match unsigned.iter().find(|&&seq| v.log_requires_signature(app, log, seq)) {
+            Some(seq) => Err(untrusted(format!("{app}/log batch {seq}: server stripped signature"))),
+            None => Ok(()),
+        };
         let mut held = self.versions.lock().await;
-        let mut next = held.data.clone();
+        let mut marked = held.data.clone();
         if let Some(seq) = first_signed {
-            next.mark_log_signed_at(app, log, seq);
+            marked.mark_log_signed_at(app, log, seq);
         }
-        if let Some(seq) = unsigned.iter().find(|&&seq| next.log_requires_signature(app, log, seq)) {
-            return Err(untrusted(format!("{app}/log batch {seq}: server stripped signature")));
+        // Checked before anything is observed: a page refused moves nothing.
+        stripped(&marked)?;
+        // Its log observed, then its binding saved, then still observed: as
+        // [Self::bind_snapshot_ordered] binds a snapshot's.
+        let moving = log.filter(|_| first_signed.is_some());
+        if let Some(l) = moving
+            && !observer.commit(l)?
+        {
+            // A newer observation is of another log: checked against what
+            // stays bound, which moves no further.
+            stripped(&held.data)?;
+            Self::flush(&self.keeper, &mut held).await?;
+            return Ok(false);
         }
-        if next != held.data || held.dirty {
-            self.keeper.save(next.to_json()).await.map_err(not_saved)?;
-            held.data = next;
+        if marked != held.data || held.dirty {
+            self.keeper.save(marked.to_json()).await.map_err(not_saved)?;
             held.dirty = false;
         }
-        if first_signed.is_some()
-            && let Some(l) = log
-        {
+        let prior = std::mem::replace(&mut held.data, marked);
+        if let Some(l) = moving {
+            let confirmed = observer.confirm(l);
+            if !matches!(confirmed, Ok(true)) {
+                Self::record_committed_held(&self.keeper, &mut held, |v| *v = prior).await?;
+                return confirmed.map(|_| false);
+            }
             held.recorded_log_ids.insert(app.to_string(), l.to_string());
         }
-        Ok(())
-    }
-
-    /// Verifies a log snapshot's signature.
-    pub async fn verify_snapshot(&self, app: &str, snapshot: &Snapshot, body: &[u8]) -> Result<(), Error> {
-        self.verify_snapshot_digest(app, snapshot, &digest(body)).await
+        Ok(true)
     }
 
     /// Verifies a signed snapshot's cryptographic signature without advancing
@@ -220,7 +237,8 @@ impl PersonalAuth {
         self.verify_snapshot_signature_only(app, snapshot, body_digest).await?;
         let mut held = self.versions.lock().await;
         // A log observed live since takes the place of the one recorded.
-        let superseded = held.recorded_log_ids.get(app).is_some_and(|known| known != &snapshot.log) && !observer.confirm(&snapshot.log)?;
+        // (An observer that orders by the request's place decides by that alone.)
+        let superseded = !observer.ordered() && held.recorded_log_ids.get(app).is_some_and(|known| known != &snapshot.log) && !observer.confirm(&snapshot.log)?;
         Self::record_snapshot_ordered(&self.keeper, &mut held, app, Some(&snapshot.log), snapshot.seq, superseded, observer).await
     }
 

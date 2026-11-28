@@ -59,6 +59,11 @@ pub trait LogObserver {
     fn commit(&self, log: &str) -> Result<bool, Error>;
     /// Whether [log] is still the one observed.
     fn confirm(&self, log: &str) -> Result<bool, Error>;
+    /// Whether [Self::commit] places [log] by when its request was sent, so
+    /// an observation made before it supersedes nothing by itself.
+    fn ordered(&self) -> bool {
+        false
+    }
 }
 
 /// What this device has seen signed in one personal LK Cloud account, kept

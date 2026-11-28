@@ -91,7 +91,7 @@ impl<S: Store> SyncClient<S> {
                             CacheCheck::Hit(etag) => return Ok(etag),
                             CacheCheck::HitAndRecordLog(log_id, etag) => {
                                 let compatible = match auth
-                                    .record_snapshot_if_log_compatible(&self.app, Some(&log_id), seq, &PendingLogObserver { client: self, auth_gen })
+                                    .record_snapshot_if_log_compatible(&self.app, Some(&log_id), seq, &self.observer(auth_gen))
                                     .await
                                 {
                                     Ok(compatible) => compatible,
@@ -235,13 +235,15 @@ impl<S: Store> SyncClient<S> {
         self.ensure_personal_gen(auth_gen)?;
         let log_before = auth.signed_log_id(&self.app).await;
         let sig = auth.sign_snapshot(&self.app, seq, &body).await;
-        let ticket = self.observation_ticket(auth_gen);
+        let mut ticket = self.observation_ticket(auth_gen);
         let (etag, resp_log) = match self.put_snapshot_signed_bytes(bound, seq, body.clone(), Some(&sig)).await {
             Err(e) if matches!(&e.kind, Kind::Refused(r) if r == "sync_signing_key") => {
                 self.ensure_personal_gen(auth_gen)?;
                 auth.ensure_published(&self.session, true).await?;
                 self.ensure_personal_gen(auth_gen)?;
                 let sig = auth.sign_snapshot(&self.app, seq, &body).await;
+                // Sent again: its place is now.
+                ticket = self.observation_ticket(auth_gen);
                 self.put_snapshot_signed_bytes(bound, seq, body, Some(&sig)).await?
             }
             other => other?,
@@ -259,7 +261,9 @@ impl<S: Store> SyncClient<S> {
                     let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
                     if slot.generation == auth_gen {
                         let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                        if guard.generation == auth_gen {
+                        // One recorded meanwhile by another write of the same
+                        // snapshot stays: a retry holding it still finds it.
+                        if guard.generation == auth_gen && !guard.snapshots.contains_key(&commit_key) {
                             let id = guard.next_id();
                             guard.snapshots.insert(commit_key, (id, SnapshotLogBinding::Confirmed(log_id.clone()), etag.clone()));
                         }
@@ -285,7 +289,9 @@ impl<S: Store> SyncClient<S> {
                 let slot = self.personal.lock().unwrap_or_else(|e| e.into_inner());
                 if slot.generation == auth_gen {
                     let mut guard = self.pending_commits.lock().unwrap_or_else(|e| e.into_inner());
-                    if guard.generation == auth_gen {
+                    // One recorded meanwhile by another write of the same
+                    // snapshot stays: a retry holding it still finds it.
+                    if guard.generation == auth_gen && !guard.snapshots.contains_key(&commit_key) {
                         let id = guard.next_id();
                         guard.snapshots.insert(commit_key, (id, binding, etag.clone()));
                     }
@@ -342,7 +348,7 @@ impl<S: Store> SyncClient<S> {
                 };
                 let same_snapshot = remote_etag == expected_etag && snap.seq == seq && &digest == expected_digest;
                 let verified = auth
-                    .verify_snapshot_digest_observed(&self.app, &snap, &digest, &PendingLogObserver { client: self, auth_gen })
+                    .verify_snapshot_digest_observed(&self.app, &snap, &digest, &self.observer(auth_gen))
                     .await;
                 if matches!(verified, Ok(false)) {
                     // Another log observed live: nothing was bound to this one.
@@ -466,9 +472,13 @@ impl<S: Store> SyncClient<S> {
                     let Some(snap) = found else {
                         return Err(Error::new(Kind::Invalid, "a snapshot without Sync-Log or Sync-Seq"));
                     };
-                    auth.verify_snapshot_digest(&self.app, &snap, &digest).await?;
+                    // One on a log a later request observed replaced is not taken.
+                    if !auth.verify_snapshot_digest_observed(&self.app, &snap, &digest, &self.observer_at(auth_gen, ticket)).await?
+                        || !self.retain_log_commits(auth_gen, Some(&snap.log), ticket)
+                    {
+                        return Err(superseded_log());
+                    }
                     self.ensure_personal_gen(auth_gen)?;
-                    self.retain_log_commits(auth_gen, Some(&snap.log), ticket);
                     let staged = part.ok_or_else(|| Error::new(Kind::Invalid, "missing staged snapshot file"))?;
                     self.publish_verified(auth_gen, staged, to)?;
                     Ok(Some(snap))
@@ -499,9 +509,13 @@ impl<S: Store> SyncClient<S> {
         };
         if let Some((auth_gen, auth)) = auth {
             self.ensure_personal_gen(auth_gen)?;
-            auth.verify_snapshot(&self.app, &snap, &body).await?;
+            let digest = *blake3::hash(&body).as_bytes();
+            if !auth.verify_snapshot_digest_observed(&self.app, &snap, &digest, &self.observer_at(auth_gen, ticket)).await?
+                || !self.retain_log_commits(auth_gen, Some(&snap.log), ticket)
+            {
+                return Err(superseded_log());
+            }
             self.ensure_personal_gen(auth_gen)?;
-            self.retain_log_commits(auth_gen, Some(&snap.log), ticket);
         }
         Ok((Some((snap, body)), verified))
     }
